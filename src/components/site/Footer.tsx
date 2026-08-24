@@ -56,17 +56,20 @@ export function Footer({ locale }: { locale: Locale }) {
           </p>
           <div className="flex items-center gap-2 mt-1">
             {[
-              { label: "Facebook", icon: "f" },
-              { label: "Instagram", icon: "◎" },
+              { label: "Facebook", icon: "f", href: "https://facebook.com/Funtikidbooks" },
+              { label: "Instagram", icon: "◎", href: "https://instagram.com/funtikidbooks" },
             ].map((s) => (
-              <span
+              <a
                 key={s.label}
-                aria-hidden
+                href={s.href}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={s.label}
                 className="flex items-center justify-center rounded-full text-sm font-bold"
                 style={{ width: 30, height: 30, border: "1.5px solid #57564f", color: "#ff9f6e" }}
               >
                 {s.icon}
-              </span>
+              </a>
             ))}
             <a
               href="mailto:funtikidbooks.studio@gmail.com"
