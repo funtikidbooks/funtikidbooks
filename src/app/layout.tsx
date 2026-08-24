@@ -24,6 +24,17 @@ export const metadata: Metadata = {
   },
   description:
     "Funti Kidbooks Studio đồng hành cùng tác giả, nhà xuất bản và thương hiệu tạo nên những cuốn sách thiếu nhi giàu hình ảnh và cảm xúc.",
+  manifest: "/manifest.json",
+  // Lets "Add to Home Screen" on iPad/iPhone launch the workspace as a
+  // standalone app — required for Web Push notifications to work on iOS.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Funti Workspace",
+  },
+  icons: {
+    apple: "/brand/funti-logo.jpg",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { sendPushToUser } from "@/lib/push";
 import type { DirectMessage } from "@/lib/types";
 
 async function requireUser() {
@@ -70,6 +71,14 @@ export async function sendDirectMessage(recipientId: string, content: string, fo
     .single();
 
   if (error || !data) throw new Error("Không thể gửi tin nhắn");
+
+  const { data: senderProfile } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
+  sendPushToUser(recipientId, {
+    title: senderProfile?.display_name ?? "Tin nhắn mới",
+    body: trimmed || (attachment ? "📎 Đã gửi một tệp đính kèm" : ""),
+    senderId: user.id,
+  }).catch(() => {});
+
   return data as DirectMessage;
 }
 

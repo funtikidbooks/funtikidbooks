@@ -41,6 +41,15 @@ export type DmRead = {
   last_read_at: string;
 };
 
+export type PushSubscriptionRow = {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  created_at: string;
+};
+
 export type Project = {
   id: string;
   title: string;
@@ -343,6 +352,12 @@ export type Database = {
         Row: DmRead;
         Insert: Partial<DmRead> & { user_id: string; peer_id: string };
         Update: Partial<DmRead>;
+        Relationships: [];
+      };
+      push_subscriptions: {
+        Row: PushSubscriptionRow;
+        Insert: Partial<PushSubscriptionRow> & { user_id: string; endpoint: string; p256dh: string; auth: string };
+        Update: Partial<PushSubscriptionRow>;
         Relationships: [];
       };
       task_assignees: {
