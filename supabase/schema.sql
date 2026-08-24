@@ -459,6 +459,11 @@ alter table public.projects add column if not exists content text;
 alter table public.projects add column if not exists title_en text;
 alter table public.projects add column if not exists description_en text;
 alter table public.projects add column if not exists content_en text;
+-- View/like counters shown on the public /du-an cards. Bumped by anonymous
+-- visitors, so they're incremented through SECURITY DEFINER functions below
+-- rather than direct table writes (visitors never get UPDATE on the table).
+alter table public.projects add column if not exists view_count integer not null default 0;
+alter table public.projects add column if not exists like_count integer not null default 0;
 
 alter table public.projects enable row level security;
 
@@ -479,6 +484,33 @@ drop trigger if exists projects_set_updated_at on public.projects;
 create trigger projects_set_updated_at
   before update on public.projects
   for each row execute procedure public.set_updated_at();
+
+-- Visitors have no write access to public.projects (see the RLS policy
+-- above), so the view/like counters are bumped through these narrow
+-- SECURITY DEFINER functions instead — each touches only its one counter
+-- column, nothing else on the row is writable this way.
+create or replace function public.increment_project_view(project_id uuid)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update public.projects set view_count = view_count + 1 where id = project_id;
+$$;
+grant execute on function public.increment_project_view(uuid) to anon, authenticated;
+
+create or replace function public.set_project_like(project_id uuid, liked boolean)
+returns integer
+language sql
+security definer
+set search_path = public
+as $$
+  update public.projects
+  set like_count = greatest(0, like_count + (case when liked then 1 else -1 end))
+  where id = project_id
+  returning like_count;
+$$;
+grant execute on function public.set_project_like(uuid, boolean) to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- news_posts: the public "Tin tức" blog, editable by director/admin

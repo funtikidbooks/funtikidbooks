@@ -63,6 +63,8 @@ export type Project = {
   gallery_images: string[];
   published: boolean;
   position: number;
+  view_count: number;
+  like_count: number;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -448,6 +450,15 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      increment_project_view: {
+        Args: { project_id: string };
+        Returns: undefined;
+      };
+      set_project_like: {
+        Args: { project_id: string; liked: boolean };
+        Returns: number;
+      };
+    };
   };
 };

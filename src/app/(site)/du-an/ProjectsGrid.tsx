@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,7 +8,36 @@ import { useDict } from "@/components/site/LocaleProvider";
 import { ProjectLightbox } from "@/components/site/ProjectLightbox";
 import { categoryLabel } from "@/lib/dictionary";
 import { pickLocalized } from "@/lib/i18n";
+import { setProjectLike, trackProjectView } from "@/lib/actions/projects";
 import type { Project } from "@/lib/types";
+
+const LIKED_STORAGE_KEY = "funti-liked-projects";
+const LIKED_EVENT = "funti-liked-projects-change";
+
+// Same pattern as useTheme: read the raw string via useSyncExternalStore
+// (stable across renders since strings compare by value) and parse it in
+// the component, rather than setState-ing a Set from an effect.
+function subscribeLikedProjects(callback: () => void) {
+  window.addEventListener(LIKED_EVENT, callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener(LIKED_EVENT, callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+function getLikedProjectsSnapshot() {
+  return localStorage.getItem(LIKED_STORAGE_KEY) ?? "[]";
+}
+
+function getLikedProjectsServerSnapshot() {
+  return "[]";
+}
+
+function writeLikedProjects(ids: Set<string>) {
+  localStorage.setItem(LIKED_STORAGE_KEY, JSON.stringify([...ids]));
+  window.dispatchEvent(new Event(LIKED_EVENT));
+}
 
 // Code-split: the rich-text editor (TipTap) it pulls in is heavy and only
 // director/admin ever open this dialog — regular visitors shouldn't pay for
@@ -42,6 +71,42 @@ export function ProjectsGrid({ projects, canEdit = false }: { projects: Project[
   const [active, setActive] = useState(ALL);
   const [openId, setOpenId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Project | "new" | null>(null);
+
+  const likedRaw = useSyncExternalStore(subscribeLikedProjects, getLikedProjectsSnapshot, getLikedProjectsServerSnapshot);
+  const likedIds = useMemo(() => {
+    try {
+      const parsed = JSON.parse(likedRaw);
+      return new Set<string>(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      return new Set<string>();
+    }
+  }, [likedRaw]);
+
+  function openProjectAndTrackView(id: string) {
+    setOpenId(id);
+    if (isRealData) void trackProjectView(id);
+  }
+
+  function toggleLike(p: Project) {
+    const liked = !likedIds.has(p.id);
+    const prevItems = items;
+
+    const nextLikedIds = new Set(likedIds);
+    if (liked) nextLikedIds.add(p.id);
+    else nextLikedIds.delete(p.id);
+    writeLikedProjects(nextLikedIds);
+
+    setItems((prev) =>
+      prev.map((x) => (x.id === p.id ? { ...x, like_count: Math.max(0, x.like_count + (liked ? 1 : -1)) } : x)),
+    );
+
+    setProjectLike(p.id, liked).then((newCount) => {
+      if (newCount === null) {
+        writeLikedProjects(likedIds);
+        setItems(prevItems);
+      }
+    });
+  }
 
   const filtered = useMemo(
     () => (active === ALL ? source : source.filter((p) => p.tag === active)),
@@ -122,7 +187,7 @@ export function ProjectsGrid({ projects, canEdit = false }: { projects: Project[
             >
               <button
                 type="button"
-                onClick={() => setOpenId(p.id)}
+                onClick={() => openProjectAndTrackView(p.id)}
                 className="absolute inset-0 w-full h-full text-left"
                 style={{ opacity: isRealData && !(p as Project).published ? 0.55 : 1 }}
               >
@@ -148,16 +213,39 @@ export function ProjectsGrid({ projects, canEdit = false }: { projects: Project[
                 </div>
               </button>
 
-              {canEdit && isRealData && (
-                <button
-                  type="button"
-                  onClick={() => setEditing(p as Project)}
-                  className="editable-image-btn absolute top-2 right-2 flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold opacity-80 group-hover:opacity-100"
-                  style={{ background: "rgba(20,18,17,.75)", color: "#fff" }}
-                >
-                  {t.projects.edit}
-                </button>
-              )}
+              <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                {isRealData && (
+                  <>
+                    <span
+                      className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold"
+                      style={{ background: "rgba(20,18,17,.75)", color: "#fff" }}
+                      title={t.projects.views}
+                    >
+                      👁 {(p as Project).view_count}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => toggleLike(p as Project)}
+                      className="flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold"
+                      style={{ background: "rgba(20,18,17,.75)", color: "#fff" }}
+                      aria-label={likedIds.has(p.id) ? t.projects.unlikeAria : t.projects.likeAria}
+                      aria-pressed={likedIds.has(p.id)}
+                    >
+                      {likedIds.has(p.id) ? "❤️" : "🤍"} {(p as Project).like_count}
+                    </button>
+                  </>
+                )}
+                {canEdit && isRealData && (
+                  <button
+                    type="button"
+                    onClick={() => setEditing(p as Project)}
+                    className="editable-image-btn flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold opacity-80 group-hover:opacity-100"
+                    style={{ background: "rgba(20,18,17,.75)", color: "#fff" }}
+                  >
+                    {t.projects.edit}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
 
