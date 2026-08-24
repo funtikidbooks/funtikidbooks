@@ -248,10 +248,13 @@ export type EditorProject = {
 export type PricingTier = {
   id: string;
   name: string;
+  nameEn?: string | null;
   priceVnd: number | null;
   priceUsd: number | null;
   delivery: string;
+  deliveryEn?: string | null;
   description: string;
+  descriptionEn?: string | null;
   // Highlighted as the standout/VIP option — e.g. a B2B tier the director
   // wants to draw extra attention to.
   featured?: boolean;
@@ -260,6 +263,7 @@ export type PricingTier = {
 export type PricingFeatureRow = {
   id: string;
   label: string;
+  labelEn?: string | null;
   // One value per tier, in the same order as `tiers` — "-" for "not
   // included", "✓" for a plain checkmark, or free text (e.g. "2 lượt").
   values: string[];

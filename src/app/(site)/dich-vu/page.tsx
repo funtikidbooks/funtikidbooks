@@ -88,11 +88,11 @@ export default async function ServicesPage() {
         {bookPages.length >= 2 && (
           <div className="flex flex-col items-center text-center gap-2">
             <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
-              XEM THỬ
+              {t.services.previewKicker}
             </div>
-            <h2 className="text-3xl">Minh hoạ sách thiếu nhi trông như thế nào?</h2>
+            <h2 className="text-3xl">{t.services.previewTitle}</h2>
             <p className="max-w-[480px] mb-8" style={{ color: "var(--color-neutral-700)" }}>
-              Bấm mũi tên hoặc kéo trang để lật thử — như đang cầm một cuốn sách tranh thật.
+              {t.services.previewSubtitle}
             </p>
             <div className="relative w-full flex items-center justify-center">
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden>
@@ -117,7 +117,7 @@ export default async function ServicesPage() {
                 ))}
               </div>
               <div className="relative">
-                <BookFlipDemo pages={bookPages} alt="Minh hoạ sách thiếu nhi" backCover={bookBackCover} />
+                <BookFlipDemo pages={bookPages} alt={t.services.previewAlt} backCover={bookBackCover} />
               </div>
             </div>
           </div>

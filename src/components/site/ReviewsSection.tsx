@@ -4,6 +4,7 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import type { Review } from "@/lib/types";
+import { useDict } from "@/components/site/LocaleProvider";
 
 // Code-split: only director/admin ever open this dialog — regular visitors
 // shouldn't pay for it in their initial page load.
@@ -23,17 +24,18 @@ function Stars({ rating }: { rating: number }) {
 export function ReviewsSection({ reviews, canEdit = false }: { reviews: Review[]; canEdit?: boolean }) {
   const [items, setItems] = useState(reviews);
   const [editing, setEditing] = useState<Review | "new" | null>(null);
+  const { t } = useDict();
 
   if (items.length === 0 && !canEdit) return null;
 
   return (
     <div className="flex flex-col items-center text-center gap-2">
       <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
-        KHÁCH HÀNG NÓI GÌ
+        {t.reviews.kicker}
       </div>
-      <h2 className="text-3xl">Phụ huynh & đối tác đánh giá Funti Kidbooks</h2>
+      <h2 className="text-3xl">{t.reviews.title}</h2>
       <p className="max-w-[520px] mb-8" style={{ color: "var(--color-neutral-700)" }}>
-        Những chia sẻ thật từ khách hàng đã đồng hành cùng chúng tôi.
+        {t.reviews.subtitle}
       </p>
 
       {items.length === 0 ? (
@@ -46,7 +48,7 @@ export function ReviewsSection({ reviews, canEdit = false }: { reviews: Review[]
           <span className="text-2xl leading-none" aria-hidden>
             +
           </span>
-          <span className="text-xs font-bold">Thêm đánh giá đầu tiên</span>
+          <span className="text-xs font-bold">{t.reviews.addFirst}</span>
         </button>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 w-full text-left">
@@ -71,7 +73,7 @@ export function ReviewsSection({ reviews, canEdit = false }: { reviews: Review[]
               <p className="text-sm" style={{ color: "var(--color-neutral-700)" }}>
                 {r.content}
               </p>
-              {!r.published && <span className="text-[11px] font-semibold w-fit tag tag-neutral">Chưa xuất bản</span>}
+              {!r.published && <span className="text-[11px] font-semibold w-fit tag tag-neutral">{t.reviews.unpublished}</span>}
 
               {canEdit && (
                 <button
@@ -80,7 +82,7 @@ export function ReviewsSection({ reviews, canEdit = false }: { reviews: Review[]
                   className="editable-image-btn absolute top-3 right-3 px-2.5 py-1 rounded-full text-[11px] font-bold"
                   style={{ background: "rgba(20,18,17,.75)", color: "#fff" }}
                 >
-                  Sửa
+                  {t.reviews.edit}
                 </button>
               )}
             </div>
@@ -96,7 +98,7 @@ export function ReviewsSection({ reviews, canEdit = false }: { reviews: Review[]
               <span className="text-2xl leading-none" aria-hidden>
                 +
               </span>
-              <span className="text-xs font-bold">Thêm đánh giá</span>
+              <span className="text-xs font-bold">{t.reviews.add}</span>
             </button>
           )}
         </div>

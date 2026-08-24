@@ -111,6 +111,10 @@ export function PricingEditDialog({
                       <input className="input" value={tier.name} onChange={(e) => updateTier(tier.id, { name: e.target.value })} />
                     </div>
                     <div className="field">
+                      <label>Tên gói (Tiếng Anh)</label>
+                      <input className="input" value={tier.nameEn ?? ""} onChange={(e) => updateTier(tier.id, { nameEn: e.target.value })} />
+                    </div>
+                    <div className="field">
                       <label>Giá (VNĐ)</label>
                       <input
                         type="number"
@@ -135,8 +139,16 @@ export function PricingEditDialog({
                       <input className="input" placeholder="VD: 1-3 ngày" value={tier.delivery} onChange={(e) => updateTier(tier.id, { delivery: e.target.value })} />
                     </div>
                     <div className="field">
+                      <label>Thời gian giao (Tiếng Anh)</label>
+                      <input className="input" placeholder="e.g. 1-3 days" value={tier.deliveryEn ?? ""} onChange={(e) => updateTier(tier.id, { deliveryEn: e.target.value })} />
+                    </div>
+                    <div className="field">
                       <label>Mô tả ngắn</label>
                       <input className="input" value={tier.description} onChange={(e) => updateTier(tier.id, { description: e.target.value })} />
+                    </div>
+                    <div className="field">
+                      <label>Mô tả ngắn (Tiếng Anh)</label>
+                      <input className="input" value={tier.descriptionEn ?? ""} onChange={(e) => updateTier(tier.id, { descriptionEn: e.target.value })} />
                     </div>
                     <button
                       type="button"
@@ -186,7 +198,10 @@ export function PricingEditDialog({
                   {rows.map((row) => (
                     <tr key={row.id} style={{ borderTop: "1px solid var(--color-neutral-100)" }}>
                       <td className="px-2 py-1.5">
-                        <input className="input" value={row.label} onChange={(e) => updateRow(row.id, { label: e.target.value })} />
+                        <div className="flex flex-col gap-1">
+                          <input className="input" value={row.label} onChange={(e) => updateRow(row.id, { label: e.target.value })} placeholder="Tiếng Việt" />
+                          <input className="input" value={row.labelEn ?? ""} onChange={(e) => updateRow(row.id, { labelEn: e.target.value })} placeholder="English" />
+                        </div>
                       </td>
                       {tiers.map((_, i) => {
                         const value = row.values[i] ?? "-";
