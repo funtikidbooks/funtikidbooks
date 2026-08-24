@@ -78,6 +78,11 @@ alter table public.profiles add column if not exists address text;
 -- Groups members for the workspace's Thành viên directory filter tabs —
 -- director-assigned, separate from `role` (the free-text job title).
 alter table public.profiles add column if not exists department text;
+-- Actual employment start date, director-editable — separate from
+-- created_at (when the login account was created, which can lag behind
+-- when someone actually joined the studio). Falls back to created_at
+-- when null.
+alter table public.profiles add column if not exists joined_at timestamptz;
 
 -- ---------------------------------------------------------------------------
 -- direct_messages: 1:1 chat between staff members, shown in the workspace

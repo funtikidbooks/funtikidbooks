@@ -10,6 +10,7 @@ export type Profile = {
   phone: string | null;
   address: string | null;
   access_role: AccessRole;
+  joined_at: string | null;
   created_at: string;
 };
 

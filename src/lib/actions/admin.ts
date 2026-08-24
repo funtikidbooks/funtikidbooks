@@ -482,6 +482,22 @@ export async function updateDepartment(profileId: string, department: string) {
   revalidatePath("/workspace/thanh-vien");
 }
 
+// Actual employment start date (drives "Thời gian làm việc" on the Thành
+// viên directory) — separate from created_at, which is just when the login
+// account was made and can lag behind when someone really joined.
+export async function updateJoinedAt(profileId: string, joinedAt: string) {
+  const { supabase } = await requireDirector();
+  const date = joinedAt.trim();
+  if (date && Number.isNaN(Date.parse(date))) {
+    throw new Error("Ngày không hợp lệ.");
+  }
+  await supabase
+    .from("profiles")
+    .update({ joined_at: date || null })
+    .eq("id", profileId);
+  revalidatePath("/workspace/thanh-vien");
+}
+
 // Deletes the Supabase Auth user outright (not just the profile row) — the
 // profiles table has `on delete cascade` from auth.users, so this removes
 // their login and profile together. Everything they authored elsewhere

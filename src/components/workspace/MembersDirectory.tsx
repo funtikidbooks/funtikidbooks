@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { usePresence } from "@/lib/usePresence";
+import { updateJoinedAt } from "@/lib/actions/admin";
 import { DEPARTMENTS } from "@/lib/constants/staff";
 import type { Profile } from "@/lib/types";
 
@@ -13,12 +14,22 @@ const CreateAccountDialog = dynamic(
 
 const ALL = "Tất cả";
 
-function formatJoinDate(createdAt: string) {
-  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(createdAt));
+// The join date directors care about (and can edit) — falls back to
+// created_at (login account creation) when nobody's set it explicitly.
+function joinDateOf(p: Profile) {
+  return p.joined_at ?? p.created_at;
 }
 
-function formatTenure(createdAt: string) {
-  const start = new Date(createdAt);
+function toDateInputValue(iso: string) {
+  return iso.slice(0, 10);
+}
+
+function formatJoinDate(iso: string) {
+  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(iso));
+}
+
+function formatTenure(iso: string) {
+  const start = new Date(iso);
   const now = new Date();
   let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
   if (now.getDate() < start.getDate()) months -= 1;
@@ -44,9 +55,25 @@ export function MembersDirectory({
   const [items, setItems] = useState(profiles);
   const [active, setActive] = useState(ALL);
   const [showCreate, setShowCreate] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
   const onlineIds = usePresence(currentUserId);
 
   const departmentOf = (p: Profile) => p.department ?? (p.access_role !== "staff" ? "Studio Admin" : null);
+
+  function changeJoinDate(id: string, dateValue: string) {
+    const prev = items;
+    setItems((list) => list.map((x) => (x.id === id ? { ...x, joined_at: dateValue || null } : x)));
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updateJoinedAt(id, dateValue);
+      } catch (err) {
+        setItems(prev);
+        setError(err instanceof Error ? err.message : "Không thể lưu ngày tham gia.");
+      }
+    });
+  }
 
   const filtered = useMemo(
     () => (active === ALL ? items : items.filter((p) => departmentOf(p) === active)),
@@ -66,6 +93,12 @@ export function MembersDirectory({
       <p className="text-sm mb-5" style={{ color: "var(--color-neutral-600)" }}>
         Cùng nhau tạo nên những sản phẩm tuyệt vời ✨
       </p>
+
+      {error && (
+        <p className="text-sm font-semibold mb-3" style={{ color: "var(--status-red)" }}>
+          {error}
+        </p>
+      )}
 
       <div className="flex flex-wrap gap-2 mb-6">
         {[ALL, ...DEPARTMENTS].map((d) => (
@@ -153,9 +186,23 @@ export function MembersDirectory({
                 )}
               </div>
 
-              <div className="flex flex-col gap-1 text-xs" style={{ color: "var(--color-neutral-600)" }}>
-                <span>📅 Tham gia: {formatJoinDate(p.created_at)}</span>
-                <span>⏱ Thời gian làm việc: {formatTenure(p.created_at)}</span>
+              <div className="flex flex-col gap-1.5 text-xs" style={{ color: "var(--color-neutral-600)" }}>
+                <span className="flex items-center gap-1.5">
+                  📅 Tham gia:{" "}
+                  {canManage ? (
+                    <input
+                      key={`join-${p.id}-${p.joined_at ?? ""}`}
+                      type="date"
+                      className="input"
+                      style={{ padding: "2px 6px", fontSize: 11, height: 24 }}
+                      defaultValue={toDateInputValue(joinDateOf(p))}
+                      onChange={(e) => e.target.value && changeJoinDate(p.id, e.target.value)}
+                    />
+                  ) : (
+                    formatJoinDate(joinDateOf(p))
+                  )}
+                </span>
+                <span>⏱ Thời gian làm việc: {formatTenure(joinDateOf(p))}</span>
               </div>
             </div>
           );
