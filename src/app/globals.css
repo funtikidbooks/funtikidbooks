@@ -241,6 +241,9 @@ h4 {
   background: rgba(192, 82, 79, 0.1);
 }
 .btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 9px;
   border-radius: var(--radius-pill);
   background: var(--color-neutral-100);
