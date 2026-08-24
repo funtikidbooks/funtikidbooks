@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
-import { ThemeToggle } from "./ThemeToggle";
 import { useChatManager } from "./ChatManager";
 import { usePresence } from "@/lib/usePresence";
 import type { Profile } from "@/lib/types";
@@ -155,24 +154,12 @@ export function Sidebar({
           >
             {user.displayName.charAt(0).toUpperCase()}
           </div>
-          <div className="flex flex-col min-w-0 flex-1">
+          <div className="flex flex-col min-w-0">
             <span className="text-xs font-bold truncate">{user.displayName}</span>
             <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
               {user.email}
             </span>
           </div>
-          {user.accessRole === "director" && (
-            <Link
-              href="/quan-tri"
-              className="ws-quan-tri-link btn-icon flex-none"
-              style={{ width: 30, height: 30, padding: 0, color: "var(--color-accent-2-700)", background: "var(--color-accent-2-100)" }}
-              title="Quản trị nội dung"
-              aria-label="Quản trị nội dung"
-            >
-              🛠
-            </Link>
-          )}
-          <ThemeToggle compact />
         </div>
         <form action={signOut}>
           <button
