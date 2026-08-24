@@ -71,6 +71,9 @@ export const metadata: Metadata = {
     description: SITE_DESCRIPTION,
     images: ["/brand/funti-logo.jpg"],
   },
+  verification: {
+    google: "OkwGTpZsOoCyp-W2Mo0Qj3XSIWq5qsOAdTs2GdxOPhs",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
