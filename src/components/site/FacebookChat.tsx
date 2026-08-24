@@ -1,65 +1,29 @@
-"use client";
-
-import { useEffect, useRef } from "react";
-
 // facebook.com/FuntiKidbooks — real numeric Page ID, taken straight from
 // the Page's own Meta Business Suite inbox settings (Hộp thư > Cài đặt
-// hộp thư > Nhắn tin > URL Messenger, m.me/<page_id>). The previous ID
-// here was guessed from meta tags and didn't match, which silently
-// prevented the Customer Chat plugin from ever rendering.
+// hộp thư > Nhắn tin > URL Messenger, m.me/<page_id>).
 const FB_PAGE_ID = "249373520318216";
+const MESSENGER_LINK = `https://m.me/${FB_PAGE_ID}`;
 
-declare global {
-  interface Window {
-    fbAsyncInit?: () => void;
-    FB?: { init: (opts: Record<string, unknown>) => void };
-  }
-}
-
-// Renders Facebook's Customer Chat Plugin — visitors typing here land as
-// real conversations in the Funti Kidbooks Page's Messenger inbox. Requires
-// the live domain to be whitelisted under the Page's Messaging settings,
-// which only the Page admin can do — see the chat with the user for steps.
+// Meta discontinued the embeddable Customer Chat Plugin (the
+// xfbml.customerchat.js widget this used to render) in May 2024 — its SDK
+// endpoint now returns a permanent 500 regardless of locale, confirmed live
+// on this site in August 2026. A plain m.me link is Meta's own recommended
+// replacement: it opens a real Messenger conversation with the Page,
+// same destination as the old widget, no dead third-party script involved.
 export function FacebookChat() {
-  const chatRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    chatRef.current?.setAttribute("page_id", FB_PAGE_ID);
-    chatRef.current?.setAttribute("attribution", "biz_inbox");
-
-    if (document.getElementById("facebook-jssdk")) {
-      window.FB?.init({ xfbml: true, version: "v19.0" });
-      return;
-    }
-
-    window.fbAsyncInit = () => {
-      window.FB?.init({ xfbml: true, version: "v19.0" });
-    };
-
-    function loadSdk(locale: string, onFail?: () => void) {
-      const script = document.createElement("script");
-      script.id = "facebook-jssdk";
-      script.src = `https://connect.facebook.net/${locale}/sdk/xfbml.customerchat.js`;
-      script.async = true;
-      script.defer = true;
-      if (onFail) script.onerror = onFail;
-      document.body.appendChild(script);
-    }
-
-    // Facebook's vi_VN locale bundle for this SDK has been known to 500 —
-    // fall back to en_US (still renders the chat UI in Vietnamese, since
-    // that's driven by the visitor's own Facebook/browser locale, not this
-    // file) so the widget doesn't just silently disappear when that happens.
-    loadSdk("vi_VN", () => {
-      document.getElementById("facebook-jssdk")?.remove();
-      loadSdk("en_US");
-    });
-  }, []);
-
   return (
-    <>
-      <div id="fb-root" />
-      <div ref={chatRef} className="fb-customerchat" />
-    </>
+    <a
+      href={MESSENGER_LINK}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Chat qua Messenger"
+      title="Chat qua Messenger"
+      className="fixed z-50 flex items-center justify-center rounded-full"
+      style={{ width: 56, height: 56, right: 20, bottom: 20, background: "#0084ff", boxShadow: "var(--shadow-lg)" }}
+    >
+      <span style={{ fontSize: 26 }} aria-hidden>
+        💬
+      </span>
+    </a>
   );
 }
