@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EditableImage } from "@/components/site/EditableImage";
+import { DEFAULT_IMAGE_TRANSFORM, EditableImage, type ImageTransform } from "@/components/site/EditableImage";
 import { InlineField } from "@/components/site/InlineField";
 import { useDict } from "@/components/site/LocaleProvider";
 import { pickLocalized } from "@/lib/i18n";
@@ -15,6 +15,7 @@ export type TeamMember = {
   bio?: string | null;
   bioEn?: string | null;
   photo: string | null;
+  photoTransform?: ImageTransform | null;
 };
 
 const SETTINGS_KEY = "gioi-thieu-team";
@@ -142,6 +143,8 @@ export function AboutTeam({ members, canEdit }: { members: TeamMember[]; canEdit
                   dropzoneLabel={t.about.photoLabel}
                   dropzoneHint={t.about.photoBrowse}
                   style={{ width: size, height: size }}
+                  transform={member.photoTransform ?? DEFAULT_IMAGE_TRANSFORM}
+                  onTransformChange={(next) => patchMember(member.id, { photoTransform: next })}
                 />
                 <InlineField
                   value={member.name}
