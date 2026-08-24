@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/workspace/Sidebar";
 import { ChatManagerProvider } from "@/components/workspace/ChatManager";
 import { ChatDock } from "@/components/workspace/ChatDock";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
+import { getUnreadCounts } from "@/lib/actions/messages";
 import type { Profile } from "@/lib/types";
 
 export default async function WorkspaceLayout({
@@ -20,7 +21,7 @@ export default async function WorkspaceLayout({
     redirect("/dang-nhap?next=/workspace");
   }
 
-  const [{ data: profile }, { data: allProfiles }] = await Promise.all([
+  const [{ data: profile }, { data: allProfiles }, unreadCounts] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, created_at")
@@ -30,6 +31,7 @@ export default async function WorkspaceLayout({
       .from("profiles")
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, created_at")
       .order("display_name", { ascending: true }),
+    getUnreadCounts().catch(() => ({})),
   ]);
 
   // Admin accounts handle site content, not the Kanban workspace — send
@@ -51,7 +53,7 @@ export default async function WorkspaceLayout({
   };
 
   return (
-    <ChatManagerProvider>
+    <ChatManagerProvider currentUserId={user.id} initialUnreadCounts={unreadCounts}>
       <div className="flex min-h-screen" style={{ background: "var(--color-bg)" }}>
         <Sidebar
           user={{

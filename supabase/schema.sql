@@ -121,6 +121,27 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- dm_reads: per-user "I've read this conversation up to here" marker, one row
+-- per (me, peer) pair. Used to compute the unread-message badge shown next
+-- to each teammate in the workspace sidebar.
+-- ---------------------------------------------------------------------------
+create table if not exists public.dm_reads (
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  peer_id uuid not null references public.profiles (id) on delete cascade,
+  last_read_at timestamptz not null default now(),
+  primary key (user_id, peer_id)
+);
+
+alter table public.dm_reads enable row level security;
+
+drop policy if exists "staff can manage their own read state" on public.dm_reads;
+create policy "staff can manage their own read state"
+  on public.dm_reads for all
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- ---------------------------------------------------------------------------
 -- boards / board_columns / tasks — the Kanban data model
 -- ---------------------------------------------------------------------------
 create table if not exists public.boards (

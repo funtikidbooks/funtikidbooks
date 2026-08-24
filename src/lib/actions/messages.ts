@@ -72,3 +72,31 @@ export async function sendDirectMessage(recipientId: string, content: string, fo
   if (error || !data) throw new Error("Không thể gửi tin nhắn");
   return data as DirectMessage;
 }
+
+// One unread count per teammate who has sent me a message since I last read
+// that conversation — powers the badge shown next to their name in the
+// workspace sidebar.
+export async function getUnreadCounts(): Promise<Record<string, number>> {
+  const { supabase, user } = await requireUser();
+  const [{ data: reads }, { data: incoming }] = await Promise.all([
+    supabase.from("dm_reads").select("peer_id, last_read_at").eq("user_id", user.id),
+    supabase.from("direct_messages").select("sender_id, created_at").eq("recipient_id", user.id),
+  ]);
+
+  const lastReadByPeer = new Map((reads ?? []).map((r) => [r.peer_id as string, r.last_read_at as string]));
+  const counts: Record<string, number> = {};
+  for (const m of incoming ?? []) {
+    const lastRead = lastReadByPeer.get(m.sender_id as string);
+    if (!lastRead || new Date(m.created_at as string) > new Date(lastRead)) {
+      counts[m.sender_id as string] = (counts[m.sender_id as string] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+export async function markConversationRead(peerId: string) {
+  const { supabase, user } = await requireUser();
+  await supabase
+    .from("dm_reads")
+    .upsert({ user_id: user.id, peer_id: peerId, last_read_at: new Date().toISOString() });
+}

@@ -29,7 +29,7 @@ export function Sidebar({
   profiles: Profile[];
 }) {
   const pathname = usePathname();
-  const { openChat } = useChatManager();
+  const { openChat, unreadCounts } = useChatManager();
   const onlineIds = usePresence(currentUserId);
 
   const teammates = profiles
@@ -100,6 +100,7 @@ export function Sidebar({
         </div>
         {teammates.map((p) => {
           const online = onlineIds.has(p.id);
+          const unread = unreadCounts[p.id] ?? 0;
           return (
             <button
               key={p.id}
@@ -126,10 +127,21 @@ export function Sidebar({
                   }}
                 />
               </span>
-              <span className="text-[13px] font-semibold flex-1 truncate">{p.display_name}</span>
-              <span className="text-[10px] truncate max-w-[64px]" style={{ color: "var(--color-neutral-500)" }}>
-                {p.role ?? ""}
+              <span className="text-[13px] font-semibold flex-1 truncate" style={{ fontWeight: unread > 0 ? 700 : 600 }}>
+                {p.display_name}
               </span>
+              {unread > 0 ? (
+                <span
+                  className="flex items-center justify-center rounded-full font-bold flex-none"
+                  style={{ minWidth: 18, height: 18, padding: "0 5px", fontSize: 10, background: "var(--status-red)", color: "#fff" }}
+                >
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              ) : (
+                <span className="text-[10px] truncate max-w-[64px]" style={{ color: "var(--color-neutral-500)" }}>
+                  {p.role ?? ""}
+                </span>
+              )}
             </button>
           );
         })}
