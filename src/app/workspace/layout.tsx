@@ -53,7 +53,7 @@ export default async function WorkspaceLayout({
   };
 
   return (
-    <ChatManagerProvider currentUserId={user.id} initialUnreadCounts={unreadCounts}>
+    <ChatManagerProvider currentUserId={user.id} profiles={(allProfiles ?? []) as Profile[]} initialUnreadCounts={unreadCounts}>
       <div className="flex min-h-screen" style={{ background: "var(--color-bg)" }}>
         <Sidebar
           user={{
