@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { createStaffAccount, updateAccessRole } from "@/lib/actions/admin";
+import { createStaffAccount, deleteStaffAccount, updateAccessRole } from "@/lib/actions/admin";
 import type { AccessRole, Profile } from "@/lib/types";
 
 const ROLE_LABELS: Record<AccessRole, string> = {
@@ -15,11 +15,12 @@ function randomPassword() {
   return Math.random().toString(36).slice(-5) + Math.random().toString(36).slice(-5);
 }
 
-export function StaffRoles({ initialProfiles }: { initialProfiles: Profile[] }) {
+export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles: Profile[]; currentUserId: string }) {
   const [profiles, setProfiles] = useState(initialProfiles);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function changeRole(id: string, role: AccessRole) {
     const prev = profiles;
@@ -31,6 +32,24 @@ export function StaffRoles({ initialProfiles }: { initialProfiles: Profile[] }) 
       } catch (err) {
         setProfiles(prev);
         setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+      }
+    });
+  }
+
+  function removeStaff(p: Profile) {
+    if (!confirm(`Xoá tài khoản của "${p.display_name}"? Họ sẽ không đăng nhập được nữa. Không thể hoàn tác.`)) return;
+    const prev = profiles;
+    setDeletingId(p.id);
+    setProfiles((list) => list.filter((x) => x.id !== p.id));
+    setError(null);
+    startTransition(async () => {
+      try {
+        await deleteStaffAccount(p.id);
+      } catch (err) {
+        setProfiles(prev);
+        setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+      } finally {
+        setDeletingId(null);
       }
     });
   }
@@ -85,6 +104,19 @@ export function StaffRoles({ initialProfiles }: { initialProfiles: Profile[] }) 
                   </option>
                 ))}
               </select>
+              {p.id !== currentUserId && (
+                <button
+                  type="button"
+                  className="btn-icon flex-none"
+                  disabled={pending}
+                  onClick={() => removeStaff(p)}
+                  aria-label={`Xoá tài khoản ${p.display_name}`}
+                  title="Xoá tài khoản"
+                  style={{ color: "var(--status-red)" }}
+                >
+                  {deletingId === p.id ? "…" : "🗑"}
+                </button>
+              )}
             </div>
           ))}
         </div>

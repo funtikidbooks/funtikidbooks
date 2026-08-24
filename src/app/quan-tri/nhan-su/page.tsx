@@ -22,5 +22,5 @@ export default async function AdminStaffPage() {
   }
 
   const profiles = await listAllProfiles();
-  return <StaffRoles initialProfiles={profiles} />;
+  return <StaffRoles initialProfiles={profiles} currentUserId={user!.id} />;
 }

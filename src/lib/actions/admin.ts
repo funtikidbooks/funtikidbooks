@@ -459,6 +459,25 @@ export async function updateAccessRole(profileId: string, accessRole: AccessRole
   revalidatePath("/quan-tri/nhan-su");
 }
 
+// Deletes the Supabase Auth user outright (not just the profile row) — the
+// profiles table has `on delete cascade` from auth.users, so this removes
+// their login and profile together. Everything they authored elsewhere
+// (comments, DMs, task assignments...) is set up in the schema to either
+// cascade away with them or fall back to a null "created_by", never block
+// the delete.
+export async function deleteStaffAccount(profileId: string) {
+  const { user } = await requireDirector();
+  if (profileId === user.id) {
+    throw new Error("Bạn không thể tự xoá tài khoản của chính mình.");
+  }
+
+  const adminClient = createAdminClient();
+  const { error } = await adminClient.auth.admin.deleteUser(profileId);
+  if (error) throw new Error("Không thể xoá tài khoản. Vui lòng thử lại.");
+
+  revalidatePath("/quan-tri/nhan-su");
+}
+
 export async function createStaffAccount(input: {
   displayName: string;
   email: string;
