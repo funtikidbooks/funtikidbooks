@@ -811,13 +811,19 @@ create table if not exists public.calendar_events (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   note text,
-  category text not null default 'other' check (category in ('meeting', 'review', 'workshop', 'deadline', 'client', 'other')),
+  category text not null default 'other' check (category in ('meeting', 'review', 'workshop', 'deadline', 'client', 'off', 'other')),
   start_at timestamptz not null,
   all_day boolean not null default false,
   created_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Widened to add the 'off' (Nghỉ) category — re-run safe on a table created
+-- before that category existed.
+alter table public.calendar_events drop constraint if exists calendar_events_category_check;
+alter table public.calendar_events add constraint calendar_events_category_check
+  check (category in ('meeting', 'review', 'workshop', 'deadline', 'client', 'off', 'other'));
 
 alter table public.calendar_events enable row level security;
 

@@ -14,7 +14,7 @@ export type Profile = {
   created_at: string;
 };
 
-export type EventCategory = "meeting" | "review" | "workshop" | "deadline" | "client" | "other";
+export type EventCategory = "meeting" | "review" | "workshop" | "deadline" | "client" | "off" | "other";
 
 export type CalendarEvent = {
   id: string;

@@ -61,12 +61,27 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
     const map = new Map<string, CalendarEvent[]>();
     for (const ev of events) {
       if (!enabledCategories.has(ev.category)) continue;
+      // "Nghỉ" events don't get a pill in the list — they turn the whole
+      // day cell red instead, same as the fixed public holidays.
+      if (ev.category === "off") continue;
       const key = dateKey(new Date(ev.start_at));
       const list = map.get(key) ?? [];
       list.push(ev);
       map.set(key, list);
     }
     for (const list of map.values()) list.sort((a, b) => a.start_at.localeCompare(b.start_at));
+    return map;
+  }, [events, enabledCategories]);
+
+  // Any "Nghỉ" (day off) event marks its whole day the same way a fixed
+  // public holiday does — keyed by day so a day with both just shows one.
+  const offDayByKey = useMemo(() => {
+    const map = new Map<string, CalendarEvent>();
+    if (!enabledCategories.has("off")) return map;
+    for (const ev of events) {
+      if (ev.category !== "off") continue;
+      map.set(dateKey(new Date(ev.start_at)), ev);
+    }
     return map;
   }, [events, enabledCategories]);
 
@@ -156,7 +171,8 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
               const inMonth = day.getMonth() === viewDate.getMonth();
               const isToday = dateKey(day) === dateKey(today);
               const dayEvents = eventsByDay.get(dateKey(day)) ?? [];
-              const holiday = holidayOn(day);
+              const offEvent = offDayByKey.get(dateKey(day));
+              const holiday = holidayOn(day) ?? (offEvent ? { label: offEvent.title } : undefined);
               return (
                 <button
                   key={day.toISOString()}
@@ -185,6 +201,16 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
                   </span>
                   {holiday && (
                     <span
+                      role={offEvent ? "button" : undefined}
+                      tabIndex={offEvent ? 0 : undefined}
+                      onClick={
+                        offEvent
+                          ? (e) => {
+                              e.stopPropagation();
+                              setEditingEvent(offEvent);
+                            }
+                          : undefined
+                      }
                       className="rounded-[4px] px-1 py-0.5 text-[10px] font-bold truncate w-full"
                       style={{ background: "rgba(192, 82, 79, 0.12)", color: "var(--status-red)" }}
                       title={holiday.label}
@@ -352,7 +378,17 @@ function EventDialog({
 
         <div className="field">
           <label htmlFor="ev-cat">Danh mục</label>
-          <select id="ev-cat" className="input" value={category} onChange={(e) => setCategory(e.target.value as EventCategory)} disabled={!canEdit}>
+          <select
+            id="ev-cat"
+            className="input"
+            value={category}
+            onChange={(e) => {
+              const next = e.target.value as EventCategory;
+              setCategory(next);
+              if (next === "off") setAllDay(true);
+            }}
+            disabled={!canEdit}
+          >
             {EVENT_CATEGORIES.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}

@@ -6,6 +6,7 @@ export const EVENT_CATEGORIES: { id: EventCategory; label: string; color: string
   { id: "workshop", label: "Workshop / Training", color: "#D6A400" },
   { id: "deadline", label: "Deadline", color: "#C0524F" },
   { id: "client", label: "Khách hàng", color: "#8B5CF6" },
+  { id: "off", label: "Nghỉ", color: "#C0524F" },
   { id: "other", label: "Khác", color: "#FF7A3D" },
 ];
 
