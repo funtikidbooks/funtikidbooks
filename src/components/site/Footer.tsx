@@ -54,32 +54,35 @@ export function Footer({ locale }: { locale: Locale }) {
           <p className="text-sm max-w-[320px]" style={{ color: "#c8c7c1" }}>
             {t.footer.tagline}
           </p>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex flex-col gap-2.5 mt-1">
             {[
               { label: "Facebook", icon: "f", href: "https://facebook.com/Funtikidbooks" },
               { label: "Instagram", icon: "◎", href: "https://instagram.com/funtikidbooks" },
+              { label: "Behance", icon: "Be", href: "https://www.behance.net/funtikidbooks" },
               { label: "Upwork", icon: "Uw", href: "https://www.upwork.com/freelancers/yunachan" },
-            ].map((s) => (
-              <a
-                key={s.label}
-                href={s.href}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={s.label}
-                className="flex items-center justify-center rounded-full font-bold"
-                style={{ width: 30, height: 30, border: "1.5px solid #57564f", color: "#ff9f6e", fontSize: s.icon.length > 1 ? 11 : 14 }}
-              >
-                {s.icon}
-              </a>
-            ))}
-            <a
-              href="mailto:funtikidbooks.studio@gmail.com"
-              aria-label="Email"
-              className="flex items-center justify-center rounded-full text-sm font-bold"
-              style={{ width: 30, height: 30, border: "1.5px solid #57564f", color: "#ff9f6e" }}
-            >
-              ✉
-            </a>
+              { label: "Email", icon: "✉", href: "mailto:funtikidbooks.studio@gmail.com" },
+            ].map((s) => {
+              const isMail = s.href.startsWith("mailto:");
+              return (
+                <a
+                  key={s.label}
+                  href={s.href}
+                  target={isMail ? undefined : "_blank"}
+                  rel={isMail ? undefined : "noreferrer"}
+                  className="flex items-center gap-2.5 text-sm font-semibold"
+                  style={{ color: "#c8c7c1" }}
+                >
+                  <span
+                    aria-hidden
+                    className="flex items-center justify-center rounded-full font-bold flex-none"
+                    style={{ width: 28, height: 28, border: "1.5px solid #57564f", color: "#ff9f6e", fontSize: s.icon.length > 1 ? 10 : 13 }}
+                  >
+                    {s.icon}
+                  </span>
+                  {s.label}
+                </a>
+              );
+            })}
           </div>
         </div>
 
