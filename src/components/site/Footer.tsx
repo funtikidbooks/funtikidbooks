@@ -58,6 +58,7 @@ export function Footer({ locale }: { locale: Locale }) {
             {[
               { label: "Facebook", icon: "f", href: "https://facebook.com/Funtikidbooks" },
               { label: "Instagram", icon: "◎", href: "https://instagram.com/funtikidbooks" },
+              { label: "Upwork", icon: "Uw", href: "https://www.upwork.com/freelancers/yunachan" },
             ].map((s) => (
               <a
                 key={s.label}
@@ -65,8 +66,8 @@ export function Footer({ locale }: { locale: Locale }) {
                 target="_blank"
                 rel="noreferrer"
                 aria-label={s.label}
-                className="flex items-center justify-center rounded-full text-sm font-bold"
-                style={{ width: 30, height: 30, border: "1.5px solid #57564f", color: "#ff9f6e" }}
+                className="flex items-center justify-center rounded-full font-bold"
+                style={{ width: 30, height: 30, border: "1.5px solid #57564f", color: "#ff9f6e", fontSize: s.icon.length > 1 ? 11 : 14 }}
               >
                 {s.icon}
               </a>
