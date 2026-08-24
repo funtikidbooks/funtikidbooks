@@ -215,7 +215,7 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
                       style={{ background: "rgba(192, 82, 79, 0.12)", color: "var(--status-red)" }}
                       title={holiday.label}
                     >
-                      🎉 {holiday.label}
+                      {offEvent ? holiday.label : `🎉 ${holiday.label}`}
                     </span>
                   )}
                   <div className="flex flex-col gap-0.5 w-full">
