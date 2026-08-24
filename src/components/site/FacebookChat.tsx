@@ -2,11 +2,12 @@
 
 import { useEffect, useRef } from "react";
 
-// facebook.com/FuntiKidbooks — real numeric Page ID, confirmed via the
-// page's al:ios:url / al:android:url meta tags (fb://profile/<id>). The
-// previous hardcoded ID here didn't match the live page, which silently
+// facebook.com/FuntiKidbooks — real numeric Page ID, taken straight from
+// the Page's own Meta Business Suite inbox settings (Hộp thư > Cài đặt
+// hộp thư > Nhắn tin > URL Messenger, m.me/<page_id>). The previous ID
+// here was guessed from meta tags and didn't match, which silently
 // prevented the Customer Chat plugin from ever rendering.
-const FB_PAGE_ID = "100076068062260";
+const FB_PAGE_ID = "249373520318216";
 
 declare global {
   interface Window {
