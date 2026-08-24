@@ -803,6 +803,55 @@ create policy "staff can view editor files"
   using (bucket_id = 'editor-uploads');
 
 -- ---------------------------------------------------------------------------
+-- calendar_events: the shared company calendar (workspace/lich) — every
+-- signed-in staff member can read it and add their own events; only the
+-- event's creator or the director can edit/delete it.
+-- ---------------------------------------------------------------------------
+create table if not exists public.calendar_events (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  note text,
+  category text not null default 'other' check (category in ('meeting', 'review', 'workshop', 'deadline', 'client', 'other')),
+  start_at timestamptz not null,
+  all_day boolean not null default false,
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.calendar_events enable row level security;
+
+drop policy if exists "staff can read calendar events" on public.calendar_events;
+create policy "staff can read calendar events"
+  on public.calendar_events for select
+  to authenticated
+  using (true);
+
+drop policy if exists "staff can create calendar events" on public.calendar_events;
+create policy "staff can create calendar events"
+  on public.calendar_events for insert
+  to authenticated
+  with check (created_by = auth.uid());
+
+drop policy if exists "creator or director can update calendar events" on public.calendar_events;
+create policy "creator or director can update calendar events"
+  on public.calendar_events for update
+  to authenticated
+  using (created_by = auth.uid() or public.current_access_role() = 'director')
+  with check (created_by = auth.uid() or public.current_access_role() = 'director');
+
+drop policy if exists "creator or director can delete calendar events" on public.calendar_events;
+create policy "creator or director can delete calendar events"
+  on public.calendar_events for delete
+  to authenticated
+  using (created_by = auth.uid() or public.current_access_role() = 'director');
+
+drop trigger if exists calendar_events_set_updated_at on public.calendar_events;
+create trigger calendar_events_set_updated_at
+  before update on public.calendar_events
+  for each row execute procedure public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
 -- Seed the portfolio with the placeholder projects already on the public
 -- site, so /du-an is backed by real rows from the start. Safe to re-run —
 -- skipped once any project exists.

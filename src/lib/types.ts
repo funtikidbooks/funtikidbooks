@@ -14,6 +14,20 @@ export type Profile = {
   created_at: string;
 };
 
+export type EventCategory = "meeting" | "review" | "workshop" | "deadline" | "client" | "other";
+
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  note: string | null;
+  category: EventCategory;
+  start_at: string;
+  all_day: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type FontAsset = {
   id: string;
   name: string;
@@ -448,6 +462,12 @@ export type Database = {
         Row: EditorProject;
         Insert: Partial<EditorProject> & { name: string };
         Update: Partial<EditorProject>;
+        Relationships: [];
+      };
+      calendar_events: {
+        Row: CalendarEvent;
+        Insert: Partial<CalendarEvent> & { title: string; start_at: string };
+        Update: Partial<CalendarEvent>;
         Relationships: [];
       };
     };

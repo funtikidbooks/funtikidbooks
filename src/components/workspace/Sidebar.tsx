@@ -15,7 +15,7 @@ const NAV = [
   { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️", enabled: true },
   { href: "#", label: "Dự án", icon: "📁", enabled: false },
   { href: "/workspace/thanh-vien", label: "Thành viên", icon: "👥", enabled: true },
-  { href: "#", label: "Lịch", icon: "📅", enabled: false },
+  { href: "/workspace/lich", label: "Lịch", icon: "📅", enabled: true },
 ];
 
 export function Sidebar({
