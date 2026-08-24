@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import localFont from "next/font/local";
 import { CtaBanner } from "@/components/site/CtaBanner";
+import { Reveal } from "@/components/site/Reveal";
 import { VideoTeaser } from "@/components/site/VideoTeaser";
 import { ProjectCarousel } from "@/components/site/ProjectCarousel";
 import { PartnersMarquee } from "@/components/site/PartnersMarquee";
@@ -71,11 +72,13 @@ export default async function HomePage() {
         </div>
       </HeroSlideshow>
 
-      <VideoTeaser />
+      <Reveal>
+        <VideoTeaser />
+      </Reveal>
 
       {/* Services */}
       <section className="max-w-[1800px] mx-auto px-10 pt-6 pb-20">
-        <div className="relative flex flex-col items-center text-center gap-2 mb-12">
+        <Reveal className="relative flex flex-col items-center text-center gap-2 mb-12">
           <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
             {t.home.servicesKicker}
           </div>
@@ -96,13 +99,15 @@ export default async function HomePage() {
               strokeWidth="1.6"
             />
           </svg>
-        </div>
-        <ServicesGrid
-          services={t.home.services}
-          initialImages={serviceImages}
-          initialTransforms={serviceTransforms}
-          canEdit={canEdit}
-        />
+        </Reveal>
+        <Reveal delay={120}>
+          <ServicesGrid
+            services={t.home.services}
+            initialImages={serviceImages}
+            initialTransforms={serviceTransforms}
+            canEdit={canEdit}
+          />
+        </Reveal>
         <div className="flex justify-center mt-12">
           <Link href="/dich-vu" className="fk-navlink text-sm font-bold">
             {t.home.servicesMore}
@@ -113,48 +118,54 @@ export default async function HomePage() {
       {/* Featured projects */}
       <section className="py-16" style={{ background: "var(--color-surface)" }}>
         <div className="max-w-[1280px] mx-auto px-5">
-          <div className="flex flex-col items-center text-center gap-2 mb-10">
+          <Reveal className="flex flex-col items-center text-center gap-2 mb-10">
             <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-700)" }}>
               {t.home.projectsKicker}
             </div>
             <h2 className="text-3xl">{t.home.projectsTitle}</h2>
-          </div>
-          <ProjectCarousel projects={projects} />
+          </Reveal>
+          <Reveal delay={120}>
+            <ProjectCarousel projects={projects} />
+          </Reveal>
         </div>
       </section>
 
       {/* About + stats */}
       <section className="max-w-[1280px] mx-auto px-5 py-16 flex flex-col lg:flex-row gap-11 items-center">
-        <div className="flex-1 w-full relative rounded-[var(--radius-lg)] overflow-hidden" style={{ minHeight: 320 }}>
-          <Image src="/brand/funti-team.jpg" alt="Funti Kidbooks Studio team" fill className="object-cover" />
-        </div>
-        <div className="flex-1 flex flex-col gap-4">
-          <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
-            {t.home.aboutKicker}
+        <Reveal className="flex-1 w-full">
+          <div className="relative rounded-[var(--radius-lg)] overflow-hidden" style={{ minHeight: 320 }}>
+            <Image src="/brand/funti-team.jpg" alt="Funti Kidbooks Studio team" fill className="object-cover" />
           </div>
-          <h2 className="text-3xl">{t.home.aboutTitle}</h2>
-          <p style={{ color: "var(--color-neutral-700)" }}>{t.home.aboutBody}</p>
-          <div className="flex gap-8 mt-2">
-            {t.home.stats.map((s) => (
-              <div key={s.label} className="flex flex-col gap-1">
-                <span className="text-2xl font-heading font-bold" style={{ color: "var(--color-accent-700)" }}>
-                  {s.value}
-                </span>
-                <span className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
-                  {s.label}
-                </span>
-              </div>
-            ))}
+        </Reveal>
+        <Reveal className="flex-1" delay={150}>
+          <div className="flex flex-col gap-4">
+            <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
+              {t.home.aboutKicker}
+            </div>
+            <h2 className="text-3xl">{t.home.aboutTitle}</h2>
+            <p style={{ color: "var(--color-neutral-700)" }}>{t.home.aboutBody}</p>
+            <div className="flex gap-8 mt-2">
+              {t.home.stats.map((s) => (
+                <div key={s.label} className="flex flex-col gap-1">
+                  <span className="text-2xl font-heading font-bold" style={{ color: "var(--color-accent-700)" }}>
+                    {s.value}
+                  </span>
+                  <span className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
+                    {s.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <Link href="/gioi-thieu" className="btn btn-secondary w-fit mt-2">
+              {t.home.aboutMore}
+            </Link>
           </div>
-          <Link href="/gioi-thieu" className="btn btn-secondary w-fit mt-2">
-            {t.home.aboutMore}
-          </Link>
-        </div>
+        </Reveal>
       </section>
 
       {/* Partners */}
       <section className="pb-16">
-        <div className="max-w-[1280px] mx-auto px-5 flex flex-col items-center text-center gap-2 mb-8">
+        <Reveal className="max-w-[1280px] mx-auto px-5 flex flex-col items-center text-center gap-2 mb-8">
           <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-700)" }}>
             {t.home.partnersKicker}
           </div>
@@ -165,10 +176,15 @@ export default async function HomePage() {
           <p className="max-w-[480px]" style={{ color: "var(--color-neutral-700)" }}>
             {t.home.partnersBody}
           </p>
-        </div>
+        </Reveal>
         <PartnersMarquee />
         <div className="max-w-[1280px] mx-auto px-5">
-          <div className="card elev-sm mt-8 p-6 flex flex-col items-center text-center gap-1" style={{ background: "var(--color-accent-100)", border: "none" }}>
+          <Reveal
+            delay={120}
+            y={16}
+            className="card elev-sm mt-8 p-6 flex flex-col items-center text-center gap-1"
+            style={{ background: "var(--color-accent-100)", border: "none" }}
+          >
             <span className="text-xl" aria-hidden>
               💌
             </span>
@@ -178,11 +194,13 @@ export default async function HomePage() {
             <p className="text-sm" style={{ color: "var(--color-accent-700)" }}>
               {t.home.thanksBody}
             </p>
-          </div>
+          </Reveal>
         </div>
       </section>
 
-      <CtaBanner title={t.ctaBanner.title} body={t.ctaBanner.body} ctaLabel={t.ctaBanner.cta} />
+      <Reveal>
+        <CtaBanner title={t.ctaBanner.title} body={t.ctaBanner.body} ctaLabel={t.ctaBanner.cta} />
+      </Reveal>
     </>
   );
 }

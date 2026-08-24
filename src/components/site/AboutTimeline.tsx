@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { EditableImage } from "@/components/site/EditableImage";
+import { Reveal } from "@/components/site/Reveal";
 import { useDict } from "@/components/site/LocaleProvider";
 import { pickLocalized } from "@/lib/i18n";
 import { saveJsonSetting, uploadContentImage } from "@/lib/actions/admin";
@@ -39,14 +40,14 @@ export function AboutTimeline({ items, canEdit }: { items: TimelineItem[]; canEd
   return (
     <section className="py-16">
       <div className="max-w-[920px] mx-auto px-5">
-        <div className="flex flex-col items-center text-center gap-2 mb-14">
+        <Reveal className="flex flex-col items-center text-center gap-2 mb-14">
           <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
             {t.about.storyKicker}
           </div>
           <h2 className="text-3xl">
             {t.about.storyTitle[0]} <span style={{ color: "var(--color-accent-600)" }}>{t.about.storyTitle[1]}</span>
           </h2>
-        </div>
+        </Reveal>
 
         <div className="relative flex flex-col gap-16">
           <div className="fk-timeline-line" aria-hidden />
@@ -58,7 +59,7 @@ export function AboutTimeline({ items, canEdit }: { items: TimelineItem[]; canEd
             const description = pickLocalized(locale, item.description, item.descriptionEn);
 
             return (
-              <div key={item.id} className="relative grid gap-6 sm:grid-cols-2 items-center">
+              <Reveal key={item.id} y={28} className="relative grid gap-6 sm:grid-cols-2 items-center">
                 <span className="fk-timeline-marker">{i + 1}</span>
 
                 <div className={isRight ? "sm:order-2" : ""}>
@@ -93,7 +94,7 @@ export function AboutTimeline({ items, canEdit }: { items: TimelineItem[]; canEd
                     </button>
                   )}
                 </div>
-              </div>
+              </Reveal>
             );
           })}
         </div>

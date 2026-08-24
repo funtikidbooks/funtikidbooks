@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PageHero } from "@/components/site/PageHero";
 import { CtaBanner } from "@/components/site/CtaBanner";
+import { Reveal } from "@/components/site/Reveal";
 import { getLocale } from "@/lib/getLocale";
 import { dictionary } from "@/lib/dictionary";
 
@@ -32,16 +33,16 @@ export default async function ProcessPage() {
       />
 
       <section className="max-w-[1280px] mx-auto px-5 py-14">
-        <div className="flex flex-col items-center text-center gap-2 mb-12">
+        <Reveal className="flex flex-col items-center text-center gap-2 mb-12">
           <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
             {t.process.stepsKicker}
           </div>
           <h2 className="text-3xl max-w-[560px]">{t.process.stepsTitle}</h2>
-        </div>
+        </Reveal>
 
         <div className="flex flex-col gap-4 max-w-[760px] mx-auto">
           {t.process.steps.map((step, i) => (
-            <div key={step.title} className="card elev-sm p-6 flex gap-5 items-start">
+            <Reveal key={step.title} delay={i * 80} y={18} className="card elev-sm p-6 flex gap-5 items-start">
               <div
                 className="flex items-center justify-center rounded-full font-heading font-bold text-lg flex-none"
                 style={{
@@ -57,12 +58,14 @@ export default async function ProcessPage() {
                 <h3 className="text-lg">{step.title}</h3>
                 <p style={{ color: "var(--color-neutral-600)" }}>{step.desc}</p>
               </div>
-            </div>
+            </Reveal>
           ))}
         </div>
       </section>
 
-      <CtaBanner title={t.ctaBanner.title} body={t.ctaBanner.body} ctaLabel={t.ctaBanner.cta} />
+      <Reveal>
+        <CtaBanner title={t.ctaBanner.title} body={t.ctaBanner.body} ctaLabel={t.ctaBanner.cta} />
+      </Reveal>
     </>
   );
 }

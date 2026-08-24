@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHero } from "@/components/site/PageHero";
 import { CtaBanner } from "@/components/site/CtaBanner";
+import { Reveal } from "@/components/site/Reveal";
 import { BookFlipDemo } from "@/components/site/BookFlipDemo";
 import { ReviewsSection } from "@/components/site/ReviewsSection";
 import { FaqSection } from "@/components/site/FaqSection";
@@ -94,7 +95,7 @@ export default async function ServicesPage() {
 
       <section className="max-w-[1280px] mx-auto px-5 py-12">
         {bookPages.length >= 2 && (
-          <div className="flex flex-col items-center text-center gap-2">
+          <Reveal className="flex flex-col items-center text-center gap-2">
             <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
               {t.services.previewKicker}
             </div>
@@ -128,24 +129,32 @@ export default async function ServicesPage() {
                 <BookFlipDemo pages={bookPages} alt={t.services.previewAlt} backCover={bookBackCover} />
               </div>
             </div>
-          </div>
+          </Reveal>
         )}
       </section>
 
-      <PricingTable table={pricing} canEdit={canEdit} />
+      <Reveal>
+        <PricingTable table={pricing} canEdit={canEdit} />
+      </Reveal>
 
-      <FaqSection title={t.services.faqTitle} items={t.services.faq} />
+      <Reveal>
+        <FaqSection title={t.services.faqTitle} items={t.services.faq} />
+      </Reveal>
 
       <section className="max-w-[1280px] mx-auto px-5 py-14">
-        <ReviewsSection reviews={reviews} canEdit={canEdit} />
+        <Reveal>
+          <ReviewsSection reviews={reviews} canEdit={canEdit} />
+        </Reveal>
       </section>
 
       <section className="py-14" style={{ background: "var(--color-surface)" }}>
         <div className="max-w-[1280px] mx-auto px-5">
-          <h2 className="text-3xl text-center mb-10">{t.services.whyTitle}</h2>
+          <Reveal>
+            <h2 className="text-3xl text-center mb-10">{t.services.whyTitle}</h2>
+          </Reveal>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {t.services.why.map((w) => (
-              <div key={w.title} className="flex flex-col items-center text-center gap-2 p-5">
+            {t.services.why.map((w, i) => (
+              <Reveal key={w.title} delay={i * 90} className="flex flex-col items-center text-center gap-2 p-5">
                 <span className="text-3xl" aria-hidden>
                   {w.icon}
                 </span>
@@ -153,13 +162,13 @@ export default async function ServicesPage() {
                 <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
                   {w.desc}
                 </p>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="max-w-[1280px] mx-auto px-5 py-14 flex flex-col items-center text-center gap-4">
+      <Reveal className="max-w-[1280px] mx-auto px-5 py-14 flex flex-col items-center text-center gap-4">
         <h2 className="text-3xl">{t.services.processTitle}</h2>
         <p className="max-w-[520px]" style={{ color: "var(--color-neutral-700)" }}>
           {t.services.processBody}
@@ -167,9 +176,11 @@ export default async function ServicesPage() {
         <Link href="/quy-trinh" className="btn btn-secondary">
           {t.services.processCta}
         </Link>
-      </section>
+      </Reveal>
 
-      <CtaBanner title={t.ctaBanner.title} body={t.ctaBanner.body} ctaLabel={t.ctaBanner.cta} />
+      <Reveal>
+        <CtaBanner title={t.ctaBanner.title} body={t.ctaBanner.body} ctaLabel={t.ctaBanner.cta} />
+      </Reveal>
     </>
   );
 }

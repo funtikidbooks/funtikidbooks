@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { EditableImage } from "./EditableImage";
 import { ImagePlaceholder } from "./ImagePlaceholder";
+import { Reveal } from "./Reveal";
 import { useDict } from "@/components/site/LocaleProvider";
 import { categoryLabel } from "@/lib/dictionary";
 import { pickLocalized } from "@/lib/i18n";
@@ -77,51 +78,52 @@ export function NewsGrid({ initialPosts, canEdit }: { initialPosts: NewsPost[]; 
         <p style={{ color: "var(--color-neutral-500)" }}>{t.news.noResults}</p>
       ) : (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((post) => (
-            <Link
-              key={post.id}
-              href={`/tin-tuc/${post.slug}`}
-              className="card elev-sm overflow-hidden flex flex-col transition-transform hover:-translate-y-0.5"
-              style={{ opacity: post.published ? 1 : 0.6 }}
-            >
-              <EditableImage
-                src={post.cover_image_url}
-                alt={post.title}
-                emoji="📰"
-                canEdit={canEdit}
-                onUpload={async (file) => {
-                  const updated = await updateNewsPost(post.id, { cover: file });
-                  setPosts((prev) => prev.map((p) => (p.id === post.id ? updated : p)));
-                  return updated.cover_image_url ?? "";
-                }}
-                className="w-full"
-                style={{ height: 170, borderRadius: 0 }}
-              />
-              <div className="p-4 flex flex-col gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="tag tag-accent-2 w-fit">{categoryLabel(locale, post.category)}</span>
-                  {canEdit && (
-                    <button
-                      type="button"
-                      className="text-xs font-bold"
-                      style={{ color: "var(--color-accent-600)" }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setEditing(post);
-                      }}
-                    >
-                      {t.news.edit}
-                    </button>
-                  )}
+          {filtered.map((post, i) => (
+            <Reveal key={post.id} delay={(i % 3) * 80} y={20}>
+              <Link
+                href={`/tin-tuc/${post.slug}`}
+                className="card elev-sm overflow-hidden flex flex-col transition-transform hover:-translate-y-0.5"
+                style={{ opacity: post.published ? 1 : 0.6 }}
+              >
+                <EditableImage
+                  src={post.cover_image_url}
+                  alt={post.title}
+                  emoji="📰"
+                  canEdit={canEdit}
+                  onUpload={async (file) => {
+                    const updated = await updateNewsPost(post.id, { cover: file });
+                    setPosts((prev) => prev.map((p) => (p.id === post.id ? updated : p)));
+                    return updated.cover_image_url ?? "";
+                  }}
+                  className="w-full"
+                  style={{ height: 170, borderRadius: 0 }}
+                />
+                <div className="p-4 flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="tag tag-accent-2 w-fit">{categoryLabel(locale, post.category)}</span>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className="text-xs font-bold"
+                        style={{ color: "var(--color-accent-600)" }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setEditing(post);
+                        }}
+                      >
+                        {t.news.edit}
+                      </button>
+                    )}
+                  </div>
+                  <h3 className="text-sm">{pickLocalized(locale, post.title, post.title_en)}</h3>
+                  <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+                    {new Date(post.created_at).toLocaleDateString(dateLocale)}
+                    {!post.published && ` · ${t.news.unpublished}`}
+                  </span>
                 </div>
-                <h3 className="text-sm">{pickLocalized(locale, post.title, post.title_en)}</h3>
-                <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-                  {new Date(post.created_at).toLocaleDateString(dateLocale)}
-                  {!post.published && ` · ${t.news.unpublished}`}
-                </span>
-              </div>
-            </Link>
+              </Link>
+            </Reveal>
           ))}
         </div>
       )}

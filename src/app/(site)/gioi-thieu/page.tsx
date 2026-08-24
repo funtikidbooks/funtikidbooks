@@ -5,6 +5,7 @@ import { AboutTimeline, type TimelineItem } from "@/components/site/AboutTimelin
 import { AboutTeam, type TeamMember } from "@/components/site/AboutTeam";
 import { CultureImage, DEFAULT_CULTURE_TRANSFORM } from "@/components/site/CultureImage";
 import { CtaBanner } from "@/components/site/CtaBanner";
+import { Reveal } from "@/components/site/Reveal";
 import { getContentEditorRole, getJsonSetting, getSiteSettings } from "@/lib/data/site-content";
 import { getLocale } from "@/lib/getLocale";
 import { dictionary } from "@/lib/dictionary";
@@ -112,7 +113,7 @@ export default async function AboutPage() {
           transform={cultureTransform}
           canEdit={canEdit}
         />
-        <div className="relative z-[1] max-w-[880px] mx-auto px-5 flex flex-col items-center text-center gap-4">
+        <Reveal className="relative z-[1] max-w-[880px] mx-auto px-5 flex flex-col items-center text-center gap-4">
           <h2 className="text-3xl">{t.about.cultureTitle}</h2>
           <p className="text-base max-w-[560px]" style={{ color: "var(--color-neutral-700)" }}>
             {t.about.cultureBody}
@@ -135,10 +136,12 @@ export default async function AboutPage() {
               </div>
             ))}
           </div>
-        </div>
+        </Reveal>
       </section>
 
-      <CtaBanner title={t.ctaBanner.title} body={t.ctaBanner.body} ctaLabel={t.ctaBanner.cta} />
+      <Reveal>
+        <CtaBanner title={t.ctaBanner.title} body={t.ctaBanner.body} ctaLabel={t.ctaBanner.cta} />
+      </Reveal>
     </>
   );
 }

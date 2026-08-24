@@ -6,6 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useDict } from "@/components/site/LocaleProvider";
 import { ProjectLightbox } from "@/components/site/ProjectLightbox";
+import { Reveal } from "@/components/site/Reveal";
 import { categoryLabel } from "@/lib/dictionary";
 import { pickLocalized } from "@/lib/i18n";
 import { setProjectLike, trackProjectView } from "@/lib/actions/projects";
@@ -179,9 +180,11 @@ export function ProjectsGrid({ projects, canEdit = false }: { projects: Project[
         {/* Behance-style grid: uniform cards, gently landscape (not a hard
             square), caption reveals on hover. */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((p) => (
-            <div
+          {filtered.map((p, i) => (
+            <Reveal
               key={p.id}
+              delay={(i % 4) * 70}
+              y={16}
               className="relative group rounded-[var(--radius-md)] overflow-hidden card elev-sm"
               style={{ aspectRatio: "4 / 3" }}
             >
@@ -246,7 +249,7 @@ export function ProjectsGrid({ projects, canEdit = false }: { projects: Project[
                   </button>
                 )}
               </div>
-            </div>
+            </Reveal>
           ))}
 
           {canEdit && (

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DEFAULT_IMAGE_TRANSFORM, EditableImage, type ImageTransform } from "@/components/site/EditableImage";
 import { InlineField } from "@/components/site/InlineField";
+import { Reveal } from "@/components/site/Reveal";
 import { useDict } from "@/components/site/LocaleProvider";
 import { pickLocalized } from "@/lib/i18n";
 import { saveJsonSetting, uploadContentImage } from "@/lib/actions/admin";
@@ -87,9 +88,9 @@ export function AboutTeam({ members, canEdit }: { members: TeamMember[]; canEdit
   return (
     <section className="py-16" style={{ background: "var(--color-surface)" }}>
       <div className="max-w-[1200px] mx-auto px-5">
-        <div className="flex flex-col items-center text-center gap-2 mb-8">
+        <Reveal className="flex flex-col items-center text-center gap-2 mb-8">
           <h2 className="text-3xl">{t.about.teamTitle}</h2>
-        </div>
+        </Reveal>
 
         <div className="relative w-full flex items-center justify-center" style={{ height: CAROUSEL_HEIGHT }}>
           {count > 1 && (

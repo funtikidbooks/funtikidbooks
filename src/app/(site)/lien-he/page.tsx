@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageHero } from "@/components/site/PageHero";
 import { ContactForm } from "@/components/site/ContactForm";
 import { ContactOfficePhoto } from "@/components/site/ContactOfficePhoto";
+import { Reveal } from "@/components/site/Reveal";
 import { getContentEditorRole, getSiteSettings } from "@/lib/data/site-content";
 import { getLocale } from "@/lib/getLocale";
 import { dictionary } from "@/lib/dictionary";
@@ -41,8 +42,10 @@ export default async function ContactPage() {
     <>
       <PageHero kicker={t.contact.kicker} title={t.contact.title} body={t.contact.body} emoji="✉️" hideImage />
       <section className="max-w-[1280px] mx-auto px-5 pb-16 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
-        <ContactForm />
-        <div className="card elev-sm p-7 flex flex-col gap-5 h-fit">
+        <Reveal>
+          <ContactForm />
+        </Reveal>
+        <Reveal delay={130} className="card elev-sm p-7 flex flex-col gap-5 h-fit">
           <h3 className="text-lg">{t.contact.infoTitle}</h3>
           {INFO.map((item) => (
             <div key={item.label} className="flex items-start gap-3">
@@ -79,11 +82,11 @@ export default async function ContactPage() {
           </div>
 
           <ContactOfficePhoto src={officeImage} canEdit={canEdit} />
-        </div>
+        </Reveal>
       </section>
 
       <section className="max-w-[1280px] mx-auto px-5 pb-16">
-        <div className="relative rounded-[var(--radius-lg)] overflow-hidden elev-sm" style={{ height: 360 }}>
+        <Reveal className="relative rounded-[var(--radius-lg)] overflow-hidden elev-sm" style={{ height: 360 }}>
           <iframe
             title="Bản đồ đường đến Funti Kidbooks Studio"
             src={`https://www.google.com/maps?q=${OFFICE_LAT},${OFFICE_LNG}&output=embed`}
@@ -102,7 +105,7 @@ export default async function ContactPage() {
           >
             📍 Funtikidbooks
           </span>
-        </div>
+        </Reveal>
       </section>
     </>
   );
