@@ -24,8 +24,8 @@ export default async function ContactPage() {
   const officeImage = settings[OFFICE_IMAGE_KEY] ?? null;
 
   const INFO = [
-    { icon: "✉️", label: t.contact.email, value: "hello@funtikidbooks.com" },
-    { icon: "📞", label: t.contact.phone, value: "+84 (0) 123 456 789" },
+    { icon: "✉️", label: t.contact.email, value: "funtikidbooks.studio@gmail.com" },
+    { icon: "📞", label: t.contact.phone, value: "0978 346 851" },
     { icon: "📍", label: t.contact.address, value: t.contact.addressValue },
   ];
 
