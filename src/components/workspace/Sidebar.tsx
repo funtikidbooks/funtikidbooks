@@ -30,6 +30,7 @@ export function Sidebar({
   const pathname = usePathname();
   const { openChat, unreadCounts } = useChatManager();
   const onlineIds = usePresence(currentUserId);
+  const myAvatarUrl = profiles.find((p) => p.id === currentUserId)?.avatar_url ?? null;
 
   const teammates = profiles
     .filter((p) => p.id !== currentUserId)
@@ -109,10 +110,15 @@ export function Sidebar({
             >
               <span className="relative flex-none">
                 <span
-                  className="flex items-center justify-center rounded-full text-[10px] font-bold"
+                  className="flex items-center justify-center rounded-full text-[10px] font-bold overflow-hidden"
                   style={{ width: 24, height: 24, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
                 >
-                  {p.display_name.charAt(0).toUpperCase()}
+                  {p.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    p.display_name.charAt(0).toUpperCase()
+                  )}
                 </span>
                 <span
                   className="absolute rounded-full"
@@ -149,10 +155,15 @@ export function Sidebar({
       <div className="mt-auto flex flex-col gap-3">
         <div className="flex items-center gap-2 px-2">
           <div
-            className="flex items-center justify-center rounded-full text-xs font-bold flex-none"
+            className="flex items-center justify-center rounded-full text-xs font-bold flex-none overflow-hidden"
             style={{ width: 30, height: 30, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
           >
-            {user.displayName.charAt(0).toUpperCase()}
+            {myAvatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={myAvatarUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              user.displayName.charAt(0).toUpperCase()
+            )}
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-bold truncate">{user.displayName}</span>

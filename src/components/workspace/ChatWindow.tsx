@@ -200,10 +200,15 @@ export function ChatWindow({
         onClick={() => setMinimized((v) => !v)}
       >
         <span
-          className="flex items-center justify-center rounded-full font-bold flex-none"
+          className="flex items-center justify-center rounded-full font-bold flex-none overflow-hidden"
           style={{ width: 26, height: 26, fontSize: 11, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
         >
-          {peer.display_name.charAt(0).toUpperCase()}
+          {peer.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={peer.avatar_url} alt="" className="w-full h-full object-cover" />
+          ) : (
+            peer.display_name.charAt(0).toUpperCase()
+          )}
         </span>
         <span className="text-[13px] font-bold flex-1 truncate">{peer.display_name}</span>
         <button
