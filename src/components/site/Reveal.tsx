@@ -11,12 +11,14 @@ export function Reveal({
   className,
   style,
   delay = 0,
+  x = 0,
   y = 24,
 }: {
   children: React.ReactNode;
   className?: string;
   style?: React.CSSProperties;
   delay?: number;
+  x?: number;
   y?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -54,7 +56,7 @@ export function Reveal({
       style={{
         ...style,
         opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : `translateY(${y}px)`,
+        transform: visible ? "translate(0, 0)" : `translate(${x}px, ${y}px)`,
         transition: "opacity 0.7s cubic-bezier(0.16,1,0.3,1), transform 0.7s cubic-bezier(0.16,1,0.3,1)",
         transitionDelay: `${delay}ms`,
         willChange: visible ? undefined : "opacity, transform",

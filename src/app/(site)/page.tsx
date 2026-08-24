@@ -59,16 +59,20 @@ export default async function HomePage() {
           {t.home.heroBody}
         </p>
         <div className="flex flex-wrap justify-center gap-3 mt-2">
-          <Link href="/lien-he" className="btn btn-primary">
-            {t.home.heroCta1}
-          </Link>
-          <Link
-            href="/du-an"
-            className="btn"
-            style={{ background: "rgba(255,255,255,.1)", color: "#fff", border: "1.5px solid rgba(255,255,255,.6)" }}
-          >
-            {t.home.heroCta2}
-          </Link>
+          <Reveal x={-48} y={0} delay={150}>
+            <Link href="/lien-he" className="btn btn-primary">
+              {t.home.heroCta1}
+            </Link>
+          </Reveal>
+          <Reveal x={48} y={0} delay={250}>
+            <Link
+              href="/du-an"
+              className="btn"
+              style={{ background: "rgba(255,255,255,.1)", color: "#fff", border: "1.5px solid rgba(255,255,255,.6)" }}
+            >
+              {t.home.heroCta2}
+            </Link>
+          </Reveal>
         </div>
       </HeroSlideshow>
 
