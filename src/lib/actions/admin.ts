@@ -470,6 +470,18 @@ export async function updateJobTitle(profileId: string, jobTitle: string) {
   revalidatePath("/quan-tri/nhan-su");
 }
 
+// Department groups members for the Thành viên directory's filter tabs —
+// also just a label, not a permission level.
+export async function updateDepartment(profileId: string, department: string) {
+  const { supabase } = await requireDirector();
+  await supabase
+    .from("profiles")
+    .update({ department: department.trim() || null })
+    .eq("id", profileId);
+  revalidatePath("/quan-tri/nhan-su");
+  revalidatePath("/workspace/thanh-vien");
+}
+
 // Deletes the Supabase Auth user outright (not just the profile row) — the
 // profiles table has `on delete cascade` from auth.users, so this removes
 // their login and profile together. Everything they authored elsewhere
@@ -487,6 +499,7 @@ export async function deleteStaffAccount(profileId: string) {
   if (error) throw new Error("Không thể xoá tài khoản. Vui lòng thử lại.");
 
   revalidatePath("/quan-tri/nhan-su");
+  revalidatePath("/workspace/thanh-vien");
 }
 
 export async function createStaffAccount(input: {
@@ -495,6 +508,7 @@ export async function createStaffAccount(input: {
   password: string;
   accessRole: "admin" | "staff";
   jobTitle?: string;
+  department?: string;
 }) {
   const { supabase } = await requireDirector();
 
@@ -528,6 +542,7 @@ export async function createStaffAccount(input: {
   // access_role 'staff' — update it to the chosen role (and job title).
   const patch: Partial<Profile> = { access_role: input.accessRole };
   if (input.jobTitle?.trim()) patch.role = input.jobTitle.trim();
+  if (input.department?.trim()) patch.department = input.department.trim();
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
@@ -549,5 +564,6 @@ export async function createStaffAccount(input: {
   }
 
   revalidatePath("/quan-tri/nhan-su");
+  revalidatePath("/workspace/thanh-vien");
   return { profile: profile as Profile, emailSent };
 }

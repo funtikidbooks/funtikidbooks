@@ -6,6 +6,7 @@ export type Profile = {
   display_name: string;
   avatar_url: string | null;
   role: string | null;
+  department: string | null;
   phone: string | null;
   address: string | null;
   access_role: AccessRole;

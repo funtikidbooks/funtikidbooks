@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Modal } from "@/components/ui/Modal";
-import { createStaffAccount, deleteStaffAccount, updateAccessRole, updateJobTitle } from "@/lib/actions/admin";
+import { CreateAccountDialog } from "@/components/admin/CreateAccountDialog";
+import { deleteStaffAccount, updateAccessRole, updateDepartment, updateJobTitle } from "@/lib/actions/admin";
+import { DEPARTMENTS, JOB_TITLE_SUGGESTIONS } from "@/lib/constants/staff";
 import type { AccessRole, Profile } from "@/lib/types";
 
 const ROLE_LABELS: Record<AccessRole, string> = {
@@ -10,23 +11,6 @@ const ROLE_LABELS: Record<AccessRole, string> = {
   admin: "Admin",
   staff: "Hoạ sĩ / PM",
 };
-
-// Quick-pick suggestions for chức danh (job title) — a free-text field, not
-// a permission level, so this is just a datalist of common studio titles
-// rather than a fixed enum.
-const JOB_TITLE_SUGGESTIONS = [
-  "Art Director",
-  "Team Leader",
-  "Project Manager",
-  "Art Lead",
-  "2D Illustrator",
-  "3D Artist",
-  "Biên tập viên",
-];
-
-function randomPassword() {
-  return Math.random().toString(36).slice(-5) + Math.random().toString(36).slice(-5);
-}
 
 export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles: Profile[]; currentUserId: string }) {
   const [profiles, setProfiles] = useState(initialProfiles);
@@ -56,6 +40,20 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
     startTransition(async () => {
       try {
         await updateJobTitle(id, jobTitle);
+      } catch (err) {
+        setProfiles(prev);
+        setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+      }
+    });
+  }
+
+  function changeDepartment(id: string, department: string) {
+    const prev = profiles;
+    setProfiles((p) => p.map((x) => (x.id === id ? { ...x, department: department || null } : x)));
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updateDepartment(id, department);
       } catch (err) {
         setProfiles(prev);
         setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
@@ -96,7 +94,8 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
       <div className="flex-1 overflow-y-auto p-6">
         <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
           Đổi vai trò để quyết định trang nào mỗi người vào được: <b>Giám đốc</b> vào được tất cả,{" "}
-          <b>Admin</b> chỉ quản trị nội dung (không vào bảng công việc), <b>Hoạ sĩ / PM</b> chỉ vào bảng công việc.
+          <b>Admin</b> chỉ quản trị nội dung (không vào bảng công việc), <b>Hoạ sĩ / PM</b> chỉ vào bảng công việc. Chức
+          danh và phòng ban chỉ là nhãn hiển thị, không ảnh hưởng quyền truy cập — phòng ban dùng để lọc ở trang Thành viên.
         </p>
         {error && (
           <p className="text-sm font-semibold mb-3" style={{ color: "var(--status-red)" }}>
@@ -108,7 +107,7 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
             <option key={title} value={title} />
           ))}
         </datalist>
-        <div className="flex flex-col gap-2 max-w-[820px]">
+        <div className="flex flex-col gap-2 max-w-[980px]">
           {profiles.map((p) => (
             <div key={p.id} className="card elev-sm p-3 flex items-center gap-3">
               <div
@@ -124,7 +123,7 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
                 </span>
               </div>
               <input
-                key={`${p.id}-${p.role ?? ""}`}
+                key={`title-${p.id}-${p.role ?? ""}`}
                 className="input"
                 style={{ width: 150 }}
                 list="job-title-suggestions"
@@ -136,6 +135,20 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
                   if (value !== (p.role ?? "")) changeJobTitle(p.id, value);
                 }}
               />
+              <select
+                className="input"
+                style={{ width: 150 }}
+                value={p.department ?? ""}
+                disabled={pending}
+                onChange={(e) => changeDepartment(p.id, e.target.value)}
+              >
+                <option value="">— Phòng ban —</option>
+                {DEPARTMENTS.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
               <select
                 className="input"
                 style={{ width: 150 }}
@@ -174,144 +187,5 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
         />
       )}
     </div>
-  );
-}
-
-function CreateAccountDialog({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: (p: Profile) => void;
-}) {
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState(randomPassword());
-  const [jobTitle, setJobTitle] = useState("");
-  const [accessRole, setAccessRole] = useState<"admin" | "staff">("staff");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ email: string; password: string; emailSent: boolean } | null>(null);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!displayName.trim() || !email.trim() || password.length < 6) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const { profile, emailSent } = await createStaffAccount({ displayName, email, password, accessRole, jobTitle });
-      onCreated(profile);
-      setCreated({ email, password, emailSent });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (created) {
-    return (
-      <Modal onClose={onClose} maxWidth={440}>
-        <div className="flex flex-col gap-4 p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg">Đã tạo tài khoản 🎉</h2>
-            <button type="button" onClick={onClose} className="btn-icon" aria-label="Đóng">
-              ✕
-            </button>
-          </div>
-          <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
-            {created.emailSent
-              ? "Đã tự động gửi email chứa mật khẩu cho nhân viên. Bạn cũng có thể gửi thêm 2 thông tin này qua Zalo/tin nhắn:"
-              : "Không gửi được email tự động (chưa cấu hình hoặc lỗi kết nối) — hãy gửi 2 thông tin này cho nhân viên qua Zalo/tin nhắn:"}
-          </p>
-          <div className="card elev-sm p-3 flex flex-col gap-1 text-sm font-mono" style={{ background: "var(--color-surface)" }}>
-            <span>Email: {created.email}</span>
-            <span>Mật khẩu: {created.password}</span>
-          </div>
-          <button type="button" className="btn btn-primary" onClick={onClose}>
-            Xong
-          </button>
-        </div>
-      </Modal>
-    );
-  }
-
-  return (
-    <Modal onClose={onClose} maxWidth={480}>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg">Thêm tài khoản nhân viên</h2>
-          <button type="button" onClick={onClose} className="btn-icon" aria-label="Đóng">
-            ✕
-          </button>
-        </div>
-
-        <div className="field">
-          <label htmlFor="s-name">Tên hiển thị</label>
-          <input id="s-name" className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
-        </div>
-
-        <div className="field">
-          <label htmlFor="s-email">Email</label>
-          <input
-            id="s-email"
-            type="email"
-            className="input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="s-title">Chức danh (tuỳ chọn, ví dụ: Art Director, Team Leader, Project Manager)</label>
-          <input
-            id="s-title"
-            className="input"
-            list="job-title-suggestions"
-            value={jobTitle}
-            onChange={(e) => setJobTitle(e.target.value)}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="s-role">Vai trò</label>
-          <select id="s-role" className="input" value={accessRole} onChange={(e) => setAccessRole(e.target.value as "admin" | "staff")}>
-            <option value="staff">Hoạ sĩ / PM — chỉ vào bảng công việc</option>
-            <option value="admin">Admin — chỉ quản trị nội dung</option>
-          </select>
-        </div>
-
-        <div className="field">
-          <label htmlFor="s-pass">Mật khẩu tạm</label>
-          <div className="flex gap-2">
-            <input
-              id="s-pass"
-              className="input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={6}
-              required
-            />
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPassword(randomPassword())}>
-              Tạo mới
-            </button>
-          </div>
-          <p className="text-xs mt-1" style={{ color: "var(--color-neutral-500)" }}>
-            Ít nhất 6 ký tự. Bạn sẽ gửi mật khẩu này cho nhân viên sau khi tạo xong.
-          </p>
-        </div>
-
-        {error && (
-          <p className="text-sm font-semibold" style={{ color: "var(--status-red)" }}>
-            {error}
-          </p>
-        )}
-
-        <button type="submit" className="btn btn-primary" disabled={saving || !displayName.trim() || !email.trim()}>
-          {saving ? "Đang tạo…" : "Tạo tài khoản"}
-        </button>
-      </form>
-    </Modal>
   );
 }

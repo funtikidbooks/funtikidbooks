@@ -75,6 +75,9 @@ create trigger on_auth_user_created
 -- policy above which only blocks access_role from self-changing).
 alter table public.profiles add column if not exists phone text;
 alter table public.profiles add column if not exists address text;
+-- Groups members for the workspace's Thành viên directory filter tabs —
+-- director-assigned, separate from `role` (the free-text job title).
+alter table public.profiles add column if not exists department text;
 
 -- ---------------------------------------------------------------------------
 -- direct_messages: 1:1 chat between staff members, shown in the workspace
