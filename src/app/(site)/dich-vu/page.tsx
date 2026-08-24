@@ -11,7 +11,15 @@ import { getContentEditorRole, getJsonSetting, getReviews } from "@/lib/data/sit
 import { getLocale } from "@/lib/getLocale";
 import { dictionary } from "@/lib/dictionary";
 
-export const metadata: Metadata = { title: "Dịch vụ" };
+const PAGE_DESCRIPTION =
+  "Dịch vụ minh hoạ sách thiếu nhi, thiết kế nhân vật, dàn trang và thiết kế bìa sách — chuẩn khổ KDP/Amazon, sẵn sàng in ấn. Xem bảng giá và đặt lịch tư vấn dự án.";
+
+export const metadata: Metadata = {
+  title: "Dịch vụ",
+  description: PAGE_DESCRIPTION,
+  openGraph: { title: "Dịch vụ · Funti Kidbooks Studio", description: PAGE_DESCRIPTION },
+  twitter: { title: "Dịch vụ · Funti Kidbooks Studio", description: PAGE_DESCRIPTION },
+};
 
 const BOOK_DEMO_BASE = "https://ueixkrrdwptymmawwred.supabase.co/storage/v1/object/public/site-content";
 

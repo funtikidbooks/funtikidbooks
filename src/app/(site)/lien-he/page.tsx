@@ -6,7 +6,15 @@ import { getContentEditorRole, getSiteSettings } from "@/lib/data/site-content";
 import { getLocale } from "@/lib/getLocale";
 import { dictionary } from "@/lib/dictionary";
 
-export const metadata: Metadata = { title: "Liên hệ" };
+const PAGE_DESCRIPTION =
+  "Liên hệ Funti Kidbooks Studio để bắt đầu dự án minh hoạ sách thiếu nhi của bạn — email, số điện thoại, địa chỉ studio tại TP.HCM và biểu mẫu gửi yêu cầu tư vấn.";
+
+export const metadata: Metadata = {
+  title: "Liên hệ",
+  description: PAGE_DESCRIPTION,
+  openGraph: { title: "Liên hệ · Funti Kidbooks Studio", description: PAGE_DESCRIPTION },
+  twitter: { title: "Liên hệ · Funti Kidbooks Studio", description: PAGE_DESCRIPTION },
+};
 
 const OFFICE_IMAGE_KEY = "lien-he-anh-van-phong";
 // Toà nhà M.O.R.E, 40B Út Tịch, P.4, Tân Bình, TP.HCM.

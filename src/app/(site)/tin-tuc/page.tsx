@@ -5,7 +5,14 @@ import { getContentEditorRole, getNewsPosts, getSiteSettings } from "@/lib/data/
 import { getLocale } from "@/lib/getLocale";
 import { dictionary } from "@/lib/dictionary";
 
-export const metadata: Metadata = { title: "Tin tức" };
+const PAGE_DESCRIPTION = "Tin tức, dự án mới và cập nhật từ Funti Kidbooks Studio — xưởng minh hoạ sách thiếu nhi.";
+
+export const metadata: Metadata = {
+  title: "Tin tức",
+  description: PAGE_DESCRIPTION,
+  openGraph: { title: "Tin tức · Funti Kidbooks Studio", description: PAGE_DESCRIPTION },
+  twitter: { title: "Tin tức · Funti Kidbooks Studio", description: PAGE_DESCRIPTION },
+};
 
 export default async function NewsPage() {
   const [editorRole, locale] = await Promise.all([getContentEditorRole(), getLocale()]);

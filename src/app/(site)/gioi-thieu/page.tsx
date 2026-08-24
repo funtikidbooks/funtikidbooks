@@ -9,7 +9,15 @@ import { getContentEditorRole, getJsonSetting, getSiteSettings } from "@/lib/dat
 import { getLocale } from "@/lib/getLocale";
 import { dictionary } from "@/lib/dictionary";
 
-export const metadata: Metadata = { title: "Giới thiệu" };
+const PAGE_DESCRIPTION =
+  "Funti Kidbooks Studio là xưởng minh hoạ sách thiếu nhi với đội ngũ hoạ sĩ tài năng, chuyên vẽ minh hoạ tay theo phong cách màu nước ấm áp cho sách, storyboard và tài liệu giáo dục.";
+
+export const metadata: Metadata = {
+  title: "Giới thiệu",
+  description: PAGE_DESCRIPTION,
+  openGraph: { title: "Giới thiệu · Funti Kidbooks Studio", description: PAGE_DESCRIPTION },
+  twitter: { title: "Giới thiệu · Funti Kidbooks Studio", description: PAGE_DESCRIPTION },
+};
 
 // Shown only until the director fills in the real company history — a
 // starting draft matching the studio's own design mockup for this page.
