@@ -11,7 +11,7 @@ export function ZaloButton() {
       aria-label="Chat qua Zalo"
       title="Chat qua Zalo"
       className="fixed z-50 flex items-center justify-center rounded-full"
-      style={{ width: 56, height: 56, right: 20, bottom: 96, background: "#0068ff", boxShadow: "var(--shadow-lg)" }}
+      style={{ width: 56, height: 56, right: 20, bottom: 172, background: "#0068ff", boxShadow: "var(--shadow-lg)" }}
     >
       <span style={{ color: "#fff", fontWeight: 800, fontSize: 13, letterSpacing: "-0.02em" }}>Zalo</span>
     </a>

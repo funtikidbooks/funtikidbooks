@@ -90,15 +90,17 @@ export function SupportChatWidget() {
         aria-label="Chat với Funti Kidbooks"
         title="Chat với chúng tôi"
         className="fixed z-50 flex items-center justify-center rounded-full"
-        style={{ width: 56, height: 56, right: 20, bottom: 172, background: "var(--color-accent-500)", boxShadow: "var(--shadow-lg)" }}
+        style={{ width: 56, height: 56, right: 20, bottom: 20, background: "var(--color-accent-500)", boxShadow: "var(--shadow-lg)" }}
       >
         <span style={{ color: "#fff", fontWeight: 800, fontSize: 12, letterSpacing: "-0.02em" }}>{open ? "Đóng" : "Hỗ trợ"}</span>
       </button>
 
       {open && (
+        // Opens beside the button (not above it) so it doesn't cover the
+        // Zalo/Messenger buttons stacked directly above.
         <div
           className="card elev-lg fixed flex flex-col z-50"
-          style={{ right: 20, bottom: 236, width: 300, height: 400 }}
+          style={{ right: 84, bottom: 20, width: 280, height: 380 }}
         >
           <div
             className="flex items-center gap-2 px-3 py-2.5 flex-none"

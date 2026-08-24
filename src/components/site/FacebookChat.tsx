@@ -19,7 +19,7 @@ export function FacebookChat() {
       aria-label="Chat qua Messenger"
       title="Chat qua Messenger"
       className="fixed z-50 flex items-center justify-center rounded-full"
-      style={{ width: 56, height: 56, right: 20, bottom: 20, background: "#0084ff", boxShadow: "var(--shadow-lg)" }}
+      style={{ width: 56, height: 56, right: 20, bottom: 96, background: "#0084ff", boxShadow: "var(--shadow-lg)" }}
     >
       <span style={{ fontSize: 26 }} aria-hidden>
         💬
