@@ -114,7 +114,7 @@ function CreateAccountDialog({
   const [accessRole, setAccessRole] = useState<"admin" | "staff">("staff");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
+  const [created, setCreated] = useState<{ email: string; password: string; emailSent: boolean } | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -122,9 +122,9 @@ function CreateAccountDialog({
     setSaving(true);
     setError(null);
     try {
-      const profile = await createStaffAccount({ displayName, email, password, accessRole, jobTitle });
+      const { profile, emailSent } = await createStaffAccount({ displayName, email, password, accessRole, jobTitle });
       onCreated(profile);
-      setCreated({ email, password });
+      setCreated({ email, password, emailSent });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
@@ -143,8 +143,9 @@ function CreateAccountDialog({
             </button>
           </div>
           <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
-            Gửi 2 thông tin này cho nhân viên (qua Zalo/tin nhắn) để họ đăng nhập lần đầu tại trang{" "}
-            <b>Thành viên</b>:
+            {created.emailSent
+              ? "Đã tự động gửi email chứa mật khẩu cho nhân viên. Bạn cũng có thể gửi thêm 2 thông tin này qua Zalo/tin nhắn:"
+              : "Không gửi được email tự động (chưa cấu hình hoặc lỗi kết nối) — hãy gửi 2 thông tin này cho nhân viên qua Zalo/tin nhắn:"}
           </p>
           <div className="card elev-sm p-3 flex flex-col gap-1 text-sm font-mono" style={{ background: "var(--color-surface)" }}>
             <span>Email: {created.email}</span>

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendStaffWelcomeEmail } from "@/lib/mail";
 import type { AccessRole, NewsPost, Profile, Project, Review } from "@/lib/types";
 
 async function requireDirector() {
@@ -507,6 +508,16 @@ export async function createStaffAccount(input: {
 
   if (profileError || !profile) throw new Error("Đã tạo tài khoản nhưng không thể gán vai trò, vào Nhân sự để chỉnh lại.");
 
+  let emailSent = false;
+  try {
+    await sendStaffWelcomeEmail({ to: email, displayName, password });
+    emailSent = true;
+  } catch {
+    // Account creation must succeed even if the welcome email fails to
+    // send (e.g. Gmail credentials not configured yet) — the director
+    // still sees the password on screen as a fallback.
+  }
+
   revalidatePath("/quan-tri/nhan-su");
-  return profile as Profile;
+  return { profile: profile as Profile, emailSent };
 }

@@ -35,6 +35,12 @@ export type DirectMessage = {
   created_at: string;
 };
 
+export type DmRead = {
+  user_id: string;
+  peer_id: string;
+  last_read_at: string;
+};
+
 export type Project = {
   id: string;
   title: string;
@@ -331,6 +337,12 @@ export type Database = {
         Row: DirectMessage;
         Insert: Partial<DirectMessage> & { sender_id: string; recipient_id: string };
         Update: Partial<DirectMessage>;
+        Relationships: [];
+      };
+      dm_reads: {
+        Row: DmRead;
+        Insert: Partial<DmRead> & { user_id: string; peer_id: string };
+        Update: Partial<DmRead>;
         Relationships: [];
       };
       task_assignees: {
