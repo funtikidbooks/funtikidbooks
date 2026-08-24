@@ -6,6 +6,7 @@ import { ChatManagerProvider } from "@/components/workspace/ChatManager";
 import { ChatDock } from "@/components/workspace/ChatDock";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
 import { ThemeToggle } from "@/components/workspace/ThemeToggle";
+import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
 import { IosInstallHint, PushSetup } from "@/components/workspace/PushSetup";
 import { getUnreadCounts } from "@/lib/actions/messages";
 import type { Profile } from "@/lib/types";
@@ -71,20 +72,23 @@ export default async function WorkspaceLayout({
             profiles={(allProfiles ?? []) as Profile[]}
           />
           <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex-none flex items-center justify-end gap-2 px-4 py-2" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-              {myProfile.access_role === "director" && (
-                <Link
-                  href="/quan-tri"
-                  className="ws-quan-tri-link btn-icon flex-none"
-                  style={{ width: 30, height: 30, padding: 0, color: "var(--color-accent-2-700)", background: "var(--color-accent-2-100)" }}
-                  title="Quản trị nội dung"
-                  aria-label="Quản trị nội dung"
-                >
-                  🛠
-                </Link>
-              )}
-              <ThemeToggle compact />
-              <ProfileMenu profile={myProfile} />
+            <div className="flex-none flex items-center justify-between gap-2 px-4 py-2" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+              <TeamOnlineBadge currentUserId={user.id} totalMembers={(allProfiles ?? []).length} />
+              <div className="flex items-center gap-2">
+                {myProfile.access_role === "director" && (
+                  <Link
+                    href="/quan-tri"
+                    className="ws-quan-tri-link btn-icon flex-none"
+                    style={{ width: 30, height: 30, padding: 0, color: "var(--color-accent-2-700)", background: "var(--color-accent-2-100)" }}
+                    title="Quản trị nội dung"
+                    aria-label="Quản trị nội dung"
+                  >
+                    🛠
+                  </Link>
+                )}
+                <ThemeToggle compact />
+                <ProfileMenu profile={myProfile} />
+              </div>
             </div>
             <div className="flex-1 flex flex-col min-h-0">{children}</div>
           </div>
