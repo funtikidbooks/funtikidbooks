@@ -27,6 +27,24 @@ export type CalendarEvent = {
   updated_at: string;
 };
 
+export type VisitorConversation = {
+  id: string;
+  visitor_name: string | null;
+  status: "open" | "closed";
+  unread: boolean;
+  created_at: string;
+  last_message_at: string;
+};
+
+export type VisitorMessage = {
+  id: string;
+  conversation_id: string;
+  sender_type: "visitor" | "staff";
+  sender_id: string | null;
+  content: string;
+  created_at: string;
+};
+
 export type FontAsset = {
   id: string;
   name: string;
@@ -467,6 +485,18 @@ export type Database = {
         Row: CalendarEvent;
         Insert: Partial<CalendarEvent> & { title: string; start_at: string };
         Update: Partial<CalendarEvent>;
+        Relationships: [];
+      };
+      visitor_conversations: {
+        Row: VisitorConversation & { visitor_token: string };
+        Insert: Partial<VisitorConversation & { visitor_token: string }>;
+        Update: Partial<VisitorConversation & { visitor_token: string }>;
+        Relationships: [];
+      };
+      visitor_messages: {
+        Row: VisitorMessage;
+        Insert: Partial<VisitorMessage> & { conversation_id: string; sender_type: string; content: string };
+        Update: Partial<VisitorMessage>;
         Relationships: [];
       };
     };

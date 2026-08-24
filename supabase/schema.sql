@@ -859,6 +859,78 @@ create trigger calendar_events_set_updated_at
   for each row execute procedure public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- visitor_conversations / visitor_messages: the "chat with us" widget on the
+-- public site — any anonymous visitor can start one, only director/admin
+-- can read or reply. Visitors have no Supabase auth session at all, so RLS
+-- can't scope rows to "their own" the normal way; instead every policy
+-- below denies anon entirely, and the visitor-facing server actions
+-- (lib/actions/visitor-chat.ts) go through the service-role client, gating
+-- access themselves by requiring the random `visitor_token` issued when the
+-- conversation was created (kept client-side in localStorage, never
+-- exposed in a URL or to other visitors).
+-- ---------------------------------------------------------------------------
+create table if not exists public.visitor_conversations (
+  id uuid primary key default gen_random_uuid(),
+  visitor_token uuid not null default gen_random_uuid(),
+  visitor_name text,
+  status text not null default 'open' check (status in ('open', 'closed')),
+  unread boolean not null default true,
+  created_at timestamptz not null default now(),
+  last_message_at timestamptz not null default now()
+);
+
+create table if not exists public.visitor_messages (
+  id uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references public.visitor_conversations (id) on delete cascade,
+  sender_type text not null check (sender_type in ('visitor', 'staff')),
+  sender_id uuid references public.profiles (id) on delete set null,
+  content text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.visitor_conversations enable row level security;
+alter table public.visitor_messages enable row level security;
+
+drop policy if exists "admin/director can read visitor conversations" on public.visitor_conversations;
+create policy "admin/director can read visitor conversations"
+  on public.visitor_conversations for select
+  to authenticated
+  using (public.current_access_role() in ('director', 'admin'));
+
+drop policy if exists "admin/director can update visitor conversations" on public.visitor_conversations;
+create policy "admin/director can update visitor conversations"
+  on public.visitor_conversations for update
+  to authenticated
+  using (public.current_access_role() in ('director', 'admin'))
+  with check (public.current_access_role() in ('director', 'admin'));
+
+drop policy if exists "admin/director can read visitor messages" on public.visitor_messages;
+create policy "admin/director can read visitor messages"
+  on public.visitor_messages for select
+  to authenticated
+  using (public.current_access_role() in ('director', 'admin'));
+
+drop policy if exists "admin/director can send visitor replies" on public.visitor_messages;
+create policy "admin/director can send visitor replies"
+  on public.visitor_messages for insert
+  to authenticated
+  with check (
+    sender_type = 'staff'
+    and sender_id = auth.uid()
+    and public.current_access_role() in ('director', 'admin')
+  );
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'visitor_messages'
+  ) then
+    alter publication supabase_realtime add table public.visitor_messages;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- Seed the portfolio with the placeholder projects already on the public
 -- site, so /du-an is backed by real rows from the start. Safe to re-run —
 -- skipped once any project exists.

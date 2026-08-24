@@ -3,6 +3,7 @@ import { Footer } from "@/components/site/Footer";
 import { LocaleProvider } from "@/components/site/LocaleProvider";
 import { FacebookChat } from "@/components/site/FacebookChat";
 import { ZaloButton } from "@/components/site/ZaloButton";
+import { SupportChatWidget } from "@/components/site/SupportChatWidget";
 import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/getLocale";
 import type { AccessRole } from "@/lib/types";
@@ -43,6 +44,7 @@ export default async function SiteLayout({
       <Footer locale={locale} />
       <ZaloButton />
       <FacebookChat />
+      <SupportChatWidget />
     </LocaleProvider>
   );
 }

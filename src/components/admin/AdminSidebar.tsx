@@ -9,7 +9,8 @@ import type { AccessRole } from "@/lib/types";
 const NAV = [
   { href: "/quan-tri/du-an", label: "Dự án", icon: "📁" },
   { href: "/quan-tri/danh-gia", label: "Đánh giá khách hàng", icon: "⭐" },
-  { href: "/quan-tri/tin-nhan", label: "Tin nhắn khách hàng", icon: "💬" },
+  { href: "/quan-tri/tin-nhan", label: "Tin nhắn khách hàng", icon: "✉️" },
+  { href: "/quan-tri/chat", label: "Chat khách vãng lai", icon: "💬" },
 ];
 
 const DIRECTOR_NAV = [
