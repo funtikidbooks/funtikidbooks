@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { CreateAccountDialog } from "@/components/admin/CreateAccountDialog";
-import { deleteStaffAccount, updateAccessRole, updateDepartment, updateJobTitle } from "@/lib/actions/admin";
-import { DEPARTMENTS, JOB_TITLE_SUGGESTIONS } from "@/lib/constants/staff";
+import { deleteStaffAccount, updateAccessRole, updateJobTitle } from "@/lib/actions/admin";
+import { JOB_TITLE_SUGGESTIONS } from "@/lib/constants/staff";
 import type { AccessRole, Profile } from "@/lib/types";
 
 const ROLE_LABELS: Record<AccessRole, string> = {
@@ -47,20 +47,6 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
     });
   }
 
-  function changeDepartment(id: string, department: string) {
-    const prev = profiles;
-    setProfiles((p) => p.map((x) => (x.id === id ? { ...x, department: department || null } : x)));
-    setError(null);
-    startTransition(async () => {
-      try {
-        await updateDepartment(id, department);
-      } catch (err) {
-        setProfiles(prev);
-        setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
-      }
-    });
-  }
-
   function removeStaff(p: Profile) {
     if (!confirm(`Xoá tài khoản của "${p.display_name}"? Họ sẽ không đăng nhập được nữa. Không thể hoàn tác.`)) return;
     const prev = profiles;
@@ -95,7 +81,7 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
         <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
           Đổi vai trò để quyết định trang nào mỗi người vào được: <b>Giám đốc</b> vào được tất cả,{" "}
           <b>Admin</b> chỉ quản trị nội dung (không vào bảng công việc), <b>Hoạ sĩ / PM</b> chỉ vào bảng công việc. Chức
-          danh và phòng ban chỉ là nhãn hiển thị, không ảnh hưởng quyền truy cập — phòng ban dùng để lọc ở trang Thành viên.
+          danh chỉ là nhãn hiển thị, không ảnh hưởng quyền truy cập — cũng là tag lọc ở trang Thành viên.
         </p>
         {error && (
           <p className="text-sm font-semibold mb-3" style={{ color: "var(--status-red)" }}>
@@ -107,7 +93,7 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
             <option key={title} value={title} />
           ))}
         </datalist>
-        <div className="flex flex-col gap-2 max-w-[980px]">
+        <div className="flex flex-col gap-2 max-w-[820px]">
           {profiles.map((p) => (
             <div key={p.id} className="card elev-sm p-3 flex items-center gap-3">
               <div
@@ -135,20 +121,6 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
                   if (value !== (p.role ?? "")) changeJobTitle(p.id, value);
                 }}
               />
-              <select
-                className="input"
-                style={{ width: 150 }}
-                value={p.department ?? ""}
-                disabled={pending}
-                onChange={(e) => changeDepartment(p.id, e.target.value)}
-              >
-                <option value="">— Phòng ban —</option>
-                {DEPARTMENTS.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
               <select
                 className="input"
                 style={{ width: 150 }}

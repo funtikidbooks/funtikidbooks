@@ -28,12 +28,12 @@ export default async function WorkspaceLayout({
   const [{ data: profile }, { data: allProfiles }, unreadCounts] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, email, display_name, avatar_url, role, department, phone, address, access_role, joined_at, created_at")
+      .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
       .eq("id", user.id)
       .maybeSingle(),
     supabase
       .from("profiles")
-      .select("id, email, display_name, avatar_url, role, department, phone, address, access_role, joined_at, created_at")
+      .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
       .order("display_name", { ascending: true }),
     getUnreadCounts().catch(() => ({})),
   ]);
@@ -50,7 +50,6 @@ export default async function WorkspaceLayout({
     display_name: user.email ?? "Thành viên",
     avatar_url: null,
     role: null,
-    department: null,
     joined_at: null,
     phone: null,
     address: null,

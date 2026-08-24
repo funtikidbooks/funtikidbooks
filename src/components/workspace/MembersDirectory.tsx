@@ -4,7 +4,6 @@ import { useMemo, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { usePresence } from "@/lib/usePresence";
 import { updateJoinedAt } from "@/lib/actions/admin";
-import { DEPARTMENTS } from "@/lib/constants/staff";
 import type { Profile } from "@/lib/types";
 
 const CreateAccountDialog = dynamic(
@@ -59,7 +58,15 @@ export function MembersDirectory({
   const [, startTransition] = useTransition();
   const onlineIds = usePresence(currentUserId);
 
-  const departmentOf = (p: Profile) => p.department ?? (p.access_role !== "staff" ? "Studio Admin" : null);
+  // Filter tabs are generated straight from whatever chức danh (job title)
+  // values are actually assigned to staff — no separate curated category.
+  const roleTabs = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of items) {
+      if (p.role?.trim()) set.add(p.role.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "vi"));
+  }, [items]);
 
   function changeJoinDate(id: string, dateValue: string) {
     const prev = items;
@@ -76,7 +83,7 @@ export function MembersDirectory({
   }
 
   const filtered = useMemo(
-    () => (active === ALL ? items : items.filter((p) => departmentOf(p) === active)),
+    () => (active === ALL ? items : items.filter((p) => p.role?.trim() === active)),
     [active, items],
   );
 
@@ -101,19 +108,19 @@ export function MembersDirectory({
       )}
 
       <div className="flex flex-wrap gap-2 mb-6">
-        {[ALL, ...DEPARTMENTS].map((d) => (
+        {[ALL, ...roleTabs].map((tab) => (
           <button
-            key={d}
+            key={tab}
             type="button"
-            onClick={() => setActive(d)}
+            onClick={() => setActive(tab)}
             className="rounded-full px-4 py-2 text-sm font-semibold"
             style={{
-              background: active === d ? "var(--color-accent-500)" : "var(--color-surface)",
-              color: active === d ? "#fff" : "var(--color-text)",
-              border: active === d ? "none" : "1px solid var(--color-neutral-200)",
+              background: active === tab ? "var(--color-accent-500)" : "var(--color-surface)",
+              color: active === tab ? "#fff" : "var(--color-text)",
+              border: active === tab ? "none" : "1px solid var(--color-neutral-200)",
             }}
           >
-            {d}
+            {tab}
           </button>
         ))}
       </div>
@@ -159,7 +166,7 @@ export function MembersDirectory({
                   {p.access_role === "director" && <span aria-label="Giám đốc">👑</span>}
                 </span>
                 <span className="text-xs truncate" style={{ color: "var(--color-neutral-500)" }}>
-                  {departmentOf(p) ?? p.role ?? "Chưa phân loại"}
+                  {p.role ?? "Chưa có chức danh"}
                 </span>
               </div>
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { createStaffAccount } from "@/lib/actions/admin";
-import { DEPARTMENTS, JOB_TITLE_SUGGESTIONS } from "@/lib/constants/staff";
+import { JOB_TITLE_SUGGESTIONS } from "@/lib/constants/staff";
 import type { Profile } from "@/lib/types";
 
 function randomPassword() {
@@ -21,7 +21,6 @@ export function CreateAccountDialog({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState(randomPassword());
   const [jobTitle, setJobTitle] = useState("");
-  const [department, setDepartment] = useState("");
   const [accessRole, setAccessRole] = useState<"admin" | "staff">("staff");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +32,7 @@ export function CreateAccountDialog({
     setSaving(true);
     setError(null);
     try {
-      const { profile, emailSent } = await createStaffAccount({ displayName, email, password, accessRole, jobTitle, department });
+      const { profile, emailSent } = await createStaffAccount({ displayName, email, password, accessRole, jobTitle });
       onCreated(profile);
       setCreated({ email, password, emailSent });
     } catch (err) {
@@ -111,18 +110,6 @@ export function CreateAccountDialog({
             value={jobTitle}
             onChange={(e) => setJobTitle(e.target.value)}
           />
-        </div>
-
-        <div className="field">
-          <label htmlFor="s-dept">Phòng ban (tuỳ chọn — hiện ở trang Thành viên)</label>
-          <select id="s-dept" className="input" value={department} onChange={(e) => setDepartment(e.target.value)}>
-            <option value="">— Chưa phân loại —</option>
-            {DEPARTMENTS.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div className="field">

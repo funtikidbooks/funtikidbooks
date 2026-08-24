@@ -75,9 +75,10 @@ create trigger on_auth_user_created
 -- policy above which only blocks access_role from self-changing).
 alter table public.profiles add column if not exists phone text;
 alter table public.profiles add column if not exists address text;
--- Groups members for the workspace's Thành viên directory filter tabs —
--- director-assigned, separate from `role` (the free-text job title).
-alter table public.profiles add column if not exists department text;
+-- Thành viên directory filter tabs turned out to just want `role` (the
+-- free-text job title, e.g. "Junior Illustrator") — this separate
+-- director-assigned category never got used for anything else.
+alter table public.profiles drop column if exists department;
 -- Actual employment start date, director-editable — separate from
 -- created_at (when the login account was created, which can lag behind
 -- when someone actually joined the studio). Falls back to created_at
