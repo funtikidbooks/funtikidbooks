@@ -649,6 +649,22 @@ select.input:focus {
   animation: fk-marquee-scroll 100s linear infinite;
 }
 
+@keyframes fk-typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+.fk-typing-dot {
+  animation: fk-typing-dot 1.2s ease-in-out infinite;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

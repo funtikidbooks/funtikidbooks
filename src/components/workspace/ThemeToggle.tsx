@@ -2,8 +2,24 @@
 
 import { useTheme } from "@/lib/useTheme";
 
-export function ThemeToggle() {
+export function ThemeToggle({ compact = false }: { compact?: boolean }) {
   const { theme, toggleTheme } = useTheme();
+  const label = theme === "dark" ? "Chế độ sáng" : "Chế độ tối";
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className="btn-icon flex-none"
+        style={{ width: 30, height: 30, padding: 0 }}
+        title={label}
+        aria-label={label}
+      >
+        {theme === "dark" ? "☀️" : "🌙"}
+      </button>
+    );
+  }
 
   return (
     <button
@@ -13,7 +29,7 @@ export function ThemeToggle() {
       style={{ color: "var(--color-neutral-600)" }}
     >
       <span aria-hidden>{theme === "dark" ? "☀️" : "🌙"}</span>
-      {theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
+      {label}
     </button>
   );
 }

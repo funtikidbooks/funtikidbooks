@@ -147,18 +147,7 @@ export function Sidebar({
         })}
       </div>
 
-      {user.accessRole === "director" && (
-        <Link
-          href="/quan-tri"
-          className="ws-quan-tri-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
-          style={{ color: "var(--color-accent-2-700)", background: "var(--color-accent-2-100)" }}
-        >
-          🛠 Quản trị nội dung
-        </Link>
-      )}
-
       <div className="mt-auto flex flex-col gap-3">
-        <ThemeToggle />
         <div className="flex items-center gap-2 px-2">
           <div
             className="flex items-center justify-center rounded-full text-xs font-bold flex-none"
@@ -166,12 +155,24 @@ export function Sidebar({
           >
             {user.displayName.charAt(0).toUpperCase()}
           </div>
-          <div className="flex flex-col min-w-0">
+          <div className="flex flex-col min-w-0 flex-1">
             <span className="text-xs font-bold truncate">{user.displayName}</span>
             <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
               {user.email}
             </span>
           </div>
+          {user.accessRole === "director" && (
+            <Link
+              href="/quan-tri"
+              className="ws-quan-tri-link btn-icon flex-none"
+              style={{ width: 30, height: 30, padding: 0, color: "var(--color-accent-2-700)", background: "var(--color-accent-2-100)" }}
+              title="Quản trị nội dung"
+              aria-label="Quản trị nội dung"
+            >
+              🛠
+            </Link>
+          )}
+          <ThemeToggle compact />
         </div>
         <form action={signOut}>
           <button

@@ -1,9 +1,51 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { getConversation, sendDirectMessage } from "@/lib/actions/messages";
 import type { DirectMessage, Profile } from "@/lib/types";
+
+// How long the peer's "typing…" indicator stays up after their last
+// keystroke broadcast, and the minimum gap between our own outgoing
+// typing broadcasts (no point spamming one per keystroke).
+const TYPING_IDLE_MS = 3000;
+const TYPING_BROADCAST_THROTTLE_MS = 2000;
+
+// A curated set of quick-pick emoji for a small popover — no need to pull
+// in a whole emoji-picker dependency for a work chat.
+const EMOJI_OPTIONS = [
+  "😀", "😂", "😅", "😍", "😉", "😎", "🤔", "😢",
+  "😭", "😡", "🥳", "😴", "😱", "🙌", "👀", "🤝",
+  "👍", "👎", "👏", "🙏", "💪", "🔥", "✅", "❌",
+  "🎉", "❤️", "💯", "😘",
+];
+
+function TypingDots({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-[12px] italic" style={{ color: "var(--color-neutral-500)" }}>
+        {label}
+      </span>
+      <span className="inline-flex items-center gap-0.5">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="fk-typing-dot"
+            style={{
+              width: 4,
+              height: 4,
+              borderRadius: "50%",
+              background: "var(--color-neutral-500)",
+              display: "inline-block",
+              animationDelay: `${i * 0.15}s`,
+            }}
+          />
+        ))}
+      </span>
+    </span>
+  );
+}
 
 function formatTime(date: string) {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(date));
@@ -37,8 +79,26 @@ export function ChatWindow({
   const [minimized, setMinimized] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [peerTyping, setPeerTyping] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const peerTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentAtRef = useRef(0);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showEmojiPicker]);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,18 +126,40 @@ export function ChatWindow({
             (row.sender_id === peer.id && row.recipient_id === currentUser.id);
           if (!belongsHere) return;
           setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+          if (row.sender_id === peer.id) {
+            if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
+            setPeerTyping(false);
+          }
         },
       )
+      .on("broadcast", { event: "typing" }, (msg) => {
+        if ((msg.payload as { userId?: string } | null)?.userId !== peer.id) return;
+        setPeerTyping(true);
+        if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
+        peerTypingTimeoutRef.current = setTimeout(() => setPeerTyping(false), TYPING_IDLE_MS);
+      })
       .subscribe();
 
+    channelRef.current = channel;
+
     return () => {
+      channelRef.current = null;
+      if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
+      setPeerTyping(false);
       supabase.removeChannel(channel);
     };
   }, [currentUser.id, peer.id]);
 
   useEffect(() => {
     if (!minimized) listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages.length, minimized]);
+  }, [messages.length, minimized, peerTyping]);
+
+  function notifyTyping() {
+    const now = Date.now();
+    if (now - lastTypingSentAtRef.current < TYPING_BROADCAST_THROTTLE_MS) return;
+    lastTypingSentAtRef.current = now;
+    channelRef.current?.send({ type: "broadcast", event: "typing", payload: { userId: currentUser.id } });
+  }
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
@@ -203,9 +285,54 @@ export function ChatWindow({
                 </div>
               );
             })}
+            {peerTyping && (
+              <div className="flex items-center gap-1.5">
+                <div
+                  className="rounded-[12px] px-3 py-2"
+                  style={{ background: "var(--color-surface)" }}
+                  aria-label={`${peer.display_name} đang gõ…`}
+                >
+                  <TypingDots label="Đang gõ" />
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="flex-none" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+          <div className="flex-none" style={{ borderTop: "1px solid var(--color-neutral-200)", position: "relative" }}>
+            {showEmojiPicker && (
+              <div
+                ref={emojiPickerRef}
+                className="card elev-lg"
+                style={{
+                  position: "absolute",
+                  bottom: "100%",
+                  left: 8,
+                  marginBottom: 6,
+                  width: 216,
+                  padding: 8,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(7, 1fr)",
+                  gap: 2,
+                }}
+              >
+                {EMOJI_OPTIONS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => {
+                      setText((prev) => prev + emoji);
+                      setShowEmojiPicker(false);
+                      textInputRef.current?.focus();
+                    }}
+                    className="btn-icon"
+                    style={{ width: 26, height: 26, padding: 0, fontSize: 15 }}
+                    aria-label={emoji}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
             {error && (
               <p className="text-[11px] font-semibold px-2.5 pt-1.5" style={{ color: "var(--status-red)" }}>
                 {error}
@@ -243,6 +370,15 @@ export function ChatWindow({
               >
                 📎
               </button>
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker((v) => !v)}
+                className="btn-icon flex-none"
+                style={{ width: 30, height: 30, padding: 0 }}
+                aria-label="Chọn biểu tượng cảm xúc"
+              >
+                😀
+              </button>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -260,11 +396,15 @@ export function ChatWindow({
                 }}
               />
               <input
+                ref={textInputRef}
                 className="input flex-1"
                 style={{ padding: "6px 10px", fontSize: 13 }}
                 placeholder="Nhắn tin…"
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  if (e.target.value.trim()) notifyTyping();
+                }}
               />
               <button type="submit" disabled={sending} className="btn btn-primary btn-sm flex-none" style={{ padding: "6px 12px" }}>
                 Gửi
