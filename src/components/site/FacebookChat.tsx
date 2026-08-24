@@ -36,12 +36,24 @@ export function FacebookChat() {
       window.FB?.init({ xfbml: true, version: "v19.0" });
     };
 
-    const script = document.createElement("script");
-    script.id = "facebook-jssdk";
-    script.src = "https://connect.facebook.net/vi_VN/sdk/xfbml.customerchat.js";
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
+    function loadSdk(locale: string, onFail?: () => void) {
+      const script = document.createElement("script");
+      script.id = "facebook-jssdk";
+      script.src = `https://connect.facebook.net/${locale}/sdk/xfbml.customerchat.js`;
+      script.async = true;
+      script.defer = true;
+      if (onFail) script.onerror = onFail;
+      document.body.appendChild(script);
+    }
+
+    // Facebook's vi_VN locale bundle for this SDK has been known to 500 —
+    // fall back to en_US (still renders the chat UI in Vietnamese, since
+    // that's driven by the visitor's own Facebook/browser locale, not this
+    // file) so the widget doesn't just silently disappear when that happens.
+    loadSdk("vi_VN", () => {
+      document.getElementById("facebook-jssdk")?.remove();
+      loadSdk("en_US");
+    });
   }, []);
 
   return (
