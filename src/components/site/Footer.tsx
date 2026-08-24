@@ -110,10 +110,13 @@ export function Footer({ locale }: { locale: Locale }) {
         </div>
       </div>
       <div
-        className="max-w-[1280px] mx-auto px-5 py-5 text-xs border-t"
+        className="max-w-[1280px] mx-auto px-5 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs border-t"
         style={{ borderColor: "#3a3934", color: "#a3a29a" }}
       >
-        © {new Date().getFullYear()} Funti Kidbooks Studio. {t.footer.copyright}
+        <span>
+          © {new Date().getFullYear()} Funti Kidbooks Studio. {t.footer.copyright}
+        </span>
+        <span>{t.footer.businessInfo}</span>
       </div>
     </footer>
   );

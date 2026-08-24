@@ -26,6 +26,7 @@ export const dictionary = {
       modeling3d: "3D & Mô hình",
       contactBtn: "Liên hệ với chúng tôi",
       copyright: "Đã đăng ký bản quyền.",
+      businessInfo: "Công ty TNHH Funti Kidbooks — MST: 0319688648",
     },
     home: {
       heroTitle: ["Kể chuyện bằng tranh", "Nuôi dưỡng trí tưởng tượng"],
@@ -339,6 +340,7 @@ export const dictionary = {
       modeling3d: "3D & Modeling",
       contactBtn: "Contact Us",
       copyright: "All rights reserved.",
+      businessInfo: "Funti Kidbooks Co., Ltd — Tax code: 0319688648",
     },
     home: {
       heroTitle: ["Storytelling through art", "Nurturing imagination"],
