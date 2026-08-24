@@ -1,0 +1,350 @@
+"use client";
+
+import { useMemo, useState, useTransition } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  closestCorners,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import type { Board, BoardColumn, Profile, TaskWithAssignee } from "@/lib/types";
+import { Column } from "./Column";
+import { TaskCard } from "./TaskCard";
+import { AddTaskDialog } from "./AddTaskDialog";
+import { EditTaskDialog } from "./EditTaskDialog";
+import { createColumn, deleteColumn, reorderTasks } from "@/lib/actions/board";
+
+export function WorkspaceBoard({
+  board,
+  initialColumns,
+  initialTasks,
+  profiles,
+  currentUserId,
+}: {
+  board: Board;
+  initialColumns: BoardColumn[];
+  initialTasks: TaskWithAssignee[];
+  profiles: Profile[];
+  currentUserId: string;
+}) {
+  const [columns, setColumns] = useState(
+    [...initialColumns].sort((a, b) => a.position - b.position),
+  );
+  const [tasksByColumn, setTasksByColumn] = useState<Record<string, TaskWithAssignee[]>>(() => {
+    const map: Record<string, TaskWithAssignee[]> = {};
+    for (const col of initialColumns) {
+      map[col.id] = initialTasks
+        .filter((t) => t.column_id === col.id)
+        .sort((a, b) => a.position - b.position);
+    }
+    return map;
+  });
+
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [addTaskColumn, setAddTaskColumn] = useState<BoardColumn | null>(null);
+  const [editingTask, setEditingTask] = useState<TaskWithAssignee | null>(null);
+  const [newColumnOpen, setNewColumnOpen] = useState(false);
+  const [newColumnTitle, setNewColumnTitle] = useState("");
+  const [, startTransition] = useTransition();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+
+  const allTasks = useMemo(() => Object.values(tasksByColumn).flat(), [tasksByColumn]);
+  const doneColumn = columns.find((c) => c.title.toLowerCase().includes("hoàn thành"));
+  const doneCount = doneColumn ? (tasksByColumn[doneColumn.id]?.length ?? 0) : 0;
+  const activeTask = activeTaskId ? allTasks.find((t) => t.id === activeTaskId) : null;
+
+  function findColumnIdOfTask(taskId: string) {
+    for (const [colId, tasks] of Object.entries(tasksByColumn)) {
+      if (tasks.some((t) => t.id === taskId)) return colId;
+    }
+    return null;
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveTaskId(String(event.active.id));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    setActiveTaskId(null);
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    const fromColumnId = findColumnIdOfTask(activeId);
+    if (!fromColumnId) return;
+
+    const toColumnId = columns.some((c) => c.id === overId) ? overId : findColumnIdOfTask(overId);
+    if (!toColumnId) return;
+
+    const fromTasks = [...tasksByColumn[fromColumnId]];
+    const activeIndex = fromTasks.findIndex((t) => t.id === activeId);
+    if (activeIndex === -1) return;
+    const [moved] = fromTasks.splice(activeIndex, 1);
+
+    const toTasks = fromColumnId === toColumnId ? fromTasks : [...(tasksByColumn[toColumnId] ?? [])];
+    let overIndex = toTasks.findIndex((t) => t.id === overId);
+    if (overIndex === -1) overIndex = toTasks.length;
+    toTasks.splice(overIndex, 0, { ...moved, column_id: toColumnId });
+
+    const next = { ...tasksByColumn };
+    next[fromColumnId] = fromColumnId === toColumnId ? toTasks : fromTasks;
+    next[toColumnId] = toTasks;
+    setTasksByColumn(next);
+
+    // Calling startTransition from inside a setState updater is not allowed
+    // ("Cannot call startTransition while rendering") — it has to run here,
+    // after the state update above, not nested inside it.
+    const updates: { id: string; column_id: string; position: number }[] = [];
+    next[fromColumnId].forEach((t, i) => updates.push({ id: t.id, column_id: fromColumnId, position: i }));
+    if (toColumnId !== fromColumnId) {
+      next[toColumnId].forEach((t, i) => updates.push({ id: t.id, column_id: toColumnId, position: i }));
+    }
+    startTransition(async () => {
+      try {
+        await reorderTasks(updates);
+      } catch {
+        // Local order stays as-is (e.g. workspace-demo has no real backend).
+      }
+    });
+  }
+
+  function handleAddColumn(e: React.FormEvent) {
+    e.preventDefault();
+    const title = newColumnTitle.trim();
+    if (!title) return;
+    setNewColumnTitle("");
+    setNewColumnOpen(false);
+
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const optimisticColumn: BoardColumn = {
+      id: tempId,
+      board_id: board.id,
+      title,
+      color: "#78776F",
+      position: columns.length,
+      created_at: new Date().toISOString(),
+    };
+    setColumns((prev) => [...prev, optimisticColumn]);
+    setTasksByColumn((prev) => ({ ...prev, [tempId]: [] }));
+
+    startTransition(async () => {
+      try {
+        const column = await createColumn(board.id, title);
+        if (!column) return;
+        setColumns((prev) => prev.map((c) => (c.id === tempId ? column : c)));
+        setTasksByColumn((prev) => {
+          const { [tempId]: tasks, ...rest } = prev;
+          return { ...rest, [column.id]: tasks ?? [] };
+        });
+      } catch {
+        // Optimistic column stays as-is (e.g. workspace-demo has no real backend).
+      }
+    });
+  }
+
+  function handleTaskCreated(columnId: string, task: TaskWithAssignee) {
+    setTasksByColumn((prev) => ({ ...prev, [columnId]: [...(prev[columnId] ?? []), task] }));
+  }
+
+  function handleTaskReconciled(columnId: string, tempId: string, task: TaskWithAssignee) {
+    setTasksByColumn((prev) => ({
+      ...prev,
+      [columnId]: (prev[columnId] ?? []).map((t) => (t.id === tempId ? task : t)),
+    }));
+  }
+
+  function handleTaskUpdated(updated: TaskWithAssignee) {
+    setTasksByColumn((prev) => {
+      const fromColumnId = Object.entries(prev).find(([, tasks]) => tasks.some((t) => t.id === updated.id))?.[0];
+
+      // Same column — update in place so position doesn't shift.
+      if (fromColumnId === updated.column_id) {
+        return {
+          ...prev,
+          [updated.column_id]: (prev[updated.column_id] ?? []).map((t) => (t.id === updated.id ? updated : t)),
+        };
+      }
+
+      // Column changed — remove from wherever it was, append to the new one.
+      const next = { ...prev };
+      if (fromColumnId) next[fromColumnId] = prev[fromColumnId].filter((t) => t.id !== updated.id);
+      next[updated.column_id] = [...(prev[updated.column_id] ?? []), updated];
+      return next;
+    });
+  }
+
+  function handleTaskDeleted(taskId: string) {
+    setTasksByColumn((prev) => {
+      const next: Record<string, TaskWithAssignee[]> = {};
+      for (const [colId, tasks] of Object.entries(prev)) {
+        next[colId] = tasks.filter((t) => t.id !== taskId);
+      }
+      return next;
+    });
+  }
+
+  function handleColumnDeleted(columnId: string) {
+    setColumns((prev) => prev.filter((c) => c.id !== columnId));
+    setTasksByColumn((prev) =>
+      Object.fromEntries(Object.entries(prev).filter(([id]) => id !== columnId)),
+    );
+    startTransition(async () => {
+      try {
+        await deleteColumn(columnId);
+      } catch {
+        // Local removal stays as-is (e.g. workspace-demo has no real backend).
+      }
+    });
+  }
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex flex-wrap items-center gap-6 px-6 py-4" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+        <h1 className="text-xl">{board.title}</h1>
+        <div className="flex items-center gap-5 text-sm" style={{ color: "var(--color-neutral-600)" }}>
+          <span>✅ {doneCount}/{allTasks.length} hoàn thành</span>
+        </div>
+        <div className="flex items-center -space-x-2 ml-auto">
+          {profiles.slice(0, 6).map((p) => (
+            <div
+              key={p.id}
+              title={p.display_name}
+              className="flex items-center justify-center rounded-full font-bold flex-none"
+              style={{
+                width: 28,
+                height: 28,
+                fontSize: 11,
+                background: "var(--color-accent-100)",
+                color: "var(--color-accent-700)",
+                border: "2px solid var(--color-bg)",
+              }}
+            >
+              {p.display_name.charAt(0).toUpperCase()}
+            </div>
+          ))}
+          {profiles.length > 6 && (
+            <div
+              className="flex items-center justify-center rounded-full font-bold flex-none"
+              style={{
+                width: 28,
+                height: 28,
+                fontSize: 10,
+                background: "var(--color-neutral-200)",
+                color: "var(--color-neutral-700)",
+                border: "2px solid var(--color-bg)",
+              }}
+            >
+              +{profiles.length - 6}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-x-auto p-6 fk-board-scroll">
+        <DndContext
+          id={`board-${board.id}`}
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex gap-4 items-start min-w-fit">
+            {columns.map((col) => (
+              <Column
+                key={col.id}
+                column={col}
+                tasks={tasksByColumn[col.id] ?? []}
+                onOpenTask={setEditingTask}
+                onAddTask={() => setAddTaskColumn(col)}
+                onDeleteColumn={() => handleColumnDeleted(col.id)}
+              />
+            ))}
+
+            <div className="flex-none w-[220px]">
+              {newColumnOpen ? (
+                <form
+                  onSubmit={handleAddColumn}
+                  className="p-3 rounded-[var(--radius-md)] flex flex-col gap-2"
+                  style={{ border: "1.5px dashed var(--color-neutral-300)" }}
+                >
+                  <input
+                    autoFocus
+                    className="input"
+                    placeholder="Tên cột mới…"
+                    value={newColumnTitle}
+                    onChange={(e) => setNewColumnTitle(e.target.value)}
+                    onBlur={() => !newColumnTitle && setNewColumnOpen(false)}
+                  />
+                  <div className="flex gap-2">
+                    <button type="submit" className="btn btn-primary btn-sm">
+                      Thêm cột
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => {
+                        setNewColumnOpen(false);
+                        setNewColumnTitle("");
+                      }}
+                    >
+                      Huỷ
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setNewColumnOpen(true)}
+                  className="ws-add-btn w-full h-12 rounded-[var(--radius-md)] text-sm font-semibold"
+                  style={{ border: "1.5px dashed var(--color-neutral-300)", color: "var(--color-neutral-500)" }}
+                >
+                  + Thêm cột
+                </button>
+              )}
+            </div>
+          </div>
+
+          <DragOverlay>
+            {activeTask ? (
+              <div style={{ width: 250 }}>
+                <TaskCard task={activeTask} onOpen={() => {}} />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      </div>
+
+      {addTaskColumn && (
+        <AddTaskDialog
+          boardId={board.id}
+          columnId={addTaskColumn.id}
+          columnTitle={addTaskColumn.title}
+          profiles={profiles}
+          onCreated={(task) => handleTaskCreated(addTaskColumn.id, task)}
+          onReconciled={(tempId, task) => handleTaskReconciled(addTaskColumn.id, tempId, task)}
+          onClose={() => setAddTaskColumn(null)}
+        />
+      )}
+
+      {editingTask && (
+        <EditTaskDialog
+          task={editingTask}
+          columns={columns}
+          profiles={profiles}
+          currentUserId={currentUserId}
+          onUpdated={handleTaskUpdated}
+          onDeleted={handleTaskDeleted}
+          onClose={() => setEditingTask(null)}
+        />
+      )}
+    </div>
+  );
+}

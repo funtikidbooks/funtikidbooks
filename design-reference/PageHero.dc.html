@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="_ds/organic-7f9e30db-7f30-4e47-982f-24e35257a27b/styles.css">
+<script src="_ds/organic-7f9e30db-7f30-4e47-982f-24e35257a27b/_ds_bundle.js"></script>
+<script src="./image-slot.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>:root{--font-heading:'Baloo 2', var(--font-body), sans-serif}</style>
+</helmet>
+<section style="display:flex;gap:44px;align-items:center;padding:36px 48px 24px;max-width:1280px;margin:0 auto">
+  <div style="flex:1;display:flex;flex-direction:column;gap:14px;max-width:520px">
+    <div style="font:700 12px var(--font-body);letter-spacing:.1em;color:var(--color-accent-2-700)">{{ kicker }}</div>
+    <h1 style="font:400 34px/1.2 var(--font-heading);margin:0">{{ title }}</h1>
+    <p style="font:16px/1.6 var(--font-body);color:var(--color-neutral-700);margin:0">{{ body }}</p>
+    <sc-if value="{{ hasPrimary }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;gap:14px;margin-top:6px">
+        <button type="button" class="btn btn-primary" onClick="{{ primaryClick }}">{{ primaryLabel }}</button>
+        <button type="button" class="btn btn-ghost" onClick="{{ secondaryClick }}">{{ secondaryLabel }}</button>
+      </div>
+    </sc-if>
+  </div>
+  <div class="{{ imgWrapClass }}" style="{{ imgWrapStyle }}">
+    <sc-if value="{{ decorative }}" hint-placeholder-val="{{ false }}">
+      <span style="position:absolute;top:-14px;left:-14px;font-size:34px;transform:rotate(-12deg);z-index:2" aria-hidden="true">⭐</span>
+      <span style="position:absolute;bottom:-16px;right:-18px;font-size:34px;transform:rotate(18deg);z-index:2" aria-hidden="true">✏️</span>
+      <span style="position:absolute;top:-20px;right:30px;font-size:26px;opacity:.6;z-index:2" aria-hidden="true">☁️</span>
+    </sc-if>
+    <image-slot id="{{ slotId }}" shape="rect" style="width:100%;height:100%" placeholder="Ảnh minh hoạ"></image-slot>
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;kicker&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;KICKER&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;title&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Tiêu đề trang&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;body&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Mô tả ngắn.&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;primaryLabel&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;secondaryLabel&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;primaryClick&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;},&quot;secondaryClick&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;},&quot;slotId&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;hero-slot&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;decorative&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const p = this.props;
+    return {
+      kicker: p.kicker ?? '', title: p.title ?? '', body: p.body ?? '',
+      primaryLabel: p.primaryLabel ?? '', secondaryLabel: p.secondaryLabel ?? '',
+      primaryClick: p.primaryClick ?? (() => {}), secondaryClick: p.secondaryClick ?? (() => {}),
+      hasPrimary: !!p.primaryLabel, slotId: p.slotId ?? 'hero-slot',
+      decorative: !!p.decorative,
+      imgWrapClass: p.decorative ? '' : 'washed',
+      imgWrapStyle: 'position:relative;flex:1;border-radius:var(--radius-lg);overflow:' + (p.decorative ? 'visible' : 'hidden') + ';height:260px' + (p.decorative ? ';border:3px solid var(--color-accent-2-400)' : ''),
+    };
+  }
+}
+</script>
+</body>
+</html>

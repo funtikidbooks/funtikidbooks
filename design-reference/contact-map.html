@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<style>html,body,#map{margin:0;height:100%;width:100%}</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+var lat = 10.797397446134665, lng = 106.65842339739149;
+var map = L.map('map', { zoomControl: true }).setView([lat, lng], 17);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+  maxZoom: 19
+}).addTo(map);
+var marker = L.marker([lat, lng]).addTo(map);
+marker.bindPopup('<b>Funti Kidbooks Studio</b><br>Toà nhà M.O.R.E, 40B Út Tịch, P.4, Tân Bình');
+window.addEventListener('load', function () {
+  setTimeout(function () { map.invalidateSize(); map.setView([lat, lng], 17); }, 80);
+});
+</script>
+</body>
+</html>

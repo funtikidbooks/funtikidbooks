@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f0eee9;font-family:'Patrick Hand',cursive}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 8px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:700 15px/1.2 'Kalam',cursive;color:#1a1a1a}
+.dv-sub{font:16px/1.4 'Patrick Hand',cursive;color:rgba(0,0,0,.6);margin:0 0 20px;max-width:640px}
+.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:16px/1.3 'Kalam',cursive;color:rgba(0,0,0,.7)}
+.dv-card{max-width:100%;background:#fdfcf9;border:2.5px solid #1a1a1a;border-radius:6px;box-shadow:3px 3px 0 rgba(0,0,0,.15);overflow:hidden}
+.dv-opt:target .dv-oid{background:#c67139;color:#fff}
+.dv-next{margin:22px 0 0;font:16px/1.6 'Patrick Hand',cursive;color:rgba(0,0,0,.55);max-width:640px}
+.wf-nav{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:2px solid #1a1a1a}
+.wf-logo{font:700 15px 'Kalam',cursive;border:2px solid #1a1a1a;border-radius:8px;padding:3px 10px}
+.wf-navlinks{display:flex;gap:14px;font-size:12.5px;color:#333}
+.wf-btn{border:2px solid #1a1a1a;border-radius:999px;padding:5px 14px;font:13px 'Patrick Hand',cursive;background:#f6a35e;white-space:nowrap}
+.wf-box{border:2px dashed #1a1a1a;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#666;text-align:center;padding:4px}
+.wf-line{height:8px;background:repeating-linear-gradient(90deg,#1a1a1a 0 60%,transparent 60% 100%);background-size:12px 2px;opacity:.35;border-radius:2px}
+.wf-tag{border:2px solid #7a8a5e;border-radius:999px;padding:2px 9px;font-size:11px;color:#4c5638}
+</style>
+</helmet>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Funtikidbooks — Trang chủ (website minh hoạ sách thiếu nhi)</span></div>
+<p class="dv-sub">4 hướng bố cục khác nhau cho trang chủ, phục vụ độc giả, nhà văn, nhà biên tập &amp; nhà sách.</p>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Studio giới thiệu — hero + dự án nổi bật + dịch vụ</div>
+<div class="dv-card" style="width:420px">
+  <div class="wf-nav"><div class="wf-logo">Funtiki</div><div class="wf-navlinks"><span>Dự án</span><span>Dịch vụ</span><span>Về chúng tôi</span><span>Liên hệ</span></div></div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;gap:16px;align-items:center">
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+        <div style="font:700 20px 'Kalam',cursive">Vẽ minh hoạ cho những<br>cuốn sách trẻ em đáng nhớ</div>
+        <div class="wf-line" style="width:90%"></div><div class="wf-line" style="width:70%"></div>
+        <div style="display:flex;gap:8px;margin-top:6px"><div class="wf-btn">Xem portfolio</div><div class="wf-btn" style="background:#fff">Đặt lịch tư vấn</div></div>
+      </div>
+      <div class="wf-box" style="width:150px;height:150px">ẢNH BÌA SÁCH</div>
+    </div>
+    <div style="font:700 13px 'Kalam',cursive">Dự án nổi bật</div>
+    <div style="display:flex;gap:10px">
+      <div class="wf-box" style="width:110px;height:80px">bìa 1</div>
+      <div class="wf-box" style="width:110px;height:80px">bìa 2</div>
+      <div class="wf-box" style="width:110px;height:80px">bìa 3</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="wf-tag">Minh hoạ nhân vật</div><div class="wf-tag">Layout sách</div><div class="wf-tag">Bìa sách</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Kể chuyện — cuộn theo hành trình một cuốn sách</div>
+<div class="dv-card" style="width:340px">
+  <div class="wf-nav"><div class="wf-logo">Funtiki</div><div class="wf-navlinks"><span>≡</span></div></div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:18px;align-items:center">
+    <div class="wf-box" style="width:100%;height:180px;border-radius:50% 50% 8px 8px">ảnh minh hoạ lớn, bo tròn</div>
+    <div style="font:700 18px 'Kalam',cursive;text-align:center">Từ trang giấy trắng<br>đến cuốn sách trong tay bé</div>
+    <div style="display:flex;flex-direction:column;gap:10px;width:100%">
+      <div style="display:flex;gap:10px;align-items:center"><div class="wf-box" style="width:50px;height:50px;border-radius:50%">1</div><div class="wf-line" style="flex:1"></div></div>
+      <div style="display:flex;gap:10px;align-items:center"><div class="wf-box" style="width:50px;height:50px;border-radius:50%">2</div><div class="wf-line" style="flex:1"></div></div>
+      <div style="display:flex;gap:10px;align-items:center"><div class="wf-box" style="width:50px;height:50px;border-radius:50%">3</div><div class="wf-line" style="flex:1"></div></div>
+    </div>
+    <div class="wf-btn">Bắt đầu câu chuyện của bạn</div>
+  </div>
+</div>
+</div>
+
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Phân theo đối tượng — chọn vai trò của bạn</div>
+<div class="dv-card" style="width:420px">
+  <div class="wf-nav"><div class="wf-logo">Funtiki</div><div class="wf-navlinks"><span>Portfolio</span><span>Liên hệ</span></div></div>
+  <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+    <div style="font:700 16px 'Kalam',cursive">Bạn là ai?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="wf-box" style="height:70px">📖 Độc giả</div>
+      <div class="wf-box" style="height:70px">✍️ Nhà văn</div>
+      <div class="wf-box" style="height:70px">📝 Nhà biên tập</div>
+      <div class="wf-box" style="height:70px">🏬 Nhà sách</div>
+    </div>
+    <div style="border-top:2px dashed #1a1a1a;margin-top:6px;padding-top:12px">
+      <div style="font-size:12px;color:#666;margin-bottom:6px">→ nội dung thay đổi theo lựa chọn phía trên</div>
+      <div class="wf-line" style="width:80%"></div><div class="wf-line" style="width:60%;margin-top:4px"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="dv-opt" id="1d">
+<div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Lưới portfolio — hình ảnh dẫn đầu, ít chữ</div>
+<div class="dv-card" style="width:420px">
+  <div class="wf-nav"><div class="wf-logo">Funtiki</div><div class="wf-navlinks"><span>Tất cả</span><span>Bìa sách</span><span>Nhân vật</span><span>Về chúng tôi</span></div></div>
+  <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+    <div class="wf-box" style="height:100px;grid-row:span 2">lớn</div>
+    <div class="wf-box" style="height:46px">img</div>
+    <div class="wf-box" style="height:46px">img</div>
+    <div class="wf-box" style="height:46px">img</div>
+    <div class="wf-box" style="height:46px">img</div>
+    <div class="wf-box" style="height:100px;grid-column:span 2">img rộng</div>
+    <div class="wf-box" style="height:80px">img</div>
+    <div class="wf-box" style="height:80px">img</div>
+    <div class="wf-box" style="height:80px">img</div>
+  </div>
+</div>
+</div>
+
+</div>
+<p class="dv-next">Thử tiếp: "phát triển thêm từ <a class="dv-oid" href="#1a">1a</a>" · "vẽ thêm trang portfolio/chi tiết sách cho <a class="dv-oid" href="#1c">1c</a>" · "làm bản mobile cho <a class="dv-oid" href="#1d">1d</a>"</p>
+</section>
+</x-dc>
+</body>
+</html>

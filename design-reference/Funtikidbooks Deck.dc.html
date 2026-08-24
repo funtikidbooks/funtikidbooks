@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+:root{
+  --font-heading:'Baloo 2', sans-serif; --font-body:'Figtree', sans-serif;
+  --color-bg:#ffffff; --color-surface:#EAF6FB; --color-text:#201e1d;
+  --color-accent-100:#FFEDE3; --color-accent-500:#FF7A3D; --color-accent-600:#F0631F; --color-accent-700:#D6540F; --color-accent-800:#B4430A;
+  --color-accent-2-100:#EAF6FB; --color-accent-2-500:#4FB3D9; --color-accent-2-700:#2E7999; --color-accent-2-800:#215A73;
+  --color-neutral-100:#F7F7F8; --color-neutral-200:#EEEEF0; --color-neutral-500:#8B8B90; --color-neutral-600:#6E6E73; --color-neutral-700:#4E4E52;
+  --type-title:64px; --type-subtitle:40px; --type-body:30px; --type-small:26px; --type-kicker:22px;
+  --pad-x:100px; --pad-top:100px; --pad-bottom:80px; --gap-title:40px; --gap-item:24px;
+}
+.kicker{font:700 var(--type-kicker) var(--font-body);letter-spacing:.08em;color:var(--color-accent-2-700);text-transform:uppercase}
+.slide-title{font:600 var(--type-title) var(--font-heading);color:var(--color-text);margin:0;line-height:1.15}
+.slide-body{font:400 var(--type-body)/1.5 var(--font-body);color:var(--color-neutral-700)}
+</style>
+</helmet>
+<x-import component-from-global-scope="deck-stage" from="./deck-stage.js" width="1920" height="1080" hint-size="100%,100%">
+
+<section data-label="Cover" data-speaker-notes="Open with the studio name and one-line promise." style="background:var(--color-bg);display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:0 var(--pad-x)">
+  <div class="kicker" style="margin-bottom:var(--gap-item)">CHILDREN'S BOOK ILLUSTRATION STUDIO</div>
+  <h1 class="slide-title" style="font-size:96px">Funti Kidbooks Studio</h1>
+  <p class="slide-body" style="max-width:900px;margin-top:var(--gap-item)">Kể chuyện bằng hình ảnh, nuôi dưỡng trí tưởng tượng của trẻ thơ.</p>
+  <div style="display:flex;gap:56px;margin-top:64px">
+    <div><div style="font:700 56px var(--font-heading);color:var(--color-accent-700)">20+</div><div class="slide-body" style="font-size:var(--type-small)">Thành viên</div></div>
+    <div><div style="font:700 56px var(--font-heading);color:var(--color-accent-700)">1000+</div><div class="slide-body" style="font-size:var(--type-small)">Dự án</div></div>
+    <div><div style="font:700 56px var(--font-heading);color:var(--color-accent-700)">5</div><div class="slide-body" style="font-size:var(--type-small)">Năm hoạt động</div></div>
+  </div>
+</section>
+
+<section data-label="About" data-speaker-notes="Introduce the studio's mission and team." style="background:var(--color-surface);display:flex;flex-direction:column;justify-content:center;padding:0 var(--pad-x)">
+  <div class="kicker" style="margin-bottom:var(--gap-item)">GIỚI THIỆU</div>
+  <h2 class="slide-title" style="font-size:var(--type-title);max-width:1300px">Chúng tôi kể chuyện bằng hình ảnh</h2>
+  <p class="slide-body" style="max-width:1200px;margin-top:var(--gap-title)">Funti Kidbooks Studio là đội ngũ những người yêu trẻ nhỏ, yêu sách và đam mê kể chuyện bằng hình ảnh. Chúng tôi đồng hành cùng tác giả, nhà xuất bản và thương hiệu để tạo nên những cuốn sách thiếu nhi ý nghĩa, sáng tạo và ấn tượng.</p>
+</section>
+
+<section data-label="Services Overview" data-speaker-notes="List the six core service lines." style="background:var(--color-bg);display:flex;flex-direction:column;padding:var(--pad-top) var(--pad-x) var(--pad-bottom)">
+  <div class="kicker">CHÚNG TÔI LÀM GÌ</div>
+  <h2 class="slide-title" style="margin-top:var(--gap-item)">Dịch vụ của chúng tôi</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:36px;margin-top:var(--gap-title);flex:1">
+    <div style="background:var(--color-accent-100);border-radius:24px;padding:36px;display:flex;flex-direction:column;gap:12px">
+      <div style="font:700 var(--type-subtitle) var(--font-heading);color:var(--color-accent-800)">01</div>
+      <div style="font:700 var(--type-body) var(--font-heading)">Sách tranh thiếu nhi</div>
+      <div class="slide-body" style="font-size:var(--type-small)">Minh hoạ sách tranh từ ý tưởng đến trang hoàn chỉnh.</div>
+    </div>
+    <div style="background:var(--color-accent-2-100);border-radius:24px;padding:36px;display:flex;flex-direction:column;gap:12px">
+      <div style="font:700 var(--type-subtitle) var(--font-heading);color:var(--color-accent-2-800)">02</div>
+      <div style="font:700 var(--type-body) var(--font-heading)">Thiết kế nhân vật</div>
+      <div class="slide-body" style="font-size:var(--type-small)">Xây dựng nhân vật có bản sắc riêng, dễ nhớ với trẻ em.</div>
+    </div>
+    <div style="background:var(--color-neutral-100);border-radius:24px;padding:36px;display:flex;flex-direction:column;gap:12px">
+      <div style="font:700 var(--type-subtitle) var(--font-heading);color:var(--color-accent-700)">03</div>
+      <div style="font:700 var(--type-body) var(--font-heading)">Thiết kế bìa sách</div>
+      <div class="slide-body" style="font-size:var(--type-small)">Bìa sách bắt mắt, phản ánh đúng tinh thần nội dung.</div>
+    </div>
+    <div style="background:var(--color-accent-2-100);border-radius:24px;padding:36px;display:flex;flex-direction:column;gap:12px">
+      <div style="font:700 var(--type-subtitle) var(--font-heading);color:var(--color-accent-2-800)">04</div>
+      <div style="font:700 var(--type-body) var(--font-heading)">Sticker & Merch</div>
+      <div class="slide-body" style="font-size:var(--type-small)">Sản phẩm đi kèm: sticker, thẻ, đồ lưu niệm cho sách.</div>
+    </div>
+    <div style="background:var(--color-neutral-100);border-radius:24px;padding:36px;display:flex;flex-direction:column;gap:12px">
+      <div style="font:700 var(--type-subtitle) var(--font-heading);color:var(--color-accent-700)">05</div>
+      <div style="font:700 var(--type-body) var(--font-heading)">Dàn trang sách</div>
+      <div class="slide-body" style="font-size:var(--type-small)">Bố cục trang sách hài hoà giữa chữ và hình.</div>
+    </div>
+    <div style="background:var(--color-accent-100);border-radius:24px;padding:36px;display:flex;flex-direction:column;gap:12px">
+      <div style="font:700 var(--type-subtitle) var(--font-heading);color:var(--color-accent-800)">06</div>
+      <div style="font:700 var(--type-body) var(--font-heading)">Mô hình 3D & ấn phẩm</div>
+      <div class="slide-body" style="font-size:var(--type-small)">Mô hình nhân vật và ấn phẩm vật lý theo yêu cầu.</div>
+    </div>
+  </div>
+</section>
+
+<section data-label="Process" data-speaker-notes="Walk through the six-step production process." style="background:var(--color-surface);display:flex;flex-direction:column;padding:var(--pad-top) var(--pad-x) var(--pad-bottom)">
+  <div class="kicker">QUY TRÌNH</div>
+  <h2 class="slide-title" style="margin-top:var(--gap-item)">Chúng tôi làm việc như thế nào?</h2>
+  <div style="display:flex;justify-content:space-between;margin-top:80px;flex:1;align-items:flex-start">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px;max-width:220px">
+      <div style="width:80px;height:80px;border-radius:50%;background:var(--color-accent-600);color:#fff;display:flex;align-items:center;justify-content:center;font:700 32px var(--font-heading)">1</div>
+      <div style="font:700 var(--type-small) var(--font-heading);text-align:center">Tiếp nhận yêu cầu</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px;max-width:220px">
+      <div style="width:80px;height:80px;border-radius:50%;background:var(--color-accent-600);color:#fff;display:flex;align-items:center;justify-content:center;font:700 32px var(--font-heading)">2</div>
+      <div style="font:700 var(--type-small) var(--font-heading);text-align:center">Nghiên cứu & ý tưởng</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px;max-width:220px">
+      <div style="width:80px;height:80px;border-radius:50%;background:var(--color-accent-600);color:#fff;display:flex;align-items:center;justify-content:center;font:700 32px var(--font-heading)">3</div>
+      <div style="font:700 var(--type-small) var(--font-heading);text-align:center">Phác thảo</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px;max-width:220px">
+      <div style="width:80px;height:80px;border-radius:50%;background:var(--color-accent-600);color:#fff;display:flex;align-items:center;justify-content:center;font:700 32px var(--font-heading)">4</div>
+      <div style="font:700 var(--type-small) var(--font-heading);text-align:center">Minh hoạ & thiết kế</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px;max-width:220px">
+      <div style="width:80px;height:80px;border-radius:50%;background:var(--color-accent-600);color:#fff;display:flex;align-items:center;justify-content:center;font:700 32px var(--font-heading)">5</div>
+      <div style="font:700 var(--type-small) var(--font-heading);text-align:center">Hoàn thiện</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px;max-width:220px">
+      <div style="width:80px;height:80px;border-radius:50%;background:var(--color-accent-600);color:#fff;display:flex;align-items:center;justify-content:center;font:700 32px var(--font-heading)">6</div>
+      <div style="font:700 var(--type-small) var(--font-heading);text-align:center">Bàn giao</div>
+    </div>
+  </div>
+</section>
+
+<section data-label="Values" data-speaker-notes="Core studio values." style="background:var(--color-bg);display:flex;flex-direction:column;padding:var(--pad-top) var(--pad-x) var(--pad-bottom)">
+  <div class="kicker">GIÁ TRỊ CỐT LÕI</div>
+  <h2 class="slide-title" style="margin-top:var(--gap-item)">Vì sao chọn Funti</h2>
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:40px;margin-top:var(--gap-title);flex:1">
+    <div style="display:flex;gap:24px;align-items:flex-start">
+      <div style="width:64px;height:64px;border-radius:50%;background:var(--color-accent-100);flex:none;display:flex;align-items:center;justify-content:center;font:700 28px var(--font-heading);color:var(--color-accent-700)">1</div>
+      <div><div style="font:700 var(--type-body) var(--font-heading)">Thấu hiểu trẻ em</div><div class="slide-body" style="font-size:var(--type-small);margin-top:8px">Đặt mình vào thế giới của trẻ để tạo sản phẩm chạm đến cảm xúc.</div></div>
+    </div>
+    <div style="display:flex;gap:24px;align-items:flex-start">
+      <div style="width:64px;height:64px;border-radius:50%;background:var(--color-accent-2-100);flex:none;display:flex;align-items:center;justify-content:center;font:700 28px var(--font-heading);color:var(--color-accent-2-800)">2</div>
+      <div><div style="font:700 var(--type-body) var(--font-heading)">Chất lượng & tận tâm</div><div class="slide-body" style="font-size:var(--type-small);margin-top:8px">Mỗi dự án được chăm chút kỹ lưỡng, đúng tiến độ.</div></div>
+    </div>
+    <div style="display:flex;gap:24px;align-items:flex-start">
+      <div style="width:64px;height:64px;border-radius:50%;background:var(--color-accent-100);flex:none;display:flex;align-items:center;justify-content:center;font:700 28px var(--font-heading);color:var(--color-accent-700)">3</div>
+      <div><div style="font:700 var(--type-body) var(--font-heading)">Đồng hành lâu dài</div><div class="slide-body" style="font-size:var(--type-small);margin-top:8px">Không chỉ là nhà cung cấp, mà là người bạn đồng hành đáng tin cậy.</div></div>
+    </div>
+    <div style="display:flex;gap:24px;align-items:flex-start">
+      <div style="width:64px;height:64px;border-radius:50%;background:var(--color-accent-2-100);flex:none;display:flex;align-items:center;justify-content:center;font:700 28px var(--font-heading);color:var(--color-accent-2-800)">4</div>
+      <div><div style="font:700 var(--type-body) var(--font-heading)">Sáng tạo không ngừng</div><div class="slide-body" style="font-size:var(--type-small);margin-top:8px">Luôn tìm cách kể chuyện mới mẻ, khác biệt qua hình ảnh.</div></div>
+    </div>
+  </div>
+</section>
+
+<section data-label="Projects" data-speaker-notes="Sample project portfolio grid." style="background:var(--color-surface);display:flex;flex-direction:column;padding:var(--pad-top) var(--pad-x) var(--pad-bottom)">
+  <div class="kicker">DỰ ÁN</div>
+  <h2 class="slide-title" style="margin-top:var(--gap-item)">Những cuốn sách chúng tôi đã tạo nên</h2>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:28px;margin-top:var(--gap-title);flex:1">
+    <div style="background:var(--color-bg);border-radius:20px;overflow:hidden;display:flex;flex-direction:column">
+      <div style="height:220px;background:var(--color-accent-100)"></div>
+      <div style="padding:20px"><div style="font:700 var(--type-small) var(--font-heading)">Miền Dâu Dại</div><div class="slide-body" style="font-size:22px">Sách tranh</div></div>
+    </div>
+    <div style="background:var(--color-bg);border-radius:20px;overflow:hidden;display:flex;flex-direction:column">
+      <div style="height:220px;background:var(--color-accent-2-100)"></div>
+      <div style="padding:20px"><div style="font:700 var(--type-small) var(--font-heading)">Usborne Books</div><div class="slide-body" style="font-size:22px">Sách truyện</div></div>
+    </div>
+    <div style="background:var(--color-bg);border-radius:20px;overflow:hidden;display:flex;flex-direction:column">
+      <div style="height:220px;background:var(--color-neutral-100)"></div>
+      <div style="padding:20px"><div style="font:700 var(--type-small) var(--font-heading)">Product Design</div><div class="slide-body" style="font-size:22px">Product & Merch</div></div>
+    </div>
+    <div style="background:var(--color-bg);border-radius:20px;overflow:hidden;display:flex;flex-direction:column">
+      <div style="height:220px;background:var(--color-accent-100)"></div>
+      <div style="padding:20px"><div style="font:700 var(--type-small) var(--font-heading)">DIY & 3D Print</div><div class="slide-body" style="font-size:22px">3D & Mô hình</div></div>
+    </div>
+  </div>
+</section>
+
+<section data-label="Partners" data-speaker-notes="List client and publisher partners." style="background:var(--color-bg);display:flex;flex-direction:column;justify-content:center;padding:0 var(--pad-x);text-align:center;align-items:center">
+  <div class="kicker">ĐỐI TÁC</div>
+  <h2 class="slide-title" style="margin-top:var(--gap-item)">Được tin tưởng bởi <span style="color:var(--color-accent-700)">các nhà sách hàng đầu</span></h2>
+  <div style="display:flex;gap:64px;flex-wrap:wrap;justify-content:center;margin-top:80px">
+    <div style="font:800 var(--type-subtitle) var(--font-heading);color:var(--color-neutral-700)">NXB Kim Đồng</div>
+    <div style="font:800 var(--type-subtitle) var(--font-heading);color:var(--color-neutral-700)">NXB Trẻ</div>
+    <div style="font:800 var(--type-subtitle) var(--font-heading);color:var(--color-neutral-700)">Đinh Tị</div>
+    <div style="font:800 var(--type-subtitle) var(--font-heading);color:var(--color-neutral-700)">Nhã Nam</div>
+  </div>
+</section>
+
+<section data-label="Contact" data-speaker-notes="Close with contact details and a call to action." style="background:var(--color-accent-700);display:flex;flex-direction:column;justify-content:center;padding:0 var(--pad-x);color:#fff">
+  <div class="kicker" style="color:rgba(255,255,255,.8)">LIÊN HỆ</div>
+  <h2 class="slide-title" style="color:#fff;margin-top:var(--gap-item)">Bắt đầu dự án của bạn</h2>
+  <div style="display:flex;flex-direction:column;gap:20px;margin-top:var(--gap-title);font:400 var(--type-body) var(--font-body)">
+    <div>funtikidbooks.studio@gmail.com</div>
+    <div>0978 346 851</div>
+    <div>Toà nhà M.O.R.E, 40B Út Tịch, P.4, Tân Bình, TP.HCM</div>
+  </div>
+</section>
+
+</x-import>
+
+</x-dc>
+</body>
+</html>

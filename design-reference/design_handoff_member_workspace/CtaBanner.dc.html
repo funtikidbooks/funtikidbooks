@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="stylesheet" href="_ds/organic-7f9e30db-7f30-4e47-982f-24e35257a27b/styles.css">
+<script src="_ds/organic-7f9e30db-7f30-4e47-982f-24e35257a27b/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--font-heading:'Baloo 2', var(--font-body), sans-serif}
+.fk-cta-badge{width:64px;height:64px;border-radius:50%;background:var(--color-bg);display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:var(--shadow-md);flex:none}
+</style>
+</helmet>
+<section class="fk-reveal" style="position:relative;overflow:hidden;background:linear-gradient(135deg, var(--color-accent-100), var(--color-accent-2-100));margin:24px 24px 48px;border-radius:var(--radius-lg);padding:40px 44px;display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap;max-width:none">
+  <div style="position:absolute;top:-40px;right:-30px;width:140px;height:140px;border-radius:50%;background:var(--color-accent-2-200);opacity:.5;pointer-events:none"></div>
+  <div style="position:absolute;bottom:-50px;right:120px;width:90px;height:90px;border-radius:50%;background:var(--color-accent-200);opacity:.5;pointer-events:none"></div>
+  <div class="fk-cta-badge">📖</div>
+  <div style="position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;min-width:220px">
+    <div style="font:400 22px var(--font-heading);margin:0">{{ title }}</div>
+    <div style="font:14px/1.5 var(--font-body);color:var(--color-neutral-700)">{{ body }}</div>
+  </div>
+  <button type="button" class="btn btn-primary" style="position:relative;flex:none" onClick="{{ onClick }}">{{ ctaLabel }}</button>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;onClick&quot;:{&quot;editor&quot;:null,&quot;tsType&quot;:&quot;() =&gt; void&quot;},&quot;lang&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;vi&quot;,&quot;options&quot;:[&quot;vi&quot;,&quot;en&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const L = this.props.lang ?? 'vi';
+    return {
+      onClick: this.props.onClick ?? (() => {}),
+      title: L === 'vi' ? 'Bạn có dự án sách thiếu nhi hoặc ý tưởng sáng tạo?' : 'Have a kids\' book project or a creative idea?',
+      body: L === 'vi' ? 'Hãy để Funti đồng hành cùng bạn biến ý tưởng thành những câu chuyện tuyệt vời.' : 'Let Funti help turn your idea into wonderful stories.',
+      ctaLabel: L === 'vi' ? 'Liên hệ ngay →' : 'Contact us →',
+    };
+  }
+}
+</script>
+</body>
+</html>
