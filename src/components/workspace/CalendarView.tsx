@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from "@/lib/actions/calendar";
-import { EVENT_CATEGORIES, categoryOf } from "@/lib/constants/calendar";
+import { EVENT_CATEGORIES, categoryOf, holidayOn } from "@/lib/constants/calendar";
 import type { CalendarEvent, EventCategory } from "@/lib/types";
 
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -156,6 +156,7 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
               const inMonth = day.getMonth() === viewDate.getMonth();
               const isToday = dateKey(day) === dateKey(today);
               const dayEvents = eventsByDay.get(dateKey(day)) ?? [];
+              const holiday = holidayOn(day);
               return (
                 <button
                   key={day.toISOString()}
@@ -166,7 +167,7 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
                     minHeight: 92,
                     borderRight: "1px solid var(--color-neutral-200)",
                     borderBottom: "1px solid var(--color-neutral-200)",
-                    background: inMonth ? "var(--color-panel)" : "var(--color-surface)",
+                    background: holiday ? "rgba(192, 82, 79, 0.07)" : inMonth ? "var(--color-panel)" : "var(--color-surface)",
                     opacity: inMonth ? 1 : 0.55,
                   }}
                 >
@@ -177,11 +178,20 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
                       height: 20,
                       borderRadius: "50%",
                       background: isToday ? "var(--color-accent-500)" : "transparent",
-                      color: isToday ? "#fff" : "var(--color-text)",
+                      color: isToday ? "#fff" : holiday ? "var(--status-red)" : "var(--color-text)",
                     }}
                   >
                     {day.getDate()}
                   </span>
+                  {holiday && (
+                    <span
+                      className="rounded-[4px] px-1 py-0.5 text-[10px] font-bold truncate w-full"
+                      style={{ background: "rgba(192, 82, 79, 0.12)", color: "var(--status-red)" }}
+                      title={holiday.label}
+                    >
+                      🎉 {holiday.label}
+                    </span>
+                  )}
                   <div className="flex flex-col gap-0.5 w-full">
                     {dayEvents.slice(0, 3).map((ev) => {
                       const cat = categoryOf(ev.category);
@@ -233,6 +243,15 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
                 </label>
               ))}
             </div>
+          </div>
+
+          <div className="card elev-sm p-4">
+            <h3 className="text-sm font-bold mb-2 flex items-center gap-1.5">🎉 Ngày nghỉ lễ</h3>
+            <p className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
+              4 ngày lễ dương lịch cố định (1/1, 30/4, 1/5, 2/9) được đánh dấu tự động. Tết Nguyên Đán và Giỗ Tổ Hùng
+              Vương đổi ngày mỗi năm theo âm lịch nên chưa tự động được — bấm &quot;+ Tạo sự kiện&quot; để thêm khi có
+              lịch nghỉ chính thức.
+            </p>
           </div>
         </div>
       </div>
