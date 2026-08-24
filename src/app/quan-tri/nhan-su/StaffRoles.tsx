@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { createStaffAccount, deleteStaffAccount, updateAccessRole } from "@/lib/actions/admin";
+import { createStaffAccount, deleteStaffAccount, updateAccessRole, updateJobTitle } from "@/lib/actions/admin";
 import type { AccessRole, Profile } from "@/lib/types";
 
 const ROLE_LABELS: Record<AccessRole, string> = {
@@ -10,6 +10,19 @@ const ROLE_LABELS: Record<AccessRole, string> = {
   admin: "Admin",
   staff: "Hoạ sĩ / PM",
 };
+
+// Quick-pick suggestions for chức danh (job title) — a free-text field, not
+// a permission level, so this is just a datalist of common studio titles
+// rather than a fixed enum.
+const JOB_TITLE_SUGGESTIONS = [
+  "Art Director",
+  "Team Leader",
+  "Project Manager",
+  "Art Lead",
+  "2D Illustrator",
+  "3D Artist",
+  "Biên tập viên",
+];
 
 function randomPassword() {
   return Math.random().toString(36).slice(-5) + Math.random().toString(36).slice(-5);
@@ -29,6 +42,20 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
     startTransition(async () => {
       try {
         await updateAccessRole(id, role);
+      } catch (err) {
+        setProfiles(prev);
+        setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+      }
+    });
+  }
+
+  function changeJobTitle(id: string, jobTitle: string) {
+    const prev = profiles;
+    setProfiles((p) => p.map((x) => (x.id === id ? { ...x, role: jobTitle || null } : x)));
+    setError(null);
+    startTransition(async () => {
+      try {
+        await updateJobTitle(id, jobTitle);
       } catch (err) {
         setProfiles(prev);
         setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
@@ -76,7 +103,12 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
             {error}
           </p>
         )}
-        <div className="flex flex-col gap-2 max-w-[640px]">
+        <datalist id="job-title-suggestions">
+          {JOB_TITLE_SUGGESTIONS.map((title) => (
+            <option key={title} value={title} />
+          ))}
+        </datalist>
+        <div className="flex flex-col gap-2 max-w-[820px]">
           {profiles.map((p) => (
             <div key={p.id} className="card elev-sm p-3 flex items-center gap-3">
               <div
@@ -91,6 +123,19 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
                   {p.email}
                 </span>
               </div>
+              <input
+                key={`${p.id}-${p.role ?? ""}`}
+                className="input"
+                style={{ width: 150 }}
+                list="job-title-suggestions"
+                placeholder="Chức danh"
+                defaultValue={p.role ?? ""}
+                disabled={pending}
+                onBlur={(e) => {
+                  const value = e.target.value.trim();
+                  if (value !== (p.role ?? "")) changeJobTitle(p.id, value);
+                }}
+              />
               <select
                 className="input"
                 style={{ width: 150 }}
@@ -219,8 +264,14 @@ function CreateAccountDialog({
         </div>
 
         <div className="field">
-          <label htmlFor="s-title">Chức danh (tuỳ chọn, ví dụ: 2D Illustrator)</label>
-          <input id="s-title" className="input" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+          <label htmlFor="s-title">Chức danh (tuỳ chọn, ví dụ: Art Director, Team Leader, Project Manager)</label>
+          <input
+            id="s-title"
+            className="input"
+            list="job-title-suggestions"
+            value={jobTitle}
+            onChange={(e) => setJobTitle(e.target.value)}
+          />
         </div>
 
         <div className="field">

@@ -459,6 +459,17 @@ export async function updateAccessRole(profileId: string, accessRole: AccessRole
   revalidatePath("/quan-tri/nhan-su");
 }
 
+// Job title (chức danh) is separate from access_role — it's just a label
+// shown around the workspace, not a permission level.
+export async function updateJobTitle(profileId: string, jobTitle: string) {
+  const { supabase } = await requireDirector();
+  await supabase
+    .from("profiles")
+    .update({ role: jobTitle.trim() || null })
+    .eq("id", profileId);
+  revalidatePath("/quan-tri/nhan-su");
+}
+
 // Deletes the Supabase Auth user outright (not just the profile row) — the
 // profiles table has `on delete cascade` from auth.users, so this removes
 // their login and profile together. Everything they authored elsewhere
