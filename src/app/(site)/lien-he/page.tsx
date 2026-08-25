@@ -18,9 +18,11 @@ export const metadata: Metadata = {
 };
 
 const OFFICE_IMAGE_KEY = "lien-he-anh-van-phong";
-// Toà nhà M.O.R.E, 40B Út Tịch, P.4, Tân Bình, TP.HCM.
-const OFFICE_LAT = 10.797428028272735;
-const OFFICE_LNG = 106.65835599417403;
+// Toà nhà M.O.R.E, 40A-40B Út Tịch, Phường Tân Sơn Nhất, Tân Bình, TP.HCM —
+// re-geocoded straight from that address string via Google Maps to confirm
+// the pin, rather than trusting the old hardcoded value.
+const OFFICE_LAT = 10.7974838;
+const OFFICE_LNG = 106.6584287;
 
 export default async function ContactPage() {
   const [locale, editorRole, settings] = await Promise.all([
