@@ -338,7 +338,9 @@ export function MeetingHub({
   const mentionCandidates = useMemo(() => {
     if (mentionQuery === null) return [];
     const q = mentionQuery.toLowerCase();
-    return profiles.filter((p) => p.display_name.toLowerCase().includes(q)).slice(0, 6);
+    return profiles
+      .filter((p) => p.display_name.toLowerCase().includes(q))
+      .sort((a, b) => a.display_name.localeCompare(b.display_name));
   }, [mentionQuery, profiles]);
 
   useEffect(() => {
@@ -742,8 +744,8 @@ export function MeetingHub({
             <div className="flex-none" style={{ borderTop: "1px solid var(--color-neutral-200)", position: "relative" }}>
               {mentionCandidates.length > 0 && (
                 <div
-                  className="card elev-lg flex flex-col p-1.5"
-                  style={{ position: "absolute", bottom: "100%", left: 12, marginBottom: 6, width: 220, zIndex: 10 }}
+                  className="card elev-lg flex flex-col p-1.5 overflow-y-auto"
+                  style={{ position: "absolute", bottom: "100%", left: 12, marginBottom: 6, width: 220, maxHeight: 260, zIndex: 10 }}
                 >
                   {mentionCandidates.map((p) => (
                     <button
