@@ -16,6 +16,7 @@ const NAV = [
   { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️", enabled: true },
   { href: "/workspace/thanh-vien", label: "Thành viên", icon: "👥", enabled: true },
   { href: "/workspace/lich", label: "Lịch", icon: "📅", enabled: true },
+  { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐", enabled: true },
   { href: "#", label: "Dự án", icon: "📁", enabled: false },
 ];
 

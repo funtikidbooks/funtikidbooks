@@ -180,6 +180,7 @@ export type AttendanceEntry = {
   id: string;
   profile_id: string;
   work_date: string;
+  check_in_at: string | null;
   status: "present" | "absent" | "leave";
   note: string | null;
   created_at: string;

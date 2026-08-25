@@ -15,7 +15,7 @@ const NAV = [
 
 const DIRECTOR_NAV = [
   { href: "/quan-tri/nhan-su", label: "Nhân sự & phân quyền", icon: "🧑‍🤝‍🧑", enabled: true },
-  { href: "#", label: "Chấm công & lịch nghỉ", icon: "🗓", enabled: false },
+  { href: "/quan-tri/cham-cong", label: "Chấm công", icon: "🕐", enabled: true },
   { href: "/quan-tri/hoa-don", label: "Tạo hoá đơn điện tử", icon: "🧾", enabled: true },
 ];
 

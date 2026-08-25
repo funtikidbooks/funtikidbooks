@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/workspace/ThemeToggle";
 import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
 import { IosInstallHint, PushSetup } from "@/components/workspace/PushSetup";
 import { getUnreadCounts } from "@/lib/actions/messages";
+import { checkInIfNeeded } from "@/lib/actions/attendance";
 import type { Profile } from "@/lib/types";
 
 export default async function WorkspaceLayout({
@@ -37,6 +38,8 @@ export default async function WorkspaceLayout({
       .order("display_name", { ascending: true }),
     getUnreadCounts().catch(() => ({})),
   ]);
+
+  await checkInIfNeeded().catch(() => {});
 
   // Admin accounts handle site content, not the Kanban workspace — send
   // them to the panel that's actually theirs.

@@ -614,7 +614,11 @@ create trigger reviews_set_updated_at
   for each row execute procedure public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
--- attendance: simple day-by-day presence log, director-managed
+-- attendance: day-by-day presence log. check_in_at is stamped automatically
+-- the first time someone loads the workspace each day (see
+-- checkInIfNeeded() in lib/actions/attendance.ts) — staff can insert their
+-- own check-in row but never edit it afterwards; only the director can
+-- correct entries or mark someone absent/on leave.
 -- ---------------------------------------------------------------------------
 create table if not exists public.attendance (
   id uuid primary key default gen_random_uuid(),
@@ -626,6 +630,10 @@ create table if not exists public.attendance (
   unique (profile_id, work_date)
 );
 
+-- Added after the initial table creation to capture the actual clock-in
+-- time, not just a present/absent/leave flag.
+alter table public.attendance add column if not exists check_in_at timestamptz;
+
 alter table public.attendance enable row level security;
 
 drop policy if exists "staff can read attendance" on public.attendance;
@@ -635,7 +643,14 @@ create policy "staff can read attendance"
   using (true);
 
 drop policy if exists "director can write attendance" on public.attendance;
-create policy "director can write attendance"
+drop policy if exists "staff can check in for themselves" on public.attendance;
+create policy "staff can check in for themselves"
+  on public.attendance for insert
+  to authenticated
+  with check (profile_id = auth.uid());
+
+drop policy if exists "director can manage attendance" on public.attendance;
+create policy "director can manage attendance"
   on public.attendance for all
   to authenticated
   using (public.current_access_role() = 'director')
