@@ -485,6 +485,14 @@ h4 {
   color: var(--color-neutral-700);
 }
 
+/* ---------- Print (invoice view etc.) ---------- */
+@media print {
+  aside,
+  .no-print {
+    display: none !important;
+  }
+}
+
 /* ---------- Cards / elevation ---------- */
 .card {
   background: var(--color-panel);

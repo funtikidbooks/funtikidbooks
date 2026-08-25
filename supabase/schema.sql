@@ -1126,6 +1126,46 @@ select 'Chung', '💬', true
 where not exists (select 1 from public.meeting_channels where is_general);
 
 -- ---------------------------------------------------------------------------
+-- invoices: internal invoice/quote generator (quan-tri/hoa-don), director
+-- only. This is a document-generation tool, not a government-compliant
+-- e-invoice (Thông tư 78) — it doesn't file anything with the tax
+-- authority, it just produces a professional PDF (via browser print) and
+-- keeps a history. Line items are stored as jsonb since they're always
+-- read/written as a whole with the invoice, never queried individually.
+-- ---------------------------------------------------------------------------
+create table if not exists public.invoices (
+  id uuid primary key default gen_random_uuid(),
+  invoice_number text not null unique,
+  client_name text not null,
+  client_address text,
+  client_tax_code text,
+  client_email text,
+  issue_date date not null default current_date,
+  due_date date,
+  items jsonb not null default '[]'::jsonb,
+  tax_rate numeric not null default 0,
+  note text,
+  status text not null default 'draft' check (status in ('draft', 'issued', 'paid', 'cancelled')),
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.invoices enable row level security;
+
+drop policy if exists "director can manage invoices" on public.invoices;
+create policy "director can manage invoices"
+  on public.invoices for all
+  to authenticated
+  using (public.current_access_role() = 'director')
+  with check (public.current_access_role() = 'director');
+
+drop trigger if exists invoices_set_updated_at on public.invoices;
+create trigger invoices_set_updated_at
+  before update on public.invoices
+  for each row execute procedure public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
 -- Seed the portfolio with the placeholder projects already on the public
 -- site, so /du-an is backed by real rows from the start. Safe to re-run —
 -- skipped once any project exists.

@@ -185,6 +185,32 @@ export type AttendanceEntry = {
   created_at: string;
 };
 
+export type InvoiceItem = {
+  description: string;
+  quantity: number;
+  unit_price: number;
+};
+
+export type InvoiceStatus = "draft" | "issued" | "paid" | "cancelled";
+
+export type Invoice = {
+  id: string;
+  invoice_number: string;
+  client_name: string;
+  client_address: string | null;
+  client_tax_code: string | null;
+  client_email: string | null;
+  issue_date: string;
+  due_date: string | null;
+  items: InvoiceItem[];
+  tax_rate: number;
+  note: string | null;
+  status: InvoiceStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Board = {
   id: string;
   title: string;
@@ -453,6 +479,12 @@ export type Database = {
         Row: MeetingReaction;
         Insert: { message_id: string; profile_id: string; emoji: string };
         Update: Partial<MeetingReaction>;
+        Relationships: [];
+      };
+      invoices: {
+        Row: Invoice;
+        Insert: Partial<Invoice> & { invoice_number: string; client_name: string };
+        Update: Partial<Invoice>;
         Relationships: [];
       };
       push_subscriptions: {
