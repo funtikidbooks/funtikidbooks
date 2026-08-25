@@ -74,6 +74,41 @@ export type DmRead = {
   last_read_at: string;
 };
 
+export type MeetingChannel = {
+  id: string;
+  name: string;
+  icon: string;
+  is_general: boolean;
+  password_hash: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+// What the client actually receives for a channel — password_hash is never
+// sent to the browser, replaced with a plain has_password flag instead.
+export type MeetingChannelPublic = Omit<MeetingChannel, "password_hash"> & {
+  has_password: boolean;
+  joined: boolean;
+};
+
+export type MeetingChannelMember = {
+  channel_id: string;
+  profile_id: string;
+  joined_at: string;
+};
+
+export type MeetingMessage = {
+  id: string;
+  channel_id: string;
+  sender_id: string;
+  content: string;
+  attachment_url: string | null;
+  attachment_filename: string | null;
+  attachment_mime: string | null;
+  attachment_size: number | null;
+  created_at: string;
+};
+
 export type PushSubscriptionRow = {
   id: string;
   user_id: string;
@@ -387,6 +422,24 @@ export type Database = {
         Row: DmRead;
         Insert: Partial<DmRead> & { user_id: string; peer_id: string };
         Update: Partial<DmRead>;
+        Relationships: [];
+      };
+      meeting_channels: {
+        Row: MeetingChannel;
+        Insert: Partial<MeetingChannel> & { name: string };
+        Update: Partial<MeetingChannel>;
+        Relationships: [];
+      };
+      meeting_channel_members: {
+        Row: MeetingChannelMember;
+        Insert: { channel_id: string; profile_id: string };
+        Update: Partial<MeetingChannelMember>;
+        Relationships: [];
+      };
+      meeting_messages: {
+        Row: MeetingMessage;
+        Insert: Partial<MeetingMessage> & { channel_id: string; sender_id: string };
+        Update: Partial<MeetingMessage>;
         Relationships: [];
       };
       push_subscriptions: {

@@ -16,6 +16,7 @@ const NAV = [
   { href: "#", label: "Dự án", icon: "📁", enabled: false },
   { href: "/workspace/thanh-vien", label: "Thành viên", icon: "👥", enabled: true },
   { href: "/workspace/lich", label: "Lịch", icon: "📅", enabled: true },
+  { href: "/workspace/hop", label: "Họp", icon: "💬", enabled: true },
 ];
 
 export function Sidebar({

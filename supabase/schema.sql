@@ -931,6 +931,147 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- meeting_channels / meeting_channel_members / meeting_messages: "Họp" — a
+-- lightweight Slack-style team chat inside the workspace. One channel is
+-- seeded as the always-open "Chung" (general) room every staff member reads
+-- without joining; anyone can also spin up their own channel ("phòng ban"),
+-- optionally protected by a password, in which case only members who joined
+-- with the correct password can read or post in it.
+-- ---------------------------------------------------------------------------
+create table if not exists public.meeting_channels (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  icon text not null default '💬',
+  is_general boolean not null default false,
+  password_hash text,
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.meeting_channel_members (
+  channel_id uuid not null references public.meeting_channels (id) on delete cascade,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  joined_at timestamptz not null default now(),
+  primary key (channel_id, profile_id)
+);
+
+create table if not exists public.meeting_messages (
+  id uuid primary key default gen_random_uuid(),
+  channel_id uuid not null references public.meeting_channels (id) on delete cascade,
+  sender_id uuid not null references public.profiles (id) on delete cascade,
+  content text not null default '',
+  attachment_url text,
+  attachment_filename text,
+  attachment_mime text,
+  attachment_size integer,
+  created_at timestamptz not null default now()
+);
+create index if not exists meeting_messages_channel_idx
+  on public.meeting_messages (channel_id, created_at);
+
+alter table public.meeting_channels enable row level security;
+alter table public.meeting_channel_members enable row level security;
+alter table public.meeting_messages enable row level security;
+
+-- Every signed-in staff member can see the channel directory (so they can
+-- browse and request to join locked ones), but password_hash never reaches
+-- the browser — the list actions in lib/actions/meetings.ts always select
+-- named columns instead of `select *`, and only the join action reads
+-- password_hash, server-side, to compare it.
+drop policy if exists "staff can read channel directory" on public.meeting_channels;
+create policy "staff can read channel directory"
+  on public.meeting_channels for select
+  to authenticated
+  using (true);
+
+drop policy if exists "staff can create channels" on public.meeting_channels;
+create policy "staff can create channels"
+  on public.meeting_channels for insert
+  to authenticated
+  with check (created_by = auth.uid());
+
+drop policy if exists "creator or director can update channels" on public.meeting_channels;
+create policy "creator or director can update channels"
+  on public.meeting_channels for update
+  to authenticated
+  using (created_by = auth.uid() or public.current_access_role() = 'director')
+  with check (created_by = auth.uid() or public.current_access_role() = 'director');
+
+drop policy if exists "creator or director can delete channels" on public.meeting_channels;
+create policy "creator or director can delete channels"
+  on public.meeting_channels for delete
+  to authenticated
+  using (created_by = auth.uid() or public.current_access_role() = 'director');
+
+drop policy if exists "staff can see channel memberships" on public.meeting_channel_members;
+create policy "staff can see channel memberships"
+  on public.meeting_channel_members for select
+  to authenticated
+  using (profile_id = auth.uid() or public.current_access_role() = 'director');
+
+drop policy if exists "staff can join channels themselves" on public.meeting_channel_members;
+create policy "staff can join channels themselves"
+  on public.meeting_channel_members for insert
+  to authenticated
+  with check (profile_id = auth.uid());
+
+drop policy if exists "staff can leave channels themselves" on public.meeting_channel_members;
+create policy "staff can leave channels themselves"
+  on public.meeting_channel_members for delete
+  to authenticated
+  using (profile_id = auth.uid() or public.current_access_role() = 'director');
+
+drop policy if exists "channel members can read messages" on public.meeting_messages;
+create policy "channel members can read messages"
+  on public.meeting_messages for select
+  to authenticated
+  using (
+    exists (select 1 from public.meeting_channels c where c.id = meeting_messages.channel_id and c.is_general)
+    or exists (
+      select 1 from public.meeting_channel_members m
+      where m.channel_id = meeting_messages.channel_id and m.profile_id = auth.uid()
+    )
+    or public.current_access_role() = 'director'
+  );
+
+drop policy if exists "channel members can send messages" on public.meeting_messages;
+create policy "channel members can send messages"
+  on public.meeting_messages for insert
+  to authenticated
+  with check (
+    sender_id = auth.uid()
+    and (
+      exists (select 1 from public.meeting_channels c where c.id = meeting_messages.channel_id and c.is_general)
+      or exists (
+        select 1 from public.meeting_channel_members m
+        where m.channel_id = meeting_messages.channel_id and m.profile_id = auth.uid()
+      )
+    )
+  );
+
+drop policy if exists "sender or director can delete messages" on public.meeting_messages;
+create policy "sender or director can delete messages"
+  on public.meeting_messages for delete
+  to authenticated
+  using (sender_id = auth.uid() or public.current_access_role() = 'director');
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'meeting_messages'
+  ) then
+    alter publication supabase_realtime add table public.meeting_messages;
+  end if;
+end $$;
+
+-- Seed the always-open "Chung" channel once, so every workspace has a
+-- default room without requiring a director to create one manually.
+insert into public.meeting_channels (name, icon, is_general)
+select 'Chung', '💬', true
+where not exists (select 1 from public.meeting_channels where is_general);
+
+-- ---------------------------------------------------------------------------
 -- Seed the portfolio with the placeholder projects already on the public
 -- site, so /du-an is backed by real rows from the start. Safe to re-run —
 -- skipped once any project exists.
