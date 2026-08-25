@@ -109,3 +109,25 @@ export function monthGridDates(monthStart: string): string[] {
 export function isSameMonth(dateStr: string, monthStart: string): boolean {
   return dateStr.slice(0, 7) === monthStart.slice(0, 7);
 }
+
+export type AttendanceSummary = { present: number; late: number; absent: number; leave: number };
+
+// Shared by the attendance month-detail view and the payroll form (which
+// suggests deductions from these same counts).
+export function summarizeAttendance(
+  entries: { work_date: string; status: "present" | "absent" | "leave"; check_in_at: string | null }[],
+): AttendanceSummary {
+  let present = 0;
+  let late = 0;
+  let absent = 0;
+  let leave = 0;
+  for (const e of entries) {
+    if (e.status === "absent") absent++;
+    else if (e.status === "leave") leave++;
+    else if (e.status === "present" && e.check_in_at) {
+      present++;
+      if (isMonToFri(e.work_date) && isLateCheckIn(e.check_in_at)) late++;
+    }
+  }
+  return { present, late, absent, leave };
+}

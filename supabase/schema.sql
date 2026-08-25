@@ -657,6 +657,44 @@ create policy "director can manage attendance"
   with check (public.current_access_role() = 'director');
 
 -- ---------------------------------------------------------------------------
+-- payroll_records: monthly salary sheet, director-only end to end — staff
+-- never get a read policy here at all, unlike attendance. Line items
+-- (allowances, bonuses, deductions) are stored as jsonb the same way
+-- invoice items are, since they're always edited as a whole with the
+-- record. The director's UI suggests deduction line items from that same
+-- employee's attendance counts for the month, but nothing here is derived
+-- automatically at the database level — it's just a starting point they
+-- can edit freely.
+-- ---------------------------------------------------------------------------
+create table if not exists public.payroll_records (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  month date not null,
+  base_salary numeric not null default 0,
+  items jsonb not null default '[]'::jsonb,
+  note text,
+  status text not null default 'draft' check (status in ('draft', 'paid')),
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (profile_id, month)
+);
+
+alter table public.payroll_records enable row level security;
+
+drop policy if exists "director can manage payroll" on public.payroll_records;
+create policy "director can manage payroll"
+  on public.payroll_records for all
+  to authenticated
+  using (public.current_access_role() = 'director')
+  with check (public.current_access_role() = 'director');
+
+drop trigger if exists payroll_records_set_updated_at on public.payroll_records;
+create trigger payroll_records_set_updated_at
+  before update on public.payroll_records
+  for each row execute procedure public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
 -- site_settings: small key/value store for editable page decoration, e.g.
 -- header/hero illustrations, editable by director/admin from the live page.
 -- ---------------------------------------------------------------------------

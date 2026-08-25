@@ -14,6 +14,7 @@ import {
   isMonToFri,
   isSameMonth,
   monthGridDates,
+  summarizeAttendance,
   vnToday,
 } from "@/lib/constants/attendance";
 import type { AttendanceEntry, Profile } from "@/lib/types";
@@ -37,21 +38,7 @@ export function AttendanceMonthDetail({
   const today = vnToday();
   const byDate = useMemo(() => new Map(entries.map((e) => [e.work_date, e])), [entries]);
 
-  const stats = useMemo(() => {
-    let present = 0;
-    let late = 0;
-    let absent = 0;
-    let leave = 0;
-    for (const e of entries) {
-      if (e.status === "absent") absent++;
-      else if (e.status === "leave") leave++;
-      else if (e.status === "present" && e.check_in_at) {
-        present++;
-        if (isMonToFri(e.work_date) && isLateCheckIn(e.check_in_at)) late++;
-      }
-    }
-    return { present, late, absent, leave };
-  }, [entries]);
+  const stats = useMemo(() => summarizeAttendance(entries), [entries]);
 
   async function goToMonth(newStart: string) {
     setMonthStart(newStart);

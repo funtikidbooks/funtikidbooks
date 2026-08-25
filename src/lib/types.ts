@@ -186,6 +186,26 @@ export type AttendanceEntry = {
   created_at: string;
 };
 
+export type PayrollItem = {
+  label: string;
+  amount: number; // positive = allowance/bonus, negative = deduction
+};
+
+export type PayrollStatus = "draft" | "paid";
+
+export type PayrollRecord = {
+  id: string;
+  profile_id: string;
+  month: string; // always the 1st of the month, e.g. "2026-08-01"
+  base_salary: number;
+  items: PayrollItem[];
+  note: string | null;
+  status: PayrollStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type InvoiceItem = {
   description: string;
   quantity: number;
@@ -548,6 +568,12 @@ export type Database = {
         Row: AttendanceEntry;
         Insert: Partial<AttendanceEntry> & { profile_id: string; work_date: string };
         Update: Partial<AttendanceEntry>;
+        Relationships: [];
+      };
+      payroll_records: {
+        Row: PayrollRecord;
+        Insert: Partial<PayrollRecord> & { profile_id: string; month: string };
+        Update: Partial<PayrollRecord>;
         Relationships: [];
       };
       site_settings: {

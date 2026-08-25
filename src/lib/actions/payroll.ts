@@ -1,0 +1,63 @@
+"use server";
+
+import { createClient } from "@/lib/supabase/server";
+import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
+import type { PayrollItem, PayrollRecord, PayrollStatus } from "@/lib/types";
+
+async function requireDirector() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Bạn cần đăng nhập.");
+
+  const { data: profile } = await supabase.from("profiles").select("access_role").eq("id", user.id).maybeSingle();
+  if (profile?.access_role !== "director") {
+    throw new Error("Chỉ Giám đốc mới có quyền này.");
+  }
+  return { supabase, user };
+}
+
+export async function listPayrollForMonth(monthStartInput?: string): Promise<PayrollRecord[]> {
+  const { supabase } = await requireDirector();
+  const monthStart = firstOfMonth(monthStartInput ?? vnToday());
+  const { data } = await supabase.from("payroll_records").select("*").eq("month", monthStart);
+  return (data ?? []) as PayrollRecord[];
+}
+
+export async function upsertPayroll(input: {
+  profileId: string;
+  month: string;
+  baseSalary: number;
+  items: PayrollItem[];
+  status: PayrollStatus;
+  note?: string;
+}): Promise<PayrollRecord> {
+  const { supabase, user } = await requireDirector();
+  const month = firstOfMonth(input.month);
+
+  const { data, error } = await supabase
+    .from("payroll_records")
+    .upsert(
+      {
+        profile_id: input.profileId,
+        month,
+        base_salary: input.baseSalary,
+        items: input.items,
+        status: input.status,
+        note: input.note?.trim() || null,
+        created_by: user.id,
+      },
+      { onConflict: "profile_id,month" },
+    )
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error("Không thể lưu bảng lương");
+  return data as PayrollRecord;
+}
+
+export async function deletePayroll(id: string) {
+  const { supabase } = await requireDirector();
+  await supabase.from("payroll_records").delete().eq("id", id);
+}
