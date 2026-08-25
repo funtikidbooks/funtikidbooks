@@ -695,6 +695,35 @@ create trigger payroll_records_set_updated_at
   for each row execute procedure public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- staff_salary: each employee's fixed monthly salary + the number of work
+-- days the director considers "a full month" for them (default 24 — the
+-- office runs Mon–Fri plus roughly 2 Saturdays a month). monthly_salary /
+-- standard_work_days gives the daily rate the payroll screen suggests for
+-- absent-day deductions. Director-only, same as payroll_records — staff
+-- never get a read policy here.
+-- ---------------------------------------------------------------------------
+create table if not exists public.staff_salary (
+  profile_id uuid primary key references public.profiles (id) on delete cascade,
+  monthly_salary numeric not null default 0,
+  standard_work_days integer not null default 24,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.staff_salary enable row level security;
+
+drop policy if exists "director can manage staff salary" on public.staff_salary;
+create policy "director can manage staff salary"
+  on public.staff_salary for all
+  to authenticated
+  using (public.current_access_role() = 'director')
+  with check (public.current_access_role() = 'director');
+
+drop trigger if exists staff_salary_set_updated_at on public.staff_salary;
+create trigger staff_salary_set_updated_at
+  before update on public.staff_salary
+  for each row execute procedure public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
 -- site_settings: small key/value store for editable page decoration, e.g.
 -- header/hero illustrations, editable by director/admin from the live page.
 -- ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
-import type { PayrollItem, PayrollRecord, PayrollStatus } from "@/lib/types";
+import type { PayrollItem, PayrollRecord, PayrollStatus, StaffSalary } from "@/lib/types";
 
 async function requireDirector() {
   const supabase = await createClient();
@@ -60,4 +60,29 @@ export async function upsertPayroll(input: {
 export async function deletePayroll(id: string) {
   const { supabase } = await requireDirector();
   await supabase.from("payroll_records").delete().eq("id", id);
+}
+
+export async function getStaffSalary(profileId: string): Promise<StaffSalary | null> {
+  const { supabase } = await requireDirector();
+  const { data } = await supabase.from("staff_salary").select("*").eq("profile_id", profileId).maybeSingle();
+  return (data as StaffSalary) ?? null;
+}
+
+export async function upsertStaffSalary(
+  profileId: string,
+  monthlySalary: number,
+  standardWorkDays: number,
+): Promise<StaffSalary> {
+  const { supabase } = await requireDirector();
+  const { data, error } = await supabase
+    .from("staff_salary")
+    .upsert(
+      { profile_id: profileId, monthly_salary: monthlySalary, standard_work_days: standardWorkDays },
+      { onConflict: "profile_id" },
+    )
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error("Không thể lưu lương cố định");
+  return data as StaffSalary;
 }

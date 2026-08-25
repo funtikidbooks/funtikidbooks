@@ -206,6 +206,13 @@ export type PayrollRecord = {
   updated_at: string;
 };
 
+export type StaffSalary = {
+  profile_id: string;
+  monthly_salary: number;
+  standard_work_days: number;
+  updated_at: string;
+};
+
 export type InvoiceItem = {
   description: string;
   quantity: number;
@@ -574,6 +581,12 @@ export type Database = {
         Row: PayrollRecord;
         Insert: Partial<PayrollRecord> & { profile_id: string; month: string };
         Update: Partial<PayrollRecord>;
+        Relationships: [];
+      };
+      staff_salary: {
+        Row: StaffSalary;
+        Insert: Partial<StaffSalary> & { profile_id: string };
+        Update: Partial<StaffSalary>;
         Relationships: [];
       };
       site_settings: {

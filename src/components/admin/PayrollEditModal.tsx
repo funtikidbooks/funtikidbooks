@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { getMonthAttendance } from "@/lib/actions/attendance";
-import { upsertPayroll } from "@/lib/actions/payroll";
+import { getStaffSalary, upsertPayroll, upsertStaffSalary } from "@/lib/actions/payroll";
 import { MONTH_LABELS, summarizeAttendance } from "@/lib/constants/attendance";
 import type { PayrollItem, PayrollRecord, PayrollStatus, Profile } from "@/lib/types";
 
@@ -47,6 +47,12 @@ export function PayrollEditModal({
   const [absentRate, setAbsentRate] = useState<number | "">("");
   const [lateRate, setLateRate] = useState<number | "">("");
 
+  const [salaryLoading, setSalaryLoading] = useState(true);
+  const [monthlySalary, setMonthlySalary] = useState<number | "">("");
+  const [standardWorkDays, setStandardWorkDays] = useState<number | "">(24);
+  const [savingSalary, setSavingSalary] = useState(false);
+  const [autoFilledAbsentRate, setAutoFilledAbsentRate] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     getMonthAttendance(profile.id, month)
@@ -57,6 +63,60 @@ export function PayrollEditModal({
       cancelled = true;
     };
   }, [profile.id, month]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getStaffSalary(profile.id)
+      .then((salary) => {
+        if (cancelled) return;
+        if (salary) {
+          setMonthlySalary(salary.monthly_salary);
+          setStandardWorkDays(salary.standard_work_days);
+        }
+      })
+      .catch(() => {})
+      .finally(() => !cancelled && setSalaryLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [profile.id]);
+
+  // Lương/ngày = lương tháng ÷ số ngày công chuẩn, làm tròn đến nghìn đồng
+  // gần nhất cho gọn số.
+  const dailyRate = useMemo(() => {
+    const salary = Number(monthlySalary) || 0;
+    const days = Number(standardWorkDays) || 0;
+    if (!salary || !days) return 0;
+    return Math.round(salary / days / 1000) * 1000;
+  }, [monthlySalary, standardWorkDays]);
+
+  // Once both the attendance count and the daily rate are known, quietly
+  // prefill the deduction-rate field a director would otherwise have to
+  // compute by hand — they can still overwrite it before applying. Deferred
+  // a frame rather than set synchronously here, so this stays a "reacting
+  // to an external system" update, not a render triggered straight from
+  // the effect body.
+  useEffect(() => {
+    if (autoFilledAbsentRate || statsLoading || salaryLoading) return;
+    const frame = requestAnimationFrame(() => {
+      if (stats.absent > 0 && dailyRate > 0 && absentRate === "") {
+        setAbsentRate(dailyRate);
+      }
+      setAutoFilledAbsentRate(true);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoFilledAbsentRate, statsLoading, salaryLoading, stats.absent, dailyRate, absentRate]);
+
+  async function saveSalarySettings() {
+    setSavingSalary(true);
+    try {
+      await upsertStaffSalary(profile.id, Number(monthlySalary) || 0, Number(standardWorkDays) || 24);
+    } catch {
+      // best effort — the fields keep whatever the director typed either way
+    } finally {
+      setSavingSalary(false);
+    }
+  }
 
   const total = useMemo(() => {
     const base = Number(baseSalary) || 0;
@@ -134,6 +194,52 @@ export function PayrollEditModal({
         </div>
 
         <div className="flex flex-col gap-5 px-6 py-6 max-h-[70vh] overflow-y-auto">
+          <div className="card p-3 flex flex-col gap-2" style={{ background: "var(--color-accent-100)" }}>
+            <span className="text-xs font-bold" style={{ color: "var(--color-accent-700)" }}>
+              LƯƠNG CỐ ĐỊNH / THÁNG
+            </span>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="field" style={{ maxWidth: 170 }}>
+                <label className="text-[11px]">Lương / tháng</label>
+                <input
+                  type="number"
+                  min={0}
+                  className="input"
+                  style={{ padding: "5px 8px", fontSize: 12 }}
+                  value={monthlySalary}
+                  onChange={(e) => setMonthlySalary(e.target.value === "" ? "" : Number(e.target.value))}
+                />
+              </div>
+              <div className="field" style={{ maxWidth: 150 }}>
+                <label className="text-[11px]">Số ngày công chuẩn</label>
+                <input
+                  type="number"
+                  min={1}
+                  className="input"
+                  style={{ padding: "5px 8px", fontSize: 12 }}
+                  value={standardWorkDays}
+                  onChange={(e) => setStandardWorkDays(e.target.value === "" ? "" : Number(e.target.value))}
+                />
+              </div>
+              <button type="button" onClick={saveSalarySettings} className="btn btn-secondary btn-sm" disabled={savingSalary || salaryLoading}>
+                {savingSalary ? "Đang lưu…" : "Lưu"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setBaseSalary(Number(monthlySalary) || 0)}
+                className="btn btn-ghost btn-sm"
+                disabled={!monthlySalary}
+              >
+                Dùng làm lương cơ bản
+              </button>
+            </div>
+            {dailyRate > 0 && (
+              <span className="text-xs" style={{ color: "var(--color-accent-700)" }}>
+                ≈ {formatVnd(dailyRate)} / ngày ({Number(standardWorkDays) || 24} ngày công/tháng)
+              </span>
+            )}
+          </div>
+
           <div className="card p-3 flex flex-col gap-2" style={{ background: "var(--color-surface)" }}>
             <span className="text-xs font-bold" style={{ color: "var(--color-neutral-500)" }}>
               CHẤM CÔNG THÁNG NÀY
