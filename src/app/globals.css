@@ -350,7 +350,7 @@ h4 {
   color: var(--color-neutral-600);
   font-style: italic;
 }
-.rich-content a {
+.rich-content a:not(.btn) {
   color: var(--color-accent-600);
   text-decoration: underline;
 }
