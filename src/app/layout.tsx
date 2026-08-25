@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   // relative path elsewhere in metadata is resolved against this.
   metadataBase: new URL(SITE_URL),
   title: {
-    default: SITE_NAME,
+    default: `${SITE_NAME} - Đơn vị vẽ sách minh hoạ thiếu nhi tràn đầy nhiệt huyết và năng lượng!`,
     template: "%s · Funti Kidbooks Studio",
   },
   description: SITE_DESCRIPTION,
