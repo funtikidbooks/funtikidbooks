@@ -67,3 +67,45 @@ export function formatDayLabel(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00`);
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
+
+export const MONTH_LABELS = [
+  "Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6",
+  "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12",
+];
+
+export function firstOfMonth(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(1);
+  return d.toLocaleDateString("en-CA");
+}
+
+export function addMonths(monthStart: string, n: number): string {
+  const d = new Date(`${monthStart}T00:00:00`);
+  d.setMonth(d.getMonth() + n);
+  return d.toLocaleDateString("en-CA");
+}
+
+export function lastDayOfMonth(monthStart: string): string {
+  const d = new Date(`${monthStart}T00:00:00`);
+  d.setMonth(d.getMonth() + 1);
+  d.setDate(0);
+  return d.toLocaleDateString("en-CA");
+}
+
+// 6-week (42-day) Monday-start grid covering `monthStart`'s month, the same
+// shape the company calendar (workspace/lich) uses.
+export function monthGridDates(monthStart: string): string[] {
+  const d = new Date(`${monthStart}T00:00:00`);
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+  const start = new Date(year, month, 1 - firstWeekday);
+  return Array.from({ length: 42 }, (_, i) => {
+    const dd = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    return dd.toLocaleDateString("en-CA");
+  });
+}
+
+export function isSameMonth(dateStr: string, monthStart: string): boolean {
+  return dateStr.slice(0, 7) === monthStart.slice(0, 7);
+}

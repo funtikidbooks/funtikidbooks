@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { addDays, mondayOf, vnToday } from "@/lib/constants/attendance";
+import { addDays, firstOfMonth, lastDayOfMonth, mondayOf, vnToday } from "@/lib/constants/attendance";
 import type { AttendanceEntry } from "@/lib/types";
 
 async function requireUser() {
@@ -71,6 +71,22 @@ export async function listAllAttendance(weekStartInput?: string): Promise<Attend
     .select("*")
     .gte("work_date", weekStart)
     .lte("work_date", weekEnd)
+    .order("work_date", { ascending: true });
+
+  return (data ?? []) as AttendanceEntry[];
+}
+
+export async function getMonthAttendance(profileId: string, monthStartInput?: string): Promise<AttendanceEntry[]> {
+  const { supabase } = await requireDirector();
+  const monthStart = firstOfMonth(monthStartInput ?? vnToday());
+  const monthEnd = lastDayOfMonth(monthStart);
+
+  const { data } = await supabase
+    .from("attendance")
+    .select("*")
+    .eq("profile_id", profileId)
+    .gte("work_date", monthStart)
+    .lte("work_date", monthEnd)
     .order("work_date", { ascending: true });
 
   return (data ?? []) as AttendanceEntry[];
