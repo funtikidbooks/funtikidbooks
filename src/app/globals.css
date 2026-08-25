@@ -416,6 +416,14 @@ h4 {
   box-shadow: var(--shadow-md);
   border-color: var(--color-accent-300);
 }
+.fk-staff-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.fk-staff-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-accent-300);
+}
 .ws-nav-link {
   transition: background-color 0.15s ease, color 0.15s ease;
 }

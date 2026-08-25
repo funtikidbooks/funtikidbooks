@@ -86,7 +86,7 @@ export function PayrollBoard({ initialRecords, staff }: { initialRecords: Payrol
                 key={p.id}
                 type="button"
                 onClick={() => setEditing(p)}
-                className="card elev-sm flex flex-col items-center gap-2 p-4 text-center"
+                className="card elev-sm fk-staff-card flex flex-col items-center gap-2 p-4 text-center"
               >
                 <AttendanceAvatar profile={p} size={44} />
                 <div className="flex flex-col gap-0.5">
