@@ -5,17 +5,30 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
 import {
+  addReaction,
   createChannel,
   deleteChannel,
+  deleteMeetingMessage,
   getMeetingMessages,
+  getReactions,
   joinChannel,
   leaveChannel,
   listChannels,
+  removeReaction,
   sendMeetingMessage,
 } from "@/lib/actions/meetings";
-import type { MeetingChannelPublic, MeetingMessage, Profile } from "@/lib/types";
+import type { MeetingChannelPublic, MeetingMessage, MeetingReaction, Profile } from "@/lib/types";
 
 const ROOM_ICONS = ["💬", "🎨", "📚", "🎬", "🧵", "🛠", "📣", "🎯"];
+
+const EMOJI_OPTIONS = [
+  "😀", "😂", "😅", "😍", "😉", "😎", "🤔", "😢",
+  "😭", "😡", "🥳", "😴", "😱", "🙌", "👀", "🤝",
+  "👍", "👎", "👏", "🙏", "💪", "🔥", "✅", "❌",
+  "🎉", "❤️", "💯", "😘",
+];
+
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀", "🙏"];
 
 function formatTime(date: string) {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(date));
@@ -25,11 +38,41 @@ function isImage(mime: string | null) {
   return !!mime && mime.startsWith("image/");
 }
 
-// Very small "is this a link" check — good enough to auto-linkify a Drive
-// link or any URL a member pastes into the chat.
-function linkify(text: string): (string | { url: string })[] {
-  const parts = text.split(/(https?:\/\/[^\s]+)/g);
-  return parts.map((part) => (/^https?:\/\//.test(part) ? { url: part } : part));
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Renders message text with URLs auto-linked and any "@Display Name" that
+// matches a real teammate highlighted — good enough without a rich-text
+// editor or a real mention-notification pipeline.
+function renderContent(text: string, namesPattern: string | null, mine: boolean) {
+  const pattern = namesPattern
+    ? new RegExp(`(https?://[^\\s]+|@(?:${namesPattern}))`, "g")
+    : /(https?:\/\/[^\s]+)/g;
+  return text.split(pattern).map((part, i) => {
+    if (!part) return null;
+    if (/^https?:\/\//.test(part)) {
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: mine ? "#fff" : "var(--color-accent-700)", textDecoration: "underline" }}
+        >
+          {part}
+        </a>
+      );
+    }
+    if (part.startsWith("@")) {
+      return (
+        <strong key={i} style={{ color: mine ? "#ffe9d6" : "var(--color-accent-700)" }}>
+          {part}
+        </strong>
+      );
+    }
+    return part;
+  });
 }
 
 function Avatar({ profile, size = 28 }: { profile: Pick<Profile, "display_name" | "avatar_url"> | undefined; size?: number }) {
@@ -260,27 +303,76 @@ export function MeetingHub({
     initialChannels.find((c) => c.is_general)?.id ?? initialChannels[0]?.id ?? null,
   );
   const [messages, setMessages] = useState<MeetingMessage[]>([]);
+  const [reactions, setReactions] = useState<MeetingReaction[]>([]);
   const [text, setText] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const messageIdsRef = useRef<Set<string>>(new Set());
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
 
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
   const joinedRooms = useMemo(() => channels.filter((c) => c.joined), [channels]);
   const browsableRooms = useMemo(() => channels.filter((c) => !c.joined), [channels]);
   const activeChannel = channels.find((c) => c.id === activeId) ?? null;
 
+  const namesPattern = useMemo(() => {
+    const names = profiles
+      .map((p) => p.display_name)
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length)
+      .map(escapeRegExp);
+    return names.length > 0 ? names.join("|") : null;
+  }, [profiles]);
+
+  const mentionMatch = /(^|\s)@([\p{L}0-9]*)$/u.exec(text);
+  const mentionQuery = mentionMatch ? mentionMatch[2] : null;
+  const mentionCandidates = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return profiles.filter((p) => p.display_name.toLowerCase().includes(q)).slice(0, 6);
+  }, [mentionQuery, profiles]);
+
+  useEffect(() => {
+    messageIdsRef.current = new Set(messages.map((m) => m.id));
+  }, [messages]);
+
+  useEffect(() => {
+    if (!showEmojiPicker && !reactionPickerFor) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+        setReactionPickerFor(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showEmojiPicker, reactionPickerFor]);
+
   useEffect(() => {
     if (!activeId) return;
     let cancelled = false;
     getMeetingMessages(activeId)
-      .then((msgs) => !cancelled && setMessages(msgs))
-      .catch(() => !cancelled && setMessages([]));
+      .then((msgs) => {
+        if (cancelled) return;
+        setMessages(msgs);
+        return getReactions(msgs.map((m) => m.id));
+      })
+      .then((rx) => !cancelled && rx && setReactions(rx))
+      .catch(() => {
+        if (!cancelled) {
+          setMessages([]);
+          setReactions([]);
+        }
+      });
     return () => {
       cancelled = true;
     };
@@ -297,6 +389,37 @@ export function MeetingHub({
         (payload) => {
           const row = payload.new as MeetingMessage;
           setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "meeting_messages" },
+        (payload) => {
+          const old = payload.old as { id: string };
+          setMessages((prev) => prev.filter((m) => m.id !== old.id));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "meeting_message_reactions" },
+        (payload) => {
+          const row = payload.new as MeetingReaction;
+          if (!messageIdsRef.current.has(row.message_id)) return;
+          setReactions((prev) =>
+            prev.some((r) => r.message_id === row.message_id && r.profile_id === row.profile_id && r.emoji === row.emoji)
+              ? prev
+              : [...prev, row],
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "meeting_message_reactions" },
+        (payload) => {
+          const old = payload.old as { message_id: string; profile_id: string; emoji: string };
+          setReactions((prev) =>
+            prev.filter((r) => !(r.message_id === old.message_id && r.profile_id === old.profile_id && r.emoji === old.emoji)),
+          );
         },
       )
       .subscribe();
@@ -345,6 +468,41 @@ export function MeetingHub({
     if (activeId === id) {
       setActiveId(channels.find((c) => c.is_general)?.id ?? null);
     }
+  }
+
+  async function handleDeleteMessage(id: string) {
+    if (!confirm("Xoá tin nhắn này?")) return;
+    setMessages((prev) => prev.filter((m) => m.id !== id));
+    try {
+      await deleteMeetingMessage(id);
+    } catch {
+      // best effort — a realtime DELETE (or the next channel switch) will
+      // reconcile if this silently failed server-side
+    }
+  }
+
+  async function toggleReaction(messageId: string, emoji: string) {
+    const already = reactions.some(
+      (r) => r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji,
+    );
+    setReactions((prev) =>
+      already
+        ? prev.filter((r) => !(r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji))
+        : [...prev, { message_id: messageId, profile_id: currentUser.id, emoji, created_at: new Date().toISOString() }],
+    );
+    setReactionPickerFor(null);
+    try {
+      if (already) await removeReaction(messageId, emoji);
+      else await addReaction(messageId, emoji);
+    } catch {
+      // optimistic update may drift from the server on failure — next
+      // channel load or a realtime event from another tab will correct it
+    }
+  }
+
+  function pickMention(p: Profile) {
+    setText((prev) => prev.replace(/(^|\s)@([\p{L}0-9]*)$/u, (_m, pre: string) => `${pre}@${p.display_name} `));
+    textInputRef.current?.focus();
   }
 
   async function handleSend(e: React.FormEvent) {
@@ -454,8 +612,14 @@ export function MeetingHub({
               {messages.map((m) => {
                 const sender = profileById.get(m.sender_id);
                 const mine = m.sender_id === currentUser.id;
+                const msgReactions = reactions.filter((r) => r.message_id === m.id);
+                const grouped = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
+                  (acc[r.emoji] ??= []).push(r.profile_id);
+                  return acc;
+                }, {});
+
                 return (
-                  <div key={m.id} className={`flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}>
+                  <div key={m.id} className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}>
                     <Avatar profile={sender} />
                     <div className={`flex flex-col ${mine ? "items-end" : "items-start"} max-w-[75%]`}>
                       <span className="text-[11px] font-semibold mb-0.5" style={{ color: "var(--color-neutral-500)" }}>
@@ -469,21 +633,7 @@ export function MeetingHub({
                             color: mine ? "#fff" : "var(--color-text)",
                           }}
                         >
-                          {linkify(m.content).map((part, i) =>
-                            typeof part === "string" ? (
-                              part
-                            ) : (
-                              <a
-                                key={i}
-                                href={part.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                style={{ color: mine ? "#fff" : "var(--color-accent-700)", textDecoration: "underline" }}
-                              >
-                                {part.url}
-                              </a>
-                            ),
-                          )}
+                          {renderContent(m.content, namesPattern, mine)}
                         </div>
                       )}
                       {m.attachment_url &&
@@ -508,8 +658,80 @@ export function MeetingHub({
                             📄 {m.attachment_filename}
                           </a>
                         ))}
-                      <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
-                        {formatTime(m.created_at)}
+
+                      {Object.keys(grouped).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {Object.entries(grouped).map(([emoji, ids]) => {
+                            const reactedByMe = ids.includes(currentUser.id);
+                            return (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => toggleReaction(m.id, emoji)}
+                                className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold"
+                                style={{
+                                  background: reactedByMe ? "var(--color-accent-100)" : "var(--color-surface)",
+                                  border: `1px solid ${reactedByMe ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
+                                }}
+                                title={ids.map((id) => profileById.get(id)?.display_name ?? "").filter(Boolean).join(", ")}
+                              >
+                                <span aria-hidden>{emoji}</span>
+                                {ids.length}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <span className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
+                          {formatTime(m.created_at)}
+                        </span>
+                        <span className="relative inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowEmojiPicker(false);
+                              setReactionPickerFor(reactionPickerFor === m.id ? null : m.id);
+                            }}
+                            className="btn-icon"
+                            style={{ width: 18, height: 18, padding: 0, fontSize: 11 }}
+                            aria-label="Thả cảm xúc"
+                          >
+                            😊
+                          </button>
+                          {mine && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMessage(m.id)}
+                              className="btn-icon"
+                              style={{ width: 18, height: 18, padding: 0, fontSize: 10 }}
+                              aria-label="Xoá tin nhắn"
+                            >
+                              ✕
+                            </button>
+                          )}
+                          {reactionPickerFor === m.id && (
+                            <div
+                              ref={popoverRef}
+                              className="card elev-lg flex items-center gap-1 p-1.5"
+                              style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, marginBottom: 6, zIndex: 10 }}
+                            >
+                              {QUICK_REACTIONS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => toggleReaction(m.id, emoji)}
+                                  className="btn-icon"
+                                  style={{ width: 26, height: 26, padding: 0, fontSize: 15 }}
+                                  aria-label={emoji}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -517,7 +739,60 @@ export function MeetingHub({
               })}
             </div>
 
-            <div className="flex-none" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+            <div className="flex-none" style={{ borderTop: "1px solid var(--color-neutral-200)", position: "relative" }}>
+              {mentionCandidates.length > 0 && (
+                <div
+                  className="card elev-lg flex flex-col p-1.5"
+                  style={{ position: "absolute", bottom: "100%", left: 12, marginBottom: 6, width: 220, zIndex: 10 }}
+                >
+                  {mentionCandidates.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => pickMention(p)}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-[8px] text-left text-[13px] font-semibold ws-nav-link"
+                    >
+                      <Avatar profile={p} size={22} />
+                      {p.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {showEmojiPicker && (
+                <div
+                  ref={popoverRef}
+                  className="card elev-lg"
+                  style={{
+                    position: "absolute",
+                    bottom: "100%",
+                    left: 44,
+                    marginBottom: 6,
+                    width: 216,
+                    padding: 8,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(7, 1fr)",
+                    gap: 2,
+                    zIndex: 10,
+                  }}
+                >
+                  {EMOJI_OPTIONS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => {
+                        setText((prev) => prev + emoji);
+                        setShowEmojiPicker(false);
+                        textInputRef.current?.focus();
+                      }}
+                      className="btn-icon"
+                      style={{ width: 26, height: 26, padding: 0, fontSize: 15 }}
+                      aria-label={emoji}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
               {error && (
                 <p className="text-[12px] font-semibold px-4 pt-2" style={{ color: "var(--status-red)" }}>
                   {error}
@@ -555,6 +830,18 @@ export function MeetingHub({
                 >
                   📎
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReactionPickerFor(null);
+                    setShowEmojiPicker((v) => !v);
+                  }}
+                  className="btn-icon flex-none"
+                  style={{ width: 34, height: 34, padding: 0 }}
+                  aria-label="Chọn biểu tượng cảm xúc"
+                >
+                  😀
+                </button>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -572,8 +859,9 @@ export function MeetingHub({
                   }}
                 />
                 <input
+                  ref={textInputRef}
                   className="input flex-1"
-                  placeholder={`Nhắn vào #${activeChannel.name}…`}
+                  placeholder={`Nhắn vào #${activeChannel.name}… (gõ @ để nhắc ai đó)`}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                 />

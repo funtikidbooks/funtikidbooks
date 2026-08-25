@@ -1065,6 +1065,60 @@ begin
   end if;
 end $$;
 
+-- meeting_message_reactions: quick emoji reactions on a Họp message —
+-- one row per (message, person, emoji), toggled on/off from the client.
+create table if not exists public.meeting_message_reactions (
+  message_id uuid not null references public.meeting_messages (id) on delete cascade,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  emoji text not null,
+  created_at timestamptz not null default now(),
+  primary key (message_id, profile_id, emoji)
+);
+
+alter table public.meeting_message_reactions enable row level security;
+
+drop policy if exists "channel members can read reactions" on public.meeting_message_reactions;
+create policy "channel members can read reactions"
+  on public.meeting_message_reactions for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.meeting_messages msg
+      join public.meeting_channels c on c.id = msg.channel_id
+      where msg.id = meeting_message_reactions.message_id
+        and (
+          c.is_general
+          or exists (
+            select 1 from public.meeting_channel_members m
+            where m.channel_id = c.id and m.profile_id = auth.uid()
+          )
+        )
+    )
+    or public.current_access_role() = 'director'
+  );
+
+drop policy if exists "staff can react as themselves" on public.meeting_message_reactions;
+create policy "staff can react as themselves"
+  on public.meeting_message_reactions for insert
+  to authenticated
+  with check (profile_id = auth.uid());
+
+drop policy if exists "staff can remove their own reaction" on public.meeting_message_reactions;
+create policy "staff can remove their own reaction"
+  on public.meeting_message_reactions for delete
+  to authenticated
+  using (profile_id = auth.uid());
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'meeting_message_reactions'
+  ) then
+    alter publication supabase_realtime add table public.meeting_message_reactions;
+  end if;
+end $$;
+
 -- Seed the always-open "Chung" channel once, so every workspace has a
 -- default room without requiring a director to create one manually.
 insert into public.meeting_channels (name, icon, is_general)

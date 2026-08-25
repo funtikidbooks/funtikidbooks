@@ -97,6 +97,13 @@ export type MeetingChannelMember = {
   joined_at: string;
 };
 
+export type MeetingReaction = {
+  message_id: string;
+  profile_id: string;
+  emoji: string;
+  created_at: string;
+};
+
 export type MeetingMessage = {
   id: string;
   channel_id: string;
@@ -440,6 +447,12 @@ export type Database = {
         Row: MeetingMessage;
         Insert: Partial<MeetingMessage> & { channel_id: string; sender_id: string };
         Update: Partial<MeetingMessage>;
+        Relationships: [];
+      };
+      meeting_message_reactions: {
+        Row: MeetingReaction;
+        Insert: { message_id: string; profile_id: string; emoji: string };
+        Update: Partial<MeetingReaction>;
         Relationships: [];
       };
       push_subscriptions: {

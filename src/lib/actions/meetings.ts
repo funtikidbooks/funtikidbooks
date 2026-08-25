@@ -3,7 +3,7 @@
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { MeetingChannelPublic, MeetingMessage } from "@/lib/types";
+import type { MeetingChannelPublic, MeetingMessage, MeetingReaction } from "@/lib/types";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -171,4 +171,39 @@ export async function sendMeetingMessage(channelId: string, content: string, for
   if (error || !data) throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
 
   return data as MeetingMessage;
+}
+
+export async function deleteMeetingMessage(messageId: string) {
+  const { supabase, user } = await requireUser();
+  const { error } = await supabase
+    .from("meeting_messages")
+    .delete()
+    .eq("id", messageId)
+    .eq("sender_id", user.id);
+  if (error) throw new Error("Không thể xoá tin nhắn");
+}
+
+export async function getReactions(messageIds: string[]): Promise<MeetingReaction[]> {
+  const { supabase } = await requireUser();
+  if (messageIds.length === 0) return [];
+  const { data } = await supabase.from("meeting_message_reactions").select("*").in("message_id", messageIds);
+  return (data ?? []) as MeetingReaction[];
+}
+
+export async function addReaction(messageId: string, emoji: string) {
+  const { supabase, user } = await requireUser();
+  const { error } = await supabase
+    .from("meeting_message_reactions")
+    .upsert({ message_id: messageId, profile_id: user.id, emoji }, { onConflict: "message_id,profile_id,emoji" });
+  if (error) throw new Error("Không thể thả cảm xúc");
+}
+
+export async function removeReaction(messageId: string, emoji: string) {
+  const { supabase, user } = await requireUser();
+  await supabase
+    .from("meeting_message_reactions")
+    .delete()
+    .eq("message_id", messageId)
+    .eq("profile_id", user.id)
+    .eq("emoji", emoji);
 }
