@@ -33,8 +33,14 @@ function invoiceTotal(inv: Pick<Invoice, "items" | "tax_rate">) {
   return subtotal + subtotal * (inv.tax_rate / 100);
 }
 
-function emptyItem(): InvoiceItem {
-  return { description: "", quantity: 1, unit_price: 0 };
+// Quantity/price/tax fields are edited as number-or-"" locally so the
+// field can genuinely go empty while typing — a plain number input whose
+// value snaps back to 0 the instant it's cleared makes it look like the
+// last digit can never be deleted.
+type ItemDraft = { description: string; quantity: number | ""; unit_price: number | "" };
+
+function emptyItem(): ItemDraft {
+  return { description: "", quantity: 1, unit_price: "" };
 }
 
 function CreateInvoiceModal({ onClose, onCreated }: { onClose: () => void; onCreated: (inv: Invoice) => void }) {
@@ -44,24 +50,31 @@ function CreateInvoiceModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [clientEmail, setClientEmail] = useState("");
   const [issueDate, setIssueDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState("");
-  const [items, setItems] = useState<InvoiceItem[]>([emptyItem()]);
-  const [taxRate, setTaxRate] = useState(0);
+  const [items, setItems] = useState<ItemDraft[]>([emptyItem()]);
+  const [taxRate, setTaxRate] = useState<number | "">(0);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const subtotal = useMemo(() => items.reduce((sum, it) => sum + it.quantity * it.unit_price, 0), [items]);
-  const taxAmount = subtotal * (taxRate / 100);
+  const subtotal = useMemo(
+    () => items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0),
+    [items],
+  );
+  const taxAmount = subtotal * ((Number(taxRate) || 0) / 100);
   const total = subtotal + taxAmount;
 
-  function updateItem(i: number, patch: Partial<InvoiceItem>) {
+  function updateItem(i: number, patch: Partial<ItemDraft>) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const cleanItems = items
-      .map((it) => ({ ...it, description: it.description.trim() }))
+    const cleanItems: InvoiceItem[] = items
+      .map((it) => ({
+        description: it.description.trim(),
+        quantity: Number(it.quantity) || 0,
+        unit_price: Number(it.unit_price) || 0,
+      }))
       .filter((it) => it.description);
     if (!clientName.trim() || cleanItems.length === 0) {
       setError("Cần tên khách hàng và ít nhất 1 mục có mô tả");
@@ -78,7 +91,7 @@ function CreateInvoiceModal({ onClose, onCreated }: { onClose: () => void; onCre
         issueDate,
         dueDate,
         items: cleanItems,
-        taxRate,
+        taxRate: Number(taxRate) || 0,
         note,
       });
       onCreated(inv);
@@ -135,7 +148,7 @@ function CreateInvoiceModal({ onClose, onCreated }: { onClose: () => void; onCre
                 max={100}
                 className="input"
                 value={taxRate}
-                onChange={(e) => setTaxRate(Number(e.target.value) || 0)}
+                onChange={(e) => setTaxRate(e.target.value === "" ? "" : Number(e.target.value))}
               />
             </div>
           </div>
@@ -162,14 +175,15 @@ function CreateInvoiceModal({ onClose, onCreated }: { onClose: () => void; onCre
                     min={0}
                     className="input"
                     value={it.quantity}
-                    onChange={(e) => updateItem(i, { quantity: Number(e.target.value) || 0 })}
+                    onChange={(e) => updateItem(i, { quantity: e.target.value === "" ? "" : Number(e.target.value) })}
                   />
                   <input
                     type="number"
                     min={0}
                     className="input"
+                    placeholder="0"
                     value={it.unit_price}
-                    onChange={(e) => updateItem(i, { unit_price: Number(e.target.value) || 0 })}
+                    onChange={(e) => updateItem(i, { unit_price: e.target.value === "" ? "" : Number(e.target.value) })}
                   />
                   <button
                     type="button"
