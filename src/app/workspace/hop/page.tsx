@@ -4,7 +4,7 @@ import { MeetingHub } from "@/components/workspace/MeetingHub";
 import { listChannels } from "@/lib/actions/meetings";
 import type { Profile } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Họp" };
+export const metadata: Metadata = { title: "Trò chuyện & họp" };
 
 export default async function MeetingPage() {
   const supabase = await createClient();

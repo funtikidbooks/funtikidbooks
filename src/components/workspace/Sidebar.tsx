@@ -10,13 +10,13 @@ import type { Profile } from "@/lib/types";
 
 const NAV = [
   { href: "/workspace", label: "Bảng công việc", icon: "📊", enabled: true },
+  { href: "/workspace/hop", label: "Trò chuyện & họp", icon: "💬", enabled: true },
   { href: "/workspace/kho-font", label: "Kho font", icon: "🔤", enabled: true },
   { href: "/workspace/tinh-kho-sach", label: "Tính khổ sách", icon: "📐", enabled: true },
   { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️", enabled: true },
   { href: "#", label: "Dự án", icon: "📁", enabled: false },
   { href: "/workspace/thanh-vien", label: "Thành viên", icon: "👥", enabled: true },
   { href: "/workspace/lich", label: "Lịch", icon: "📅", enabled: true },
-  { href: "/workspace/hop", label: "Họp", icon: "💬", enabled: true },
 ];
 
 export function Sidebar({
