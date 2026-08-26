@@ -270,6 +270,58 @@ export async function removeReaction(messageId: string, emoji: string) {
     .eq("emoji", emoji);
 }
 
+// Server-computed source of truth for the global "Riêng"/tab-badge unread
+// counts (ChatManager.tsx) — the live realtime subscription that normally
+// keeps those counts current can silently miss messages sent while the
+// websocket was disconnected (phone screen locked, tab backgrounded...),
+// which showed up to staff as "only see the notification after reloading".
+// Called on reconnect/tab-focus to catch up on whatever was missed.
+export async function getUnreadMeetingCounts(): Promise<Record<string, number>> {
+  const { supabase, user } = await requireUser();
+
+  const [{ data: memberChannels }, { data: generalChannels }] = await Promise.all([
+    supabase.from("meeting_channel_members").select("channel_id").eq("profile_id", user.id),
+    supabase.from("meeting_channels").select("id").eq("is_general", true),
+  ]);
+  const channelIds = Array.from(
+    new Set([
+      ...(memberChannels ?? []).map((m) => m.channel_id as string),
+      ...(generalChannels ?? []).map((c) => c.id as string),
+    ]),
+  );
+  if (channelIds.length === 0) return {};
+
+  const [{ data: reads }, { data: messages }] = await Promise.all([
+    supabase
+      .from("meeting_channel_reads")
+      .select("channel_id, last_read_message_id")
+      .eq("profile_id", user.id)
+      .in("channel_id", channelIds),
+    supabase
+      .from("meeting_messages")
+      .select("id, channel_id, sender_id, created_at")
+      .in("channel_id", channelIds)
+      .order("created_at", { ascending: false })
+      .limit(500),
+  ]);
+
+  const lastReadIdByChannel = new Map(
+    (reads ?? []).map((r) => [r.channel_id as string, r.last_read_message_id as string | null]),
+  );
+  const msgById = new Map((messages ?? []).map((m) => [m.id as string, m]));
+
+  const counts: Record<string, number> = {};
+  for (const m of messages ?? []) {
+    if (m.sender_id === user.id) continue;
+    const lastReadId = lastReadIdByChannel.get(m.channel_id as string);
+    const lastReadMsg = lastReadId ? msgById.get(lastReadId as string) : undefined;
+    if (!lastReadMsg || new Date(m.created_at as string) > new Date(lastReadMsg.created_at as string)) {
+      counts[m.channel_id as string] = (counts[m.channel_id as string] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
 export async function getChannelReads(channelId: string): Promise<MeetingChannelRead[]> {
   const { supabase } = await requireUser();
   const { data } = await supabase.from("meeting_channel_reads").select("*").eq("channel_id", channelId);

@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { markConversationRead } from "@/lib/actions/messages";
+import { getUnreadCounts, markConversationRead } from "@/lib/actions/messages";
+import { getUnreadMeetingCounts } from "@/lib/actions/meetings";
 import type { DirectMessage, MeetingMessage, Profile } from "@/lib/types";
 
 type ChatManagerValue = {
@@ -88,6 +89,42 @@ export function ChatManagerProvider({
     });
   }, []);
 
+  // Re-fetches both unread counts from the server and replaces local state
+  // wholesale — the source of truth (dm_reads / meeting_channel_reads)
+  // already reflects any conversation the user has actually opened, so this
+  // is safe to just overwrite with, no merging needed. Exists because the
+  // realtime subscription below can silently miss messages sent while the
+  // websocket was disconnected (phone screen locked, tab backgrounded, a
+  // network blip...) — staff reported only ever seeing a new-message badge
+  // after reloading the page, which is exactly that gap. Called on tab
+  // focus/visibility and whenever the realtime channel (re)subscribes.
+  const resync = useCallback(async () => {
+    const [dm, meeting] = await Promise.all([
+      getUnreadCounts().catch(() => null),
+      getUnreadMeetingCounts().catch(() => null),
+    ]);
+    if (dm) {
+      for (const id of openChatIdsRef.current) delete dm[id];
+      setUnreadCounts(dm);
+    }
+    if (meeting) {
+      if (activeMeetingChannelIdRef.current) delete meeting[activeMeetingChannelIdRef.current];
+      setMeetingUnreadCounts(meeting);
+    }
+  }, []);
+
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === "visible") resync();
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", resync);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", resync);
+    };
+  }, [resync]);
+
   // Global inbox subscription — separate from each ChatWindow's own
   // conversation subscription, so a badge shows up even for teammates whose
   // chat window isn't currently open.
@@ -127,12 +164,17 @@ export function ChatManagerProvider({
           setMeetingUnreadCounts((prev) => ({ ...prev, [row.channel_id]: (prev[row.channel_id] ?? 0) + 1 }));
         },
       )
-      .subscribe();
+      // Fires with "SUBSCRIBED" both on the initial connect and after any
+      // reconnect — resyncing here is what catches up on messages that
+      // arrived during a drop, since Realtime doesn't replay missed events.
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") resync();
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUserId]);
+  }, [currentUserId, resync]);
 
   const totalUnreadCount = useMemo(() => {
     const dmTotal = Object.values(unreadCounts).reduce((sum, n) => sum + n, 0);
