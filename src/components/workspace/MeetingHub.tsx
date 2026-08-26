@@ -553,6 +553,27 @@ export function MeetingHub({
     }
   }
 
+  // Lets a screenshot copied to the clipboard (or any image, really) go
+  // straight into the composer with Ctrl+V, same as Slack/Messenger —
+  // no need to save it to disk first and use the 📎 picker.
+  function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (!item.type.startsWith("image/")) continue;
+      const file = item.getAsFile();
+      if (!file) continue;
+      e.preventDefault();
+      if (file.size > 20 * 1024 * 1024) {
+        setError("Tệp vượt quá 20MB");
+        return;
+      }
+      setError(null);
+      setPendingFile(file);
+      return;
+    }
+  }
+
   function pickMention(p: Profile) {
     setText((prev) => prev.replace(/(^|\s)@([\p{L}0-9]*)$/u, (_m, pre: string) => `${pre}@${p.display_name} `));
     textInputRef.current?.focus();
@@ -922,9 +943,10 @@ export function MeetingHub({
                 <input
                   ref={textInputRef}
                   className="input flex-1"
-                  placeholder={`Nhắn vào #${activeChannel.name}… (gõ @ để nhắc ai đó)`}
+                  placeholder={`Nhắn vào #${activeChannel.name}… (gõ @ để nhắc ai đó, dán ảnh bằng Ctrl+V)`}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
+                  onPaste={handlePaste}
                 />
                 <button type="submit" disabled={sending} className="btn btn-primary flex-none">
                   Gửi
