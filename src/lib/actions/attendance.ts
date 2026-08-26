@@ -47,22 +47,6 @@ export async function checkInIfNeeded() {
     .then(() => {});
 }
 
-export async function listMyAttendance(weekStartInput?: string): Promise<AttendanceEntry[]> {
-  const { supabase, user } = await requireUser();
-  const weekStart = mondayOf(weekStartInput ?? vnToday());
-  const weekEnd = addDays(weekStart, 6);
-
-  const { data } = await supabase
-    .from("attendance")
-    .select("*")
-    .eq("profile_id", user.id)
-    .gte("work_date", weekStart)
-    .lte("work_date", weekEnd)
-    .order("work_date", { ascending: true });
-
-  return (data ?? []) as AttendanceEntry[];
-}
-
 export async function listMyMonthAttendance(monthStartInput?: string): Promise<AttendanceEntry[]> {
   const { supabase, user } = await requireUser();
   const monthStart = firstOfMonth(monthStartInput ?? vnToday());
