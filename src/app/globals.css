@@ -505,6 +505,19 @@ h4 {
   }
 }
 
+/* ---------- Jump-to-message flash (search results, reply quotes) ---------- */
+.fk-flash-highlight {
+  animation: fk-flash 1.6s ease-out;
+}
+@keyframes fk-flash {
+  0%, 15% {
+    background-color: var(--color-accent-100);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
 /* ---------- Floating DM chat window on phones ---------- */
 /* ChatWindow.tsx sets right/width inline (offsetRight staggers multiple
    open windows sideways on desktop) — !important is the only way to widen

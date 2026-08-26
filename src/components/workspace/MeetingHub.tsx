@@ -19,9 +19,17 @@ import {
   markChannelRead,
   recallMeetingMessage,
   removeReaction,
+  searchMeetingMessages,
   sendMeetingMessage,
 } from "@/lib/actions/meetings";
-import type { MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, Profile } from "@/lib/types";
+import type {
+  MeetingChannelPublic,
+  MeetingChannelRead,
+  MeetingMessage,
+  MeetingReaction,
+  MeetingSearchResult,
+  Profile,
+} from "@/lib/types";
 
 const ROOM_ICONS = ["💬", "🎨", "📚", "🎬", "🧵", "🛠", "📣", "🎯"];
 
@@ -45,6 +53,24 @@ function formatTime(date: string) {
 
 function isImage(mime: string | null) {
   return !!mime && mime.startsWith("image/");
+}
+
+// Bolds the first occurrence of the search query in a result's snippet —
+// good enough for a one-line preview, no need to highlight every hit.
+function highlightMatch(content: string, query: string) {
+  const q = query.trim();
+  if (!q) return content;
+  const idx = content.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return content;
+  return (
+    <>
+      {content.slice(0, idx)}
+      <mark style={{ background: "var(--color-accent-100)", color: "var(--color-accent-700)", fontWeight: 700 }}>
+        {content.slice(idx, idx + q.length)}
+      </mark>
+      {content.slice(idx + q.length)}
+    </>
+  );
 }
 
 function escapeRegExp(s: string) {
@@ -335,6 +361,14 @@ export function MeetingHub({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<MeetingMessage | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<MeetingSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  // Set when a search result is picked — the scroll-into-view effect below
+  // watches for this element to actually exist (it may not yet, if we just
+  // switched rooms and that room's messages are still loading).
+  const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -557,6 +591,51 @@ export function MeetingHub({
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [activeId, messages.length]);
+
+  // Jumps to a picked search result once its message actually exists in the
+  // DOM — runs again every time `messages` changes, which covers having
+  // just switched rooms and still waiting on that room's fetch to resolve.
+  // Declared after the scroll-to-bottom effect above so it wins when both
+  // fire from the same messages update (switching into a room to jump to
+  // a hit there triggers both).
+  useEffect(() => {
+    if (!scrollToMessageId) return;
+    const el = document.getElementById(`meeting-msg-${scrollToMessageId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("fk-flash-highlight");
+    const flashTimer = setTimeout(() => el.classList.remove("fk-flash-highlight"), 1600);
+    // Deferred rather than called synchronously in the effect body — this
+    // clears the target once handled, not a value derivable during render.
+    const raf = requestAnimationFrame(() => setScrollToMessageId(null));
+    return () => {
+      clearTimeout(flashTimer);
+      cancelAnimationFrame(raf);
+    };
+  }, [messages, scrollToMessageId]);
+
+  // Debounced live search across every room the user is in. Doesn't bother
+  // resetting searchResults/searching when the query gets too short — the
+  // render below already hides stale results behind the same length check.
+  useEffect(() => {
+    if (!showSearch || searchQuery.trim().length < 2) return;
+    const handle = setTimeout(() => {
+      searchMeetingMessages(searchQuery)
+        .then((results) => setSearchResults(results))
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [showSearch, searchQuery]);
+
+  function pickSearchResult(result: MeetingSearchResult) {
+    setShowSearch(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    setShowRoomListMobile(false);
+    setScrollToMessageId(result.id);
+    if (result.channel_id !== activeId) selectChannel(result.channel_id);
+  }
 
   function refreshChannel(id: string, patch: Partial<MeetingChannelPublic>) {
     setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
@@ -871,6 +950,16 @@ export function MeetingHub({
               </button>
               <span aria-hidden style={{ fontSize: 18 }}>{activeChannel.icon}</span>
               <span className="font-bold flex-1 truncate">{activeChannel.name}</span>
+              <button
+                type="button"
+                onClick={() => setShowSearch((v) => !v)}
+                className="btn-icon flex-none"
+                style={{ width: 30, height: 30, padding: 0 }}
+                aria-label="Tìm kiếm tin nhắn"
+                title="Tìm kiếm tin nhắn"
+              >
+                🔍
+              </button>
               {!activeChannel.is_general && (
                 <>
                   <button type="button" onClick={() => handleLeave(activeChannel.id)} className="btn btn-ghost btn-sm">
@@ -884,6 +973,78 @@ export function MeetingHub({
                 </>
               )}
             </div>
+
+            {showSearch && (
+              <div className="flex-none flex flex-col" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+                <div className="flex items-center gap-2 px-4 py-2">
+                  <input
+                    autoFocus
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      if (e.target.value.trim().length >= 2) setSearching(true);
+                    }}
+                    placeholder="Tìm tin nhắn trong Trò chuyện & họp… (mọi phòng)"
+                    className="input flex-1"
+                    style={{ padding: "6px 10px", fontSize: 13 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSearch(false);
+                      setSearchQuery("");
+                    }}
+                    className="btn-icon flex-none"
+                    style={{ width: 28, height: 28, padding: 0 }}
+                    aria-label="Đóng tìm kiếm"
+                  >
+                    ✕
+                  </button>
+                </div>
+                {searchQuery.trim().length >= 2 && (
+                  <div className="overflow-y-auto" style={{ maxHeight: 320, borderTop: "1px solid var(--color-neutral-200)" }}>
+                    {searching ? (
+                      <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
+                        Đang tìm…
+                      </p>
+                    ) : searchResults.length === 0 ? (
+                      <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
+                        Không tìm thấy tin nhắn nào.
+                      </p>
+                    ) : (
+                      searchResults.map((r) => {
+                        const sender = profileById.get(r.sender_id);
+                        return (
+                          <button
+                            key={r.id}
+                            type="button"
+                            onClick={() => pickSearchResult(r)}
+                            className="ws-nav-link flex items-start gap-2.5 px-4 py-2 text-left w-full"
+                          >
+                            <Avatar profile={sender} size={26} />
+                            <span className="flex-1 min-w-0">
+                              <span className="flex items-center gap-1.5">
+                                <span className="text-[12px] font-bold">{sender?.display_name ?? "Ẩn danh"}</span>
+                                <span className="tag tag-neutral" style={{ fontSize: 9 }}>
+                                  {r.channel_icon} {r.channel_name}
+                                </span>
+                              </span>
+                              <span className="block text-[12px] truncate" style={{ color: "var(--color-neutral-600)" }}>
+                                {highlightMatch(r.content, searchQuery)}
+                              </span>
+                            </span>
+                            <span className="text-[10px] flex-none" style={{ color: "var(--color-neutral-500)" }}>
+                              {formatTime(r.created_at)}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
               {messages.length === 0 && (

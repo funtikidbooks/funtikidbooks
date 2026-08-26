@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
-import type { MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction } from "@/lib/types";
+import type { MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, MeetingSearchResult } from "@/lib/types";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -141,6 +141,47 @@ export async function getMeetingMessages(channelId: string): Promise<MeetingMess
     .order("created_at", { ascending: true })
     .limit(300);
   return (data ?? []) as MeetingMessage[];
+}
+
+// Searches message content across every room the caller is in (#Chung plus
+// any project/password room they've joined) rather than just whichever
+// room happens to be open — finding every time someone mentioned "Phúc" is
+// more useful across the whole workspace than one room at a time.
+export async function searchMeetingMessages(query: string): Promise<MeetingSearchResult[]> {
+  const { supabase, user } = await requireUser();
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+
+  const [{ data: memberChannels }, { data: generalChannels }] = await Promise.all([
+    supabase.from("meeting_channel_members").select("channel_id").eq("profile_id", user.id),
+    supabase.from("meeting_channels").select("id").eq("is_general", true),
+  ]);
+  const channelIds = Array.from(
+    new Set([
+      ...(memberChannels ?? []).map((m) => m.channel_id as string),
+      ...(generalChannels ?? []).map((c) => c.id as string),
+    ]),
+  );
+  if (channelIds.length === 0) return [];
+
+  const [{ data: messages }, { data: channels }] = await Promise.all([
+    supabase
+      .from("meeting_messages")
+      .select("*")
+      .in("channel_id", channelIds)
+      .eq("is_recalled", false)
+      .ilike("content", `%${trimmed}%`)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    supabase.from("meeting_channels").select("id, name, icon").in("id", channelIds),
+  ]);
+
+  const channelById = new Map((channels ?? []).map((c) => [c.id as string, c]));
+  return (messages ?? []).map((m) => ({
+    ...(m as MeetingMessage),
+    channel_name: (channelById.get(m.channel_id as string)?.name as string) ?? "",
+    channel_icon: (channelById.get(m.channel_id as string)?.icon as string) ?? "💬",
+  }));
 }
 
 const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);

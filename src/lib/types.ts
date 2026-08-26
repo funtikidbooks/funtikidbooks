@@ -140,6 +140,14 @@ export type MeetingMessage = {
   created_at: string;
 };
 
+// A meeting_messages row plus which room it came from — searchMeetingMessages()
+// spans every room the searcher is in, so results need to say where each
+// one is, since they don't all belong to whatever room is currently open.
+export type MeetingSearchResult = MeetingMessage & {
+  channel_name: string;
+  channel_icon: string;
+};
+
 export type PushSubscriptionRow = {
   id: string;
   user_id: string;
