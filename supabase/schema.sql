@@ -864,12 +864,14 @@ create policy "staff can view font files"
 
 -- ---------------------------------------------------------------------------
 -- brushes: the "Kho font & brush" page's second tab — shared digital-painting
--- brush files (Procreate .brush/.brushset, Photoshop .abr, Clip Studio .sut,
--- Krita .kpp/.bundle). Same permission shape as fonts above.
+-- brush files, tagged by which app they're for (Photoshop .abr, Procreate
+-- .brush/.brushset, Clip Studio Paint .sut). Same permission shape as fonts
+-- above.
 -- ---------------------------------------------------------------------------
 create table if not exists public.brushes (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  category text not null default 'photoshop',
   storage_path text not null,
   file_url text not null,
   file_ext text not null,
@@ -877,6 +879,10 @@ create table if not exists public.brushes (
   uploaded_by uuid references public.profiles (id) on delete set null,
   created_at timestamptz not null default now()
 );
+
+alter table public.brushes add column if not exists category text not null default 'photoshop';
+alter table public.brushes drop constraint if exists brushes_category_check;
+alter table public.brushes add constraint brushes_category_check check (category in ('photoshop', 'procreate', 'clip_studio'));
 
 alter table public.brushes enable row level security;
 
@@ -895,9 +901,11 @@ create policy "uploader or director can delete brushes"
   to authenticated
   using (uploaded_by = auth.uid() or public.current_access_role() = 'director');
 
-insert into storage.buckets (id, name, public)
-values ('brushes', 'brushes', true)
-on conflict (id) do nothing;
+-- 500MB — brush packs (Procreate .brushset especially) commonly exceed the
+-- default 50MB project-wide upload limit, so this bucket gets its own cap.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('brushes', 'brushes', true, 524288000)
+on conflict (id) do update set file_size_limit = 524288000;
 
 drop policy if exists "staff can upload brush files" on storage.objects;
 create policy "staff can upload brush files"

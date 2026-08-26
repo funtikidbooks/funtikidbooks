@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
-import type { BrushAsset } from "@/lib/types";
+import { BRUSH_CATEGORY_EXT, BRUSH_CATEGORY_LABELS } from "@/lib/brushCategory";
+import type { BrushAsset, BrushCategory } from "@/lib/types";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -14,17 +15,23 @@ async function requireUser() {
   return { supabase, user };
 }
 
-const ALLOWED_EXT = new Set(["brush", "brushset", "abr", "sut", "kpp", "bundle"]);
-const MAX_SIZE = 100 * 1024 * 1024;
+const MAX_SIZE = 500 * 1024 * 1024;
 
 export async function uploadBrush(formData: FormData): Promise<BrushAsset> {
   const { supabase, user } = await requireUser();
   const file = formData.get("file");
   if (!(file instanceof File)) throw new Error("Thiếu tệp brush");
 
+  const categoryInput = formData.get("category");
+  if (typeof categoryInput !== "string" || !(categoryInput in BRUSH_CATEGORY_EXT)) throw new Error("Thiếu loại brush");
+  const category = categoryInput as BrushCategory;
+  const allowedExt = BRUSH_CATEGORY_EXT[category];
+
   const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "";
-  if (!ALLOWED_EXT.has(ext)) throw new Error("Chỉ hỗ trợ brush .brush, .brushset, .abr, .sut, .kpp, .bundle");
-  if (file.size > MAX_SIZE) throw new Error("Tệp vượt quá 100MB");
+  if (!allowedExt.includes(ext)) {
+    throw new Error(`Brush ${BRUSH_CATEGORY_LABELS[category]} chỉ hỗ trợ đuôi .${allowedExt.join(", .")}`);
+  }
+  if (file.size > MAX_SIZE) throw new Error("Tệp vượt quá 500MB");
 
   const name = file.name.replace(/\.[^.]+$/, "");
   const storagePath = `${randomUUID()}.${ext}`;
@@ -38,6 +45,7 @@ export async function uploadBrush(formData: FormData): Promise<BrushAsset> {
     .from("brushes")
     .insert({
       name,
+      category,
       storage_path: storagePath,
       file_url: publicUrlData.publicUrl,
       file_ext: ext,

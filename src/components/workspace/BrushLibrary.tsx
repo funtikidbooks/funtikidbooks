@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { deleteBrush, uploadBrush } from "@/lib/actions/brushes";
-import type { BrushAsset } from "@/lib/types";
+import { BRUSH_CATEGORIES, BRUSH_CATEGORY_EXT, BRUSH_CATEGORY_LABELS } from "@/lib/brushCategory";
+import type { BrushAsset, BrushCategory } from "@/lib/types";
 
 function formatSize(bytes: number | null) {
   if (!bytes) return "";
@@ -21,9 +22,16 @@ export function BrushLibrary({
   isDirector: boolean;
 }) {
   const [brushes, setBrushes] = useState(initialBrushes);
+  const [uploadCategory, setUploadCategory] = useState<BrushCategory>("procreate");
+  const [filter, setFilter] = useState<BrushCategory | "all">("all");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const visibleBrushes = useMemo(
+    () => (filter === "all" ? brushes : brushes.filter((b) => b.category === filter)),
+    [brushes, filter],
+  );
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -32,6 +40,7 @@ export function BrushLibrary({
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("category", uploadCategory);
       const created = await uploadBrush(formData);
       setBrushes((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
     } catch (err) {
@@ -58,19 +67,54 @@ export function BrushLibrary({
       <div className="flex items-center justify-between gap-4 px-6 py-4" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
         <div>
           <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-            {brushes.length} brush — cọ vẽ Procreate, Photoshop, Clip Studio Paint, Krita… ai cũng có thể tải về và thêm brush mới
+            {brushes.length} brush — cọ vẽ Photoshop, Procreate, Clip Studio Paint, tối đa 500MB — ai cũng có thể tải về và thêm brush mới
           </p>
         </div>
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-          {uploading ? "Đang tải lên…" : "+ Thêm brush"}
-        </button>
+        <div className="flex items-center gap-2 flex-none">
+          <select
+            className="input"
+            style={{ padding: "6px 10px", fontSize: 13, width: "auto" }}
+            value={uploadCategory}
+            onChange={(e) => setUploadCategory(e.target.value as BrushCategory)}
+            aria-label="Loại brush sắp tải lên"
+          >
+            {BRUSH_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {BRUSH_CATEGORY_LABELS[c]}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+            {uploading ? "Đang tải lên…" : "+ Thêm brush"}
+          </button>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".brush,.brushset,.abr,.sut,.kpp,.bundle"
+          accept={BRUSH_CATEGORY_EXT[uploadCategory].map((e) => `.${e}`).join(",")}
           className="hidden"
           onChange={(e) => handleFile(e.target.files?.[0])}
         />
+      </div>
+
+      <div className="flex items-center gap-2 px-6 pt-3">
+        <button
+          type="button"
+          onClick={() => setFilter("all")}
+          className={`btn btn-sm ${filter === "all" ? "btn-primary" : "btn-ghost"}`}
+        >
+          Tất cả
+        </button>
+        {BRUSH_CATEGORIES.map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => setFilter(c)}
+            className={`btn btn-sm ${filter === c ? "btn-primary" : "btn-ghost"}`}
+          >
+            {BRUSH_CATEGORY_LABELS[c]}
+          </button>
+        ))}
       </div>
 
       {error && (
@@ -80,11 +124,13 @@ export function BrushLibrary({
       )}
 
       <div className="flex-1 overflow-y-auto p-6">
-        {brushes.length === 0 ? (
-          <p style={{ color: "var(--color-neutral-500)" }}>Chưa có brush nào. Bấm &quot;+ Thêm brush&quot; để tải lên.</p>
+        {visibleBrushes.length === 0 ? (
+          <p style={{ color: "var(--color-neutral-500)" }}>
+            {brushes.length === 0 ? 'Chưa có brush nào. Bấm "+ Thêm brush" để tải lên.' : "Không có brush nào trong mục này."}
+          </p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {brushes.map((b) => (
+            {visibleBrushes.map((b) => (
               <div key={b.id} className="card elev-sm flex items-center gap-3 p-3">
                 <span
                   className="flex items-center justify-center rounded-[10px] flex-none"
@@ -97,7 +143,10 @@ export function BrushLibrary({
                   <h3 className="text-sm font-bold truncate" title={b.name}>
                     {b.name}
                   </h3>
-                  <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                  <span className="text-[11px] flex items-center gap-1.5 flex-wrap" style={{ color: "var(--color-neutral-500)" }}>
+                    <span className="tag tag-neutral" style={{ padding: "1px 6px" }}>
+                      {BRUSH_CATEGORY_LABELS[b.category]}
+                    </span>
                     .{b.file_ext} {formatSize(b.size_bytes) && `· ${formatSize(b.size_bytes)}`}
                   </span>
                 </div>

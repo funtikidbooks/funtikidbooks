@@ -56,9 +56,12 @@ export type FontAsset = {
   created_at: string;
 };
 
+export type BrushCategory = "photoshop" | "procreate" | "clip_studio";
+
 export type BrushAsset = {
   id: string;
   name: string;
+  category: BrushCategory;
   storage_path: string;
   file_url: string;
   file_ext: string;
