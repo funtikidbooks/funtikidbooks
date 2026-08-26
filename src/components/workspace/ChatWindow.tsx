@@ -87,7 +87,8 @@ export function ChatWindow({
   const peerTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentAtRef = useRef(0);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
-  const textInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
+  const composerFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (!showEmojiPicker) return;
@@ -153,6 +154,16 @@ export function ChatWindow({
   useEffect(() => {
     if (!minimized) listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages.length, minimized, peerTyping]);
+
+  // Grows the composer with the message instead of scrolling the text
+  // sideways in a single line, capped so it doesn't take over this small
+  // floating window.
+  useEffect(() => {
+    const el = textInputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 100)}px`;
+  }, [text]);
 
   function notifyTyping() {
     const now = Date.now();
@@ -365,7 +376,7 @@ export function ChatWindow({
                 </button>
               </div>
             )}
-            <form onSubmit={handleSend} className="flex items-center gap-1.5 p-2">
+            <form ref={composerFormRef} onSubmit={handleSend} className="flex items-end gap-1.5 p-2">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
@@ -400,15 +411,22 @@ export function ChatWindow({
                   setPendingFile(f);
                 }}
               />
-              <input
+              <textarea
                 ref={textInputRef}
-                className="input flex-1"
-                style={{ padding: "6px 10px", fontSize: 13 }}
-                placeholder="Nhắn tin…"
+                className="input flex-1 resize-none"
+                style={{ padding: "6px 10px", fontSize: 13, maxHeight: 100, overflowY: "auto" }}
+                rows={1}
+                placeholder="Nhắn tin… (Shift+Enter để xuống dòng)"
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
                   if (e.target.value.trim()) notifyTyping();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    composerFormRef.current?.requestSubmit();
+                  }
                 }}
               />
               <button type="submit" disabled={sending} className="btn btn-primary btn-sm flex-none" style={{ padding: "6px 12px" }}>
