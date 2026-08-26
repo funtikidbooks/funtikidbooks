@@ -226,14 +226,23 @@ async function notifyChannelMembers(
   );
 }
 
-export async function deleteMeetingMessage(messageId: string) {
+// "Thu hồi" keeps the row so an "Đã thu hồi" placeholder still shows where
+// the message was, instead of it silently vanishing for everyone else.
+export async function recallMeetingMessage(messageId: string) {
   const { supabase, user } = await requireUser();
   const { error } = await supabase
     .from("meeting_messages")
-    .delete()
+    .update({
+      is_recalled: true,
+      content: "",
+      attachment_url: null,
+      attachment_filename: null,
+      attachment_mime: null,
+      attachment_size: null,
+    })
     .eq("id", messageId)
     .eq("sender_id", user.id);
-  if (error) throw new Error("Không thể xoá tin nhắn");
+  if (error) throw new Error("Không thể thu hồi tin nhắn");
 }
 
 export async function getReactions(messageIds: string[]): Promise<MeetingReaction[]> {

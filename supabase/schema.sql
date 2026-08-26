@@ -1079,6 +1079,11 @@ create index if not exists meeting_messages_channel_idx
 -- preview rather than being deleted itself.
 alter table public.meeting_messages add column if not exists reply_to_message_id uuid references public.meeting_messages (id) on delete set null;
 
+-- Recalling a message ("thu hồi") keeps the row (unlike the hard-delete
+-- policy below) so everyone still sees an "Đã thu hồi" placeholder where
+-- it was, instead of the message silently vanishing without a trace.
+alter table public.meeting_messages add column if not exists is_recalled boolean not null default false;
+
 alter table public.meeting_channels enable row level security;
 alter table public.meeting_channel_members enable row level security;
 alter table public.meeting_messages enable row level security;
@@ -1164,6 +1169,13 @@ create policy "sender or director can delete messages"
   on public.meeting_messages for delete
   to authenticated
   using (sender_id = auth.uid() or public.current_access_role() = 'director');
+
+drop policy if exists "sender can recall their own messages" on public.meeting_messages;
+create policy "sender can recall their own messages"
+  on public.meeting_messages for update
+  to authenticated
+  using (sender_id = auth.uid())
+  with check (sender_id = auth.uid());
 
 do $$
 begin

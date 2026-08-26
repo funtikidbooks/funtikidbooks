@@ -8,7 +8,6 @@ import {
   addReaction,
   createChannel,
   deleteChannel,
-  deleteMeetingMessage,
   getChannelReads,
   getMeetingMessages,
   getReactions,
@@ -16,6 +15,7 @@ import {
   leaveChannel,
   listChannels,
   markChannelRead,
+  recallMeetingMessage,
   removeReaction,
   sendMeetingMessage,
 } from "@/lib/actions/meetings";
@@ -533,13 +533,13 @@ export function MeetingHub({
     }
   }
 
-  async function handleDeleteMessage(id: string) {
-    if (!confirm("Xoá tin nhắn này?")) return;
-    setMessages((prev) => prev.filter((m) => m.id !== id));
+  async function handleRecallMessage(id: string) {
+    if (!confirm("Thu hồi tin nhắn này? Mọi người sẽ thấy \"Đã thu hồi\" thay cho nội dung.")) return;
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, is_recalled: true, content: "", attachment_url: null } : m)));
     try {
-      await deleteMeetingMessage(id);
+      await recallMeetingMessage(id);
     } catch {
-      // best effort — a realtime DELETE (or the next channel switch) will
+      // best effort — a realtime UPDATE (or the next channel switch) will
       // reconcile if this silently failed server-side
     }
   }
@@ -777,13 +777,14 @@ export function MeetingHub({
                     >
                       😊
                     </button>
-                    {mine && (
+                    {mine && !m.is_recalled && (
                       <button
                         type="button"
-                        onClick={() => handleDeleteMessage(m.id)}
+                        onClick={() => handleRecallMessage(m.id)}
                         className="btn-icon"
                         style={{ width: 20, height: 20, padding: 0, fontSize: 10 }}
-                        aria-label="Xoá tin nhắn"
+                        aria-label="Thu hồi tin nhắn"
+                        title="Thu hồi tin nhắn"
                       >
                         ✕
                       </button>
@@ -833,6 +834,15 @@ export function MeetingHub({
                       <span className="text-[11px] font-semibold mb-0.5" style={{ color: "var(--color-neutral-500)" }}>
                         {mine ? "Bạn" : (sender?.display_name ?? "Ẩn danh")}
                       </span>
+                      {m.is_recalled ? (
+                        <div
+                          className="rounded-[12px] px-3 py-2 text-sm italic"
+                          style={{ background: "var(--color-surface)", color: "var(--color-neutral-500)" }}
+                        >
+                          Đã thu hồi
+                        </div>
+                      ) : (
+                        <>
                       {m.reply_to_message_id && (
                         <button
                           type="button"
@@ -850,7 +860,7 @@ export function MeetingHub({
                             {quoted ? (quotedSender?.display_name ?? "Ẩn danh") : "Tin nhắn gốc"}
                           </span>
                           <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)", maxWidth: 220 }}>
-                            {quoted ? (quoted.content || (quoted.attachment_url ? "📎 Tệp đính kèm" : "")) : "Đã bị xoá"}
+                            {quoted ? (quoted.is_recalled ? "Đã thu hồi" : quoted.content || (quoted.attachment_url ? "📎 Tệp đính kèm" : "")) : "Đã bị xoá"}
                           </span>
                         </button>
                       )}
@@ -923,12 +933,14 @@ export function MeetingHub({
                           })}
                         </div>
                       )}
+                        </>
+                      )}
 
                       <span className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
                           {formatTime(m.created_at)}
                         </span>
-                        {!m.content && (
+                        {!m.content && !m.is_recalled && (
                           <span className="fk-msg-actions relative inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             {actionButtons}
                           </span>

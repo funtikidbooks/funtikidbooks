@@ -121,6 +121,7 @@ export type MeetingMessage = {
   attachment_mime: string | null;
   attachment_size: number | null;
   reply_to_message_id: string | null;
+  is_recalled: boolean;
   created_at: string;
 };
 
