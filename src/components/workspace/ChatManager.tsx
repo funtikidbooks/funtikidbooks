@@ -9,6 +9,10 @@ type ChatManagerValue = {
   openChats: Profile[];
   openChat: (profile: Profile) => void;
   closeChat: (profileId: string) => void;
+  // Clears a DM sender's unread badge + marks it read server-side, without
+  // opening the floating ChatWindow — used by the embedded "Riêng" panel in
+  // Trò chuyện & họp, which shows the conversation inline instead.
+  clearDmUnread: (profileId: string) => void;
   unreadCounts: Record<string, number>;
   meetingUnreadCounts: Record<string, number>;
   setActiveMeetingChannel: (channelId: string | null) => void;
@@ -51,16 +55,23 @@ export function ChatManagerProvider({
     notificationAudioRef.current = new Audio("/sounds/dm-message.mp3");
   }, []);
 
-  const openChat = useCallback((profile: Profile) => {
-    setOpenChats((prev) => (prev.some((p) => p.id === profile.id) ? prev : [...prev, profile]));
+  const clearDmUnread = useCallback((profileId: string) => {
     setUnreadCounts((prev) => {
-      if (!prev[profile.id]) return prev;
+      if (!prev[profileId]) return prev;
       const next = { ...prev };
-      delete next[profile.id];
+      delete next[profileId];
       return next;
     });
-    markConversationRead(profile.id).catch(() => {});
+    markConversationRead(profileId).catch(() => {});
   }, []);
+
+  const openChat = useCallback(
+    (profile: Profile) => {
+      setOpenChats((prev) => (prev.some((p) => p.id === profile.id) ? prev : [...prev, profile]));
+      clearDmUnread(profile.id);
+    },
+    [clearDmUnread],
+  );
 
   const closeChat = useCallback((profileId: string) => {
     setOpenChats((prev) => prev.filter((p) => p.id !== profileId));
@@ -135,6 +146,7 @@ export function ChatManagerProvider({
         openChats,
         openChat,
         closeChat,
+        clearDmUnread,
         unreadCounts,
         meetingUnreadCounts,
         setActiveMeetingChannel,

@@ -5,6 +5,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
 import { useChatManager } from "@/components/workspace/ChatManager";
+import { DirectMessagesPanel } from "@/components/workspace/DirectMessagesPanel";
 import {
   addReaction,
   createChannel,
@@ -23,6 +24,11 @@ import {
 import type { MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, Profile } from "@/lib/types";
 
 const ROOM_ICONS = ["💬", "🎨", "📚", "🎬", "🧵", "🛠", "📣", "🎯"];
+
+// A pseudo-room id for the "Riêng" (1:1) tab in the room list — not a real
+// meeting_channels row, just a sentinel activeId value that swaps the main
+// panel over to DirectMessagesPanel instead of a channel's messages.
+const DM_TAB_ID = "__dm__";
 
 const EMOJI_OPTIONS = [
   "😀", "😂", "😅", "😍", "😉", "😎", "🤔", "😢",
@@ -301,7 +307,7 @@ export function MeetingHub({
   profiles: Profile[];
   initialChannels: MeetingChannelPublic[];
 }) {
-  const { setActiveMeetingChannel } = useChatManager();
+  const { setActiveMeetingChannel, unreadCounts: dmUnreadCounts } = useChatManager();
   const [channels, setChannels] = useState(initialChannels);
   const [activeId, setActiveId] = useState<string | null>(
     initialChannels.find((c) => c.is_general)?.id ?? initialChannels[0]?.id ?? null,
@@ -339,13 +345,14 @@ export function MeetingHub({
   // them — and clears on unmount so leaving /workspace/hop entirely doesn't
   // leave a room stuck marked "active" forever.
   useEffect(() => {
-    setActiveMeetingChannel(activeId);
+    setActiveMeetingChannel(activeId === DM_TAB_ID ? null : activeId);
     return () => setActiveMeetingChannel(null);
   }, [activeId, setActiveMeetingChannel]);
 
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const joinedRooms = useMemo(() => channels.filter((c) => c.joined), [channels]);
+  const dmTotalUnread = useMemo(() => Object.values(dmUnreadCounts).reduce((sum, n) => sum + n, 0), [dmUnreadCounts]);
   const browsableRooms = useMemo(() => channels.filter((c) => !c.joined), [channels]);
   const activeChannel = channels.find((c) => c.id === activeId) ?? null;
 
@@ -399,7 +406,7 @@ export function MeetingHub({
   }, [showEmojiPicker, reactionPickerFor]);
 
   useEffect(() => {
-    if (!activeId) return;
+    if (!activeId || activeId === DM_TAB_ID) return;
     let cancelled = false;
     lastMarkedReadIdRef.current = null;
     getMeetingMessages(activeId)
@@ -429,7 +436,7 @@ export function MeetingHub({
   // state to update here: the "seen by" row under a message only ever
   // shows other people, never yourself, so this is pure fire-and-forget.
   useEffect(() => {
-    if (!activeId || messages.length === 0) return;
+    if (!activeId || activeId === DM_TAB_ID || messages.length === 0) return;
     const lastMessage = messages[messages.length - 1];
     if (lastMarkedReadIdRef.current === lastMessage.id) return;
     lastMarkedReadIdRef.current = lastMessage.id;
@@ -437,7 +444,7 @@ export function MeetingHub({
   }, [activeId, messages]);
 
   useEffect(() => {
-    if (!activeId) return;
+    if (!activeId || activeId === DM_TAB_ID) return;
     const supabase = createClient();
     const channel = supabase
       .channel(`meeting-${activeId}`)
@@ -715,22 +722,45 @@ export function MeetingHub({
         </div>
         <div className="flex flex-col gap-1 overflow-y-auto flex-1">
           {joinedRooms.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => selectChannel(r.id)}
-              className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
-              style={{
-                background: activeId === r.id ? "var(--color-accent-100)" : undefined,
-                color: activeId === r.id ? "var(--color-accent-700)" : "var(--color-text)",
-              }}
-            >
-              <span aria-hidden>{r.icon}</span>
-              <span className="flex-1 truncate">{r.name}</span>
-              {r.has_password && !r.is_general && (
-                <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
+            <div key={r.id} className="contents">
+              <button
+                type="button"
+                onClick={() => selectChannel(r.id)}
+                className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
+                style={{
+                  background: activeId === r.id ? "var(--color-accent-100)" : undefined,
+                  color: activeId === r.id ? "var(--color-accent-700)" : "var(--color-text)",
+                }}
+              >
+                <span aria-hidden>{r.icon}</span>
+                <span className="flex-1 truncate">{r.name}</span>
+                {r.has_password && !r.is_general && (
+                  <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
+                )}
+              </button>
+              {r.is_general && (
+                <button
+                  type="button"
+                  onClick={() => selectChannel(DM_TAB_ID)}
+                  className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
+                  style={{
+                    background: activeId === DM_TAB_ID ? "var(--color-accent-100)" : undefined,
+                    color: activeId === DM_TAB_ID ? "var(--color-accent-700)" : "var(--color-text)",
+                  }}
+                >
+                  <span aria-hidden>👤</span>
+                  <span className="flex-1 truncate">Riêng</span>
+                  {dmTotalUnread > 0 && (
+                    <span
+                      className="flex items-center justify-center rounded-full font-bold flex-none"
+                      style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                    >
+                      {dmTotalUnread > 9 ? "9+" : dmTotalUnread}
+                    </span>
+                  )}
+                </button>
               )}
-            </button>
+            </div>
           ))}
         </div>
         <button type="button" onClick={() => setShowBrowse(true)} className="btn btn-secondary btn-sm w-full">
@@ -741,7 +771,9 @@ export function MeetingHub({
 
       {/* Chat panel */}
       <div className="flex-1 flex flex-col min-w-0">
-        {!activeChannel ? (
+        {activeId === DM_TAB_ID ? (
+          <DirectMessagesPanel currentUser={currentUser} profiles={profiles} />
+        ) : !activeChannel ? (
           <div className="flex-1 flex items-center justify-center text-sm" style={{ color: "var(--color-neutral-500)" }}>
             Chọn hoặc tạo một phòng để bắt đầu trò chuyện.
           </div>
