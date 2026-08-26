@@ -45,10 +45,12 @@ export default async function HomePage() {
         overlay="linear-gradient(180deg, rgba(20,18,17,.55) 0%, rgba(20,18,17,.3) 45%, rgba(20,18,17,.65) 100%)"
       >
         <div style={{ opacity: 0.8 }}>
-          <FitText
-            text="Funtikidbooks"
-            className={`${wordmarkFont.className} text-[88px] sm:text-[128px] tracking-tight leading-none`}
-          />
+          <Reveal x={0} y={-30}>
+            <FitText
+              text="Funtikidbooks"
+              className={`${wordmarkFont.className} text-[88px] sm:text-[128px] tracking-tight leading-none`}
+            />
+          </Reveal>
           <h1 className="text-[32px] leading-[1.25] sm:text-[44px] mt-6">
             {t.home.heroTitle[0]}
             <br />
