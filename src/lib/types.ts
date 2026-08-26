@@ -56,6 +56,17 @@ export type FontAsset = {
   created_at: string;
 };
 
+export type BrushAsset = {
+  id: string;
+  name: string;
+  storage_path: string;
+  file_url: string;
+  file_ext: string;
+  size_bytes: number | null;
+  uploaded_by: string | null;
+  created_at: string;
+};
+
 export type DirectMessage = {
   id: string;
   sender_id: string;
@@ -626,6 +637,12 @@ export type Database = {
         Row: FontAsset;
         Insert: Partial<FontAsset> & { name: string; storage_path: string; file_url: string; file_ext: string };
         Update: Partial<FontAsset>;
+        Relationships: [];
+      };
+      brushes: {
+        Row: BrushAsset;
+        Insert: Partial<BrushAsset> & { name: string; storage_path: string; file_url: string; file_ext: string };
+        Update: Partial<BrushAsset>;
         Relationships: [];
       };
       editor_projects: {

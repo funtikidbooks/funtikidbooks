@@ -68,9 +68,11 @@ function FontPreviewText({
 
 export function FontLibrary({
   initialFonts,
+  currentUserId,
   isDirector,
 }: {
   initialFonts: FontAsset[];
+  currentUserId: string;
   isDirector: boolean;
 }) {
   const [fonts, setFonts] = useState(initialFonts);
@@ -119,25 +121,20 @@ export function FontLibrary({
 
       <div className="flex items-center justify-between gap-4 px-6 py-4" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
         <div>
-          <h1 className="text-xl">Kho font</h1>
           <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-            {fonts.length} font — đây là những font không bị lỗi dấu tiếng Việt, nhân viên có thể xem trước và tải về
+            {fonts.length} font — đây là những font không bị lỗi dấu tiếng Việt, ai cũng có thể xem trước, tải về và thêm font mới
           </p>
         </div>
-        {isDirector && (
-          <>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-              {uploading ? "Đang tải lên…" : "+ Thêm font"}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".ttf,.otf,.woff,.woff2"
-              className="hidden"
-              onChange={(e) => handleFile(e.target.files?.[0])}
-            />
-          </>
-        )}
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}>
+          {uploading ? "Đang tải lên…" : "+ Thêm font"}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".ttf,.otf,.woff,.woff2"
+          className="hidden"
+          onChange={(e) => handleFile(e.target.files?.[0])}
+        />
       </div>
 
       {error && (
@@ -148,9 +145,7 @@ export function FontLibrary({
 
       <div className="flex-1 overflow-y-auto p-6">
         {fonts.length === 0 ? (
-          <p style={{ color: "var(--color-neutral-500)" }}>
-            Chưa có font nào. {isDirector ? 'Bấm "+ Thêm font" để tải lên.' : "Đợi Giám đốc thêm font vào đây."}
-          </p>
+          <p style={{ color: "var(--color-neutral-500)" }}>Chưa có font nào. Bấm &quot;+ Thêm font&quot; để tải lên.</p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {fonts.map((f) => (
@@ -171,7 +166,7 @@ export function FontLibrary({
                     <a href={f.file_url} download={`${f.name}.${f.file_ext}`} className="btn btn-ghost btn-sm" title="Tải về">
                       ⬇
                     </a>
-                    {isDirector && (
+                    {(isDirector || f.uploaded_by === currentUserId) && (
                       <button type="button" onClick={() => handleDelete(f)} className="btn-icon" aria-label="Xoá font" title="Xoá">
                         🗑
                       </button>

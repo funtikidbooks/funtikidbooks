@@ -803,8 +803,10 @@ create policy "anyone can view site content"
   using (bucket_id = 'site-content');
 
 -- ---------------------------------------------------------------------------
--- fonts: the workspace's shared font library ("Kho font"). Director uploads
--- typeface files staff can browse/preview/download from inside the app.
+-- fonts: the workspace's shared font library ("Kho font & brush"). Any staff
+-- account (director, admin, or staff) can upload typeface files for everyone
+-- to browse/preview/download from inside the app; only the uploader or a
+-- director can remove one.
 -- ---------------------------------------------------------------------------
 create table if not exists public.fonts (
   id uuid primary key default gen_random_uuid(),
@@ -823,38 +825,97 @@ drop policy if exists "staff can read fonts" on public.fonts;
 create policy "staff can read fonts" on public.fonts for select to authenticated using (true);
 
 drop policy if exists "director can add fonts" on public.fonts;
-create policy "director can add fonts"
+drop policy if exists "staff can add fonts" on public.fonts;
+create policy "staff can add fonts"
   on public.fonts for insert
   to authenticated
-  with check (public.current_access_role() = 'director');
+  with check (public.current_access_role() in ('director', 'admin', 'staff'));
 
 drop policy if exists "director can delete fonts" on public.fonts;
-create policy "director can delete fonts"
+drop policy if exists "uploader or director can delete fonts" on public.fonts;
+create policy "uploader or director can delete fonts"
   on public.fonts for delete
   to authenticated
-  using (public.current_access_role() = 'director');
+  using (uploaded_by = auth.uid() or public.current_access_role() = 'director');
 
 insert into storage.buckets (id, name, public)
 values ('fonts', 'fonts', true)
 on conflict (id) do nothing;
 
 drop policy if exists "director can upload font files" on storage.objects;
-create policy "director can upload font files"
+drop policy if exists "staff can upload font files" on storage.objects;
+create policy "staff can upload font files"
   on storage.objects for insert
   to authenticated
-  with check (bucket_id = 'fonts' and public.current_access_role() = 'director');
+  with check (bucket_id = 'fonts' and public.current_access_role() in ('director', 'admin', 'staff'));
 
 drop policy if exists "director can delete font files" on storage.objects;
-create policy "director can delete font files"
+drop policy if exists "uploader or director can delete font files" on storage.objects;
+create policy "uploader or director can delete font files"
   on storage.objects for delete
   to authenticated
-  using (bucket_id = 'fonts' and public.current_access_role() = 'director');
+  using (bucket_id = 'fonts' and (owner = auth.uid() or public.current_access_role() = 'director'));
 
 drop policy if exists "staff can view font files" on storage.objects;
 create policy "staff can view font files"
   on storage.objects for select
   to authenticated
   using (bucket_id = 'fonts');
+
+-- ---------------------------------------------------------------------------
+-- brushes: the "Kho font & brush" page's second tab — shared digital-painting
+-- brush files (Procreate .brush/.brushset, Photoshop .abr, Clip Studio .sut,
+-- Krita .kpp/.bundle). Same permission shape as fonts above.
+-- ---------------------------------------------------------------------------
+create table if not exists public.brushes (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  storage_path text not null,
+  file_url text not null,
+  file_ext text not null,
+  size_bytes integer,
+  uploaded_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.brushes enable row level security;
+
+drop policy if exists "staff can read brushes" on public.brushes;
+create policy "staff can read brushes" on public.brushes for select to authenticated using (true);
+
+drop policy if exists "staff can add brushes" on public.brushes;
+create policy "staff can add brushes"
+  on public.brushes for insert
+  to authenticated
+  with check (public.current_access_role() in ('director', 'admin', 'staff'));
+
+drop policy if exists "uploader or director can delete brushes" on public.brushes;
+create policy "uploader or director can delete brushes"
+  on public.brushes for delete
+  to authenticated
+  using (uploaded_by = auth.uid() or public.current_access_role() = 'director');
+
+insert into storage.buckets (id, name, public)
+values ('brushes', 'brushes', true)
+on conflict (id) do nothing;
+
+drop policy if exists "staff can upload brush files" on storage.objects;
+create policy "staff can upload brush files"
+  on storage.objects for insert
+  to authenticated
+  with check (bucket_id = 'brushes' and public.current_access_role() in ('director', 'admin', 'staff'));
+
+drop policy if exists "uploader or director can delete brush files" on storage.objects;
+create policy "uploader or director can delete brush files"
+  on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'brushes' and (owner = auth.uid() or public.current_access_role() = 'director'));
+
+drop policy if exists "staff can view brush files" on storage.objects;
+create policy "staff can view brush files"
+  on storage.objects for select
+  to authenticated
+  using (bucket_id = 'brushes');
 
 -- ---------------------------------------------------------------------------
 -- editor_projects: nhân viên tải file khách gửi lên rồi chèn thêm chữ/ảnh để

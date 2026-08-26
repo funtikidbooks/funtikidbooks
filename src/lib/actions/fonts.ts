@@ -5,23 +5,12 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import type { FontAsset } from "@/lib/types";
 
-async function requireDirector() {
+async function requireUser() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Bạn cần đăng nhập.");
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("access_role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (profile?.access_role !== "director") {
-    throw new Error("Chỉ Giám đốc mới có quyền này.");
-  }
-
   return { supabase, user };
 }
 
@@ -29,7 +18,7 @@ const ALLOWED_EXT = new Set(["ttf", "otf", "woff", "woff2"]);
 const MAX_SIZE = 30 * 1024 * 1024;
 
 export async function uploadFont(formData: FormData): Promise<FontAsset> {
-  const { supabase, user } = await requireDirector();
+  const { supabase, user } = await requireUser();
   const file = formData.get("file");
   if (!(file instanceof File)) throw new Error("Thiếu tệp font");
 
@@ -64,8 +53,9 @@ export async function uploadFont(formData: FormData): Promise<FontAsset> {
 }
 
 export async function deleteFont(fontId: string, storagePath: string) {
-  const { supabase } = await requireDirector();
+  const { supabase } = await requireUser();
   await supabase.storage.from("fonts").remove([storagePath]);
-  await supabase.from("fonts").delete().eq("id", fontId);
+  const { error } = await supabase.from("fonts").delete().eq("id", fontId);
+  if (error) throw new Error("Không thể xoá font — chỉ người tải lên hoặc Giám đốc mới xoá được.");
   revalidatePath("/workspace/kho-font");
 }

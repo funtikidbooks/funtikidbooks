@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { getFonts } from "@/lib/data/fonts";
-import { FontLibrary } from "@/components/workspace/FontLibrary";
+import { getBrushes } from "@/lib/data/brushes";
+import { FontBrushLibrary } from "@/components/workspace/FontBrushLibrary";
 
-export const metadata: Metadata = { title: "Kho font" };
+export const metadata: Metadata = { title: "Kho font & brush" };
 
 export default async function KhoFontPage() {
   const supabase = await createClient();
@@ -11,10 +12,18 @@ export default async function KhoFontPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [fonts, { data: profile }] = await Promise.all([
+  const [fonts, brushes, { data: profile }] = await Promise.all([
     getFonts(),
+    getBrushes(),
     supabase.from("profiles").select("access_role").eq("id", user!.id).maybeSingle(),
   ]);
 
-  return <FontLibrary initialFonts={fonts} isDirector={profile?.access_role === "director"} />;
+  return (
+    <FontBrushLibrary
+      initialFonts={fonts}
+      initialBrushes={brushes}
+      currentUserId={user!.id}
+      isDirector={profile?.access_role === "director"}
+    />
+  );
 }
