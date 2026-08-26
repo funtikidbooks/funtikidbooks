@@ -160,20 +160,22 @@ export async function sendMeetingMessage(
 
   if (!trimmed && !attachment) return null;
 
-  const { data, error } = await supabase
-    .from("meeting_messages")
-    .insert({
-      channel_id: channelId,
-      sender_id: user.id,
-      content: trimmed,
-      attachment_url: attachment?.url ?? null,
-      attachment_filename: attachment?.filename ?? null,
-      attachment_mime: attachment?.mime ?? null,
-      attachment_size: attachment?.size ?? null,
-      reply_to_message_id: replyToMessageId ?? null,
-    })
-    .select("*")
-    .single();
+  // reply_to_message_id is only included when actually replying, so a
+  // director who hasn't re-run supabase/schema.sql yet (adding that
+  // column) can still send ordinary messages without erroring — only the
+  // reply feature itself needs that migration.
+  const insertRow: Partial<MeetingMessage> & { channel_id: string; sender_id: string } = {
+    channel_id: channelId,
+    sender_id: user.id,
+    content: trimmed,
+    attachment_url: attachment?.url ?? null,
+    attachment_filename: attachment?.filename ?? null,
+    attachment_mime: attachment?.mime ?? null,
+    attachment_size: attachment?.size ?? null,
+  };
+  if (replyToMessageId) insertRow.reply_to_message_id = replyToMessageId;
+
+  const { data, error } = await supabase.from("meeting_messages").insert(insertRow).select("*").single();
 
   if (error || !data) throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
 
