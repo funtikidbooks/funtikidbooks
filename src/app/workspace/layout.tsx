@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/workspace/Sidebar";
 import { ChatManagerProvider } from "@/components/workspace/ChatManager";
 import { ChatDock } from "@/components/workspace/ChatDock";
+import { ChatHeadBubbles } from "@/components/workspace/ChatHeadBubbles";
 import { TabNotificationBadge } from "@/components/workspace/TabNotificationBadge";
 import { ThemeSync } from "@/components/workspace/ThemeSync";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
@@ -110,6 +111,7 @@ export default async function WorkspaceLayout({
         <MobileNav isDirector={myProfile.access_role === "director"} />
       </div>
       <ChatDock currentUser={{ id: myProfile.id, display_name: myProfile.display_name }} />
+      <ChatHeadBubbles profiles={(allProfiles ?? []) as Profile[]} />
     </ChatManagerProvider>
   );
 }
