@@ -1,71 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { savePushSubscription } from "@/lib/actions/push";
-
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
-  return outputArray;
-}
-
-function isIos() {
-  return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
-}
-
-function isStandalone() {
-  return window.matchMedia("(display-mode: standalone)").matches || (window.navigator as unknown as { standalone?: boolean }).standalone === true;
-}
+import { isIos, isStandalone, subscribeToPush } from "@/lib/pushClient";
 
 // Registers the service worker and subscribes this device to Web Push so
 // chat notifications reach the person even when the tab isn't open/focused.
 // On iPad this only works once the site has been "Added to Home Screen" —
 // until then, this quietly does nothing and InstallHint (below) explains why.
+// Runs silently on every workspace load; anyone who dismissed the native
+// permission prompt (now stuck on "denied") can retry manually from the
+// "Bật thông báo" button in their profile (ProfileMenu.tsx).
 export function PushSetup() {
   useEffect(() => {
-    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!publicKey) return;
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-    if (isIos() && !isStandalone()) return;
-
-    let cancelled = false;
-
-    async function setup() {
-      try {
-        const registration = await navigator.serviceWorker.register("/sw.js");
-        if (Notification.permission === "default") {
-          await Notification.requestPermission();
-        }
-        if (Notification.permission !== "granted") return;
-
-        let subscription = await registration.pushManager.getSubscription();
-        if (!subscription) {
-          subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(publicKey!),
-          });
-        }
-        if (cancelled) return;
-
-        const json = subscription.toJSON();
-        if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
-          await savePushSubscription({
-            endpoint: json.endpoint,
-            keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
-          });
-        }
-      } catch {
-        // Best-effort — chat still works via the in-page unread badge either way.
-      }
-    }
-
-    setup();
-    return () => {
-      cancelled = true;
-    };
+    subscribeToPush();
   }, []);
 
   return null;

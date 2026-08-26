@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { updateMyAvatar, updateMyEmail, updateMyProfile } from "@/lib/actions/profile";
+import { sendTestPush } from "@/lib/actions/push";
+import { getPushStatus, subscribeToPush, type PushStatus } from "@/lib/pushClient";
 import type { Profile } from "@/lib/types";
 
 export function ProfileMenu({ profile }: { profile: Profile }) {
@@ -45,7 +47,31 @@ function ProfileDialog({ profile, onClose }: { profile: Profile; onClose: () => 
   const [savingEmail, setSavingEmail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emailNotice, setEmailNotice] = useState<string | null>(null);
+  const [notifStatus, setNotifStatus] = useState<PushStatus>(() => getPushStatus());
+  const [notifBusy, setNotifBusy] = useState(false);
+  const [testSent, setTestSent] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  async function enableNotifications() {
+    setNotifBusy(true);
+    setError(null);
+    try {
+      setNotifStatus(await subscribeToPush());
+    } finally {
+      setNotifBusy(false);
+    }
+  }
+
+  async function testNotification() {
+    setTestSent(false);
+    setError(null);
+    try {
+      await sendTestPush();
+      setTestSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể gửi thông báo thử");
+    }
+  }
 
   async function handleAvatarFile(file: File | undefined) {
     if (!file) return;
@@ -162,6 +188,45 @@ function ProfileDialog({ profile, onClose }: { profile: Profile; onClose: () => 
         <button type="button" onClick={saveInfo} className="btn btn-primary btn-sm w-fit" disabled={savingInfo || !displayName.trim()}>
           {savingInfo ? "Đang lưu…" : "Lưu thông tin"}
         </button>
+
+        <div className="field" style={{ borderTop: "1px solid var(--color-neutral-200)", paddingTop: 14 }}>
+          <label>🔔 Thông báo tin nhắn</label>
+          {notifStatus === "unsupported" && (
+            <p className="text-[12px]" style={{ color: "var(--color-neutral-500)" }}>
+              Trình duyệt này không hỗ trợ thông báo.
+            </p>
+          )}
+          {notifStatus === "needs-ios-install" && (
+            <p className="text-[12px]" style={{ color: "var(--color-neutral-500)" }}>
+              Trên iPhone/iPad: bấm nút <b>Chia sẻ</b> trong Safari → <b>&quot;Thêm vào MH chính&quot;</b>, rồi mở workspace từ biểu tượng đó để bật được thông báo.
+            </p>
+          )}
+          {notifStatus === "denied" && (
+            <p className="text-[12px]" style={{ color: "var(--status-red)" }}>
+              Bạn đã từ chối thông báo trước đó nên trang không thể tự bật lại. Bấm vào biểu tượng ổ khoá 🔒 cạnh địa chỉ web → Thông báo → chọn Cho phép, rồi tải lại trang.
+            </p>
+          )}
+          {notifStatus === "default" && (
+            <button type="button" onClick={enableNotifications} className="btn btn-secondary btn-sm w-fit" disabled={notifBusy}>
+              {notifBusy ? "Đang bật…" : "Bật thông báo"}
+            </button>
+          )}
+          {notifStatus === "granted" && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[12px] font-semibold" style={{ color: "var(--status-green)" }}>
+                ✅ Đã bật
+              </span>
+              <button type="button" onClick={testNotification} className="btn btn-ghost btn-sm">
+                Gửi thông báo thử
+              </button>
+              {testSent && (
+                <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                  Đã gửi!
+                </span>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="field" style={{ borderTop: "1px solid var(--color-neutral-200)", paddingTop: 14 }}>
           <label htmlFor="pm-email">Email đăng nhập</label>
