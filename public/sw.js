@@ -20,13 +20,14 @@ self.addEventListener("push", (event) => {
   }
 
   const title = payload.title || "Tin nhắn mới";
+  const url = payload.url || "/workspace";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: payload.body || "",
       icon: "/brand/funti-logo.jpg",
       badge: "/brand/funti-logo.jpg",
-      tag: payload.senderId ? `funti-dm-${payload.senderId}` : "funti-dm",
-      data: { senderId: payload.senderId || null, url: "/workspace" },
+      tag: payload.tag || (payload.senderId ? `funti-dm-${payload.senderId}` : "funti-dm"),
+      data: { senderId: payload.senderId || null, url },
     }),
   );
 });

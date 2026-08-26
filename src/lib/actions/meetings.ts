@@ -3,6 +3,7 @@
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { sendPushToUser } from "@/lib/push";
 import type { MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction } from "@/lib/types";
 
 async function requireUser() {
@@ -170,7 +171,51 @@ export async function sendMeetingMessage(channelId: string, content: string, for
 
   if (error || !data) throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
 
+  notifyChannelMembers(supabase, channelId, user.id, trimmed, !!attachment).catch(() => {});
+
   return data as MeetingMessage;
+}
+
+// Fire-and-forget: pushes a real OS notification to everyone who should
+// hear about this message — every staff member for the always-open
+// "Chung" channel, or just that room's members for a private one — the
+// same way sendDirectMessage() already notifies a DM recipient.
+async function notifyChannelMembers(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  channelId: string,
+  senderId: string,
+  content: string,
+  hasAttachment: boolean,
+) {
+  const [{ data: channel }, { data: sender }] = await Promise.all([
+    supabase.from("meeting_channels").select("name, is_general").eq("id", channelId).maybeSingle(),
+    supabase.from("profiles").select("display_name").eq("id", senderId).maybeSingle(),
+  ]);
+  if (!channel) return;
+
+  let recipientIds: string[];
+  if (channel.is_general) {
+    const { data: everyone } = await supabase.from("profiles").select("id");
+    recipientIds = (everyone ?? []).map((p) => p.id as string);
+  } else {
+    const { data: members } = await supabase.from("meeting_channel_members").select("profile_id").eq("channel_id", channelId);
+    recipientIds = (members ?? []).map((m) => m.profile_id as string);
+  }
+
+  const body = content || (hasAttachment ? "📎 Đã gửi một tệp đính kèm" : "");
+  await Promise.all(
+    recipientIds
+      .filter((id) => id !== senderId)
+      .map((id) =>
+        sendPushToUser(id, {
+          title: `#${channel.name} · ${sender?.display_name ?? "Tin nhắn mới"}`,
+          body,
+          senderId,
+          url: "/workspace/hop",
+          tag: `funti-channel-${channelId}`,
+        }).catch(() => {}),
+      ),
+  );
 }
 
 export async function deleteMeetingMessage(messageId: string) {

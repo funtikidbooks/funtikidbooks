@@ -18,7 +18,10 @@ function ensureConfigured() {
 // Used from the server action that saves a new direct message — pushes a
 // real OS notification even when the recipient's tab isn't open/focused,
 // including on an iPad where the site was added to the Home Screen.
-export async function sendPushToUser(userId: string, payload: { title: string; body: string; senderId: string }) {
+export async function sendPushToUser(
+  userId: string,
+  payload: { title: string; body: string; senderId: string; url?: string; tag?: string },
+) {
   if (!ensureConfigured()) return;
 
   const adminClient = createAdminClient();
