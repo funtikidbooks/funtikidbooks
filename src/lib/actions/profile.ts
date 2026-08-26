@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { Profile } from "@/lib/types";
 
 async function requireUser() {
@@ -53,6 +54,8 @@ export async function updateMyAvatar(formData: FormData) {
   if (!ALLOWED_AVATAR_TYPES.has(file.type)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF hoặc WEBP");
   if (file.size > MAX_AVATAR_SIZE) throw new Error("Ảnh vượt quá 8MB");
 
+  const { data: currentProfile } = await supabase.from("profiles").select("avatar_url").eq("id", user.id).maybeSingle();
+
   const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
   const storagePath = `avatars/${user.id}-${randomUUID()}.${ext}`;
 
@@ -64,7 +67,16 @@ export async function updateMyAvatar(formData: FormData) {
   const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
 
   const { error } = await supabase.from("profiles").update({ avatar_url: publicUrlData.publicUrl }).eq("id", user.id);
-  if (error) throw new Error("Không thể lưu ảnh đại diện");
+  if (error) {
+    await supabase.storage.from("task-attachments").remove([storagePath]).catch(() => {});
+    throw new Error("Không thể lưu ảnh đại diện");
+  }
+
+  // Old avatar is now unreferenced — free the space it was taking up.
+  if (currentProfile?.avatar_url) {
+    const oldPath = storagePathFromPublicUrl(currentProfile.avatar_url, "task-attachments");
+    if (oldPath) await supabase.storage.from("task-attachments").remove([oldPath]).catch(() => {});
+  }
 
   revalidatePath("/workspace");
   return publicUrlData.publicUrl;

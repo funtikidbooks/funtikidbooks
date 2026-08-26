@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
+import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { DirectMessage } from "@/lib/types";
 
 async function requireUser() {
@@ -70,7 +71,13 @@ export async function sendDirectMessage(recipientId: string, content: string, fo
     .select("*")
     .single();
 
-  if (error || !data) throw new Error("Không thể gửi tin nhắn");
+  if (error || !data) {
+    if (attachment) {
+      const path = storagePathFromPublicUrl(attachment.url, "task-attachments");
+      if (path) await supabase.storage.from("task-attachments").remove([path]).catch(() => {});
+    }
+    throw new Error("Không thể gửi tin nhắn");
+  }
 
   const { data: senderProfile } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
   sendPushToUser(recipientId, {

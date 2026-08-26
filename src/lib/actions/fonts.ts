@@ -47,7 +47,10 @@ export async function uploadFont(formData: FormData): Promise<FontAsset> {
     .select("*")
     .single();
 
-  if (error || !data) throw new Error("Không thể lưu font");
+  if (error || !data) {
+    await supabase.storage.from("fonts").remove([storagePath]).catch(() => {});
+    throw new Error("Không thể lưu font");
+  }
   revalidatePath("/workspace/kho-font");
   return data as FontAsset;
 }

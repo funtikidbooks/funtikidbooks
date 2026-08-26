@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { Task } from "@/lib/types";
 import { logTaskActivity } from "@/lib/actions/task-detail";
 
@@ -45,6 +46,26 @@ export async function renameColumn(columnId: string, title: string) {
 
 export async function deleteColumn(columnId: string) {
   const { supabase } = await requireUser();
+
+  // tasks (and task_attachments through them) cascade-delete with the
+  // column at the DB level, but that never touches storage — every cover
+  // image and attachment across every task in this column would otherwise
+  // be orphaned.
+  const { data: tasks } = await supabase.from("tasks").select("id, cover_image_url").eq("column_id", columnId);
+  const taskIds = (tasks ?? []).map((t) => t.id as string);
+  const paths: string[] = [];
+  for (const t of tasks ?? []) {
+    if (t.cover_image_url) {
+      const p = storagePathFromPublicUrl(t.cover_image_url as string, "task-attachments");
+      if (p) paths.push(p);
+    }
+  }
+  if (taskIds.length > 0) {
+    const { data: attachments } = await supabase.from("task_attachments").select("storage_path").in("task_id", taskIds);
+    paths.push(...(attachments ?? []).map((a) => a.storage_path as string));
+  }
+  if (paths.length > 0) await supabase.storage.from("task-attachments").remove(paths).catch(() => {});
+
   await supabase.from("board_columns").delete().eq("id", columnId);
   revalidatePath("/workspace");
 }
@@ -128,6 +149,8 @@ export async function setTaskCover(taskId: string, formData: FormData) {
   if (!ALLOWED_COVER_TYPES.has(file.type)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF hoặc WEBP");
   if (file.size > MAX_COVER_SIZE) throw new Error("Ảnh vượt quá 20MB");
 
+  const { data: currentTask } = await supabase.from("tasks").select("cover_image_url").eq("id", taskId).maybeSingle();
+
   const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
   const storagePath = `${taskId}/cover-${randomUUID()}.${ext}`;
 
@@ -140,13 +163,24 @@ export async function setTaskCover(taskId: string, formData: FormData) {
 
   await supabase.from("tasks").update({ cover_image_url: publicUrlData.publicUrl }).eq("id", taskId);
 
+  // Old cover is now unreferenced — free the space it was taking up.
+  if (currentTask?.cover_image_url) {
+    const oldPath = storagePathFromPublicUrl(currentTask.cover_image_url, "task-attachments");
+    if (oldPath) await supabase.storage.from("task-attachments").remove([oldPath]).catch(() => {});
+  }
+
   revalidatePath("/workspace");
   return publicUrlData.publicUrl;
 }
 
 export async function removeTaskCover(taskId: string) {
   const { supabase } = await requireUser();
+  const { data: currentTask } = await supabase.from("tasks").select("cover_image_url").eq("id", taskId).maybeSingle();
   await supabase.from("tasks").update({ cover_image_url: null }).eq("id", taskId);
+  if (currentTask?.cover_image_url) {
+    const path = storagePathFromPublicUrl(currentTask.cover_image_url, "task-attachments");
+    if (path) await supabase.storage.from("task-attachments").remove([path]).catch(() => {});
+  }
   revalidatePath("/workspace");
 }
 
@@ -204,6 +238,21 @@ export async function updateTaskLabels(taskId: string, labels: string[]) {
 
 export async function deleteTask(taskId: string) {
   const { supabase } = await requireUser();
+
+  // task_attachments cascade-deletes with the task at the DB level, but
+  // that never touches storage — clean up the cover and every attachment
+  // first or they'd be orphaned.
+  const [{ data: task }, { data: attachments }] = await Promise.all([
+    supabase.from("tasks").select("cover_image_url").eq("id", taskId).maybeSingle(),
+    supabase.from("task_attachments").select("storage_path").eq("task_id", taskId),
+  ]);
+  const paths = (attachments ?? []).map((a) => a.storage_path as string);
+  if (task?.cover_image_url) {
+    const coverPath = storagePathFromPublicUrl(task.cover_image_url, "task-attachments");
+    if (coverPath) paths.push(coverPath);
+  }
+  if (paths.length > 0) await supabase.storage.from("task-attachments").remove(paths).catch(() => {});
+
   await supabase.from("tasks").delete().eq("id", taskId);
   revalidatePath("/workspace");
 }

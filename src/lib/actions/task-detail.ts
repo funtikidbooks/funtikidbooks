@@ -202,6 +202,13 @@ export async function addComment(taskId: string, content: string, attachmentIds:
 
 export async function deleteComment(commentId: string) {
   const { supabase, user } = await requireUser();
+
+  // task_attachments.comment_id cascade-deletes with the comment at the DB
+  // level, but that never touches storage — clean up first.
+  const { data: attachments } = await supabase.from("task_attachments").select("storage_path").eq("comment_id", commentId);
+  const paths = (attachments ?? []).map((a) => a.storage_path as string);
+  if (paths.length > 0) await supabase.storage.from("task-attachments").remove(paths).catch(() => {});
+
   await supabase.from("task_comments").delete().eq("id", commentId).eq("user_id", user.id);
   revalidatePath("/workspace");
 }

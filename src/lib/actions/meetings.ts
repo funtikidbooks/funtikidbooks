@@ -4,6 +4,7 @@ import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
+import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction } from "@/lib/types";
 
 async function requireUser() {
@@ -113,6 +114,20 @@ export async function leaveChannel(channelId: string) {
 
 export async function deleteChannel(channelId: string) {
   const { supabase } = await requireUser();
+
+  // meeting_messages cascade-deletes with the channel at the DB level, but
+  // that never touches Supabase Storage — clean up every attachment first
+  // or they'd sit there orphaned forever.
+  const { data: messagesWithFiles } = await supabase
+    .from("meeting_messages")
+    .select("attachment_url")
+    .eq("channel_id", channelId)
+    .not("attachment_url", "is", null);
+  const paths = (messagesWithFiles ?? [])
+    .map((m) => storagePathFromPublicUrl(m.attachment_url as string, "task-attachments"))
+    .filter((p): p is string => !!p);
+  if (paths.length > 0) await supabase.storage.from("task-attachments").remove(paths).catch(() => {});
+
   await supabase.from("meeting_channels").delete().eq("id", channelId);
   revalidatePath("/workspace/hop");
 }
@@ -177,7 +192,15 @@ export async function sendMeetingMessage(
 
   const { data, error } = await supabase.from("meeting_messages").insert(insertRow).select("*").single();
 
-  if (error || !data) throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
+  if (error || !data) {
+    // The file already made it to storage — don't leave it orphaned just
+    // because the row it was meant to belong to never got created.
+    if (attachment) {
+      const path = storagePathFromPublicUrl(attachment.url, "task-attachments");
+      if (path) await supabase.storage.from("task-attachments").remove([path]).catch(() => {});
+    }
+    throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
+  }
 
   notifyChannelMembers(supabase, channelId, user.id, trimmed, !!attachment).catch(() => {});
 
@@ -227,9 +250,19 @@ async function notifyChannelMembers(
 }
 
 // "Thu hồi" keeps the row so an "Đã thu hồi" placeholder still shows where
-// the message was, instead of it silently vanishing for everyone else.
+// the message was, instead of it silently vanishing for everyone else —
+// but the attachment file itself (if any) is actually deleted from storage,
+// not just unlinked, so recalling really does free up the space.
 export async function recallMeetingMessage(messageId: string) {
   const { supabase, user } = await requireUser();
+
+  const { data: existing } = await supabase
+    .from("meeting_messages")
+    .select("attachment_url")
+    .eq("id", messageId)
+    .eq("sender_id", user.id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("meeting_messages")
     .update({
@@ -243,6 +276,11 @@ export async function recallMeetingMessage(messageId: string) {
     .eq("id", messageId)
     .eq("sender_id", user.id);
   if (error) throw new Error("Không thể thu hồi tin nhắn");
+
+  if (existing?.attachment_url) {
+    const path = storagePathFromPublicUrl(existing.attachment_url as string, "task-attachments");
+    if (path) await supabase.storage.from("task-attachments").remove([path]).catch(() => {});
+  }
 }
 
 export async function getReactions(messageIds: string[]): Promise<MeetingReaction[]> {

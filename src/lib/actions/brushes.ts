@@ -43,7 +43,10 @@ export async function recordBrush(input: {
     .select("*")
     .single();
 
-  if (error || !data) throw new Error("Không thể lưu brush");
+  if (error || !data) {
+    await supabase.storage.from("brushes").remove([input.storagePath]).catch(() => {});
+    throw new Error("Không thể lưu brush");
+  }
   revalidatePath("/workspace/kho-font");
   return data as BrushAsset;
 }

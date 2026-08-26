@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendStaffWelcomeEmail } from "@/lib/mail";
+import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { AccessRole, NewsPost, Profile, Project, Review } from "@/lib/types";
 
 async function requireDirector() {
@@ -499,6 +500,34 @@ export async function deleteStaffAccount(profileId: string) {
   }
 
   const adminClient = createAdminClient();
+
+  // auth.admin.deleteUser() cascades away this person's profile,
+  // task_attachments, and every chat message they sent or received at the
+  // DB level — but that cascade never touches Supabase Storage, so without
+  // this pass every file they ever uploaded (avatar, task files, chat
+  // attachments) would sit there orphaned forever.
+  const [{ data: profile }, { data: attachments }, { data: sentMeeting }, { data: dms }] = await Promise.all([
+    adminClient.from("profiles").select("avatar_url").eq("id", profileId).maybeSingle(),
+    adminClient.from("task_attachments").select("storage_path").eq("uploaded_by", profileId),
+    adminClient.from("meeting_messages").select("attachment_url").eq("sender_id", profileId).not("attachment_url", "is", null),
+    adminClient
+      .from("direct_messages")
+      .select("attachment_url")
+      .or(`sender_id.eq.${profileId},recipient_id.eq.${profileId}`)
+      .not("attachment_url", "is", null),
+  ]);
+
+  const paths = [
+    ...(attachments ?? []).map((a) => a.storage_path as string),
+    ...(sentMeeting ?? []).map((m) => storagePathFromPublicUrl(m.attachment_url as string, "task-attachments")),
+    ...(dms ?? []).map((m) => storagePathFromPublicUrl(m.attachment_url as string, "task-attachments")),
+  ].filter((p): p is string => !!p);
+  if (profile?.avatar_url) {
+    const avatarPath = storagePathFromPublicUrl(profile.avatar_url, "task-attachments");
+    if (avatarPath) paths.push(avatarPath);
+  }
+  if (paths.length > 0) await adminClient.storage.from("task-attachments").remove(paths).catch(() => {});
+
   const { error } = await adminClient.auth.admin.deleteUser(profileId);
   if (error) throw new Error("Không thể xoá tài khoản. Vui lòng thử lại.");
 

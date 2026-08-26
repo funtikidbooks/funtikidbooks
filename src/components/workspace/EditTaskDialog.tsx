@@ -589,6 +589,7 @@ export function EditTaskDialog({
                   attachments={attachments}
                   onChange={setAttachments}
                   inputRef={attachmentsInputRef}
+                  currentUserId={currentUserId}
                 />
               </>
             )}
