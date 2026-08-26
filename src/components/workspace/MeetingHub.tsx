@@ -307,7 +307,7 @@ export function MeetingHub({
   profiles: Profile[];
   initialChannels: MeetingChannelPublic[];
 }) {
-  const { setActiveMeetingChannel, unreadCounts: dmUnreadCounts } = useChatManager();
+  const { setActiveMeetingChannel, unreadCounts: dmUnreadCounts, meetingUnreadCounts } = useChatManager();
   const [channels, setChannels] = useState(initialChannels);
   const [activeId, setActiveId] = useState<string | null>(
     initialChannels.find((c) => c.is_general)?.id ?? initialChannels[0]?.id ?? null,
@@ -737,7 +737,9 @@ export function MeetingHub({
           </div>
         </div>
         <div className="flex flex-col gap-1 overflow-y-auto flex-1">
-          {joinedRooms.map((r) => (
+          {joinedRooms.map((r) => {
+            const roomUnread = meetingUnreadCounts[r.id] ?? 0;
+            return (
             <div key={r.id} className="contents">
               <button
                 type="button"
@@ -752,6 +754,14 @@ export function MeetingHub({
                 <span className="flex-1 truncate">{r.name}</span>
                 {r.has_password && !r.is_general && (
                   <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
+                )}
+                {roomUnread > 0 && (
+                  <span
+                    className="flex items-center justify-center rounded-full font-bold flex-none"
+                    style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                  >
+                    {roomUnread > 9 ? "9+" : roomUnread}
+                  </span>
                 )}
               </button>
               {r.is_general && (
@@ -777,7 +787,8 @@ export function MeetingHub({
                 </button>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
         <button type="button" onClick={() => setShowBrowse(true)} className="btn btn-secondary btn-sm w-full">
           🔍 Khám phá phòng
