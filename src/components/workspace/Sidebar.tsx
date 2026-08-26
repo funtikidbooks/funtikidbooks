@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
+import { useChatManager } from "@/components/workspace/ChatManager";
 import type { Profile } from "@/lib/types";
 
 const NAV = [
@@ -28,6 +29,7 @@ export function Sidebar({
   profiles: Profile[];
 }) {
   const pathname = usePathname();
+  const { totalUnreadCount } = useChatManager();
   const myAvatarUrl = profiles.find((p) => p.id === currentUserId)?.avatar_url ?? null;
 
   return (
@@ -74,7 +76,15 @@ export function Sidebar({
               }}
             >
               <span aria-hidden>{item.icon}</span>
-              {item.label}
+              <span className="flex-1 truncate">{item.label}</span>
+              {item.href === "/workspace/hop" && totalUnreadCount > 0 && (
+                <span
+                  className="flex items-center justify-center rounded-full font-bold flex-none"
+                  style={{ minWidth: 17, height: 17, padding: "0 4px", fontSize: 10, background: "var(--status-red)", color: "#fff" }}
+                >
+                  {totalUnreadCount > 9 ? "9+" : totalUnreadCount}
+                </span>
+              )}
               {!item.enabled && (
                 <span className="ml-auto text-[9px] tag tag-neutral">SẮP RA MẮT</span>
               )}

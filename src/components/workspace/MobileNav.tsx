@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { signOut } from "@/lib/actions/auth";
+import { useChatManager } from "@/components/workspace/ChatManager";
 import { useTheme } from "@/lib/useTheme";
 
 // The 4 most-used sections get a permanent thumb-reachable tab; everything
@@ -28,6 +29,7 @@ export function MobileNav({ isDirector }: { isDirector: boolean }) {
   const pathname = usePathname();
   const [showMore, setShowMore] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const { totalUnreadCount } = useChatManager();
 
   return (
     <>
@@ -44,8 +46,14 @@ export function MobileNav({ isDirector }: { isDirector: boolean }) {
               className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
               style={{ color: active ? "var(--color-accent-700)" : "var(--color-neutral-500)" }}
             >
-              <span style={{ fontSize: 20 }} aria-hidden>
+              <span className="relative" style={{ fontSize: 20 }} aria-hidden>
                 {item.icon}
+                {item.href === "/workspace/hop" && totalUnreadCount > 0 && (
+                  <span
+                    className="absolute rounded-full"
+                    style={{ width: 8, height: 8, top: -1, right: -3, background: "var(--status-red)", border: "1.5px solid var(--color-panel)" }}
+                  />
+                )}
               </span>
               <span className="text-[10px] font-bold">{item.label}</span>
             </Link>
