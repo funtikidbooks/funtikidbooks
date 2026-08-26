@@ -11,6 +11,10 @@ export const WORK_START_HOUR = 9;
 export const WORK_START_MINUTE = 0;
 export const WORK_HOURS_LABEL = "09:00 – 18:30 (Thứ 2 – Thứ 6)";
 
+// A check-in up to this many minutes after WORK_START still counts as
+// on-time — only later than that gets flagged "Trễ".
+export const LATE_GRACE_MINUTES = 15;
+
 // "Ngày làm việc" always follows Vietnam local time, not the server's UTC
 // clock — a login at 00:30 VN time should count for that VN calendar day.
 export function vnToday(): string {
@@ -60,7 +64,9 @@ export function isLateCheckIn(iso: string): boolean {
     timeZone: "Asia/Ho_Chi_Minh",
   }).format(new Date(iso));
   const [h, m] = hm.split(":").map(Number);
-  return h > WORK_START_HOUR || (h === WORK_START_HOUR && m > WORK_START_MINUTE);
+  const minutesSinceMidnight = h * 60 + m;
+  const thresholdMinutes = WORK_START_HOUR * 60 + WORK_START_MINUTE + LATE_GRACE_MINUTES;
+  return minutesSinceMidnight > thresholdMinutes;
 }
 
 export function formatDayLabel(dateStr: string): string {
