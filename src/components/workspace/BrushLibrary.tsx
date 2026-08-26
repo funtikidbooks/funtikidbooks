@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { deleteBrush, uploadBrush } from "@/lib/actions/brushes";
+import { createClient } from "@/lib/supabase/client";
+import { deleteBrush, recordBrush } from "@/lib/actions/brushes";
 import { BRUSH_CATEGORIES, BRUSH_CATEGORY_EXT, BRUSH_CATEGORY_LABELS } from "@/lib/brushCategory";
 import type { BrushAsset, BrushCategory } from "@/lib/types";
 
@@ -11,6 +12,8 @@ function formatSize(bytes: number | null) {
   if (kb < 1024) return `${Math.round(kb)} KB`;
   return `${(kb / 1024).toFixed(1)} MB`;
 }
+
+const MAX_SIZE = 500 * 1024 * 1024;
 
 export function BrushLibrary({
   initialBrushes,
@@ -33,15 +36,40 @@ export function BrushLibrary({
     [brushes, filter],
   );
 
+  // Uploads straight from the browser to Supabase Storage instead of
+  // through a server action — brush packs run up to 500MB, way past
+  // Vercel's request body limit for server actions, so routing the bytes
+  // through our own server would get rejected before ever reaching
+  // Supabase. Only the small metadata insert (recordBrush) hits our server.
   async function handleFile(file: File | undefined) {
     if (!file) return;
     setUploading(true);
     setError(null);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("category", uploadCategory);
-      const created = await uploadBrush(formData);
+      const allowedExt = BRUSH_CATEGORY_EXT[uploadCategory];
+      const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "";
+      if (!allowedExt.includes(ext)) {
+        throw new Error(`Brush ${BRUSH_CATEGORY_LABELS[uploadCategory]} chỉ hỗ trợ đuôi .${allowedExt.join(", .")}`);
+      }
+      if (file.size > MAX_SIZE) throw new Error("Tệp vượt quá 500MB");
+
+      const supabase = createClient();
+      const name = file.name.replace(/\.[^.]+$/, "");
+      const storagePath = `${crypto.randomUUID()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage.from("brushes").upload(storagePath, file);
+      if (uploadError) throw new Error("Không thể tải brush lên");
+
+      const { data: publicUrlData } = supabase.storage.from("brushes").getPublicUrl(storagePath);
+
+      const created = await recordBrush({
+        name,
+        category: uploadCategory,
+        storagePath,
+        fileUrl: publicUrlData.publicUrl,
+        fileExt: ext,
+        sizeBytes: file.size,
+      });
       setBrushes((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể tải brush lên");
