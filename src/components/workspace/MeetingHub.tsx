@@ -326,6 +326,11 @@ export function MeetingHub({
   const longPressFiredRef = useRef(false);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
+  const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    notificationAudioRef.current = new Audio("/sounds/dm-message.mp3");
+  }, []);
 
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
@@ -430,6 +435,13 @@ export function MeetingHub({
         { event: "INSERT", schema: "public", table: "meeting_messages", filter: `channel_id=eq.${activeId}` },
         (payload) => {
           const row = payload.new as MeetingMessage;
+          if (row.sender_id !== currentUser.id) {
+            const audio = notificationAudioRef.current;
+            if (audio) {
+              audio.currentTime = 0;
+              audio.play().catch(() => {});
+            }
+          }
           setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
         },
       )
@@ -488,7 +500,7 @@ export function MeetingHub({
       channelRef.current = null;
       supabase.removeChannel(channel);
     };
-  }, [activeId]);
+  }, [activeId, currentUser.id]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
