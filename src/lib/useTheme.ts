@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "funti-theme";
-const THEME_EVENT = "funti-theme-change";
+export const THEME_EVENT = "funti-theme-change";
 
 function subscribe(callback: () => void) {
   window.addEventListener(THEME_EVENT, callback);
