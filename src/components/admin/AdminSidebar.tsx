@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
+import { resetThemeOnSignOut } from "@/lib/useTheme";
 import type { AccessRole } from "@/lib/types";
 
 const NAV = [
@@ -120,7 +121,7 @@ export function AdminSidebar({
             </span>
           </div>
         </div>
-        <form action={signOut}>
+        <form action={signOut} onSubmit={resetThemeOnSignOut}>
           <button
             type="submit"
             className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold w-full text-left"

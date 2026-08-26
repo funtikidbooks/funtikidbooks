@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { thumbnailUrl } from "@/lib/imageTransform";
+import { resetThemeOnSignOut } from "@/lib/useTheme";
 import type { Profile } from "@/lib/types";
 
 const NAV = [
@@ -114,7 +115,7 @@ export function Sidebar({
             </span>
           </div>
         </div>
-        <form action={signOut}>
+        <form action={signOut} onSubmit={resetThemeOnSignOut}>
           <button
             type="submit"
             className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold w-full text-left"

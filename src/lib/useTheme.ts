@@ -39,3 +39,18 @@ export function useTheme() {
 
   return { theme, setTheme, toggleTheme };
 }
+
+// Dark mode is an internal workspace/admin preference, not something the
+// public marketing site or the next person on a shared computer should
+// inherit — called right as the sign-out form submits so the browser goes
+// back to the default light look the moment the session ends. Leaves
+// profiles.theme in the database untouched, so ThemeSync still restores the
+// same person's dark choice the next time they log back in.
+export function resetThemeOnSignOut() {
+  document.documentElement.setAttribute("data-theme", "light");
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // localStorage unavailable — nothing to clear
+  }
+}

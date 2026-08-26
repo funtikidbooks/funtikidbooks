@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { signOut } from "@/lib/actions/auth";
 import { useChatManager } from "@/components/workspace/ChatManager";
-import { useTheme } from "@/lib/useTheme";
+import { resetThemeOnSignOut, useTheme } from "@/lib/useTheme";
 
 // The 4 most-used sections get a permanent thumb-reachable tab; everything
 // else (plus theme + sign out, previously only reachable from the
@@ -115,7 +115,7 @@ export function MobileNav({ isDirector }: { isDirector: boolean }) {
             >
               <span aria-hidden>{theme === "dark" ? "☀️" : "🌙"}</span> {theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
             </button>
-            <form action={signOut}>
+            <form action={signOut} onSubmit={resetThemeOnSignOut}>
               <button
                 type="submit"
                 className="ws-nav-link flex items-center gap-2.5 px-2 py-2.5 rounded-[8px] text-[14px] font-semibold w-full text-left"
