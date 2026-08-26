@@ -55,9 +55,8 @@ function escapeRegExp(s: string) {
 // matches a real teammate highlighted — good enough without a rich-text
 // editor or a real mention-notification pipeline.
 function renderContent(text: string, namesPattern: string | null, mine: boolean) {
-  const pattern = namesPattern
-    ? new RegExp(`(https?://[^\\s]+|@(?:${namesPattern}))`, "g")
-    : /(https?:\/\/[^\s]+)/g;
+  const namesAlt = namesPattern ? `${namesPattern}|` : "";
+  const pattern = new RegExp(`(https?://[^\\s]+|@(?:${namesAlt}all\\b))`, "g");
   return text.split(pattern).map((part, i) => {
     if (!part) return null;
     if (/^https?:\/\//.test(part)) {
@@ -74,8 +73,16 @@ function renderContent(text: string, namesPattern: string | null, mine: boolean)
       );
     }
     if (part.startsWith("@")) {
+      const isAll = part === "@all";
       return (
-        <strong key={i} style={{ color: mine ? "#ffe9d6" : "var(--color-accent-700)" }}>
+        <strong
+          key={i}
+          className={isAll ? "px-1 rounded-[4px]" : undefined}
+          style={{
+            color: isAll ? "#fff" : mine ? "#ffe9d6" : "var(--color-accent-700)",
+            background: isAll ? "var(--status-red)" : undefined,
+          }}
+        >
           {part}
         </strong>
       );
@@ -400,6 +407,10 @@ export function MeetingHub({
 
   const mentionMatch = /(^|\s)@([\p{L}0-9]*)$/u.exec(text);
   const mentionQuery = mentionMatch ? mentionMatch[2] : null;
+  // "@all" pings everyone in the room the same way @-ing a real teammate
+  // does — offered in the same dropdown whenever what's typed so far could
+  // still lead to it.
+  const showAllMentionOption = mentionQuery !== null && "all".startsWith(mentionQuery.toLowerCase());
   const mentionCandidates = useMemo(() => {
     if (mentionQuery === null) return [];
     const q = mentionQuery.toLowerCase();
@@ -691,6 +702,11 @@ export function MeetingHub({
 
   function pickMention(p: Profile) {
     setText((prev) => prev.replace(/(^|\s)@([\p{L}0-9]*)$/u, (_m, pre: string) => `${pre}@${p.display_name} `));
+    textInputRef.current?.focus();
+  }
+
+  function pickAllMention() {
+    setText((prev) => prev.replace(/(^|\s)@([\p{L}0-9]*)$/u, (_m, pre: string) => `${pre}@all `));
     textInputRef.current?.focus();
   }
 
@@ -1092,11 +1108,26 @@ export function MeetingHub({
             </div>
 
             <div className="flex-none" style={{ borderTop: "1px solid var(--color-neutral-200)", position: "relative" }}>
-              {mentionCandidates.length > 0 && (
+              {(mentionCandidates.length > 0 || showAllMentionOption) && (
                 <div
                   className="card elev-lg flex flex-col p-1.5 overflow-y-auto"
                   style={{ position: "absolute", bottom: "100%", left: 12, marginBottom: 6, width: 220, maxHeight: 260, zIndex: 10 }}
                 >
+                  {showAllMentionOption && (
+                    <button
+                      type="button"
+                      onClick={pickAllMention}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-[8px] text-left text-[13px] font-semibold ws-nav-link"
+                    >
+                      <span
+                        className="flex items-center justify-center rounded-full font-bold flex-none"
+                        style={{ width: 22, height: 22, fontSize: 11, background: "var(--status-red)", color: "#fff" }}
+                      >
+                        📢
+                      </span>
+                      Tất cả mọi người
+                    </button>
+                  )}
                   {mentionCandidates.map((p) => (
                     <button
                       key={p.id}

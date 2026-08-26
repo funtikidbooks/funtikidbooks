@@ -234,12 +234,19 @@ async function notifyChannelMembers(
   }
 
   const body = content || (hasAttachment ? "📎 Đã gửi một tệp đính kèm" : "");
+  // "@all" makes the push impossible to miss — everyone in the room already
+  // gets notified for every message, this just makes clear the message was
+  // specifically meant for all of them.
+  const taggedAll = /(^|\s)@all\b/.test(content);
+  const title = taggedAll
+    ? `📢 #${channel.name} · ${sender?.display_name ?? "Ai đó"} đã nhắc tất cả mọi người`
+    : `#${channel.name} · ${sender?.display_name ?? "Tin nhắn mới"}`;
   await Promise.all(
     recipientIds
       .filter((id) => id !== senderId)
       .map((id) =>
         sendPushToUser(id, {
-          title: `#${channel.name} · ${sender?.display_name ?? "Tin nhắn mới"}`,
+          title,
           body,
           senderId,
           url: "/workspace/hop",
