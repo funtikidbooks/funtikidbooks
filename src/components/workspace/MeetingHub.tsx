@@ -324,7 +324,8 @@ export function MeetingHub({
   const popoverRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
-  const textInputRef = useRef<HTMLInputElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
+  const composerFormRef = useRef<HTMLFormElement>(null);
 
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
@@ -598,7 +599,17 @@ export function MeetingHub({
   // walking clipboardData.items — which some screenshot tools use instead,
   // and which isn't reliably array-iterable across browsers, hence
   // Array.from() rather than for...of — if that comes up empty.
-  function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
+  // Grows the composer with the message instead of scrolling the text
+  // sideways in a single line, so a long message stays readable before
+  // sending — capped so it doesn't take over the whole screen.
+  useEffect(() => {
+    const el = textInputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [text]);
+
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const clipboardData = e.clipboardData;
     if (!clipboardData) return;
 
@@ -1064,7 +1075,7 @@ export function MeetingHub({
                   </button>
                 </div>
               )}
-              <form onSubmit={handleSend} className="flex items-center gap-2 p-3">
+              <form ref={composerFormRef} onSubmit={handleSend} className="flex items-end gap-2 p-3">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -1102,13 +1113,21 @@ export function MeetingHub({
                     setPendingFile(f);
                   }}
                 />
-                <input
+                <textarea
                   ref={textInputRef}
-                  className="input flex-1"
-                  placeholder={`Nhắn vào #${activeChannel.name}… (gõ @ để nhắc ai đó, dán ảnh bằng Ctrl+V)`}
+                  className="input flex-1 resize-none"
+                  style={{ maxHeight: 160, overflowY: "auto" }}
+                  rows={1}
+                  placeholder={`Nhắn vào #${activeChannel.name}… (gõ @ để nhắc ai đó, dán ảnh bằng Ctrl+V, Shift+Enter để xuống dòng)`}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onPaste={handlePaste}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      composerFormRef.current?.requestSubmit();
+                    }
+                  }}
                 />
                 <button type="submit" disabled={sending} className="btn btn-primary flex-none">
                   Gửi
