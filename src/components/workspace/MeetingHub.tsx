@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
+import { useChatManager } from "@/components/workspace/ChatManager";
 import {
   addReaction,
   createChannel,
@@ -300,6 +301,7 @@ export function MeetingHub({
   profiles: Profile[];
   initialChannels: MeetingChannelPublic[];
 }) {
+  const { setActiveMeetingChannel } = useChatManager();
   const [channels, setChannels] = useState(initialChannels);
   const [activeId, setActiveId] = useState<string | null>(
     initialChannels.find((c) => c.is_general)?.id ?? initialChannels[0]?.id ?? null,
@@ -331,6 +333,15 @@ export function MeetingHub({
   useEffect(() => {
     notificationAudioRef.current = new Audio("/sounds/dm-message.mp3");
   }, []);
+
+  // Tells the global tab-badge tracker which room is open right now, so it
+  // doesn't count messages here as "unread" while the user is looking at
+  // them — and clears on unmount so leaving /workspace/hop entirely doesn't
+  // leave a room stuck marked "active" forever.
+  useEffect(() => {
+    setActiveMeetingChannel(activeId);
+    return () => setActiveMeetingChannel(null);
+  }, [activeId, setActiveMeetingChannel]);
 
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);

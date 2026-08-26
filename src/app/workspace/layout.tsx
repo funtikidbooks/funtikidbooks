@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/workspace/Sidebar";
 import { ChatManagerProvider } from "@/components/workspace/ChatManager";
 import { ChatDock } from "@/components/workspace/ChatDock";
+import { TabNotificationBadge } from "@/components/workspace/TabNotificationBadge";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
 import { ThemeToggle } from "@/components/workspace/ThemeToggle";
 import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
@@ -62,6 +63,7 @@ export default async function WorkspaceLayout({
 
   return (
     <ChatManagerProvider currentUserId={user.id} initialUnreadCounts={unreadCounts}>
+      <TabNotificationBadge />
       <PushSetup />
       <div className="flex flex-col min-h-screen" style={{ background: "var(--color-bg)" }}>
         <IosInstallHint />
