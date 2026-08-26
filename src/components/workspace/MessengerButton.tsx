@@ -105,7 +105,7 @@ export function MessengerButton({ currentUserId, profiles }: { currentUserId: st
 
       {open && (
         <div
-          className="card elev-lg flex flex-col"
+          className="fk-messenger-dropdown card elev-lg flex flex-col"
           style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 300, maxHeight: 420, zIndex: 50 }}
         >
           <div className="px-3.5 py-3 font-bold text-sm" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>

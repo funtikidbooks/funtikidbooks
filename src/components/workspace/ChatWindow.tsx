@@ -19,7 +19,7 @@ export function ChatWindow({
 
   return (
     <div
-      className="card elev-lg fixed flex flex-col z-40"
+      className="fk-chat-window-float card elev-lg fixed flex flex-col z-40"
       style={{ right: offsetRight, bottom: 0, width: 280, height: minimized ? "auto" : 380 }}
     >
       <div

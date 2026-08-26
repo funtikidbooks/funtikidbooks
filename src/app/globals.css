@@ -505,6 +505,36 @@ h4 {
   }
 }
 
+/* ---------- Floating DM chat window on phones ---------- */
+/* ChatWindow.tsx sets right/width inline (offsetRight staggers multiple
+   open windows sideways on desktop) — !important is the only way to widen
+   it to a comfortable full-bleed-ish bottom sheet on a phone instead of a
+   cramped 280px box, since inline styles otherwise always win. */
+@media (max-width: 639px) {
+  .fk-chat-window-float {
+    left: 12px !important;
+    right: 12px !important;
+    width: auto !important;
+  }
+}
+
+/* ---------- Messenger dropdown on phones ---------- */
+/* Anchored `right: 0` off the topbar icon (MessengerButton.tsx), it's fine
+   on desktop but on a narrow phone that icon isn't flush with the screen
+   edge (ProfileMenu sits further right of it), so a 300px-wide dropdown
+   expanding left from there can run past the left edge of the viewport.
+   Pin it to the viewport instead of the button on small screens. */
+@media (max-width: 639px) {
+  .fk-messenger-dropdown {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: 56px !important;
+    width: auto !important;
+    max-height: calc(100vh - 96px) !important;
+  }
+}
+
 /* ---------- Print (invoice view etc.) ---------- */
 @media print {
   aside,

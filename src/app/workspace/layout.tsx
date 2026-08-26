@@ -9,6 +9,7 @@ import { ThemeSync } from "@/components/workspace/ThemeSync";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
 import { ThemeToggle } from "@/components/workspace/ThemeToggle";
 import { MessengerButton } from "@/components/workspace/MessengerButton";
+import { MobileNav } from "@/components/workspace/MobileNav";
 import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
 import { IosInstallHint, PushSetup } from "@/components/workspace/PushSetup";
 import { getUnreadCounts } from "@/lib/actions/messages";
@@ -88,7 +89,7 @@ export default async function WorkspaceLayout({
                 {myProfile.access_role === "director" && (
                   <Link
                     href="/quan-tri"
-                    className="ws-quan-tri-link btn-icon flex-none"
+                    className="ws-quan-tri-link btn-icon flex-none hidden md:inline-flex"
                     style={{ width: 30, height: 30, padding: 0, color: "var(--color-accent-2-700)", background: "var(--color-accent-2-100)" }}
                     title="Quản trị nội dung"
                     aria-label="Quản trị nội dung"
@@ -96,7 +97,9 @@ export default async function WorkspaceLayout({
                     🛠
                   </Link>
                 )}
-                <ThemeToggle compact />
+                <span className="hidden md:inline-flex">
+                  <ThemeToggle compact />
+                </span>
                 <MessengerButton currentUserId={user.id} profiles={(allProfiles ?? []) as Profile[]} />
                 <ProfileMenu profile={myProfile} />
               </div>
@@ -104,6 +107,7 @@ export default async function WorkspaceLayout({
             <div className="flex-1 flex flex-col min-h-0">{children}</div>
           </div>
         </div>
+        <MobileNav isDirector={myProfile.access_role === "director"} />
       </div>
       <ChatDock currentUser={{ id: myProfile.id, display_name: myProfile.display_name }} />
     </ChatManagerProvider>

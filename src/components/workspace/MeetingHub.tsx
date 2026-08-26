@@ -321,6 +321,10 @@ export function MeetingHub({
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
+  // The room list is a persistent column at sm+, but a full-screen overlay
+  // on phones (no room for it beside the chat panel) — toggled from a
+  // hamburger button in the chat panel's own header.
+  const [showRoomListMobile, setShowRoomListMobile] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<MeetingMessage | null>(null);
@@ -532,6 +536,7 @@ export function MeetingHub({
   function selectChannel(id: string | null) {
     setReplyingTo(null);
     setActiveId(id);
+    setShowRoomListMobile(false);
   }
 
   async function handleCreated(id: string) {
@@ -707,18 +712,29 @@ export function MeetingHub({
 
   return (
     <div className="flex flex-1 min-h-0">
-      {/* Room list */}
+      {/* Room list — a persistent column at sm+, a full-screen overlay on phones */}
       <div
-        className="w-[240px] flex-none hidden sm:flex flex-col gap-3 px-3 py-4"
-        style={{ borderRight: "1px solid var(--color-neutral-200)" }}
+        className={`${showRoomListMobile ? "flex fixed inset-0 z-40" : "hidden"} sm:flex sm:static sm:z-auto flex-col gap-3 px-3 py-4 sm:w-[240px] sm:flex-none`}
+        style={{ borderRight: "1px solid var(--color-neutral-200)", background: "var(--color-bg)" }}
       >
         <div className="flex items-center justify-between px-1">
           <span className="text-[11px] font-bold tracking-[0.08em]" style={{ color: "var(--color-neutral-500)" }}>
             PHÒNG HỌP
           </span>
-          <button type="button" onClick={() => setShowCreate(true)} className="btn-icon" style={{ width: 24, height: 24, padding: 0 }} aria-label="Tạo phòng">
-            ＋
-          </button>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => setShowCreate(true)} className="btn-icon" style={{ width: 24, height: 24, padding: 0 }} aria-label="Tạo phòng">
+              ＋
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowRoomListMobile(false)}
+              className="btn-icon sm:hidden"
+              style={{ width: 24, height: 24, padding: 0 }}
+              aria-label="Đóng"
+            >
+              ✕
+            </button>
+          </div>
         </div>
         <div className="flex flex-col gap-1 overflow-y-auto flex-1">
           {joinedRooms.map((r) => (
@@ -772,10 +788,25 @@ export function MeetingHub({
       {/* Chat panel */}
       <div className="flex-1 flex flex-col min-w-0">
         {activeId === DM_TAB_ID ? (
-          <DirectMessagesPanel currentUser={currentUser} profiles={profiles} />
+          <DirectMessagesPanel
+            currentUser={currentUser}
+            profiles={profiles}
+            onOpenRoomList={() => setShowRoomListMobile(true)}
+          />
         ) : !activeChannel ? (
-          <div className="flex-1 flex items-center justify-center text-sm" style={{ color: "var(--color-neutral-500)" }}>
-            Chọn hoặc tạo một phòng để bắt đầu trò chuyện.
+          <div className="flex-1 flex flex-col">
+            <button
+              type="button"
+              onClick={() => setShowRoomListMobile(true)}
+              className="btn-icon sm:hidden m-3"
+              style={{ width: 28, height: 28, padding: 0 }}
+              aria-label="Danh sách phòng"
+            >
+              ☰
+            </button>
+            <div className="flex-1 flex items-center justify-center text-sm" style={{ color: "var(--color-neutral-500)" }}>
+              Chọn hoặc tạo một phòng để bắt đầu trò chuyện.
+            </div>
           </div>
         ) : (
           <>
@@ -783,6 +814,15 @@ export function MeetingHub({
               className="flex-none flex items-center gap-2 px-4 py-3"
               style={{ borderBottom: "1px solid var(--color-neutral-200)" }}
             >
+              <button
+                type="button"
+                onClick={() => setShowRoomListMobile(true)}
+                className="btn-icon sm:hidden flex-none"
+                style={{ width: 28, height: 28, padding: 0 }}
+                aria-label="Danh sách phòng"
+              >
+                ☰
+              </button>
               <span aria-hidden style={{ fontSize: 18 }}>{activeChannel.icon}</span>
               <span className="font-bold flex-1 truncate">{activeChannel.name}</span>
               {!activeChannel.is_general && (

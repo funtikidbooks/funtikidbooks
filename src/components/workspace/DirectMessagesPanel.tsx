@@ -8,15 +8,21 @@ import type { Profile } from "@/lib/types";
 
 // The "Riêng" tab inside Trò chuyện & họp — 1:1 chat rendered inline (full
 // panel) instead of the small floating ChatWindow, with a rail of teammate
-// avatars on the left to pick who to talk to. Reuses the same
-// DirectConversation body as the floating chat, so they stay in sync
-// feature-for-feature.
+// avatars to pick who to talk to. Reuses the same DirectConversation body as
+// the floating chat, so they stay in sync feature-for-feature.
+//
+// Below sm, there isn't room for both the rail and the conversation side by
+// side, so it becomes a two-screen master-detail flow instead: the rail
+// full-width until someone's picked, then the conversation full-width with
+// a back arrow — same pattern as Messenger/Telegram's own mobile apps.
 export function DirectMessagesPanel({
   currentUser,
   profiles,
+  onOpenRoomList,
 }: {
   currentUser: Pick<Profile, "id" | "display_name">;
   profiles: Profile[];
+  onOpenRoomList: () => void;
 }) {
   const { unreadCounts, recentSenderOrder, clearDmUnread } = useChatManager();
   const onlineIds = usePresence(currentUser.id);
@@ -46,7 +52,7 @@ export function DirectMessagesPanel({
 
   return (
     <div className="flex flex-1 min-h-0">
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className={`${selectedPeer ? "flex" : "hidden"} sm:flex flex-1 flex-col min-w-0`}>
         {!selectedPeer ? (
           <div className="flex-1 flex items-center justify-center text-sm text-center px-4" style={{ color: "var(--color-neutral-500)" }}>
             Chọn một thành viên bên phải để bắt đầu trò chuyện riêng.
@@ -54,6 +60,15 @@ export function DirectMessagesPanel({
         ) : (
           <>
             <div className="flex-none flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+              <button
+                type="button"
+                onClick={() => setSelectedPeer(null)}
+                className="btn-icon sm:hidden flex-none"
+                style={{ width: 28, height: 28, padding: 0 }}
+                aria-label="Quay lại danh sách"
+              >
+                ←
+              </button>
               <span
                 className="flex items-center justify-center rounded-full text-[11px] font-bold overflow-hidden flex-none"
                 style={{ width: 28, height: 28, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
@@ -73,9 +88,21 @@ export function DirectMessagesPanel({
       </div>
 
       <div
-        className="w-[220px] flex-none flex flex-col gap-0.5 overflow-y-auto py-2 px-1.5"
+        className={`${selectedPeer ? "hidden" : "flex"} sm:flex w-full sm:w-[220px] flex-none flex-col gap-0.5 overflow-y-auto py-2 px-1.5`}
         style={{ borderLeft: "1px solid var(--color-neutral-200)" }}
       >
+        <div className="sm:hidden flex items-center gap-2 px-1.5 pb-2">
+          <button
+            type="button"
+            onClick={onOpenRoomList}
+            className="btn-icon flex-none"
+            style={{ width: 28, height: 28, padding: 0 }}
+            aria-label="Danh sách phòng"
+          >
+            ☰
+          </button>
+          <span className="text-[13px] font-bold">Riêng</span>
+        </div>
         {teammates.length === 0 ? (
           <p className="text-[12px] text-center py-4 px-2" style={{ color: "var(--color-neutral-500)" }}>
             Chưa có thành viên nào khác.

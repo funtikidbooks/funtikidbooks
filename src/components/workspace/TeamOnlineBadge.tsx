@@ -11,7 +11,8 @@ export function TeamOnlineBadge({ currentUserId, totalMembers }: { currentUserId
       style={{ background: "var(--color-neutral-100)", color: "var(--color-neutral-700)" }}
     >
       <span aria-hidden>👥</span>
-      {onlineIds.size}/{totalMembers} thành viên online
+      {onlineIds.size}/{totalMembers}
+      <span className="hidden sm:inline"> thành viên online</span>
     </span>
   );
 }
