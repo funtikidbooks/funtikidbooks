@@ -63,6 +63,22 @@ export async function listMyAttendance(weekStartInput?: string): Promise<Attenda
   return (data ?? []) as AttendanceEntry[];
 }
 
+export async function listMyMonthAttendance(monthStartInput?: string): Promise<AttendanceEntry[]> {
+  const { supabase, user } = await requireUser();
+  const monthStart = firstOfMonth(monthStartInput ?? vnToday());
+  const monthEnd = lastDayOfMonth(monthStart);
+
+  const { data } = await supabase
+    .from("attendance")
+    .select("*")
+    .eq("profile_id", user.id)
+    .gte("work_date", monthStart)
+    .lte("work_date", monthEnd)
+    .order("work_date", { ascending: true });
+
+  return (data ?? []) as AttendanceEntry[];
+}
+
 export async function listAllAttendance(weekStartInput?: string): Promise<AttendanceEntry[]> {
   const { supabase } = await requireHrManager();
   const weekStart = mondayOf(weekStartInput ?? vnToday());
