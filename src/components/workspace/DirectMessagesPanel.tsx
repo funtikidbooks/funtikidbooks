@@ -1,10 +1,33 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { DirectConversation } from "@/components/workspace/DirectConversation";
+import { searchDirectMessages } from "@/lib/actions/messages";
 import { usePresence } from "@/lib/usePresence";
-import type { Profile } from "@/lib/types";
+import type { DirectMessageSearchResult, Profile } from "@/lib/types";
+
+function formatTime(date: string) {
+  return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(date));
+}
+
+// Bolds the first occurrence of the search query in a result's snippet —
+// good enough for a one-line preview, no need to highlight every hit.
+function highlightMatch(content: string, query: string) {
+  const q = query.trim();
+  if (!q) return content;
+  const idx = content.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return content;
+  return (
+    <>
+      {content.slice(0, idx)}
+      <mark style={{ background: "var(--color-accent-100)", color: "var(--color-accent-700)", fontWeight: 700 }}>
+        {content.slice(idx, idx + q.length)}
+      </mark>
+      {content.slice(idx + q.length)}
+    </>
+  );
+}
 
 // The "Riêng" tab inside Trò chuyện & họp — 1:1 chat rendered inline (full
 // panel) instead of the small floating ChatWindow, with a rail of teammate
@@ -27,6 +50,38 @@ export function DirectMessagesPanel({
   const { unreadCounts, recentSenderOrder, clearDmUnread } = useChatManager();
   const onlineIds = usePresence(currentUser.id);
   const [selectedPeer, setSelectedPeer] = useState<Profile | null>(null);
+  const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<DirectMessageSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
+
+  // Debounced live search across every 1:1 conversation the user has. Doesn't
+  // bother resetting searchResults/searching when the query gets too short —
+  // the render below already hides stale results behind the same length check.
+  useEffect(() => {
+    if (!showSearch || searchQuery.trim().length < 2) return;
+    const handle = setTimeout(() => {
+      searchDirectMessages(searchQuery)
+        .then((results) => setSearchResults(results))
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [showSearch, searchQuery]);
+
+  function pickSearchResult(result: DirectMessageSearchResult) {
+    const peer = profileById.get(result.peer_id);
+    if (!peer) return;
+    setShowSearch(false);
+    setSearchQuery("");
+    setSearchResults([]);
+    setScrollToMessageId(result.id);
+    setSelectedPeer(peer);
+    clearDmUnread(peer.id);
+  }
 
   const teammates = useMemo(() => {
     return profiles
@@ -82,7 +137,12 @@ export function DirectMessagesPanel({
               </span>
               <span className="font-bold flex-1 truncate">{selectedPeer.display_name}</span>
             </div>
-            <DirectConversation peer={selectedPeer} currentUser={currentUser} />
+            <DirectConversation
+              peer={selectedPeer}
+              currentUser={currentUser}
+              scrollToMessageId={scrollToMessageId}
+              onScrolledTo={() => setScrollToMessageId(null)}
+            />
           </>
         )}
       </div>
@@ -91,19 +151,96 @@ export function DirectMessagesPanel({
         className={`${selectedPeer ? "hidden" : "flex"} sm:flex w-full sm:w-[220px] flex-none flex-col gap-0.5 overflow-y-auto py-2 px-1.5`}
         style={{ borderLeft: "1px solid var(--color-neutral-200)" }}
       >
-        <div className="sm:hidden flex items-center gap-2 px-1.5 pb-2">
+        <div className="flex items-center gap-2 px-1.5 pb-2">
           <button
             type="button"
             onClick={onOpenRoomList}
-            className="btn-icon flex-none"
+            className="btn-icon sm:hidden flex-none"
             style={{ width: 28, height: 28, padding: 0 }}
             aria-label="Danh sách phòng"
           >
             ☰
           </button>
-          <span className="text-[13px] font-bold">Riêng</span>
+          <span className="text-[13px] font-bold flex-1">Riêng</span>
+          <button
+            type="button"
+            onClick={() => setShowSearch((v) => !v)}
+            className="btn-icon flex-none"
+            style={{ width: 26, height: 26, padding: 0 }}
+            aria-label="Tìm kiếm tin nhắn"
+            title="Tìm kiếm tin nhắn"
+          >
+            🔍
+          </button>
         </div>
-        {teammates.length === 0 ? (
+
+        {showSearch && (
+          <div className="flex flex-col" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+            <div className="flex items-center gap-1.5 px-1.5 pb-2">
+              <input
+                autoFocus
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  if (e.target.value.trim().length >= 2) setSearching(true);
+                }}
+                placeholder="Tìm tin nhắn riêng…"
+                className="input flex-1"
+                style={{ padding: "6px 10px", fontSize: 13 }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSearch(false);
+                  setSearchQuery("");
+                }}
+                className="btn-icon flex-none"
+                style={{ width: 26, height: 26, padding: 0 }}
+                aria-label="Đóng tìm kiếm"
+              >
+                ✕
+              </button>
+            </div>
+            {searchQuery.trim().length >= 2 && (
+              <div className="overflow-y-auto pb-2" style={{ maxHeight: 320 }}>
+                {searching ? (
+                  <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
+                    Đang tìm…
+                  </p>
+                ) : searchResults.length === 0 ? (
+                  <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
+                    Không tìm thấy tin nhắn nào.
+                  </p>
+                ) : (
+                  searchResults.map((r) => {
+                    const peer = profileById.get(r.peer_id);
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => pickSearchResult(r)}
+                        className="ws-nav-link flex flex-col items-start gap-0.5 px-2 py-1.5 text-left w-full rounded-[8px]"
+                      >
+                        <span className="flex items-center gap-1.5 w-full">
+                          <span className="text-[12px] font-bold truncate flex-1">{peer?.display_name ?? "Ẩn danh"}</span>
+                          <span className="text-[10px] flex-none" style={{ color: "var(--color-neutral-500)" }}>
+                            {formatTime(r.created_at)}
+                          </span>
+                        </span>
+                        <span className="block text-[12px] truncate w-full" style={{ color: "var(--color-neutral-600)" }}>
+                          {highlightMatch(r.content, searchQuery)}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {showSearch ? null : teammates.length === 0 ? (
           <p className="text-[12px] text-center py-4 px-2" style={{ color: "var(--color-neutral-500)" }}>
             Chưa có thành viên nào khác.
           </p>

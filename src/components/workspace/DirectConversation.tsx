@@ -71,9 +71,13 @@ function linkify(text: string): (string | { url: string })[] {
 export function DirectConversation({
   peer,
   currentUser,
+  scrollToMessageId,
+  onScrolledTo,
 }: {
   peer: Profile;
   currentUser: Pick<Profile, "id" | "display_name">;
+  scrollToMessageId?: string | null;
+  onScrolledTo?: () => void;
 }) {
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [text, setText] = useState("");
@@ -171,6 +175,21 @@ export function DirectConversation({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages.length, peerTyping]);
 
+  // Scrolling to a search hit is a separate concern from the scroll-to-bottom
+  // effect above — declared after it so it wins when both would fire off the
+  // same `messages` update. The setState that clears the request lives in the
+  // parent (onScrolledTo), so this effect itself never calls setState.
+  useEffect(() => {
+    if (!scrollToMessageId) return;
+    const el = document.getElementById(`dm-msg-${scrollToMessageId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("fk-flash-highlight");
+    const flashTimer = setTimeout(() => el.classList.remove("fk-flash-highlight"), 1600);
+    onScrolledTo?.();
+    return () => clearTimeout(flashTimer);
+  }, [messages, scrollToMessageId, onScrolledTo]);
+
   // Grows the composer with the message instead of scrolling the text
   // sideways in a single line.
   useEffect(() => {
@@ -226,7 +245,7 @@ export function DirectConversation({
         {messages.map((m) => {
           const mine = m.sender_id === currentUser.id;
           return (
-            <div key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
+            <div id={`dm-msg-${m.id}`} key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
               {m.content && (
                 <div
                   className="rounded-[12px] px-3 py-1.5 text-[13px] max-w-[70%] whitespace-pre-wrap break-words"

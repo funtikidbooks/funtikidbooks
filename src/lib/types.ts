@@ -83,6 +83,14 @@ export type DirectMessage = {
   created_at: string;
 };
 
+// A direct_messages row plus who the OTHER person in that conversation is —
+// searchDirectMessages() spans every conversation the searcher has, and the
+// searcher could be either sender_id or recipient_id on any given row, so
+// results need this resolved rather than making the UI figure it out.
+export type DirectMessageSearchResult = DirectMessage & {
+  peer_id: string;
+};
+
 export type DmRead = {
   user_id: string;
   peer_id: string;

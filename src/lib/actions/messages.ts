@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
-import type { DirectMessage } from "@/lib/types";
+import type { DirectMessage, DirectMessageSearchResult } from "@/lib/types";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -27,6 +27,25 @@ export async function getConversation(otherUserId: string): Promise<DirectMessag
     .limit(200);
 
   return (data ?? []) as DirectMessage[];
+}
+
+export async function searchDirectMessages(query: string): Promise<DirectMessageSearchResult[]> {
+  const { supabase, user } = await requireUser();
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+
+  const { data } = await supabase
+    .from("direct_messages")
+    .select("*")
+    .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`)
+    .ilike("content", `%${trimmed}%`)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  return (data ?? []).map((m) => ({
+    ...(m as DirectMessage),
+    peer_id: (m.sender_id === user.id ? m.recipient_id : m.sender_id) as string,
+  }));
 }
 
 const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
