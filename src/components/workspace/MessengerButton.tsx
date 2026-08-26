@@ -5,6 +5,16 @@ import { useChatManager } from "@/components/workspace/ChatManager";
 import { usePresence } from "@/lib/usePresence";
 import type { Profile } from "@/lib/types";
 
+// Strips Vietnamese diacritics so searching "phong" still finds "Phong" —
+// plain toLowerCase().includes() would force staff to type accents exactly.
+function normalize(s: string) {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase();
+}
+
 // A Messenger-style icon + dropdown for 1:1 chat, split out of the sidebar's
 // old always-visible "Thành viên Funti" list so it doesn't eat vertical
 // space on every workspace page — now it's one click away from the topbar,
@@ -14,22 +24,35 @@ export function MessengerButton({ currentUserId, profiles }: { currentUserId: st
   const { openChat, unreadCounts, recentSenderOrder } = useChatManager();
   const onlineIds = usePresence(currentUserId);
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  function closeDropdown() {
+    setOpen(false);
+    setQuery("");
+  }
 
   useEffect(() => {
     if (!open) return;
     function handlePointerDown(e: PointerEvent) {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(e.target as Node)) closeDropdown();
     }
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [open]);
 
+  useEffect(() => {
+    if (open) searchInputRef.current?.focus();
+  }, [open]);
+
   const totalUnread = useMemo(() => Object.values(unreadCounts).reduce((sum, n) => sum + n, 0), [unreadCounts]);
 
   const teammates = useMemo(() => {
+    const q = normalize(query.trim());
     return profiles
       .filter((p) => p.id !== currentUserId)
+      .filter((p) => !q || normalize(p.display_name).includes(q))
       .sort((a, b) => {
         const aRecent = recentSenderOrder.indexOf(a.id);
         const bRecent = recentSenderOrder.indexOf(b.id);
@@ -47,13 +70,13 @@ export function MessengerButton({ currentUserId, profiles }: { currentUserId: st
         if (aOnline !== bOnline) return aOnline - bOnline;
         return a.display_name.localeCompare(b.display_name);
       });
-  }, [profiles, currentUserId, recentSenderOrder, unreadCounts, onlineIds]);
+  }, [profiles, currentUserId, query, recentSenderOrder, unreadCounts, onlineIds]);
 
   return (
     <div ref={rootRef} className="relative flex-none">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? closeDropdown() : setOpen(true))}
         className="btn-icon relative flex-none"
         style={{ width: 30, height: 30, padding: 0 }}
         aria-label="Tin nhắn"
@@ -88,10 +111,21 @@ export function MessengerButton({ currentUserId, profiles }: { currentUserId: st
           <div className="px-3.5 py-3 font-bold text-sm" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
             Tin nhắn
           </div>
+          <div className="px-3 pt-2.5 pb-1 flex-none">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Tìm tên..."
+              className="input"
+              style={{ padding: "6px 10px", fontSize: 13 }}
+            />
+          </div>
           <div className="flex-1 overflow-y-auto py-1">
             {teammates.length === 0 ? (
               <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
-                Chưa có thành viên nào khác.
+                {query.trim() ? "Không tìm thấy ai." : "Chưa có thành viên nào khác."}
               </p>
             ) : (
               teammates.map((p) => {
@@ -103,7 +137,7 @@ export function MessengerButton({ currentUserId, profiles }: { currentUserId: st
                     type="button"
                     onClick={() => {
                       openChat(p);
-                      setOpen(false);
+                      closeDropdown();
                     }}
                     className="ws-nav-link flex items-center gap-2.5 px-3.5 py-2 text-left w-full"
                   >
