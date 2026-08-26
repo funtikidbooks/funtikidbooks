@@ -1,7 +1,15 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { addDays, firstOfMonth, isBeforeCheckInWindow, lastDayOfMonth, mondayOf, vnToday } from "@/lib/constants/attendance";
+import {
+  addDays,
+  firstOfMonth,
+  isBeforeCheckInWindow,
+  lastDayOfMonth,
+  mondayOf,
+  vnToday,
+  weekdayIndex,
+} from "@/lib/constants/attendance";
 import type { AttendanceEntry } from "@/lib/types";
 
 async function requireUser() {
@@ -28,6 +36,10 @@ export async function checkInIfNeeded() {
   const { supabase, user } = await requireUser();
   const today = vnToday();
   const now = new Date();
+
+  // Sunday is always off — no auto check-in. Saturday varies (sometimes a
+  // work day) so it isn't excluded here.
+  if (weekdayIndex(today) === 6) return;
 
   // Too early to count as actually "at work" (e.g. someone browsing at 3am
   // or 8am) — don't record anything yet. This function re-runs on every
