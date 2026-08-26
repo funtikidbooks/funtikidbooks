@@ -554,24 +554,41 @@ export function MeetingHub({
   }
 
   // Lets a screenshot copied to the clipboard (or any image, really) go
-  // straight into the composer with Ctrl+V, same as Slack/Messenger —
-  // no need to save it to disk first and use the 📎 picker.
+  // straight into the composer with Ctrl+V, same as Slack/Messenger — no
+  // need to save it to disk first and use the 📎 picker. Checks
+  // clipboardData.files first (the simplest, most broadly-supported path
+  // for an actual image file on the clipboard) and only falls back to
+  // walking clipboardData.items — which some screenshot tools use instead,
+  // and which isn't reliably array-iterable across browsers, hence
+  // Array.from() rather than for...of — if that comes up empty.
   function handlePaste(e: React.ClipboardEvent<HTMLInputElement>) {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of items) {
-      if (!item.type.startsWith("image/")) continue;
-      const file = item.getAsFile();
-      if (!file) continue;
-      e.preventDefault();
-      if (file.size > 20 * 1024 * 1024) {
-        setError("Tệp vượt quá 20MB");
-        return;
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
+
+    let file: File | null = null;
+
+    if (clipboardData.files && clipboardData.files.length > 0) {
+      file = Array.from(clipboardData.files).find((f) => f.type.startsWith("image/")) ?? null;
+    }
+
+    if (!file && clipboardData.items) {
+      for (const item of Array.from(clipboardData.items)) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          file = item.getAsFile();
+          if (file) break;
+        }
       }
-      setError(null);
-      setPendingFile(file);
+    }
+
+    if (!file) return;
+
+    e.preventDefault();
+    if (file.size > 20 * 1024 * 1024) {
+      setError("Tệp vượt quá 20MB");
       return;
     }
+    setError(null);
+    setPendingFile(file);
   }
 
   function pickMention(p: Profile) {
