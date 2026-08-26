@@ -322,6 +322,8 @@ export function MeetingHub({
   const messageIdsRef = useRef<Set<string>>(new Set());
   const lastMarkedReadIdRef = useRef<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFiredRef = useRef(false);
   const textInputRef = useRef<HTMLInputElement>(null);
 
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
@@ -561,6 +563,29 @@ export function MeetingHub({
     }
   }
 
+  // iPad/tablet: there's no hover, so the small 😊/↩/✕ row never reveals
+  // itself, and tapping a bubble just triggers iOS's native text-selection
+  // callout. A finger-or-pen press-and-hold on the bubble opens the quick
+  // reaction picker instead — same gesture as iMessage/Messenger. Mouse
+  // users already have the hover row, so this only arms for touch/pen.
+  function handleBubblePressStart(e: React.PointerEvent, messageId: string) {
+    if (e.pointerType === "mouse") return;
+    longPressFiredRef.current = false;
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      longPressFiredRef.current = true;
+      setShowEmojiPicker(false);
+      setReactionPickerFor(messageId);
+    }, 450);
+  }
+
+  function cancelBubblePress() {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
   // Lets a screenshot copied to the clipboard (or any image, really) go
   // straight into the composer with Ctrl+V, same as Slack/Messenger — no
   // need to save it to disk first and use the 📎 picker. Checks
@@ -752,10 +777,17 @@ export function MeetingHub({
                       )}
                       {m.content && (
                         <div
-                          className="rounded-[12px] px-3 py-2 text-sm whitespace-pre-wrap break-words"
+                          className="fk-message-bubble rounded-[12px] px-3 py-2 text-sm whitespace-pre-wrap break-words"
                           style={{
                             background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
                             color: mine ? "#fff" : "var(--color-text)",
+                          }}
+                          onPointerDown={(e) => handleBubblePressStart(e, m.id)}
+                          onPointerUp={cancelBubblePress}
+                          onPointerLeave={cancelBubblePress}
+                          onPointerCancel={cancelBubblePress}
+                          onContextMenu={(e) => {
+                            if (longPressFiredRef.current) e.preventDefault();
                           }}
                         >
                           {renderContent(m.content, namesPattern, mine)}
@@ -812,7 +844,7 @@ export function MeetingHub({
                         <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
                           {formatTime(m.created_at)}
                         </span>
-                        <span className="relative inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="fk-msg-actions relative inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             type="button"
                             onClick={() => {

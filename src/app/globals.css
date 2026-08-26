@@ -493,6 +493,24 @@ h4 {
   color: var(--color-neutral-700);
 }
 
+/* ---------- Touch devices (iPad/tablet chat) ---------- */
+/* There's no real hover on touch, so the reply/react/delete row would
+   otherwise stay invisible forever; force it visible instead. Also turns
+   off iOS's native long-press text-selection callout on message bubbles,
+   since a long-press there is repurposed as the "open reaction picker"
+   gesture (see MeetingHub.tsx) — plain single-tap text selection still
+   works fine on mouse/trackpad devices, which this media query excludes. */
+@media (hover: none) {
+  .fk-msg-actions {
+    opacity: 1;
+  }
+  .fk-message-bubble {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
 /* ---------- Print (invoice view etc.) ---------- */
 @media print {
   aside,
