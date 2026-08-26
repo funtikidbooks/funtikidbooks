@@ -13,19 +13,41 @@ const NAV = [
   { href: "/quan-tri/chat", label: "Chat khách vãng lai", icon: "💬" },
 ];
 
-const DIRECTOR_NAV = [
-  { href: "/quan-tri/nhan-su", label: "Nhân sự & phân quyền", icon: "🧑‍🤝‍🧑", enabled: true },
-  { href: "/quan-tri/cham-cong", label: "Chấm công", icon: "🕐", enabled: true },
-  { href: "/quan-tri/bang-luong", label: "Bảng lương", icon: "💰", enabled: true },
-  { href: "/quan-tri/hoa-don", label: "Tạo hoá đơn điện tử", icon: "🧾", enabled: true },
+const DIRECTOR_ONLY_NAV = [{ href: "/quan-tri/nhan-su", label: "Nhân sự & phân quyền", icon: "🧑‍🤝‍🧑" }];
+
+// Also open to staff whose chức danh is exactly "Project Manager" — see
+// can_manage_hr() in supabase/schema.sql.
+const HR_NAV = [
+  { href: "/quan-tri/cham-cong", label: "Chấm công", icon: "🕐" },
+  { href: "/quan-tri/bang-luong", label: "Bảng lương", icon: "💰" },
+  { href: "/quan-tri/hoa-don", label: "Tạo hoá đơn điện tử", icon: "🧾" },
 ];
 
 export function AdminSidebar({
   user,
 }: {
-  user: { displayName: string; email: string; accessRole: AccessRole };
+  user: { displayName: string; email: string; accessRole: AccessRole; jobTitle: string | null };
 }) {
   const pathname = usePathname();
+  const isDirector = user.accessRole === "director";
+  const isProjectManager = user.jobTitle === "Project Manager";
+
+  function NavLink({ item }: { item: { href: string; label: string; icon: string } }) {
+    const active = pathname.startsWith(item.href);
+    return (
+      <Link
+        href={item.href}
+        className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold transition-colors"
+        style={{
+          background: active ? "var(--color-accent-100)" : "transparent",
+          color: active ? "var(--color-accent-700)" : "var(--color-text)",
+        }}
+      >
+        <span aria-hidden>{item.icon}</span>
+        {item.label}
+      </Link>
+    );
+  }
 
   return (
     <aside
@@ -44,39 +66,29 @@ export function AdminSidebar({
       </Link>
 
       <div className="flex flex-col gap-1">
-        <div className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1" style={{ color: "var(--color-neutral-500)" }}>
-          QUẢN TRỊ NỘI DUNG
-        </div>
-        {NAV.map((item) => {
-          const active = pathname.startsWith(item.href);
-          return (
+        {(isDirector || user.accessRole === "admin") && (
+          <>
+            <div className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1" style={{ color: "var(--color-neutral-500)" }}>
+              QUẢN TRỊ NỘI DUNG
+            </div>
+            {NAV.map((item) => (
+              <NavLink key={item.href} item={item} />
+            ))}
             <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold transition-colors"
-              style={{
-                background: active ? "var(--color-accent-100)" : "transparent",
-                color: active ? "var(--color-accent-700)" : "var(--color-text)",
-              }}
+              href="/tin-tuc"
+              className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
+              style={{ color: "var(--color-text)" }}
             >
-              <span aria-hidden>{item.icon}</span>
-              {item.label}
+              <span aria-hidden>📰</span>
+              Tin tức (đăng bài trực tiếp trên trang)
             </Link>
-          );
-        })}
-        <Link
-          href="/tin-tuc"
-          className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
-          style={{ color: "var(--color-text)" }}
-        >
-          <span aria-hidden>📰</span>
-          Tin tức (đăng bài trực tiếp trên trang)
-        </Link>
+          </>
+        )}
 
-        {user.accessRole === "director" && (
+        {(isDirector || isProjectManager) && (
           <>
             <div className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1 mt-3" style={{ color: "var(--color-neutral-500)" }}>
-              GIÁM ĐỐC
+              {isDirector ? "GIÁM ĐỐC" : "QUẢN LÝ"}
             </div>
             <Link
               href="/workspace"
@@ -85,33 +97,10 @@ export function AdminSidebar({
             >
               📊 Bảng công việc
             </Link>
-            {DIRECTOR_NAV.map((item) =>
-              item.enabled ? (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
-                  style={{
-                    background: pathname.startsWith(item.href) ? "var(--color-accent-100)" : "transparent",
-                    color: pathname.startsWith(item.href) ? "var(--color-accent-700)" : "var(--color-text)",
-                  }}
-                >
-                  <span aria-hidden>{item.icon}</span>
-                  {item.label}
-                </Link>
-              ) : (
-                <span
-                  key={item.href}
-                  title="Sắp ra mắt"
-                  className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
-                  style={{ color: "var(--color-neutral-400)" }}
-                >
-                  <span aria-hidden>{item.icon}</span>
-                  {item.label}
-                  <span className="ml-auto text-[9px] tag tag-neutral">SẮP RA MẮT</span>
-                </span>
-              ),
-            )}
+            {isDirector && DIRECTOR_ONLY_NAV.map((item) => <NavLink key={item.href} item={item} />)}
+            {HR_NAV.map((item) => (
+              <NavLink key={item.href} item={item} />
+            ))}
           </>
         )}
       </div>
@@ -127,7 +116,7 @@ export function AdminSidebar({
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-bold truncate">{user.displayName}</span>
             <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
-              {user.accessRole === "director" ? "Giám đốc" : "Admin"}
+              {isDirector ? "Giám đốc" : user.accessRole === "admin" ? "Admin" : user.jobTitle || "Nhân viên"}
             </span>
           </div>
         </div>

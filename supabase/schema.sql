@@ -442,6 +442,25 @@ as $$
   select access_role from public.profiles where id = auth.uid();
 $$;
 
+-- Grants staff whose chức danh (job title) is exactly "Project Manager"
+-- the same access as the director to three specific HR/finance tools
+-- (chấm công, bảng lương, hoá đơn) without changing their access_role —
+-- everything else they can do stays plain "staff". Chức danh is a
+-- free-text field (see lib/constants/staff.ts), so this only matches an
+-- exact "Project Manager" string, not a fuzzy/case-insensitive one.
+create or replace function public.can_manage_hr()
+returns boolean
+language sql
+security definer set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and (access_role = 'director' or role = 'Project Manager')
+  );
+$$;
+
 -- ---------------------------------------------------------------------------
 -- projects: the public "Dự án" portfolio, editable by director/admin
 -- ---------------------------------------------------------------------------
@@ -650,11 +669,12 @@ create policy "staff can check in for themselves"
   with check (profile_id = auth.uid());
 
 drop policy if exists "director can manage attendance" on public.attendance;
-create policy "director can manage attendance"
+drop policy if exists "director or pm can manage attendance" on public.attendance;
+create policy "director or pm can manage attendance"
   on public.attendance for all
   to authenticated
-  using (public.current_access_role() = 'director')
-  with check (public.current_access_role() = 'director');
+  using (public.can_manage_hr())
+  with check (public.can_manage_hr());
 
 -- ---------------------------------------------------------------------------
 -- payroll_records: monthly salary sheet, director-only end to end — staff
@@ -683,11 +703,12 @@ create table if not exists public.payroll_records (
 alter table public.payroll_records enable row level security;
 
 drop policy if exists "director can manage payroll" on public.payroll_records;
-create policy "director can manage payroll"
+drop policy if exists "director or pm can manage payroll" on public.payroll_records;
+create policy "director or pm can manage payroll"
   on public.payroll_records for all
   to authenticated
-  using (public.current_access_role() = 'director')
-  with check (public.current_access_role() = 'director');
+  using (public.can_manage_hr())
+  with check (public.can_manage_hr());
 
 drop trigger if exists payroll_records_set_updated_at on public.payroll_records;
 create trigger payroll_records_set_updated_at
@@ -712,11 +733,12 @@ create table if not exists public.staff_salary (
 alter table public.staff_salary enable row level security;
 
 drop policy if exists "director can manage staff salary" on public.staff_salary;
-create policy "director can manage staff salary"
+drop policy if exists "director or pm can manage staff salary" on public.staff_salary;
+create policy "director or pm can manage staff salary"
   on public.staff_salary for all
   to authenticated
-  using (public.current_access_role() = 'director')
-  with check (public.current_access_role() = 'director');
+  using (public.can_manage_hr())
+  with check (public.can_manage_hr());
 
 drop trigger if exists staff_salary_set_updated_at on public.staff_salary;
 create trigger staff_salary_set_updated_at
@@ -1236,11 +1258,12 @@ create table if not exists public.invoices (
 alter table public.invoices enable row level security;
 
 drop policy if exists "director can manage invoices" on public.invoices;
-create policy "director can manage invoices"
+drop policy if exists "director or pm can manage invoices" on public.invoices;
+create policy "director or pm can manage invoices"
   on public.invoices for all
   to authenticated
-  using (public.current_access_role() = 'director')
-  with check (public.current_access_role() = 'director');
+  using (public.can_manage_hr())
+  with check (public.can_manage_hr());
 
 drop trigger if exists invoices_set_updated_at on public.invoices;
 create trigger invoices_set_updated_at

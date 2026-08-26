@@ -13,11 +13,13 @@ async function requireUser() {
   return { supabase, user };
 }
 
-async function requireDirector() {
+// Director, or any staff whose chức danh is exactly "Project Manager" —
+// mirrors the can_manage_hr() RLS helper in supabase/schema.sql.
+async function requireHrManager() {
   const { supabase, user } = await requireUser();
-  const { data: profile } = await supabase.from("profiles").select("access_role").eq("id", user.id).maybeSingle();
-  if (profile?.access_role !== "director") {
-    throw new Error("Chỉ Giám đốc mới có quyền này.");
+  const { data: profile } = await supabase.from("profiles").select("access_role, role").eq("id", user.id).maybeSingle();
+  if (profile?.access_role !== "director" && profile?.role !== "Project Manager") {
+    throw new Error("Bạn không có quyền này.");
   }
   return { supabase, user };
 }
@@ -62,7 +64,7 @@ export async function listMyAttendance(weekStartInput?: string): Promise<Attenda
 }
 
 export async function listAllAttendance(weekStartInput?: string): Promise<AttendanceEntry[]> {
-  const { supabase } = await requireDirector();
+  const { supabase } = await requireHrManager();
   const weekStart = mondayOf(weekStartInput ?? vnToday());
   const weekEnd = addDays(weekStart, 6);
 
@@ -77,7 +79,7 @@ export async function listAllAttendance(weekStartInput?: string): Promise<Attend
 }
 
 export async function getMonthAttendance(profileId: string, monthStartInput?: string): Promise<AttendanceEntry[]> {
-  const { supabase } = await requireDirector();
+  const { supabase } = await requireHrManager();
   const monthStart = firstOfMonth(monthStartInput ?? vnToday());
   const monthEnd = lastDayOfMonth(monthStart);
 
@@ -99,7 +101,7 @@ export async function upsertAttendance(input: {
   checkInTime?: string; // "HH:mm", combined with workDate in VN time
   note?: string;
 }) {
-  const { supabase } = await requireDirector();
+  const { supabase } = await requireHrManager();
 
   const checkInAt = input.checkInTime
     ? new Date(`${input.workDate}T${input.checkInTime}:00+07:00`).toISOString()

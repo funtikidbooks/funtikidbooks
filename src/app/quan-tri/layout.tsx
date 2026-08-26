@@ -23,15 +23,23 @@ export default async function AdminLayout({
     .maybeSingle();
 
   // Only director/admin manage site content — staff belong in the Kanban
-  // workspace instead.
-  if (!profile || profile.access_role === "staff") {
+  // workspace instead, except a "Project Manager" job title, which gets
+  // let in just far enough to reach chấm công/bảng lương/hoá đơn (see
+  // can_manage_hr() in supabase/schema.sql).
+  const isProjectManager = profile?.role === "Project Manager";
+  if (!profile || (profile.access_role === "staff" && !isProjectManager)) {
     redirect("/workspace");
   }
 
   return (
     <div className="flex min-h-screen" style={{ background: "var(--color-bg)" }}>
       <AdminSidebar
-        user={{ displayName: profile.display_name, email: user.email ?? "", accessRole: profile.access_role }}
+        user={{
+          displayName: profile.display_name,
+          email: user.email ?? "",
+          accessRole: profile.access_role,
+          jobTitle: profile.role,
+        }}
       />
       <div className="flex-1 flex flex-col min-w-0">{children}</div>
     </div>

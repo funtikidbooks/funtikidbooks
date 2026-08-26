@@ -14,11 +14,11 @@ export default async function AdminPayrollPage() {
   } = await supabase.auth.getUser();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("access_role")
+    .select("access_role, role")
     .eq("id", user!.id)
     .maybeSingle();
 
-  if (profile?.access_role !== "director") {
+  if (profile?.access_role !== "director" && profile?.role !== "Project Manager") {
     redirect("/quan-tri");
   }
 

@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type { Invoice, InvoiceItem, InvoiceStatus } from "@/lib/types";
 
-async function requireDirector() {
+// Director, or any staff whose chức danh is exactly "Project Manager" —
+// mirrors the can_manage_hr() RLS helper in supabase/schema.sql.
+async function requireHrManager() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -13,12 +15,12 @@ async function requireDirector() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("access_role")
+    .select("access_role, role")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (profile?.access_role !== "director") {
-    throw new Error("Chỉ Giám đốc mới có quyền này.");
+  if (profile?.access_role !== "director" && profile?.role !== "Project Manager") {
+    throw new Error("Bạn không có quyền này.");
   }
 
   return { supabase, user };
@@ -36,13 +38,13 @@ async function nextInvoiceNumber(supabase: Awaited<ReturnType<typeof createClien
 }
 
 export async function listInvoices(): Promise<Invoice[]> {
-  const { supabase } = await requireDirector();
+  const { supabase } = await requireHrManager();
   const { data } = await supabase.from("invoices").select("*").order("created_at", { ascending: false });
   return (data ?? []) as Invoice[];
 }
 
 export async function getInvoice(id: string): Promise<Invoice | null> {
-  const { supabase } = await requireDirector();
+  const { supabase } = await requireHrManager();
   const { data } = await supabase.from("invoices").select("*").eq("id", id).maybeSingle();
   return (data as Invoice) ?? null;
 }
@@ -58,7 +60,7 @@ export async function createInvoice(input: {
   taxRate: number;
   note?: string;
 }): Promise<Invoice> {
-  const { supabase, user } = await requireDirector();
+  const { supabase, user } = await requireHrManager();
   const clientName = input.clientName.trim();
   if (!clientName) throw new Error("Thiếu tên khách hàng");
   if (input.items.length === 0) throw new Error("Hoá đơn cần ít nhất 1 mục");
@@ -91,14 +93,14 @@ export async function createInvoice(input: {
 }
 
 export async function updateInvoiceStatus(id: string, status: InvoiceStatus) {
-  const { supabase } = await requireDirector();
+  const { supabase } = await requireHrManager();
   const { error } = await supabase.from("invoices").update({ status }).eq("id", id);
   if (error) throw new Error("Không thể cập nhật trạng thái hoá đơn");
   revalidatePath("/quan-tri/hoa-don");
 }
 
 export async function deleteInvoice(id: string) {
-  const { supabase } = await requireDirector();
+  const { supabase } = await requireHrManager();
   await supabase.from("invoices").delete().eq("id", id);
   revalidatePath("/quan-tri/hoa-don");
 }
