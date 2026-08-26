@@ -104,6 +104,13 @@ export type MeetingReaction = {
   created_at: string;
 };
 
+export type MeetingChannelRead = {
+  channel_id: string;
+  profile_id: string;
+  last_read_message_id: string | null;
+  updated_at: string;
+};
+
 export type MeetingMessage = {
   id: string;
   channel_id: string;
@@ -507,6 +514,12 @@ export type Database = {
         Row: MeetingReaction;
         Insert: { message_id: string; profile_id: string; emoji: string };
         Update: Partial<MeetingReaction>;
+        Relationships: [];
+      };
+      meeting_channel_reads: {
+        Row: MeetingChannelRead;
+        Insert: Partial<MeetingChannelRead> & { channel_id: string; profile_id: string };
+        Update: Partial<MeetingChannelRead>;
         Relationships: [];
       };
       invoices: {

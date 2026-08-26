@@ -3,7 +3,7 @@
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { MeetingChannelPublic, MeetingMessage, MeetingReaction } from "@/lib/types";
+import type { MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction } from "@/lib/types";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -206,4 +206,23 @@ export async function removeReaction(messageId: string, emoji: string) {
     .eq("message_id", messageId)
     .eq("profile_id", user.id)
     .eq("emoji", emoji);
+}
+
+export async function getChannelReads(channelId: string): Promise<MeetingChannelRead[]> {
+  const { supabase } = await requireUser();
+  const { data } = await supabase.from("meeting_channel_reads").select("*").eq("channel_id", channelId);
+  return (data ?? []) as MeetingChannelRead[];
+}
+
+export async function markChannelRead(channelId: string, lastMessageId: string) {
+  const { supabase, user } = await requireUser();
+  await supabase.from("meeting_channel_reads").upsert(
+    {
+      channel_id: channelId,
+      profile_id: user.id,
+      last_read_message_id: lastMessageId,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "channel_id,profile_id" },
+  );
 }

@@ -9,15 +9,17 @@ import {
   createChannel,
   deleteChannel,
   deleteMeetingMessage,
+  getChannelReads,
   getMeetingMessages,
   getReactions,
   joinChannel,
   leaveChannel,
   listChannels,
+  markChannelRead,
   removeReaction,
   sendMeetingMessage,
 } from "@/lib/actions/meetings";
-import type { MeetingChannelPublic, MeetingMessage, MeetingReaction, Profile } from "@/lib/types";
+import type { MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, Profile } from "@/lib/types";
 
 const ROOM_ICONS = ["💬", "🎨", "📚", "🎬", "🧵", "🛠", "📣", "🎯"];
 
@@ -304,6 +306,7 @@ export function MeetingHub({
   );
   const [messages, setMessages] = useState<MeetingMessage[]>([]);
   const [reactions, setReactions] = useState<MeetingReaction[]>([]);
+  const [reads, setReads] = useState<MeetingChannelRead[]>([]);
   const [text, setText] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
@@ -316,6 +319,7 @@ export function MeetingHub({
   const listRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
+  const lastMarkedReadIdRef = useRef<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
 
@@ -332,6 +336,20 @@ export function MeetingHub({
       .map(escapeRegExp);
     return names.length > 0 ? names.join("|") : null;
   }, [profiles]);
+
+  // Facebook-style read receipts: each teammate's little avatar trails
+  // under whichever message is the last one *they've* seen — which can be
+  // an older message if they're behind, not necessarily the newest one.
+  const seenByMessageId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const r of reads) {
+      if (r.profile_id === currentUser.id || !r.last_read_message_id) continue;
+      const list = map.get(r.last_read_message_id);
+      if (list) list.push(r.profile_id);
+      else map.set(r.last_read_message_id, [r.profile_id]);
+    }
+    return map;
+  }, [reads, currentUser.id]);
 
   const mentionMatch = /(^|\s)@([\p{L}0-9]*)$/u.exec(text);
   const mentionQuery = mentionMatch ? mentionMatch[2] : null;
@@ -362,6 +380,7 @@ export function MeetingHub({
   useEffect(() => {
     if (!activeId) return;
     let cancelled = false;
+    lastMarkedReadIdRef.current = null;
     getMeetingMessages(activeId)
       .then((msgs) => {
         if (cancelled) return;
@@ -375,10 +394,26 @@ export function MeetingHub({
           setReactions([]);
         }
       });
+    getChannelReads(activeId)
+      .then((rd) => !cancelled && setReads(rd))
+      .catch(() => !cancelled && setReads([]));
     return () => {
       cancelled = true;
     };
   }, [activeId]);
+
+  // Mark the newest message in the currently-open channel as "seen by me" —
+  // fires again whenever a fresh message arrives while the channel stays
+  // open, same as Messenger updating your read position live. No local
+  // state to update here: the "seen by" row under a message only ever
+  // shows other people, never yourself, so this is pure fire-and-forget.
+  useEffect(() => {
+    if (!activeId || messages.length === 0) return;
+    const lastMessage = messages[messages.length - 1];
+    if (lastMarkedReadIdRef.current === lastMessage.id) return;
+    lastMarkedReadIdRef.current = lastMessage.id;
+    markChannelRead(activeId, lastMessage.id).catch(() => {});
+  }, [activeId, messages]);
 
   useEffect(() => {
     if (!activeId) return;
@@ -422,6 +457,22 @@ export function MeetingHub({
           setReactions((prev) =>
             prev.filter((r) => !(r.message_id === old.message_id && r.profile_id === old.profile_id && r.emoji === old.emoji)),
           );
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "meeting_channel_reads", filter: `channel_id=eq.${activeId}` },
+        (payload) => {
+          const row = payload.new as MeetingChannelRead;
+          setReads((prev) => [...prev.filter((r) => r.profile_id !== row.profile_id), row]);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "meeting_channel_reads", filter: `channel_id=eq.${activeId}` },
+        (payload) => {
+          const row = payload.new as MeetingChannelRead;
+          setReads((prev) => [...prev.filter((r) => r.profile_id !== row.profile_id), row]);
         },
       )
       .subscribe();
@@ -619,6 +670,7 @@ export function MeetingHub({
                   (acc[r.emoji] ??= []).push(r.profile_id);
                   return acc;
                 }, {});
+                const seenBy = seenByMessageId.get(m.id) ?? [];
 
                 return (
                   <div key={m.id} className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}>
@@ -735,6 +787,13 @@ export function MeetingHub({
                           )}
                         </span>
                       </span>
+                      {seenBy.length > 0 && (
+                        <span className="flex items-center -space-x-1 mt-0.5" title={seenBy.map((id) => profileById.get(id)?.display_name ?? "").filter(Boolean).join(", ")}>
+                          {seenBy.map((id) => (
+                            <Avatar key={id} profile={profileById.get(id)} size={14} />
+                          ))}
+                        </span>
+                      )}
                     </div>
                   </div>
                 );

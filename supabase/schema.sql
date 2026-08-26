@@ -1223,6 +1223,50 @@ begin
   end if;
 end $$;
 
+-- meeting_channel_reads: "seen up to here" marker, one row per (channel,
+-- person) — powers the small avatar shown under the last message each
+-- member has read, Messenger-style. Read broadly (everyone in a channel
+-- needs to see everyone else's read position, unlike a 1:1 DM), but each
+-- person can only ever write their own row.
+create table if not exists public.meeting_channel_reads (
+  channel_id uuid not null references public.meeting_channels (id) on delete cascade,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  last_read_message_id uuid references public.meeting_messages (id) on delete set null,
+  updated_at timestamptz not null default now(),
+  primary key (channel_id, profile_id)
+);
+
+alter table public.meeting_channel_reads enable row level security;
+
+drop policy if exists "staff can read channel read receipts" on public.meeting_channel_reads;
+create policy "staff can read channel read receipts"
+  on public.meeting_channel_reads for select
+  to authenticated
+  using (true);
+
+drop policy if exists "staff can mark their own read receipt" on public.meeting_channel_reads;
+create policy "staff can mark their own read receipt"
+  on public.meeting_channel_reads for insert
+  to authenticated
+  with check (profile_id = auth.uid());
+
+drop policy if exists "staff can update their own read receipt" on public.meeting_channel_reads;
+create policy "staff can update their own read receipt"
+  on public.meeting_channel_reads for update
+  to authenticated
+  using (profile_id = auth.uid())
+  with check (profile_id = auth.uid());
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'meeting_channel_reads'
+  ) then
+    alter publication supabase_realtime add table public.meeting_channel_reads;
+  end if;
+end $$;
+
 -- Seed the always-open "Chung" channel once, so every workspace has a
 -- default room without requiring a director to create one manually.
 insert into public.meeting_channels (name, icon, is_general)
