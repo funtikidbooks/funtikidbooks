@@ -550,9 +550,13 @@ export function MeetingHub({
     };
   }, [activeId, currentUser.id]);
 
+  // Keyed on activeId too, not just messages.length — switching to a room
+  // whose message count happens to match the previous one wouldn't
+  // otherwise re-trigger this, leaving the view stuck scrolled wherever it
+  // was instead of jumping to that room's latest message.
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages.length]);
+  }, [activeId, messages.length]);
 
   function refreshChannel(id: string, patch: Partial<MeetingChannelPublic>) {
     setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
