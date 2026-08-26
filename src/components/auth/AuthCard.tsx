@@ -71,20 +71,13 @@ export function AuthCard({ next }: { next: string }) {
         </p>
       </form>
 
-      <div className="flex items-center justify-center gap-4">
+      <div className="flex items-center justify-center">
         <Link
           href="/"
           className="text-center text-sm font-semibold"
           style={{ color: "var(--color-neutral-500)" }}
         >
           ← Về trang chủ
-        </Link>
-        <Link
-          href="/workspace-demo"
-          className="text-center text-sm font-semibold"
-          style={{ color: "var(--color-accent-2-700)" }}
-        >
-          Xem thử giao diện →
         </Link>
       </div>
     </div>
