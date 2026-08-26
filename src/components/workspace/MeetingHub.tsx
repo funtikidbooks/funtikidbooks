@@ -570,6 +570,10 @@ export function MeetingHub({
   // users already have the hover row, so this only arms for touch/pen.
   function handleBubblePressStart(e: React.PointerEvent, messageId: string) {
     if (e.pointerType === "mouse") return;
+    // A press directly on the message text is left alone — native
+    // selection/copy still works there. Only a press on the bubble's own
+    // padding (background, not the text itself) arms the reaction picker.
+    if ((e.target as HTMLElement).closest(".fk-message-text")) return;
     longPressFiredRef.current = false;
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = setTimeout(() => {
@@ -747,6 +751,81 @@ export function MeetingHub({
                 const quoted = m.reply_to_message_id ? messageById.get(m.reply_to_message_id) : undefined;
                 const quotedSender = quoted ? profileById.get(quoted.sender_id) : undefined;
 
+                const actionButtons = (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReplyingTo(m);
+                        textInputRef.current?.focus();
+                      }}
+                      className="btn-icon"
+                      style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: "inherit" }}
+                      aria-label="Trả lời tin nhắn"
+                    >
+                      ↩
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowEmojiPicker(false);
+                        setReactionPickerFor(reactionPickerFor === m.id ? null : m.id);
+                      }}
+                      className="btn-icon"
+                      style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: "inherit" }}
+                      aria-label="Thả cảm xúc"
+                    >
+                      😊
+                    </button>
+                    {mine && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMessage(m.id)}
+                        className="btn-icon"
+                        style={{ width: 20, height: 20, padding: 0, fontSize: 10, color: "inherit" }}
+                        aria-label="Xoá tin nhắn"
+                      >
+                        ✕
+                      </button>
+                    )}
+                    {reactionPickerFor === m.id && (
+                      <div
+                        ref={popoverRef}
+                        className="card elev-lg flex items-center gap-1 p-1.5"
+                        style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, marginBottom: 6, zIndex: 10 }}
+                      >
+                        {QUICK_REACTIONS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => toggleReaction(m.id, emoji)}
+                            className="btn-icon"
+                            style={{ width: 26, height: 26, padding: 0, fontSize: 15 }}
+                            aria-label={emoji}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        {m.content && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard?.writeText(m.content).catch(() => {});
+                              setReactionPickerFor(null);
+                            }}
+                            className="btn-icon"
+                            style={{ width: 26, height: 26, padding: 0, fontSize: 13 }}
+                            aria-label="Sao chép"
+                            title="Sao chép"
+                          >
+                            📋
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+
                 return (
                   <div key={m.id} id={`meeting-msg-${m.id}`} className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}>
                     <Avatar profile={sender} />
@@ -777,7 +856,7 @@ export function MeetingHub({
                       )}
                       {m.content && (
                         <div
-                          className="fk-message-bubble rounded-[12px] px-3 py-2 text-sm whitespace-pre-wrap break-words"
+                          className="relative rounded-[12px] px-3 py-2 text-sm whitespace-pre-wrap break-words"
                           style={{
                             background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
                             color: mine ? "#fff" : "var(--color-text)",
@@ -790,7 +869,13 @@ export function MeetingHub({
                             if (longPressFiredRef.current) e.preventDefault();
                           }}
                         >
-                          {renderContent(m.content, namesPattern, mine)}
+                          <span className="fk-message-text">{renderContent(m.content, namesPattern, mine)}</span>
+                          <span
+                            className="fk-msg-actions absolute inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                            style={{ right: 6, bottom: 5, background: "rgba(0,0,0,0.18)" }}
+                          >
+                            {actionButtons}
+                          </span>
                         </div>
                       )}
                       {m.attachment_url &&
@@ -844,63 +929,11 @@ export function MeetingHub({
                         <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
                           {formatTime(m.created_at)}
                         </span>
-                        <span className="fk-msg-actions relative inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReplyingTo(m);
-                              textInputRef.current?.focus();
-                            }}
-                            className="btn-icon"
-                            style={{ width: 18, height: 18, padding: 0, fontSize: 11 }}
-                            aria-label="Trả lời tin nhắn"
-                          >
-                            ↩
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowEmojiPicker(false);
-                              setReactionPickerFor(reactionPickerFor === m.id ? null : m.id);
-                            }}
-                            className="btn-icon"
-                            style={{ width: 18, height: 18, padding: 0, fontSize: 11 }}
-                            aria-label="Thả cảm xúc"
-                          >
-                            😊
-                          </button>
-                          {mine && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteMessage(m.id)}
-                              className="btn-icon"
-                              style={{ width: 18, height: 18, padding: 0, fontSize: 10 }}
-                              aria-label="Xoá tin nhắn"
-                            >
-                              ✕
-                            </button>
-                          )}
-                          {reactionPickerFor === m.id && (
-                            <div
-                              ref={popoverRef}
-                              className="card elev-lg flex items-center gap-1 p-1.5"
-                              style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, marginBottom: 6, zIndex: 10 }}
-                            >
-                              {QUICK_REACTIONS.map((emoji) => (
-                                <button
-                                  key={emoji}
-                                  type="button"
-                                  onClick={() => toggleReaction(m.id, emoji)}
-                                  className="btn-icon"
-                                  style={{ width: 26, height: 26, padding: 0, fontSize: 15 }}
-                                  aria-label={emoji}
-                                >
-                                  {emoji}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </span>
+                        {!m.content && (
+                          <span className="fk-msg-actions relative inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {actionButtons}
+                          </span>
+                        )}
                       </span>
                       {seenBy.length > 0 && (
                         <span className="flex items-center -space-x-1 mt-0.5" title={seenBy.map((id) => profileById.get(id)?.display_name ?? "").filter(Boolean).join(", ")}>
