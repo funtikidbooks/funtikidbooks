@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { getConversation, sendDirectMessage } from "@/lib/actions/messages";
@@ -90,6 +90,21 @@ export function DirectConversation({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
+
+  // A real thumbnail of the pending image beats a filename chip — lets
+  // people confirm it's the right screenshot before sending. Computed
+  // during render (not in an effect) since it's a pure derivation of
+  // pendingFile; the effect below only ever revokes it, never sets state.
+  const pendingPreviewUrl = useMemo(() => {
+    if (!pendingFile || !isImage(pendingFile.type)) return null;
+    return URL.createObjectURL(pendingFile);
+  }, [pendingFile]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
+    };
+  }, [pendingPreviewUrl]);
 
   useEffect(() => {
     if (!showEmojiPicker) return;
@@ -320,12 +335,22 @@ export function DirectConversation({
         )}
         {pendingFile && (
           <div className="flex items-center gap-1.5 px-2.5 pt-1.5">
-            <span
-              className="flex items-center gap-1 rounded-[8px] px-2 py-1 text-[11px] font-semibold truncate max-w-full"
-              style={{ background: "var(--color-surface)", color: "var(--color-accent-700)" }}
-            >
-              {isImage(pendingFile.type) ? "🖼" : "📄"} {pendingFile.name}
-            </span>
+            {pendingPreviewUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={pendingPreviewUrl}
+                alt=""
+                className="rounded-[8px] object-cover flex-none"
+                style={{ width: 44, height: 44, border: "1px solid var(--color-neutral-200)" }}
+              />
+            ) : (
+              <span
+                className="flex items-center gap-1 rounded-[8px] px-2 py-1 text-[11px] font-semibold truncate max-w-full"
+                style={{ background: "var(--color-surface)", color: "var(--color-accent-700)" }}
+              >
+                📄 {pendingFile.name}
+              </span>
+            )}
             <button
               type="button"
               onClick={() => {
