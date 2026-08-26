@@ -760,7 +760,7 @@ export function MeetingHub({
                         textInputRef.current?.focus();
                       }}
                       className="btn-icon"
-                      style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: "inherit" }}
+                      style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
                       aria-label="Trả lời tin nhắn"
                     >
                       ↩
@@ -772,7 +772,7 @@ export function MeetingHub({
                         setReactionPickerFor(reactionPickerFor === m.id ? null : m.id);
                       }}
                       className="btn-icon"
-                      style={{ width: 20, height: 20, padding: 0, fontSize: 11, color: "inherit" }}
+                      style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
                       aria-label="Thả cảm xúc"
                     >
                       😊
@@ -782,7 +782,7 @@ export function MeetingHub({
                         type="button"
                         onClick={() => handleDeleteMessage(m.id)}
                         className="btn-icon"
-                        style={{ width: 20, height: 20, padding: 0, fontSize: 10, color: "inherit" }}
+                        style={{ width: 20, height: 20, padding: 0, fontSize: 10 }}
                         aria-label="Xoá tin nhắn"
                       >
                         ✕
@@ -855,25 +855,24 @@ export function MeetingHub({
                         </button>
                       )}
                       {m.content && (
-                        <div
-                          className="relative rounded-[12px] px-3 py-2 text-sm whitespace-pre-wrap break-words"
-                          style={{
-                            background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
-                            color: mine ? "#fff" : "var(--color-text)",
-                          }}
-                          onPointerDown={(e) => handleBubblePressStart(e, m.id)}
-                          onPointerUp={cancelBubblePress}
-                          onPointerLeave={cancelBubblePress}
-                          onPointerCancel={cancelBubblePress}
-                          onContextMenu={(e) => {
-                            if (longPressFiredRef.current) e.preventDefault();
-                          }}
-                        >
-                          <span className="fk-message-text">{renderContent(m.content, namesPattern, mine)}</span>
-                          <span
-                            className="fk-msg-actions absolute inline-flex items-center gap-0.5 rounded-full px-1 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                            style={{ right: 6, bottom: 5, background: "rgba(0,0,0,0.18)" }}
+                        <div className={`flex items-center gap-1 ${mine ? "flex-row-reverse" : ""}`}>
+                          <div
+                            className="rounded-[12px] px-3 py-2 text-sm whitespace-pre-wrap break-words"
+                            style={{
+                              background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
+                              color: mine ? "#fff" : "var(--color-text)",
+                            }}
+                            onPointerDown={(e) => handleBubblePressStart(e, m.id)}
+                            onPointerUp={cancelBubblePress}
+                            onPointerLeave={cancelBubblePress}
+                            onPointerCancel={cancelBubblePress}
+                            onContextMenu={(e) => {
+                              if (longPressFiredRef.current) e.preventDefault();
+                            }}
                           >
+                            <span className="fk-message-text">{renderContent(m.content, namesPattern, mine)}</span>
+                          </div>
+                          <span className="fk-msg-actions relative inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-none">
                             {actionButtons}
                           </span>
                         </div>
