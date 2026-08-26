@@ -416,7 +416,7 @@ export function ChatWindow({
                 className="input flex-1 resize-none"
                 style={{ padding: "6px 10px", fontSize: 13, maxHeight: 100, overflowY: "auto" }}
                 rows={1}
-                placeholder="Nhắn tin… (Shift+Enter để xuống dòng)"
+                placeholder="Nhắn tin…"
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);

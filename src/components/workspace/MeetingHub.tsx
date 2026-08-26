@@ -1118,7 +1118,7 @@ export function MeetingHub({
                   className="input flex-1 resize-none"
                   style={{ maxHeight: 160, overflowY: "auto" }}
                   rows={1}
-                  placeholder={`Nhắn vào #${activeChannel.name}… (gõ @ để nhắc ai đó, dán ảnh bằng Ctrl+V, Shift+Enter để xuống dòng)`}
+                  placeholder={`Nhắn vào #${activeChannel.name}… (gõ @ để nhắc ai đó, dán ảnh bằng Ctrl+V)`}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onPaste={handlePaste}
