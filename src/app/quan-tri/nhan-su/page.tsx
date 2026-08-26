@@ -13,14 +13,15 @@ export default async function AdminStaffPage() {
   } = await supabase.auth.getUser();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("access_role")
+    .select("access_role, role")
     .eq("id", user!.id)
     .maybeSingle();
 
-  if (profile?.access_role !== "director") {
+  const isDirector = profile?.access_role === "director";
+  if (!isDirector && profile?.role !== "Project Manager") {
     redirect("/quan-tri");
   }
 
   const profiles = await listAllProfiles();
-  return <StaffRoles initialProfiles={profiles} currentUserId={user!.id} />;
+  return <StaffRoles initialProfiles={profiles} currentUserId={user!.id} isDirector={isDirector} />;
 }

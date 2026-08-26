@@ -13,11 +13,12 @@ const NAV = [
   { href: "/quan-tri/chat", label: "Chat khách vãng lai", icon: "💬" },
 ];
 
-const DIRECTOR_ONLY_NAV = [{ href: "/quan-tri/nhan-su", label: "Nhân sự & phân quyền", icon: "🧑‍🤝‍🧑" }];
-
 // Also open to staff whose chức danh is exactly "Project Manager" — see
-// can_manage_hr() in supabase/schema.sql.
+// can_manage_hr() / requireDirectorOrPM() in supabase/schema.sql and
+// lib/actions/admin.ts. Nhân sự is view-only for them (StaffRoles.tsx
+// hides every edit control unless the viewer is actually the director).
 const HR_NAV = [
+  { href: "/quan-tri/nhan-su", label: "Nhân sự & phân quyền", icon: "🧑‍🤝‍🧑" },
   { href: "/quan-tri/cham-cong", label: "Chấm công", icon: "🕐" },
   { href: "/quan-tri/bang-luong", label: "Bảng lương", icon: "💰" },
   { href: "/quan-tri/hoa-don", label: "Tạo hoá đơn điện tử", icon: "🧾" },
@@ -97,7 +98,6 @@ export function AdminSidebar({
             >
               📊 Bảng công việc
             </Link>
-            {isDirector && DIRECTOR_ONLY_NAV.map((item) => <NavLink key={item.href} item={item} />)}
             {HR_NAV.map((item) => (
               <NavLink key={item.href} item={item} />
             ))}

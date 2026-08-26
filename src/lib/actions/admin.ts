@@ -28,6 +28,32 @@ async function requireDirector() {
   return { supabase, user };
 }
 
+// Read-only visibility into the staff list for a "Project Manager" job
+// title, alongside director — same population that already gets full
+// access to chấm công/bảng lương/hoá đơn (can_manage_hr() in
+// supabase/schema.sql). They can see roles/job titles but not change them:
+// updateAccessRole/updateJobTitle/deleteStaffAccount/createStaffAccount
+// below all still require requireDirector(), not this.
+async function requireDirectorOrPM() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Bạn cần đăng nhập.");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("access_role, role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profile?.access_role !== "director" && profile?.role !== "Project Manager") {
+    throw new Error("Bạn không có quyền xem trang này.");
+  }
+
+  return { supabase, user };
+}
+
 async function requireContentEditor() {
   const supabase = await createClient();
   const {
@@ -443,7 +469,7 @@ export async function listContactMessages() {
 // ---------------------------------------------------------------------------
 
 export async function listAllProfiles() {
-  const { supabase } = await requireDirector();
+  const { supabase } = await requireDirectorOrPM();
   const { data } = await supabase
     .from("profiles")
     .select("*")

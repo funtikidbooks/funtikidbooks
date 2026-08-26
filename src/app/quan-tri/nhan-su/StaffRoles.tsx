@@ -12,7 +12,15 @@ const ROLE_LABELS: Record<AccessRole, string> = {
   staff: "Hoạ sĩ / PM",
 };
 
-export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles: Profile[]; currentUserId: string }) {
+export function StaffRoles({
+  initialProfiles,
+  currentUserId,
+  isDirector,
+}: {
+  initialProfiles: Profile[];
+  currentUserId: string;
+  isDirector: boolean;
+}) {
   const [profiles, setProfiles] = useState(initialProfiles);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -71,17 +79,25 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
         <h1 className="text-xl">Nhân sự & phân quyền</h1>
         <div className="flex items-center gap-3">
           <span className="tag tag-neutral">{profiles.length} tài khoản</span>
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
-            + Thêm tài khoản
-          </button>
+          {isDirector && (
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>
+              + Thêm tài khoản
+            </button>
+          )}
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
         <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
-          Đổi vai trò để quyết định trang nào mỗi người vào được: <b>Giám đốc</b> vào được tất cả,{" "}
-          <b>Admin</b> chỉ quản trị nội dung (không vào bảng công việc), <b>Hoạ sĩ / PM</b> chỉ vào bảng công việc. Chức
-          danh chỉ là nhãn hiển thị, không ảnh hưởng quyền truy cập — cũng là tag lọc ở trang Thành viên.
+          {isDirector ? (
+            <>
+              Đổi vai trò để quyết định trang nào mỗi người vào được: <b>Giám đốc</b> vào được tất cả,{" "}
+              <b>Admin</b> chỉ quản trị nội dung (không vào bảng công việc), <b>Hoạ sĩ / PM</b> chỉ vào bảng công việc.
+              Chức danh chỉ là nhãn hiển thị, không ảnh hưởng quyền truy cập — cũng là tag lọc ở trang Thành viên.
+            </>
+          ) : (
+            "Xem danh sách vai trò và chức danh của cả studio. Chỉ Giám đốc mới đổi được vai trò, chức danh, hoặc xoá tài khoản."
+          )}
         </p>
         {error && (
           <p className="text-sm font-semibold mb-3" style={{ color: "var(--status-red)" }}>
@@ -108,44 +124,57 @@ export function StaffRoles({ initialProfiles, currentUserId }: { initialProfiles
                   {p.email}
                 </span>
               </div>
-              <input
-                key={`title-${p.id}-${p.role ?? ""}`}
-                className="input"
-                style={{ width: 150 }}
-                list="job-title-suggestions"
-                placeholder="Chức danh"
-                defaultValue={p.role ?? ""}
-                disabled={pending}
-                onBlur={(e) => {
-                  const value = e.target.value.trim();
-                  if (value !== (p.role ?? "")) changeJobTitle(p.id, value);
-                }}
-              />
-              <select
-                className="input"
-                style={{ width: 150 }}
-                value={p.access_role}
-                disabled={pending}
-                onChange={(e) => changeRole(p.id, e.target.value as AccessRole)}
-              >
-                {(Object.keys(ROLE_LABELS) as AccessRole[]).map((r) => (
-                  <option key={r} value={r}>
-                    {ROLE_LABELS[r]}
-                  </option>
-                ))}
-              </select>
-              {p.id !== currentUserId && (
-                <button
-                  type="button"
-                  className="btn-icon flex-none"
-                  disabled={pending}
-                  onClick={() => removeStaff(p)}
-                  aria-label={`Xoá tài khoản ${p.display_name}`}
-                  title="Xoá tài khoản"
-                  style={{ color: "var(--status-red)" }}
-                >
-                  {deletingId === p.id ? "…" : "🗑"}
-                </button>
+              {isDirector ? (
+                <>
+                  <input
+                    key={`title-${p.id}-${p.role ?? ""}`}
+                    className="input"
+                    style={{ width: 150 }}
+                    list="job-title-suggestions"
+                    placeholder="Chức danh"
+                    defaultValue={p.role ?? ""}
+                    disabled={pending}
+                    onBlur={(e) => {
+                      const value = e.target.value.trim();
+                      if (value !== (p.role ?? "")) changeJobTitle(p.id, value);
+                    }}
+                  />
+                  <select
+                    className="input"
+                    style={{ width: 150 }}
+                    value={p.access_role}
+                    disabled={pending}
+                    onChange={(e) => changeRole(p.id, e.target.value as AccessRole)}
+                  >
+                    {(Object.keys(ROLE_LABELS) as AccessRole[]).map((r) => (
+                      <option key={r} value={r}>
+                        {ROLE_LABELS[r]}
+                      </option>
+                    ))}
+                  </select>
+                  {p.id !== currentUserId && (
+                    <button
+                      type="button"
+                      className="btn-icon flex-none"
+                      disabled={pending}
+                      onClick={() => removeStaff(p)}
+                      aria-label={`Xoá tài khoản ${p.display_name}`}
+                      title="Xoá tài khoản"
+                      style={{ color: "var(--status-red)" }}
+                    >
+                      {deletingId === p.id ? "…" : "🗑"}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className="text-sm truncate" style={{ width: 150 }}>
+                    {p.role || "—"}
+                  </span>
+                  <span className="tag tag-neutral" style={{ width: 150, textAlign: "center" }}>
+                    {ROLE_LABELS[p.access_role]}
+                  </span>
+                </>
               )}
             </div>
           ))}
