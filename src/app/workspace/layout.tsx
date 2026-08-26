@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/workspace/Sidebar";
 import { ChatManagerProvider } from "@/components/workspace/ChatManager";
 import { ChatDock } from "@/components/workspace/ChatDock";
 import { TabNotificationBadge } from "@/components/workspace/TabNotificationBadge";
+import { ThemeSync } from "@/components/workspace/ThemeSync";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
 import { ThemeToggle } from "@/components/workspace/ThemeToggle";
 import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
@@ -30,12 +31,12 @@ export default async function WorkspaceLayout({
   const [{ data: profile }, { data: allProfiles }, unreadCounts] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
+      .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, theme, created_at")
       .eq("id", user.id)
       .maybeSingle(),
     supabase
       .from("profiles")
-      .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
+      .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, theme, created_at")
       .order("display_name", { ascending: true }),
     getUnreadCounts().catch(() => ({})),
   ]);
@@ -58,12 +59,14 @@ export default async function WorkspaceLayout({
     phone: null,
     address: null,
     access_role: "staff",
+    theme: null,
     created_at: new Date().toISOString(),
   };
 
   return (
     <ChatManagerProvider currentUserId={user.id} initialUnreadCounts={unreadCounts}>
       <TabNotificationBadge />
+      <ThemeSync serverTheme={myProfile.theme} />
       <PushSetup />
       <div className="flex flex-col min-h-screen" style={{ background: "var(--color-bg)" }}>
         <IosInstallHint />

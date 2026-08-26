@@ -10,11 +10,11 @@ export const metadata: Metadata = { title: "Xem thử — Bảng công việc" }
 const now = new Date().toISOString();
 
 const PROFILES: Profile[] = [
-  { id: "demo-linh", email: "linh@funtikidbooks.com", display_name: "Linh", avatar_url: null, role: "2D Illustrator", joined_at: null, phone: null, address: null, access_role: "staff", created_at: now },
-  { id: "demo-an", email: "an@funtikidbooks.com", display_name: "An", avatar_url: null, role: "Art Lead", joined_at: null, phone: null, address: null, access_role: "staff", created_at: now },
-  { id: "demo-nam", email: "nam@funtikidbooks.com", display_name: "Nam", avatar_url: null, role: "2D Illustrator", joined_at: null, phone: null, address: null, access_role: "staff", created_at: now },
-  { id: "demo-minh", email: "minh@funtikidbooks.com", display_name: "Minh", avatar_url: null, role: "Project Manager", joined_at: null, phone: null, address: null, access_role: "staff", created_at: now },
-  { id: "demo-ha", email: "ha@funtikidbooks.com", display_name: "Hà", avatar_url: null, role: "3D Artist", joined_at: null, phone: null, address: null, access_role: "staff", created_at: now },
+  { id: "demo-linh", email: "linh@funtikidbooks.com", display_name: "Linh", avatar_url: null, role: "2D Illustrator", joined_at: null, phone: null, address: null, access_role: "staff", theme: null, created_at: now },
+  { id: "demo-an", email: "an@funtikidbooks.com", display_name: "An", avatar_url: null, role: "Art Lead", joined_at: null, phone: null, address: null, access_role: "staff", theme: null, created_at: now },
+  { id: "demo-nam", email: "nam@funtikidbooks.com", display_name: "Nam", avatar_url: null, role: "2D Illustrator", joined_at: null, phone: null, address: null, access_role: "staff", theme: null, created_at: now },
+  { id: "demo-minh", email: "minh@funtikidbooks.com", display_name: "Minh", avatar_url: null, role: "Project Manager", joined_at: null, phone: null, address: null, access_role: "staff", theme: null, created_at: now },
+  { id: "demo-ha", email: "ha@funtikidbooks.com", display_name: "Hà", avatar_url: null, role: "3D Artist", joined_at: null, phone: null, address: null, access_role: "staff", theme: null, created_at: now },
 ];
 
 const BOARD: Board = {

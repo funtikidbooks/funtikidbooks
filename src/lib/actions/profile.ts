@@ -35,6 +35,14 @@ export async function updateMyProfile(input: { displayName?: string; phone?: str
   revalidatePath("/workspace");
 }
 
+// Ties the dark/light choice to the account so it survives localStorage
+// getting wiped (browser privacy settings, Safari's ITP purge for inactive
+// sites...) — see ThemeSync.tsx for how this gets reconciled on load.
+export async function updateMyTheme(theme: "light" | "dark") {
+  const { supabase, user } = await requireUser();
+  await supabase.from("profiles").update({ theme }).eq("id", user.id);
+}
+
 const ALLOWED_AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 const MAX_AVATAR_SIZE = 8 * 1024 * 1024;
 

@@ -10,6 +10,7 @@ export type Profile = {
   address: string | null;
   access_role: AccessRole;
   joined_at: string | null;
+  theme: "light" | "dark" | null;
   created_at: string;
 };
 

@@ -23,8 +23,7 @@ function getServerSnapshot(): "light" | "dark" {
 export function useTheme() {
   const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
+  function setTheme(next: "light" | "dark") {
     document.documentElement.setAttribute("data-theme", next);
     try {
       localStorage.setItem(STORAGE_KEY, next);
@@ -34,5 +33,9 @@ export function useTheme() {
     window.dispatchEvent(new Event(THEME_EVENT));
   }
 
-  return { theme, toggleTheme };
+  function toggleTheme() {
+    setTheme(theme === "dark" ? "light" : "dark");
+  }
+
+  return { theme, setTheme, toggleTheme };
 }

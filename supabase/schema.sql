@@ -22,6 +22,15 @@ alter table public.profiles add column if not exists access_role text not null d
 alter table public.profiles drop constraint if exists profiles_access_role_check;
 alter table public.profiles add constraint profiles_access_role_check check (access_role in ('director', 'admin', 'staff'));
 
+-- Dark/light choice tied to the account instead of only the browser's
+-- localStorage — localStorage can get wiped on its own (Safari's 7-day ITP
+-- purge for inactive sites, "clear on exit" settings...), which showed up
+-- to staff as the theme randomly reverting to light. Null = no choice made
+-- yet, falls back to the client-only localStorage behavior.
+alter table public.profiles add column if not exists theme text;
+alter table public.profiles drop constraint if exists profiles_theme_check;
+alter table public.profiles add constraint profiles_theme_check check (theme is null or theme in ('light', 'dark'));
+
 alter table public.profiles enable row level security;
 
 drop policy if exists "profiles are readable by any signed-in staff" on public.profiles;
