@@ -131,7 +131,12 @@ export async function getMeetingMessages(channelId: string): Promise<MeetingMess
 const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
 const MAX_SIZE = 20 * 1024 * 1024;
 
-export async function sendMeetingMessage(channelId: string, content: string, formData?: FormData) {
+export async function sendMeetingMessage(
+  channelId: string,
+  content: string,
+  formData?: FormData,
+  replyToMessageId?: string | null,
+) {
   const { supabase, user } = await requireUser();
   const trimmed = content.trim();
 
@@ -165,6 +170,7 @@ export async function sendMeetingMessage(channelId: string, content: string, for
       attachment_filename: attachment?.filename ?? null,
       attachment_mime: attachment?.mime ?? null,
       attachment_size: attachment?.size ?? null,
+      reply_to_message_id: replyToMessageId ?? null,
     })
     .select("*")
     .single();

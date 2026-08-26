@@ -315,6 +315,7 @@ export function MeetingHub({
   const [showBrowse, setShowBrowse] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<MeetingMessage | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -324,6 +325,7 @@ export function MeetingHub({
   const textInputRef = useRef<HTMLInputElement>(null);
 
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
+  const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const joinedRooms = useMemo(() => channels.filter((c) => c.joined), [channels]);
   const browsableRooms = useMemo(() => channels.filter((c) => !c.joined), [channels]);
   const activeChannel = channels.find((c) => c.id === activeId) ?? null;
@@ -493,16 +495,22 @@ export function MeetingHub({
     setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   }
 
+  // A reply-in-progress only makes sense in the channel it was started in.
+  function selectChannel(id: string | null) {
+    setReplyingTo(null);
+    setActiveId(id);
+  }
+
   async function handleCreated(id: string) {
     const fresh = await listChannels().catch(() => null);
     if (fresh) setChannels(fresh);
-    setActiveId(id);
+    selectChannel(id);
   }
 
   function handleJoined(id: string) {
     refreshChannel(id, { joined: true });
     setShowBrowse(false);
-    setActiveId(id);
+    selectChannel(id);
   }
 
   async function handleLeave(id: string) {
@@ -510,7 +518,7 @@ export function MeetingHub({
     await leaveChannel(id);
     setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, joined: false } : c)));
     if (activeId === id) {
-      setActiveId(channels.find((c) => c.is_general)?.id ?? null);
+      selectChannel(channels.find((c) => c.is_general)?.id ?? null);
     }
   }
 
@@ -519,7 +527,7 @@ export function MeetingHub({
     await deleteChannel(id);
     setChannels((prev) => prev.filter((c) => c.id !== id));
     if (activeId === id) {
-      setActiveId(channels.find((c) => c.is_general)?.id ?? null);
+      selectChannel(channels.find((c) => c.is_general)?.id ?? null);
     }
   }
 
@@ -602,10 +610,12 @@ export function MeetingHub({
     const trimmed = text.trim();
     const file = pendingFile;
     if (!trimmed && !file) return;
+    const replyId = replyingTo?.id ?? null;
     setSending(true);
     setError(null);
     setText("");
     setPendingFile(null);
+    setReplyingTo(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
 
     try {
@@ -614,7 +624,7 @@ export function MeetingHub({
         formData = new FormData();
         formData.append("file", file);
       }
-      const sent = await sendMeetingMessage(activeId, trimmed, formData);
+      const sent = await sendMeetingMessage(activeId, trimmed, formData, replyId);
       if (sent) setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể gửi tin nhắn.");
@@ -645,7 +655,7 @@ export function MeetingHub({
             <button
               key={r.id}
               type="button"
-              onClick={() => setActiveId(r.id)}
+              onClick={() => selectChannel(r.id)}
               className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
               style={{
                 background: activeId === r.id ? "var(--color-accent-100)" : undefined,
@@ -709,14 +719,37 @@ export function MeetingHub({
                   return acc;
                 }, {});
                 const seenBy = seenByMessageId.get(m.id) ?? [];
+                const quoted = m.reply_to_message_id ? messageById.get(m.reply_to_message_id) : undefined;
+                const quotedSender = quoted ? profileById.get(quoted.sender_id) : undefined;
 
                 return (
-                  <div key={m.id} className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}>
+                  <div key={m.id} id={`meeting-msg-${m.id}`} className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}>
                     <Avatar profile={sender} />
                     <div className={`flex flex-col ${mine ? "items-end" : "items-start"} max-w-[75%]`}>
                       <span className="text-[11px] font-semibold mb-0.5" style={{ color: "var(--color-neutral-500)" }}>
                         {mine ? "Bạn" : (sender?.display_name ?? "Ẩn danh")}
                       </span>
+                      {m.reply_to_message_id && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const el = document.getElementById(`meeting-msg-${m.reply_to_message_id}`);
+                            el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }}
+                          className="flex flex-col text-left rounded-[8px] px-2.5 py-1.5 mb-1 max-w-full"
+                          style={{
+                            background: "var(--color-surface)",
+                            borderLeft: "3px solid var(--color-accent-500)",
+                          }}
+                        >
+                          <span className="text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
+                            {quoted ? (quotedSender?.display_name ?? "Ẩn danh") : "Tin nhắn gốc"}
+                          </span>
+                          <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)", maxWidth: 220 }}>
+                            {quoted ? (quoted.content || (quoted.attachment_url ? "📎 Tệp đính kèm" : "")) : "Đã bị xoá"}
+                          </span>
+                        </button>
+                      )}
                       {m.content && (
                         <div
                           className="rounded-[12px] px-3 py-2 text-sm whitespace-pre-wrap break-words"
@@ -780,6 +813,18 @@ export function MeetingHub({
                           {formatTime(m.created_at)}
                         </span>
                         <span className="relative inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReplyingTo(m);
+                              textInputRef.current?.focus();
+                            }}
+                            className="btn-icon"
+                            style={{ width: 18, height: 18, padding: 0, fontSize: 11 }}
+                            aria-label="Trả lời tin nhắn"
+                          >
+                            ↩
+                          </button>
                           <button
                             type="button"
                             onClick={() => {
@@ -890,6 +935,30 @@ export function MeetingHub({
                       {emoji}
                     </button>
                   ))}
+                </div>
+              )}
+              {replyingTo && (
+                <div className="flex items-center gap-2 px-4 pt-2">
+                  <div
+                    className="flex flex-col flex-1 min-w-0 rounded-[8px] px-2.5 py-1.5"
+                    style={{ background: "var(--color-surface)", borderLeft: "3px solid var(--color-accent-500)" }}
+                  >
+                    <span className="text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
+                      Đang trả lời {replyingTo.sender_id === currentUser.id ? "chính mình" : (profileById.get(replyingTo.sender_id)?.display_name ?? "Ẩn danh")}
+                    </span>
+                    <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
+                      {replyingTo.content || (replyingTo.attachment_url ? "📎 Tệp đính kèm" : "")}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReplyingTo(null)}
+                    className="btn-icon flex-none"
+                    style={{ width: 22, height: 22, padding: 0, fontSize: 12 }}
+                    aria-label="Bỏ trả lời"
+                  >
+                    ✕
+                  </button>
                 </div>
               )}
               {error && (

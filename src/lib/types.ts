@@ -120,6 +120,7 @@ export type MeetingMessage = {
   attachment_filename: string | null;
   attachment_mime: string | null;
   attachment_size: number | null;
+  reply_to_message_id: string | null;
   created_at: string;
 };
 

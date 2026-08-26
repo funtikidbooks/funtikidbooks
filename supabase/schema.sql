@@ -1073,6 +1073,12 @@ create table if not exists public.meeting_messages (
 create index if not exists meeting_messages_channel_idx
   on public.meeting_messages (channel_id, created_at);
 
+-- Added after the initial table creation — lets a message quote-reply to
+-- an earlier one (Zalo/Messenger-style). Set null instead of cascading a
+-- delete so replying to a since-deleted message just loses its quote
+-- preview rather than being deleted itself.
+alter table public.meeting_messages add column if not exists reply_to_message_id uuid references public.meeting_messages (id) on delete set null;
+
 alter table public.meeting_channels enable row level security;
 alter table public.meeting_channel_members enable row level security;
 alter table public.meeting_messages enable row level security;
