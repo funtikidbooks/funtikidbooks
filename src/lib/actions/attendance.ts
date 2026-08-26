@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { addDays, firstOfMonth, lastDayOfMonth, mondayOf, vnToday } from "@/lib/constants/attendance";
+import { addDays, firstOfMonth, isBeforeCheckInWindow, lastDayOfMonth, mondayOf, vnToday } from "@/lib/constants/attendance";
 import type { AttendanceEntry } from "@/lib/types";
 
 async function requireUser() {
@@ -27,6 +27,13 @@ async function requireHrManager() {
 export async function checkInIfNeeded() {
   const { supabase, user } = await requireUser();
   const today = vnToday();
+  const now = new Date();
+
+  // Too early to count as actually "at work" (e.g. someone browsing at 3am
+  // or 8am) — don't record anything yet. This function re-runs on every
+  // page load, so it just tries again on whatever page they open next,
+  // recording the first one that lands at or after the check-in window.
+  if (isBeforeCheckInWindow(now.toISOString())) return;
 
   const { data: existing } = await supabase
     .from("attendance")
@@ -43,7 +50,7 @@ export async function checkInIfNeeded() {
   // time, which is all that matters here.
   await supabase
     .from("attendance")
-    .insert({ profile_id: user.id, work_date: today, check_in_at: new Date().toISOString(), status: "present" })
+    .insert({ profile_id: user.id, work_date: today, check_in_at: now.toISOString(), status: "present" })
     .then(() => {});
 }
 

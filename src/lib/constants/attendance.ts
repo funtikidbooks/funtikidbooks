@@ -15,6 +15,14 @@ export const WORK_HOURS_LABEL = "09:00 – 18:30 (Thứ 2 – Thứ 6)";
 // on-time — only later than that gets flagged "Trễ".
 export const LATE_GRACE_MINUTES = 15;
 
+// Logging into the workspace before this time doesn't auto-record a
+// check-in at all (someone browsing at 3am or 8am isn't "at work" yet) —
+// it just keeps trying on every later page load that same day until one
+// lands at or after this hour. There's no upper bound: showing up late
+// still checks in fine, just flagged "Trễ" via isLateCheckIn above.
+export const EARLIEST_CHECK_IN_HOUR = 8;
+export const EARLIEST_CHECK_IN_MINUTE = 30;
+
 // "Ngày làm việc" always follows Vietnam local time, not the server's UTC
 // clock — a login at 00:30 VN time should count for that VN calendar day.
 export function vnToday(): string {
@@ -67,6 +75,21 @@ export function isLateCheckIn(iso: string): boolean {
   const minutesSinceMidnight = h * 60 + m;
   const thresholdMinutes = WORK_START_HOUR * 60 + WORK_START_MINUTE + LATE_GRACE_MINUTES;
   return minutesSinceMidnight > thresholdMinutes;
+}
+
+// True before EARLIEST_CHECK_IN_HOUR:EARLIEST_CHECK_IN_MINUTE VN time — see
+// checkInIfNeeded(), which uses this to skip auto-recording a too-early login.
+export function isBeforeCheckInWindow(iso: string): boolean {
+  const hm = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Ho_Chi_Minh",
+  }).format(new Date(iso));
+  const [h, m] = hm.split(":").map(Number);
+  const minutesSinceMidnight = h * 60 + m;
+  const windowStartMinutes = EARLIEST_CHECK_IN_HOUR * 60 + EARLIEST_CHECK_IN_MINUTE;
+  return minutesSinceMidnight < windowStartMinutes;
 }
 
 export function formatDayLabel(dateStr: string): string {
