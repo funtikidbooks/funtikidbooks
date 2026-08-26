@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { upsertAttendance } from "@/lib/actions/attendance";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import { formatCheckInTime, formatDayLabel } from "@/lib/constants/attendance";
 import type { AttendanceEntry, Profile } from "@/lib/types";
 
@@ -14,7 +15,7 @@ export function AttendanceAvatar({ profile, size = 26 }: { profile: Profile; siz
     >
       {profile.avatar_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+        <img src={thumbnailUrl(profile.avatar_url, Math.max(size * 2, 64))} alt="" className="w-full h-full object-cover" />
       ) : (
         profile.display_name.charAt(0).toUpperCase()
       )}

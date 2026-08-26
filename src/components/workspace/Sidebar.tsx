@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
 import { useChatManager } from "@/components/workspace/ChatManager";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import type { Profile } from "@/lib/types";
 
 const NAV = [
@@ -101,7 +102,7 @@ export function Sidebar({
           >
             {myAvatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={myAvatarUrl} alt="" className="w-full h-full object-cover" />
+              <img src={thumbnailUrl(myAvatarUrl, 64)} alt="" className="w-full h-full object-cover" />
             ) : (
               user.displayName.charAt(0).toUpperCase()
             )}

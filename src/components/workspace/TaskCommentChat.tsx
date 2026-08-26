@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { addComment, getTaskActivity, getTaskComments, uploadTaskAttachment } from "@/lib/actions/task-detail";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import type { Profile, TaskActivity, TaskAttachment, TaskComment } from "@/lib/types";
 
 function formatTime(date: string) {
@@ -193,7 +194,7 @@ export function TaskCommentChat({
                       <a key={att.id} href={att.url} target="_blank" rel="noreferrer">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={att.url}
+                          src={thumbnailUrl(att.url, 128)}
                           alt={att.filename}
                           className="rounded-[6px] object-cover"
                           style={{ width: 64, height: 64, border: "1px solid var(--color-neutral-200)" }}
@@ -215,7 +216,7 @@ export function TaskCommentChat({
               <div key={p.id} className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={p.url}
+                  src={thumbnailUrl(p.url, 88)}
                   alt={p.filename}
                   className="rounded-[6px] object-cover"
                   style={{ width: 44, height: 44, border: "1px solid var(--color-neutral-200)" }}

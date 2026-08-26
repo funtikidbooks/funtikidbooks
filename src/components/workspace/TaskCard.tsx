@@ -5,6 +5,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { TaskWithAssignee } from "@/lib/types";
 import { labelColor } from "@/lib/labelPalette";
 import { computeTaskProgress, taskProgressColor } from "@/lib/taskProgress";
+import { thumbnailUrl } from "@/lib/imageTransform";
 
 function formatDueDate(dueDate: string | null) {
   if (!dueDate) return null;
@@ -64,7 +65,7 @@ export function TaskCard({
       {task.cover_image_url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={task.cover_image_url}
+          src={thumbnailUrl(task.cover_image_url, 480, 180)}
           alt=""
           className="rounded-[6px] w-full object-cover"
           style={{ height: 90 }}

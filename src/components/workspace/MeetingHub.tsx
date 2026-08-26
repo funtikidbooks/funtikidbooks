@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { DirectMessagesPanel } from "@/components/workspace/DirectMessagesPanel";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import {
   addReaction,
   createChannel,
@@ -125,7 +126,7 @@ function Avatar({ profile, size = 28 }: { profile: Pick<Profile, "display_name" 
     >
       {profile?.avatar_url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+        <img src={thumbnailUrl(profile.avatar_url, Math.max(size * 2, 64))} alt="" className="w-full h-full object-cover" />
       ) : (
         (profile?.display_name ?? "?").charAt(0).toUpperCase()
       )}
@@ -1205,7 +1206,7 @@ export function MeetingHub({
                           <a href={m.attachment_url} target="_blank" rel="noreferrer" className="mt-1">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
-                              src={m.attachment_url}
+                              src={thumbnailUrl(m.attachment_url, 480)}
                               alt={m.attachment_filename ?? ""}
                               className="rounded-[10px] object-cover"
                               style={{ maxWidth: 240, maxHeight: 240 }}

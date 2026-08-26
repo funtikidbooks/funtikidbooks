@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { usePresence } from "@/lib/usePresence";
 import { updateJoinedAt } from "@/lib/actions/admin";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import type { Profile } from "@/lib/types";
 
 const CreateAccountDialog = dynamic(
@@ -138,7 +139,7 @@ export function MembersDirectory({
                   >
                     {p.avatar_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                      <img src={thumbnailUrl(p.avatar_url, 112)} alt="" className="w-full h-full object-cover" />
                     ) : (
                       p.display_name.charAt(0).toUpperCase()
                     )}

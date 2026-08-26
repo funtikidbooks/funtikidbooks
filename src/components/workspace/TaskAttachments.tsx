@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { deleteAttachment, uploadTaskAttachment } from "@/lib/actions/task-detail";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import type { TaskAttachment } from "@/lib/types";
 
 export function TaskAttachments({
@@ -91,7 +92,7 @@ export function TaskAttachments({
                   style={{ border: "1px solid var(--color-neutral-200)" }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={att.url} alt={att.filename} className="h-20 w-full object-cover" />
+                  <img src={thumbnailUrl(att.url, 300, 160)} alt={att.filename} className="h-20 w-full object-cover" />
                 </a>
               ) : (
                 <a

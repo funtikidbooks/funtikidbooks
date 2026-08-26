@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useChatManager } from "@/components/workspace/ChatManager";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import { usePresence } from "@/lib/usePresence";
 import type { Profile } from "@/lib/types";
 
@@ -148,7 +149,7 @@ export function MessengerButton({ currentUserId, profiles }: { currentUserId: st
                       >
                         {p.avatar_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                          <img src={thumbnailUrl(p.avatar_url, 64)} alt="" className="w-full h-full object-cover" />
                         ) : (
                           p.display_name.charAt(0).toUpperCase()
                         )}

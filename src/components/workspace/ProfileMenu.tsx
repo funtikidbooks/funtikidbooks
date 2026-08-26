@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { updateMyAvatar, updateMyEmail, updateMyProfile } from "@/lib/actions/profile";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import { sendTestPush } from "@/lib/actions/push";
 import { getPushStatus, subscribeToPush, type PushStatus } from "@/lib/pushClient";
 import type { Profile } from "@/lib/types";
@@ -24,7 +25,7 @@ export function ProfileMenu({ profile }: { profile: Profile }) {
         >
           {profile.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
+            <img src={thumbnailUrl(profile.avatar_url, 64)} alt="" className="w-full h-full object-cover" />
           ) : (
             profile.display_name.charAt(0).toUpperCase()
           )}
@@ -139,7 +140,7 @@ function ProfileDialog({ profile, onClose }: { profile: Profile; onClose: () => 
           >
             {avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
+              <img src={thumbnailUrl(avatarUrl, 152)} alt="" className="w-full h-full object-cover" />
             ) : (
               displayName.charAt(0).toUpperCase()
             )}

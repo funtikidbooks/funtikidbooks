@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { getConversation, sendDirectMessage } from "@/lib/actions/messages";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import type { DirectMessage, Profile } from "@/lib/types";
 
 // How long the peer's "typing…" indicator stays up after their last
@@ -276,7 +277,7 @@ export function DirectConversation({
                   <a href={m.attachment_url} target="_blank" rel="noreferrer" className="mt-1">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={m.attachment_url}
+                      src={thumbnailUrl(m.attachment_url, 480)}
                       alt={m.attachment_filename ?? ""}
                       className="rounded-[10px] object-cover"
                       style={{ maxWidth: 240, maxHeight: 240 }}

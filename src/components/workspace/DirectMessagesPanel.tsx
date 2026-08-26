@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { DirectConversation } from "@/components/workspace/DirectConversation";
 import { searchDirectMessages } from "@/lib/actions/messages";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import { usePresence } from "@/lib/usePresence";
 import type { DirectMessageSearchResult, Profile } from "@/lib/types";
 
@@ -130,7 +131,7 @@ export function DirectMessagesPanel({
               >
                 {selectedPeer.avatar_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={selectedPeer.avatar_url} alt="" className="w-full h-full object-cover" />
+                  <img src={thumbnailUrl(selectedPeer.avatar_url, 64)} alt="" className="w-full h-full object-cover" />
                 ) : (
                   selectedPeer.display_name.charAt(0).toUpperCase()
                 )}
@@ -269,7 +270,7 @@ export function DirectMessagesPanel({
                   >
                     {p.avatar_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+                      <img src={thumbnailUrl(p.avatar_url, 64)} alt="" className="w-full h-full object-cover" />
                     ) : (
                       p.display_name.charAt(0).toUpperCase()
                     )}

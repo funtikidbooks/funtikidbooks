@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { removeTaskCover, setTaskCover } from "@/lib/actions/board";
+import { thumbnailUrl } from "@/lib/imageTransform";
 
 export function TaskCover({
   taskId,
@@ -45,7 +46,7 @@ export function TaskCover({
       {coverUrl ? (
         <div className="relative" style={{ height: 130 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={coverUrl} alt="" className="w-full h-full object-cover" />
+          <img src={thumbnailUrl(coverUrl, 640, 260)} alt="" className="w-full h-full object-cover" />
           <button
             type="button"
             onClick={handleRemove}

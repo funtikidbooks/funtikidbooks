@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useChatManager } from "@/components/workspace/ChatManager";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import type { Profile } from "@/lib/types";
 
 const MAX_BUBBLES = 5;
@@ -57,7 +58,7 @@ export function ChatHeadBubbles({ profiles }: { profiles: Profile[] }) {
           >
             {p.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
+              <img src={thumbnailUrl(p.avatar_url, 104)} alt="" className="w-full h-full object-cover" />
             ) : (
               p.display_name.charAt(0).toUpperCase()
             )}

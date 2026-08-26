@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DirectConversation } from "@/components/workspace/DirectConversation";
+import { thumbnailUrl } from "@/lib/imageTransform";
 import type { Profile } from "@/lib/types";
 
 export function ChatWindow({
@@ -33,7 +34,7 @@ export function ChatWindow({
         >
           {peer.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={peer.avatar_url} alt="" className="w-full h-full object-cover" />
+            <img src={thumbnailUrl(peer.avatar_url, 64)} alt="" className="w-full h-full object-cover" />
           ) : (
             peer.display_name.charAt(0).toUpperCase()
           )}
