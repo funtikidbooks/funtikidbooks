@@ -13,6 +13,9 @@ type ChatManagerValue = {
   meetingUnreadCounts: Record<string, number>;
   setActiveMeetingChannel: (channelId: string | null) => void;
   totalUnreadCount: number;
+  // Sender ids in "most recently messaged me" order, for the Messenger-style
+  // dropdown to bubble a conversation to the top the moment a DM arrives.
+  recentSenderOrder: string[];
 };
 
 const ChatManagerContext = createContext<ChatManagerValue | null>(null);
@@ -29,6 +32,7 @@ export function ChatManagerProvider({
   const [openChats, setOpenChats] = useState<Profile[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>(initialUnreadCounts);
   const [meetingUnreadCounts, setMeetingUnreadCounts] = useState<Record<string, number>>({});
+  const [recentSenderOrder, setRecentSenderOrder] = useState<string[]>([]);
   // Mirrors openChats without forcing the realtime effect below to
   // re-subscribe every time a chat window opens or closes.
   const openChatIdsRef = useRef<Set<string>>(new Set());
@@ -94,6 +98,7 @@ export function ChatManagerProvider({
             audio.currentTime = 0;
             audio.play().catch(() => {});
           }
+          setRecentSenderOrder((prev) => [row.sender_id, ...prev.filter((id) => id !== row.sender_id)]);
           if (openChatIdsRef.current.has(row.sender_id)) return;
           setUnreadCounts((prev) => ({ ...prev, [row.sender_id]: (prev[row.sender_id] ?? 0) + 1 }));
         },
@@ -126,7 +131,16 @@ export function ChatManagerProvider({
 
   return (
     <ChatManagerContext.Provider
-      value={{ openChats, openChat, closeChat, unreadCounts, meetingUnreadCounts, setActiveMeetingChannel, totalUnreadCount }}
+      value={{
+        openChats,
+        openChat,
+        closeChat,
+        unreadCounts,
+        meetingUnreadCounts,
+        setActiveMeetingChannel,
+        totalUnreadCount,
+        recentSenderOrder,
+      }}
     >
       {children}
     </ChatManagerContext.Provider>

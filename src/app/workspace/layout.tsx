@@ -8,6 +8,7 @@ import { TabNotificationBadge } from "@/components/workspace/TabNotificationBadg
 import { ThemeSync } from "@/components/workspace/ThemeSync";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
 import { ThemeToggle } from "@/components/workspace/ThemeToggle";
+import { MessengerButton } from "@/components/workspace/MessengerButton";
 import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
 import { IosInstallHint, PushSetup } from "@/components/workspace/PushSetup";
 import { getUnreadCounts } from "@/lib/actions/messages";
@@ -96,6 +97,7 @@ export default async function WorkspaceLayout({
                   </Link>
                 )}
                 <ThemeToggle compact />
+                <MessengerButton currentUserId={user.id} profiles={(allProfiles ?? []) as Profile[]} />
                 <ProfileMenu profile={myProfile} />
               </div>
             </div>

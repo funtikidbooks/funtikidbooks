@@ -4,8 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
-import { useChatManager } from "./ChatManager";
-import { usePresence } from "@/lib/usePresence";
 import type { Profile } from "@/lib/types";
 
 const NAV = [
@@ -30,18 +28,7 @@ export function Sidebar({
   profiles: Profile[];
 }) {
   const pathname = usePathname();
-  const { openChat, unreadCounts } = useChatManager();
-  const onlineIds = usePresence(currentUserId);
   const myAvatarUrl = profiles.find((p) => p.id === currentUserId)?.avatar_url ?? null;
-
-  const teammates = profiles
-    .filter((p) => p.id !== currentUserId)
-    .sort((a, b) => {
-      const aOnline = onlineIds.has(a.id) ? 0 : 1;
-      const bOnline = onlineIds.has(b.id) ? 0 : 1;
-      if (aOnline !== bOnline) return aOnline - bOnline;
-      return a.display_name.localeCompare(b.display_name);
-    });
 
   return (
     <aside
@@ -92,64 +79,6 @@ export function Sidebar({
                 <span className="ml-auto text-[9px] tag tag-neutral">SẮP RA MẮT</span>
               )}
             </Link>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-col gap-1 min-h-0 overflow-y-auto">
-        <div className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1" style={{ color: "var(--color-neutral-500)" }}>
-          THÀNH VIÊN FUNTI
-        </div>
-        {teammates.map((p) => {
-          const online = onlineIds.has(p.id);
-          const unread = unreadCounts[p.id] ?? 0;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => openChat(p)}
-              className="ws-nav-link flex items-center gap-2 px-2 py-1.5 rounded-[8px] text-left"
-            >
-              <span className="relative flex-none">
-                <span
-                  className="flex items-center justify-center rounded-full text-[10px] font-bold overflow-hidden"
-                  style={{ width: 24, height: 24, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
-                >
-                  {p.avatar_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    p.display_name.charAt(0).toUpperCase()
-                  )}
-                </span>
-                <span
-                  className="absolute rounded-full"
-                  style={{
-                    width: 8,
-                    height: 8,
-                    right: -1,
-                    bottom: -1,
-                    background: online ? "var(--status-green)" : "var(--color-neutral-400)",
-                    border: "2px solid var(--color-bg)",
-                  }}
-                />
-              </span>
-              <span className="text-[13px] font-semibold flex-1 truncate" style={{ fontWeight: unread > 0 ? 700 : 600 }}>
-                {p.display_name}
-              </span>
-              {unread > 0 ? (
-                <span
-                  className="flex items-center justify-center rounded-full font-bold flex-none"
-                  style={{ minWidth: 18, height: 18, padding: "0 5px", fontSize: 10, background: "var(--status-red)", color: "#fff" }}
-                >
-                  {unread > 9 ? "9+" : unread}
-                </span>
-              ) : (
-                <span className="text-[10px] truncate max-w-[64px]" style={{ color: "var(--color-neutral-500)" }}>
-                  {p.role ?? ""}
-                </span>
-              )}
-            </button>
           );
         })}
       </div>
