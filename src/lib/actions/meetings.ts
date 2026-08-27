@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
-import type { MeetingChannel, MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, MeetingSearchResult } from "@/lib/types";
+import type { MeetingChannel, MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, MeetingSearchResult, Profile } from "@/lib/types";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -149,6 +149,34 @@ export async function joinChannel(channelId: string, password: string) {
 export async function leaveChannel(channelId: string) {
   const { supabase, user } = await requireUser();
   await supabase.from("meeting_channel_members").delete().eq("channel_id", channelId).eq("profile_id", user.id);
+  revalidatePath("/workspace/hop");
+}
+
+export async function listChannelMembers(channelId: string): Promise<Profile[]> {
+  const { supabase } = await requireUser();
+  const { data: memberRows } = await supabase.from("meeting_channel_members").select("profile_id").eq("channel_id", channelId);
+  const ids = (memberRows ?? []).map((m) => m.profile_id as string);
+  if (ids.length === 0) return [];
+
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
+    .in("id", ids)
+    .order("display_name", { ascending: true });
+  return (profiles ?? []) as Profile[];
+}
+
+// Lets an existing member add a teammate directly — skips that person
+// having to browse to the room and (if it's locked) know the password.
+// The "members can add teammates to the channel" RLS policy is what
+// actually enforces "caller must already be a member"; this just surfaces
+// a clean error if that's not the case.
+export async function addChannelMember(channelId: string, profileId: string) {
+  const { supabase } = await requireUser();
+  const { error } = await supabase
+    .from("meeting_channel_members")
+    .upsert({ channel_id: channelId, profile_id: profileId }, { onConflict: "channel_id,profile_id" });
+  if (error) throw new Error("Không thể thêm thành viên — bạn cần tham gia phòng này trước.");
   revalidatePath("/workspace/hop");
 }
 

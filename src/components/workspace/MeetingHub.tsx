@@ -8,6 +8,7 @@ import { useChatManager } from "@/components/workspace/ChatManager";
 import { DirectMessagesPanel } from "@/components/workspace/DirectMessagesPanel";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import {
+  addChannelMember,
   addReaction,
   createChannel,
   deleteChannel,
@@ -16,6 +17,7 @@ import {
   getReactions,
   joinChannel,
   leaveChannel,
+  listChannelMembers,
   listChannels,
   markChannelRead,
   recallMeetingMessage,
@@ -362,6 +364,123 @@ function BrowseRoomsModal({
   );
 }
 
+function AddMemberModal({
+  channelId,
+  channelName,
+  profiles,
+  onClose,
+}: {
+  channelId: string;
+  channelName: string;
+  profiles: Profile[];
+  onClose: () => void;
+}) {
+  const [memberIds, setMemberIds] = useState<Set<string> | null>(null);
+  const [search, setSearch] = useState("");
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listChannelMembers(channelId)
+      .then((members) => !cancelled && setMemberIds(new Set(members.map((m) => m.id))))
+      .catch(() => !cancelled && setMemberIds(new Set()));
+    return () => {
+      cancelled = true;
+    };
+  }, [channelId]);
+
+  const q = search.trim().toLowerCase();
+  const candidates = profiles.filter(
+    (p) => !memberIds?.has(p.id) && (q === "" || p.display_name.toLowerCase().includes(q)),
+  );
+
+  async function add(profileId: string) {
+    setAddingId(profileId);
+    setError(null);
+    try {
+      await addChannelMember(channelId, profileId);
+      setMemberIds((prev) => new Set(prev).add(profileId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setAddingId(null);
+    }
+  }
+
+  return (
+    <Modal onClose={onClose} maxWidth={420}>
+      <div className="flex flex-col gap-4 p-6">
+        <div>
+          <h2 className="text-lg">Thêm thành viên</h2>
+          <p className="text-xs mt-1" style={{ color: "var(--color-neutral-500)" }}>
+            Vào phòng {channelName}
+          </p>
+        </div>
+        <input
+          className="input"
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Tìm tên nhân viên…"
+          autoFocus
+        />
+        {error && (
+          <p className="text-sm font-semibold" style={{ color: "var(--status-red)" }}>
+            {error}
+          </p>
+        )}
+        {memberIds === null ? (
+          <p className="text-sm text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
+            Đang tải…
+          </p>
+        ) : candidates.length === 0 ? (
+          <p className="text-sm text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
+            {q ? "Không tìm thấy ai." : "Mọi người đều đã ở trong phòng này rồi."}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: 320 }}>
+            {candidates.map((p) => (
+              <div key={p.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-[8px]" style={{ background: "var(--color-surface)" }}>
+                <span
+                  className="flex items-center justify-center rounded-full text-[12px] font-bold overflow-hidden flex-none"
+                  style={{ width: 32, height: 32, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+                >
+                  {p.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={thumbnailUrl(p.avatar_url, 64)} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    p.display_name.charAt(0).toUpperCase()
+                  )}
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[13px] font-semibold truncate">{p.display_name}</span>
+                  <span className="block text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
+                    {p.role ?? ""}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => add(p.id)}
+                  disabled={addingId === p.id}
+                  className="btn btn-secondary btn-sm flex-none"
+                >
+                  {addingId === p.id ? "Đang thêm…" : "+ Thêm"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center justify-end">
+          <button type="button" onClick={onClose} className="btn btn-ghost">
+            Xong
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function MeetingHub({
   currentUser,
   profiles,
@@ -393,6 +512,7 @@ export function MeetingHub({
   );
   const [expandedRoomIds, setExpandedRoomIds] = useState<Set<string>>(new Set());
   const [showBrowse, setShowBrowse] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
   // The room list is a persistent column at sm+, but a full-screen overlay
   // on phones (no room for it beside the chat panel) — toggled from a
   // hamburger button in the chat panel's own header.
@@ -1127,6 +1247,18 @@ export function MeetingHub({
                   ➕
                 </button>
               )}
+              {!activeChannel.is_general && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddMember(true)}
+                  className="btn-icon flex-none"
+                  style={{ width: 30, height: 30, padding: 0 }}
+                  aria-label="Thêm thành viên"
+                  title="Thêm thành viên vào phòng"
+                >
+                  👥
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowSearch((v) => !v)}
@@ -1688,6 +1820,14 @@ export function MeetingHub({
       )}
       {showBrowse && (
         <BrowseRoomsModal rooms={browsableRooms} onClose={() => setShowBrowse(false)} onJoined={handleJoined} />
+      )}
+      {showAddMember && activeChannel && (
+        <AddMemberModal
+          channelId={activeChannel.id}
+          channelName={activeChannel.name}
+          profiles={profiles.filter((p) => p.id !== currentUser.id)}
+          onClose={() => setShowAddMember(false)}
+        />
       )}
     </div>
   );

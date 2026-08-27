@@ -1220,17 +1220,43 @@ create policy "creator or director can delete channels"
   to authenticated
   using (created_by = auth.uid() or public.current_access_role() = 'director');
 
+-- A member seeing the rest of their own room's roster is what lets
+-- createChannel() actually copy a parent room's members into a new
+-- sub-room (previously that select only ever returned the caller's own
+-- row for a non-director, silently copying nobody else), and is what
+-- powers the "add a teammate to this room" picker below.
 drop policy if exists "staff can see channel memberships" on public.meeting_channel_members;
 create policy "staff can see channel memberships"
   on public.meeting_channel_members for select
   to authenticated
-  using (profile_id = auth.uid() or public.current_access_role() = 'director');
+  using (
+    profile_id = auth.uid()
+    or public.current_access_role() = 'director'
+    or exists (
+      select 1 from public.meeting_channel_members m
+      where m.channel_id = meeting_channel_members.channel_id and m.profile_id = auth.uid()
+    )
+  );
 
 drop policy if exists "staff can join channels themselves" on public.meeting_channel_members;
 create policy "staff can join channels themselves"
   on public.meeting_channel_members for insert
   to authenticated
   with check (profile_id = auth.uid());
+
+-- Lets an existing member add a teammate directly instead of that person
+-- having to find the room in "Khám phá phòng" and (if it's locked) know
+-- the password.
+drop policy if exists "members can add teammates to the channel" on public.meeting_channel_members;
+create policy "members can add teammates to the channel"
+  on public.meeting_channel_members for insert
+  to authenticated
+  with check (
+    exists (
+      select 1 from public.meeting_channel_members m
+      where m.channel_id = meeting_channel_members.channel_id and m.profile_id = auth.uid()
+    )
+  );
 
 drop policy if exists "staff can leave channels themselves" on public.meeting_channel_members;
 create policy "staff can leave channels themselves"
