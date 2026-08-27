@@ -12,12 +12,19 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import type { Board, BoardColumn, Profile, TaskWithAssignee } from "@/lib/types";
+import type { Board, BoardColumn, BoardLabel, Profile, TaskWithAssignee } from "@/lib/types";
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
 import { AddTaskDialog } from "./AddTaskDialog";
 import { EditTaskDialog } from "./EditTaskDialog";
-import { createColumn, deleteColumn, reorderTasks } from "@/lib/actions/board";
+import {
+  createBoardLabel,
+  createColumn,
+  deleteBoardLabel,
+  deleteColumn,
+  reorderTasks,
+  updateBoardLabel,
+} from "@/lib/actions/board";
 import { isDoneColumnTitle } from "@/lib/taskProgress";
 
 export function WorkspaceBoard({
@@ -25,12 +32,14 @@ export function WorkspaceBoard({
   initialColumns,
   initialTasks,
   profiles,
+  initialBoardLabels = [],
   currentUserId,
 }: {
   board: Board;
   initialColumns: BoardColumn[];
   initialTasks: TaskWithAssignee[];
   profiles: Profile[];
+  initialBoardLabels?: BoardLabel[];
   currentUserId: string;
 }) {
   const [columns, setColumns] = useState(
@@ -45,6 +54,9 @@ export function WorkspaceBoard({
     }
     return map;
   });
+  const [boardLabels, setBoardLabels] = useState(
+    [...initialBoardLabels].sort((a, b) => a.position - b.position),
+  );
 
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [addTaskColumn, setAddTaskColumn] = useState<BoardColumn | null>(null);
@@ -214,6 +226,70 @@ export function WorkspaceBoard({
     });
   }
 
+  async function handleCreateLabel(name: string, color: string) {
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const optimistic: BoardLabel = {
+      id: tempId,
+      board_id: board.id,
+      name,
+      color,
+      position: boardLabels.length,
+      created_at: new Date().toISOString(),
+    };
+    setBoardLabels((prev) => [...prev, optimistic]);
+    try {
+      const created = await createBoardLabel(board.id, name, color);
+      if (created) setBoardLabels((prev) => prev.map((l) => (l.id === tempId ? created : l)));
+      return created ?? optimistic;
+    } catch {
+      // Optimistic label stays as-is (e.g. workspace-demo has no real backend).
+      return optimistic;
+    }
+  }
+
+  function handleRenameLabel(labelId: string, name: string) {
+    setBoardLabels((prev) => prev.map((l) => (l.id === labelId ? { ...l, name } : l)));
+    startTransition(async () => {
+      try {
+        await updateBoardLabel(labelId, { name });
+      } catch {
+        // Local rename stays as-is (e.g. workspace-demo has no real backend).
+      }
+    });
+  }
+
+  function handleRecolorLabel(labelId: string, color: string) {
+    setBoardLabels((prev) => prev.map((l) => (l.id === labelId ? { ...l, color } : l)));
+    startTransition(async () => {
+      try {
+        await updateBoardLabel(labelId, { color });
+      } catch {
+        // Local recolor stays as-is (e.g. workspace-demo has no real backend).
+      }
+    });
+  }
+
+  function handleDeleteLabel(labelId: string) {
+    setBoardLabels((prev) => prev.filter((l) => l.id !== labelId));
+    setTasksByColumn((prev) => {
+      const next: Record<string, TaskWithAssignee[]> = {};
+      for (const [colId, tasks] of Object.entries(prev)) {
+        next[colId] = tasks.map((t) =>
+          t.labels.includes(labelId) ? { ...t, labels: t.labels.filter((id) => id !== labelId) } : t,
+        );
+      }
+      return next;
+    });
+    setEditingTask((prev) => (prev && prev.labels.includes(labelId) ? { ...prev, labels: prev.labels.filter((id) => id !== labelId) } : prev));
+    startTransition(async () => {
+      try {
+        await deleteBoardLabel(labelId);
+      } catch {
+        // Local removal stays as-is (e.g. workspace-demo has no real backend).
+      }
+    });
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex flex-wrap items-center gap-6 px-6 py-4" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
@@ -271,6 +347,7 @@ export function WorkspaceBoard({
                 key={col.id}
                 column={col}
                 tasks={tasksByColumn[col.id] ?? []}
+                boardLabels={boardLabels}
                 onOpenTask={setEditingTask}
                 onAddTask={() => setAddTaskColumn(col)}
                 onDeleteColumn={() => handleColumnDeleted(col.id)}
@@ -324,7 +401,7 @@ export function WorkspaceBoard({
           <DragOverlay>
             {activeTask ? (
               <div style={{ width: 250 }}>
-                <TaskCard task={activeTask} onOpen={() => {}} />
+                <TaskCard task={activeTask} boardLabels={boardLabels} onOpen={() => {}} />
               </div>
             ) : null}
           </DragOverlay>
@@ -348,9 +425,14 @@ export function WorkspaceBoard({
           task={editingTask}
           columns={columns}
           profiles={profiles}
+          boardLabels={boardLabels}
           currentUserId={currentUserId}
           onUpdated={handleTaskUpdated}
           onDeleted={handleTaskDeleted}
+          onCreateLabel={handleCreateLabel}
+          onRenameLabel={handleRenameLabel}
+          onRecolorLabel={handleRecolorLabel}
+          onDeleteLabel={handleDeleteLabel}
           onClose={() => setEditingTask(null)}
         />
       )}

@@ -5,15 +5,16 @@ import dynamic from "next/dynamic";
 import { Modal } from "@/components/ui/Modal";
 import { addTaskAssignee, moveTaskColumn, removeTaskAssignee, updateTask, updateTaskLabels, deleteTask } from "@/lib/actions/board";
 import { getTaskDetail, uploadTaskAttachment } from "@/lib/actions/task-detail";
-import { LABEL_PALETTE, labelColor } from "@/lib/labelPalette";
 import { computeTaskProgress, taskProgressColor } from "@/lib/taskProgress";
 import { ChecklistSection } from "./ChecklistSection";
+import { LabelPicker } from "./LabelPicker";
 import { TaskAttachments } from "./TaskAttachments";
 import { TaskCommentChat } from "./TaskCommentChat";
 import { TaskCover } from "./TaskCover";
 import { TaskLinks } from "./TaskLinks";
 import type {
   BoardColumn,
+  BoardLabel,
   ChecklistItem,
   Profile,
   TaskActivity,
@@ -33,17 +34,27 @@ export function EditTaskDialog({
   task,
   columns,
   profiles,
+  boardLabels,
   currentUserId,
   onUpdated,
   onDeleted,
+  onCreateLabel,
+  onRenameLabel,
+  onRecolorLabel,
+  onDeleteLabel,
   onClose,
 }: {
   task: TaskWithAssignee;
   columns: BoardColumn[];
   profiles: Profile[];
+  boardLabels: BoardLabel[];
   currentUserId: string;
   onUpdated: (task: TaskWithAssignee) => void;
   onDeleted: (taskId: string) => void;
+  onCreateLabel: (name: string, color: string) => void;
+  onRenameLabel: (labelId: string, name: string) => void;
+  onRecolorLabel: (labelId: string, color: string) => void;
+  onDeleteLabel: (labelId: string) => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(task.title);
@@ -100,8 +111,8 @@ export function EditTaskDialog({
     });
   }
 
-  function toggleLabel(key: string) {
-    const next = labels.includes(key) ? labels.filter((k) => k !== key) : [...labels, key];
+  function toggleLabel(labelId: string) {
+    const next = labels.includes(labelId) ? labels.filter((id) => id !== labelId) : [...labels, labelId];
     setLabels(next);
     pushUpdate({ labels: next });
     startTransition(async () => {
@@ -292,15 +303,19 @@ export function EditTaskDialog({
 
             {labels.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {labels.map((key) => (
-                  <span
-                    key={key}
-                    className="rounded-[4px] px-2.5 py-1 text-[11px] font-bold"
-                    style={{ background: labelColor(key), color: "#fff" }}
-                  >
-                    {LABEL_PALETTE.find((l) => l.key === key)?.name ?? key}
-                  </span>
-                ))}
+                {labels.map((id) => {
+                  const label = boardLabels.find((l) => l.id === id);
+                  if (!label) return null;
+                  return (
+                    <span
+                      key={id}
+                      className="rounded-[4px] px-2.5 py-1 text-[11px] font-bold"
+                      style={{ background: label.color, color: "#fff" }}
+                    >
+                      {label.name}
+                    </span>
+                  );
+                })}
               </div>
             )}
 
@@ -382,21 +397,16 @@ export function EditTaskDialog({
                 {labelMenuOpen && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setLabelMenuOpen(false)} />
-                    <div className="card elev-md absolute left-0 top-9 z-20 flex flex-col gap-1 p-2" style={{ width: 200 }}>
-                      {LABEL_PALETTE.map((l) => (
-                        <button
-                          key={l.key}
-                          type="button"
-                          onClick={() => toggleLabel(l.key)}
-                          className="ws-nav-link flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[13px] font-semibold"
-                        >
-                          <span className="rounded-[4px] flex-1 text-left px-2 py-1" style={{ background: l.color, color: "#fff" }}>
-                            {l.name}
-                          </span>
-                          {labels.includes(l.key) && <span aria-hidden>✓</span>}
-                        </button>
-                      ))}
-                    </div>
+                    <LabelPicker
+                      labels={boardLabels}
+                      selectedIds={labels}
+                      onToggle={toggleLabel}
+                      onCreate={onCreateLabel}
+                      onRename={onRenameLabel}
+                      onRecolor={onRecolorLabel}
+                      onDelete={onDeleteLabel}
+                      onClose={() => setLabelMenuOpen(false)}
+                    />
                   </>
                 )}
               </div>

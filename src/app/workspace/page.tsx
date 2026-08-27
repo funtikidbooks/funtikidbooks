@@ -12,7 +12,7 @@ export default async function WorkspacePage() {
   } = await supabase.auth.getUser();
 
   const board = await getOrCreateDefaultBoard(user!.id);
-  const { columns, tasks, profiles } = await getBoardData(board.id);
+  const { columns, tasks, profiles, boardLabels } = await getBoardData(board.id);
 
   return (
     <WorkspaceBoard
@@ -20,6 +20,7 @@ export default async function WorkspacePage() {
       initialColumns={columns}
       initialTasks={tasks}
       profiles={profiles}
+      initialBoardLabels={boardLabels}
       currentUserId={user!.id}
     />
   );

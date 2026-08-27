@@ -1,7 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { mapTaskAssignees } from "@/lib/mapTaskAssignees";
-import type { Profile, TaskWithAssignee } from "@/lib/types";
+import type { BoardLabel, Profile, TaskWithAssignee } from "@/lib/types";
 
 const DEFAULT_COLUMNS = [
   { title: "Ý tưởng", color: "#78776F" },
@@ -48,7 +48,7 @@ export async function getOrCreateDefaultBoard(userId: string) {
 export async function getBoardData(boardId: string) {
   const supabase = await createClient();
 
-  const [{ data: columns }, { data: tasks }, { data: profiles }] = await Promise.all([
+  const [{ data: columns }, { data: tasks }, { data: profiles }, { data: boardLabels }] = await Promise.all([
     supabase
       .from("board_columns")
       .select("id, board_id, title, color, position, created_at")
@@ -65,6 +65,11 @@ export async function getBoardData(boardId: string) {
       .from("profiles")
       .select("id, email, display_name, avatar_url, role, created_at")
       .order("display_name", { ascending: true }),
+    supabase
+      .from("board_labels")
+      .select("id, board_id, name, color, position, created_at")
+      .eq("board_id", boardId)
+      .order("position", { ascending: true }),
   ]);
 
   return {
@@ -74,5 +79,6 @@ export async function getBoardData(boardId: string) {
       assignees: mapTaskAssignees(t.assignees),
     })),
     profiles: (profiles ?? []) as Profile[],
+    boardLabels: (boardLabels ?? []) as BoardLabel[],
   };
 }

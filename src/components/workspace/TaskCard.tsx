@@ -2,8 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { TaskWithAssignee } from "@/lib/types";
-import { labelColor } from "@/lib/labelPalette";
+import type { BoardLabel, TaskWithAssignee } from "@/lib/types";
 import { computeTaskProgress, taskProgressColor } from "@/lib/taskProgress";
 import { thumbnailUrl } from "@/lib/imageTransform";
 
@@ -28,10 +27,12 @@ function dueDateTone(dueDate: string | null, isDone: boolean): { bg: string; fg:
 
 export function TaskCard({
   task,
+  boardLabels = [],
   isDone = false,
   onOpen,
 }: {
   task: TaskWithAssignee;
+  boardLabels?: BoardLabel[];
   isDone?: boolean;
   onOpen: () => void;
 }) {
@@ -73,13 +74,18 @@ export function TaskCard({
       )}
       {task.labels.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {task.labels.map((key) => (
-            <span
-              key={key}
-              className="rounded-[4px]"
-              style={{ width: 32, height: 8, background: labelColor(key) }}
-            />
-          ))}
+          {task.labels.map((id) => {
+            const label = boardLabels.find((l) => l.id === id);
+            if (!label) return null;
+            return (
+              <span
+                key={id}
+                title={label.name}
+                className="rounded-[4px]"
+                style={{ width: 32, height: 8, background: label.color }}
+              />
+            );
+          })}
         </div>
       )}
       <span className="text-[11px] font-semibold" style={{ color: "var(--color-neutral-500)" }}>

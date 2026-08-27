@@ -309,6 +309,15 @@ export type BoardColumn = {
   created_at: string;
 };
 
+export type BoardLabel = {
+  id: string;
+  board_id: string;
+  name: string;
+  color: string;
+  position: number;
+  created_at: string;
+};
+
 export type Task = {
   id: string;
   board_id: string;
@@ -518,6 +527,12 @@ export type Database = {
         Row: Task;
         Insert: Partial<Task> & { board_id: string; column_id: string; title: string };
         Update: Partial<Task>;
+        Relationships: [];
+      };
+      board_labels: {
+        Row: BoardLabel;
+        Insert: Partial<BoardLabel> & { board_id: string };
+        Update: Partial<BoardLabel>;
         Relationships: [];
       };
       contact_messages: {

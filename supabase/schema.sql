@@ -1534,6 +1534,56 @@ create policy "director or PM can write workspace room labels"
   with check (public.is_director_or_pm());
 
 -- ---------------------------------------------------------------------------
+-- board_labels: custom, per-board Kanban labels (Trello-style) — a color plus
+-- an editable name, e.g. "GẤP", "Dự án GIÁ OK, nên đầu tư". tasks.labels
+-- stores an array of these ids (as text), replacing the old fixed 8-color
+-- palette keys that nothing had ever actually been set to.
+-- ---------------------------------------------------------------------------
+create table if not exists public.board_labels (
+  id uuid primary key default gen_random_uuid(),
+  board_id uuid not null references public.boards (id) on delete cascade,
+  name text not null default '',
+  color text not null default '#78776F',
+  position integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists board_labels_board_id_idx on public.board_labels (board_id);
+
+alter table public.board_labels enable row level security;
+
+drop policy if exists "staff can read board labels" on public.board_labels;
+create policy "staff can read board labels"
+  on public.board_labels for select
+  to authenticated
+  using (true);
+
+drop policy if exists "staff can write board labels" on public.board_labels;
+create policy "staff can write board labels"
+  on public.board_labels for all
+  to authenticated
+  using (true)
+  with check (true);
+
+-- Seed the real board with the same labels already in use on the studio's
+-- Trello board, so the migrated cards have something to pick from right
+-- away. Safe to re-run — skipped once the (first) board already has labels.
+insert into public.board_labels (board_id, name, color, position)
+select b.id, v.name, v.color, v.position
+from public.boards b
+cross join (values
+  ('Dự án GIÁ OK, nên đầu tư', '#3F9E52', 0),
+  ('Bài TEST cho khách', '#D6A400', 1),
+  ('Dự án giá THẤP, cần làm', '#FF7A3D', 2),
+  ('GẤP', '#E5484D', 3),
+  ('KH Series', '#4F80D9', 4),
+  ('Dự án theo GIỜ', '#3B98BE', 5),
+  ('Pause', '#78776F', 6)
+) as v(name, color, position)
+where b.id = (select id from public.boards order by created_at asc limit 1)
+  and not exists (select 1 from public.board_labels where board_id = b.id);
+
+-- ---------------------------------------------------------------------------
 -- Seed the portfolio with the placeholder projects already on the public
 -- site, so /du-an is backed by real rows from the start. Safe to re-run —
 -- skipped once any project exists.

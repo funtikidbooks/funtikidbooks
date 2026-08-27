@@ -223,6 +223,48 @@ export async function updateTaskLabels(taskId: string, labels: string[]) {
   revalidatePath("/workspace");
 }
 
+export async function createBoardLabel(boardId: string, name: string, color: string) {
+  const { supabase } = await requireUser();
+  const { count } = await supabase
+    .from("board_labels")
+    .select("id", { count: "exact", head: true })
+    .eq("board_id", boardId);
+
+  const { data } = await supabase
+    .from("board_labels")
+    .insert({ board_id: boardId, name: name.trim(), color, position: count ?? 0 })
+    .select("id, board_id, name, color, position, created_at")
+    .single();
+
+  revalidatePath("/workspace");
+  return data ?? null;
+}
+
+export async function updateBoardLabel(labelId: string, patch: { name?: string; color?: string }) {
+  const { supabase } = await requireUser();
+  const update: { name?: string; color?: string } = {};
+  if (patch.name !== undefined) update.name = patch.name.trim();
+  if (patch.color !== undefined) update.color = patch.color;
+  if (Object.keys(update).length === 0) return;
+  await supabase.from("board_labels").update(update).eq("id", labelId);
+  revalidatePath("/workspace");
+}
+
+export async function deleteBoardLabel(labelId: string) {
+  const { supabase } = await requireUser();
+
+  // tasks.labels is a plain text[], not a foreign key — a deleted label's id
+  // would otherwise stay stuck on every card that had it checked.
+  const { data: tasks } = await supabase.from("tasks").select("id, labels").contains("labels", [labelId]);
+  for (const t of tasks ?? []) {
+    const next = (t.labels as string[]).filter((id) => id !== labelId);
+    await supabase.from("tasks").update({ labels: next }).eq("id", t.id);
+  }
+
+  await supabase.from("board_labels").delete().eq("id", labelId);
+  revalidatePath("/workspace");
+}
+
 export async function deleteTask(taskId: string) {
   const { supabase } = await requireUser();
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { BoardColumn, TaskWithAssignee } from "@/lib/types";
+import type { BoardColumn, BoardLabel, TaskWithAssignee } from "@/lib/types";
 import { TaskCard } from "./TaskCard";
 import { renameColumn } from "@/lib/actions/board";
 import { isDoneColumnTitle } from "@/lib/taskProgress";
@@ -11,12 +11,14 @@ import { isDoneColumnTitle } from "@/lib/taskProgress";
 export function Column({
   column,
   tasks,
+  boardLabels,
   onOpenTask,
   onAddTask,
   onDeleteColumn,
 }: {
   column: BoardColumn;
   tasks: TaskWithAssignee[];
+  boardLabels: BoardLabel[];
   onOpenTask: (task: TaskWithAssignee) => void;
   onAddTask: () => void;
   onDeleteColumn: () => void;
@@ -93,7 +95,7 @@ export function Column({
       <div ref={setNodeRef} className="flex flex-col gap-2 overflow-y-auto fk-col-scroll min-h-[40px]">
         <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} isDone={isDone} onOpen={() => onOpenTask(task)} />
+            <TaskCard key={task.id} task={task} boardLabels={boardLabels} isDone={isDone} onOpen={() => onOpenTask(task)} />
           ))}
         </SortableContext>
       </div>
