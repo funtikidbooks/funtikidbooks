@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { MeetingHub } from "@/components/workspace/MeetingHub";
-import { listChannels } from "@/lib/actions/meetings";
+import { getDmTabLabel, listChannels } from "@/lib/actions/meetings";
 import type { Profile } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Trò chuyện & họp" };
@@ -12,11 +12,12 @@ export default async function MeetingPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [channels, { data: profiles }] = await Promise.all([
+  const [channels, { data: profiles }, dmTabLabel] = await Promise.all([
     listChannels(),
     supabase
       .from("profiles")
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at"),
+    getDmTabLabel().catch(() => "Riêng"),
   ]);
 
   const me = (profiles ?? []).find((p) => p.id === user?.id);
@@ -26,6 +27,7 @@ export default async function MeetingPage() {
       currentUser={{ id: user?.id ?? "", display_name: me?.display_name ?? user?.email ?? "Bạn" }}
       profiles={(profiles ?? []) as Profile[]}
       initialChannels={channels}
+      initialDmTabLabel={dmTabLabel}
     />
   );
 }

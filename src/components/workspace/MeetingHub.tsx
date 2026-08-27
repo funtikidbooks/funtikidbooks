@@ -25,6 +25,7 @@ import {
   removeReaction,
   searchMeetingMessages,
   sendMeetingMessage,
+  setDmTabLabel,
   updateChannel,
 } from "@/lib/actions/meetings";
 import type {
@@ -268,6 +269,101 @@ function CreateRoomModal({
           </button>
           <button type="submit" className="btn btn-primary" disabled={saving || !name.trim()}>
             {saving ? "Đang tạo…" : "Tạo phòng"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// Director/PM-only: renames "Chung" (a real meeting_channels row, patched
+// via updateChannel like any other room) and the "Riêng" tab (a hardcoded
+// label with no row of its own, stored in workspace_room_labels instead —
+// see setDmTabLabel).
+function RoomLabelsEditor({
+  onClose,
+  generalChannelId,
+  generalChannelName,
+  dmTabLabel,
+  onSaved,
+}: {
+  onClose: () => void;
+  generalChannelId: string | null;
+  generalChannelName: string;
+  dmTabLabel: string;
+  onSaved: (patch: { generalName?: string; dmTabLabel?: string }) => void;
+}) {
+  const [generalName, setGeneralName] = useState(generalChannelName);
+  const [riengLabel, setRiengLabel] = useState(dmTabLabel);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmedGeneral = generalName.trim();
+    const trimmedRieng = riengLabel.trim();
+    if (!trimmedGeneral || !trimmedRieng) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const patch: { generalName?: string; dmTabLabel?: string } = {};
+      if (generalChannelId && trimmedGeneral !== generalChannelName) {
+        await updateChannel(generalChannelId, { name: trimmedGeneral });
+        patch.generalName = trimmedGeneral;
+      }
+      if (trimmedRieng !== dmTabLabel) {
+        await setDmTabLabel(trimmedRieng);
+        patch.dmTabLabel = trimmedRieng;
+      }
+      onSaved(patch);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal onClose={onClose} maxWidth={380}>
+      <form onSubmit={submit} className="flex flex-col gap-4 p-6">
+        <h2 className="text-lg">Đổi tên Chung / Riêng</h2>
+
+        <div className="field">
+          <label htmlFor="rooms-general-name">Tên phòng chung</label>
+          <input
+            id="rooms-general-name"
+            className="input"
+            value={generalName}
+            onChange={(e) => setGeneralName(e.target.value.slice(0, 60))}
+            required
+            autoFocus
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="rooms-dm-label">Tên tab nhắn riêng</label>
+          <input
+            id="rooms-dm-label"
+            className="input"
+            value={riengLabel}
+            onChange={(e) => setRiengLabel(e.target.value.slice(0, 30))}
+            required
+          />
+        </div>
+
+        {error && (
+          <p className="text-sm font-semibold" style={{ color: "var(--status-red)" }}>
+            {error}
+          </p>
+        )}
+
+        <div className="flex items-center justify-end gap-3">
+          <button type="button" onClick={onClose} className="btn btn-ghost" disabled={saving}>
+            Huỷ
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={saving || !generalName.trim() || !riengLabel.trim()}>
+            {saving ? "Đang lưu…" : "Lưu"}
           </button>
         </div>
       </form>
@@ -706,13 +802,19 @@ export function MeetingHub({
   currentUser,
   profiles,
   initialChannels,
+  initialDmTabLabel,
 }: {
   currentUser: { id: string; display_name: string };
   profiles: Profile[];
   initialChannels: MeetingChannelPublic[];
+  initialDmTabLabel: string;
 }) {
   const { setActiveMeetingChannel, unreadCounts: dmUnreadCounts, meetingUnreadCounts } = useChatManager();
   const [channels, setChannels] = useState(initialChannels);
+  const [dmTabLabel, setDmTabLabelState] = useState(initialDmTabLabel);
+  const [showLabelsEditor, setShowLabelsEditor] = useState(false);
+  const myProfile = profiles.find((p) => p.id === currentUser.id);
+  const isDirectorOrPm = myProfile?.access_role === "director" || myProfile?.role === "Project Manager";
   const [activeId, setActiveId] = useState<string | null>(
     initialChannels.find((c) => c.is_general)?.id ?? initialChannels[0]?.id ?? null,
   );
@@ -1360,6 +1462,18 @@ export function MeetingHub({
             PHÒNG HỌP
           </span>
           <div className="flex items-center gap-1">
+            {isDirectorOrPm && (
+              <button
+                type="button"
+                onClick={() => setShowLabelsEditor(true)}
+                className="btn-icon"
+                style={{ width: 24, height: 24, padding: 0 }}
+                aria-label="Đổi tên Chung / Riêng"
+                title="Đổi tên Chung / Riêng"
+              >
+                ✏️
+              </button>
+            )}
             <button type="button" onClick={() => setShowCreate(true)} className="btn-icon" style={{ width: 24, height: 24, padding: 0 }} aria-label="Tạo phòng">
               ＋
             </button>
@@ -1453,26 +1567,29 @@ export function MeetingHub({
                   );
                 })}
               {r.is_general && (
-                <button
-                  type="button"
-                  onClick={() => selectChannel(DM_TAB_ID)}
-                  className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
-                  style={{
-                    background: activeId === DM_TAB_ID ? "var(--color-accent-100)" : undefined,
-                    color: activeId === DM_TAB_ID ? "var(--color-accent-700)" : "var(--color-text)",
-                  }}
-                >
-                  <span aria-hidden>👤</span>
-                  <span className="flex-1 truncate">Riêng</span>
-                  {dmTotalUnread > 0 && (
-                    <span
-                      className="flex items-center justify-center rounded-full font-bold flex-none"
-                      style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
-                    >
-                      {dmTotalUnread > 9 ? "9+" : dmTotalUnread}
-                    </span>
-                  )}
-                </button>
+                <div className="flex items-center gap-0.5">
+                  <span className="flex-none" style={{ width: 18 }} />
+                  <button
+                    type="button"
+                    onClick={() => selectChannel(DM_TAB_ID)}
+                    className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold flex-1 min-w-0"
+                    style={{
+                      background: activeId === DM_TAB_ID ? "var(--color-accent-100)" : undefined,
+                      color: activeId === DM_TAB_ID ? "var(--color-accent-700)" : "var(--color-text)",
+                    }}
+                  >
+                    <span aria-hidden>👤</span>
+                    <span className="flex-1 truncate">{dmTabLabel}</span>
+                    {dmTotalUnread > 0 && (
+                      <span
+                        className="flex items-center justify-center rounded-full font-bold flex-none"
+                        style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                      >
+                        {dmTotalUnread > 9 ? "9+" : dmTotalUnread}
+                      </span>
+                    )}
+                  </button>
+                </div>
               )}
             </div>
             );
@@ -1492,6 +1609,7 @@ export function MeetingHub({
             profiles={profiles}
             onOpenRoomList={() => setShowRoomListMobile(true)}
             initialPeerId={initialDmPeerId}
+            label={dmTabLabel}
           />
         ) : !activeChannel ? (
           <div className="flex-1 flex flex-col">
@@ -2343,6 +2461,22 @@ export function MeetingHub({
       {showBrowse && (
         <BrowseRoomsModal rooms={browsableRooms} onClose={() => setShowBrowse(false)} onJoined={handleJoined} />
       )}
+      {showLabelsEditor &&
+        (() => {
+          const generalChannel = channels.find((c) => c.is_general) ?? null;
+          return (
+            <RoomLabelsEditor
+              onClose={() => setShowLabelsEditor(false)}
+              generalChannelId={generalChannel?.id ?? null}
+              generalChannelName={generalChannel?.name ?? "Chung"}
+              dmTabLabel={dmTabLabel}
+              onSaved={(patch) => {
+                if (patch.generalName && generalChannel) handleChannelUpdated(generalChannel.id, { name: patch.generalName });
+                if (patch.dmTabLabel) setDmTabLabelState(patch.dmTabLabel);
+              }}
+            />
+          );
+        })()}
     </div>
   );
 }

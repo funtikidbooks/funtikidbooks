@@ -44,11 +44,13 @@ export function DirectMessagesPanel({
   profiles,
   onOpenRoomList,
   initialPeerId,
+  label,
 }: {
   currentUser: Pick<Profile, "id" | "display_name">;
   profiles: Profile[];
   onOpenRoomList: () => void;
   initialPeerId?: string | null;
+  label: string;
 }) {
   const { unreadCounts, recentSenderOrder, clearDmUnread } = useChatManager();
   const onlineIds = usePresence(currentUser.id);
@@ -172,7 +174,7 @@ export function DirectMessagesPanel({
           >
             ☰
           </button>
-          <span className="text-[13px] font-bold flex-1">Riêng</span>
+          <span className="text-[13px] font-bold flex-1">{label}</span>
           <button
             type="button"
             onClick={() => setShowSearch((v) => !v)}

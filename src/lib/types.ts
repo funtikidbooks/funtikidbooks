@@ -136,6 +136,12 @@ export type MeetingChannelRead = {
   updated_at: string;
 };
 
+export type WorkspaceRoomLabel = {
+  key: string;
+  label: string;
+  updated_at: string;
+};
+
 export type MeetingMessage = {
   id: string;
   channel_id: string;
@@ -555,6 +561,12 @@ export type Database = {
         Row: MeetingChannelRead;
         Insert: Partial<MeetingChannelRead> & { channel_id: string; profile_id: string };
         Update: Partial<MeetingChannelRead>;
+        Relationships: [];
+      };
+      workspace_room_labels: {
+        Row: WorkspaceRoomLabel;
+        Insert: Partial<WorkspaceRoomLabel> & { key: string; label: string };
+        Update: Partial<WorkspaceRoomLabel>;
         Relationships: [];
       };
       invoices: {

@@ -482,6 +482,23 @@ as $$
   );
 $$;
 
+-- Same "director or exact chức danh 'Project Manager'" rule as
+-- can_manage_hr(), under a name that isn't HR-specific — used to gate
+-- renaming "Chung" and the "Riêng" tab label (see meeting_channels' update
+-- policy and workspace_room_labels below).
+create or replace function public.is_director_or_pm()
+returns boolean
+language sql
+security definer set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and (access_role = 'director' or role = 'Project Manager')
+  );
+$$;
+
 -- ---------------------------------------------------------------------------
 -- projects: the public "Dự án" portfolio, editable by director/admin
 -- ---------------------------------------------------------------------------
@@ -1207,12 +1224,16 @@ create policy "staff can create channels"
   to authenticated
   with check (created_by = auth.uid());
 
+-- A room's own creator (or a director) can always rename/lock it — plus, as
+-- a special case, a Project Manager can rename specifically "Chung"
+-- (is_general), since that room has no meaningful "creator" for the
+-- ordinary rule to apply to.
 drop policy if exists "creator or director can update channels" on public.meeting_channels;
-create policy "creator or director can update channels"
+create policy "creator, director, or PM (for Chung) can update channels"
   on public.meeting_channels for update
   to authenticated
-  using (created_by = auth.uid() or public.current_access_role() = 'director')
-  with check (created_by = auth.uid() or public.current_access_role() = 'director');
+  using (created_by = auth.uid() or public.current_access_role() = 'director' or (is_general and public.is_director_or_pm()))
+  with check (created_by = auth.uid() or public.current_access_role() = 'director' or (is_general and public.is_director_or_pm()));
 
 drop policy if exists "creator or director can delete channels" on public.meeting_channels;
 create policy "creator or director can delete channels"
@@ -1483,6 +1504,34 @@ drop trigger if exists invoices_set_updated_at on public.invoices;
 create trigger invoices_set_updated_at
   before update on public.invoices
   for each row execute procedure public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- workspace_room_labels: tiny key/value store for renaming pseudo-rooms in
+-- Trò chuyện & họp that don't have their own table row to rename — right
+-- now just the "Riêng" (1:1 DM) tab, which is a hardcoded label rather than
+-- a real meeting_channels row. "Chung" doesn't need an entry here since
+-- it's renamed in place via meeting_channels.name instead.
+-- ---------------------------------------------------------------------------
+create table if not exists public.workspace_room_labels (
+  key text primary key,
+  label text not null,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.workspace_room_labels enable row level security;
+
+drop policy if exists "staff can read workspace room labels" on public.workspace_room_labels;
+create policy "staff can read workspace room labels"
+  on public.workspace_room_labels for select
+  to authenticated
+  using (true);
+
+drop policy if exists "director or PM can write workspace room labels" on public.workspace_room_labels;
+create policy "director or PM can write workspace room labels"
+  on public.workspace_room_labels for all
+  to authenticated
+  using (public.is_director_or_pm())
+  with check (public.is_director_or_pm());
 
 -- ---------------------------------------------------------------------------
 -- Seed the portfolio with the placeholder projects already on the public

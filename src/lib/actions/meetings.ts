@@ -212,6 +212,30 @@ export async function updateChannel(channelId: string, input: { name?: string; p
   revalidatePath("/workspace/hop");
 }
 
+const DM_TAB_LABEL_KEY = "dm_tab";
+const DEFAULT_DM_TAB_LABEL = "Riêng";
+
+// The "Riêng" tab has no meeting_channels row of its own to rename, so its
+// label lives in workspace_room_labels instead — falls back to the default
+// Vietnamese label until a director/PM ever renames it (or if the row is
+// missing because supabase/schema.sql hasn't been re-run yet).
+export async function getDmTabLabel(): Promise<string> {
+  const { supabase } = await requireUser();
+  const { data } = await supabase.from("workspace_room_labels").select("label").eq("key", DM_TAB_LABEL_KEY).maybeSingle();
+  return (data?.label as string | undefined)?.trim() || DEFAULT_DM_TAB_LABEL;
+}
+
+export async function setDmTabLabel(label: string) {
+  const { supabase } = await requireUser();
+  const trimmed = label.trim();
+  if (!trimmed) throw new Error("Thiếu tên tab");
+  const { error } = await supabase
+    .from("workspace_room_labels")
+    .upsert({ key: DM_TAB_LABEL_KEY, label: trimmed, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) throw new Error("Không thể đổi tên — chỉ giám đốc hoặc Project Manager mới có quyền này.");
+  revalidatePath("/workspace/hop");
+}
+
 export async function deleteChannel(channelId: string) {
   const { supabase } = await requireUser();
 
