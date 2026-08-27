@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { DirectConversation } from "@/components/workspace/DirectConversation";
+import { VideoCallModal } from "@/components/workspace/VideoCallModal";
 import { searchDirectMessages } from "@/lib/actions/messages";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { usePresence } from "@/lib/usePresence";
@@ -64,6 +65,7 @@ export function DirectMessagesPanel({
     if (initialPeerId) clearDmUnread(initialPeerId);
   }, [initialPeerId, clearDmUnread]);
   const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
+  const [showVideoCall, setShowVideoCall] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<DirectMessageSearchResult[]>([]);
@@ -149,6 +151,16 @@ export function DirectMessagesPanel({
                 )}
               </span>
               <span className="font-bold flex-1 truncate">{selectedPeer.display_name}</span>
+              <button
+                type="button"
+                onClick={() => setShowVideoCall(true)}
+                className="btn-icon flex-none"
+                style={{ width: 30, height: 30, padding: 0 }}
+                aria-label="Gọi video"
+                title="Gọi video"
+              >
+                📹
+              </button>
             </div>
             <DirectConversation
               peer={selectedPeer}
@@ -156,6 +168,16 @@ export function DirectMessagesPanel({
               scrollToMessageId={scrollToMessageId}
               onScrolledTo={() => setScrollToMessageId(null)}
             />
+            {showVideoCall && (
+              <VideoCallModal
+                // Sorted so both sides land in the same Jitsi room no matter
+                // who taps "Gọi video" first.
+                roomKey={`dm-${[currentUser.id, selectedPeer.id].sort().join("-")}`}
+                label={`📹 ${selectedPeer.display_name}`}
+                displayName={currentUser.display_name}
+                onClose={() => setShowVideoCall(false)}
+              />
+            )}
           </>
         )}
       </div>

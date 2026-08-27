@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { DirectMessagesPanel } from "@/components/workspace/DirectMessagesPanel";
+import { VideoCallModal } from "@/components/workspace/VideoCallModal";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import {
   addChannelMember,
@@ -883,6 +884,7 @@ export function MeetingHub({
   const [showMedia, setShowMedia] = useState(false);
   const [mediaTab, setMediaTab] = useState<"images" | "links" | "files">("images");
   const [mediaSearch, setMediaSearch] = useState("");
+  const [showVideoCall, setShowVideoCall] = useState(false);
   // Set when a search result is picked — the scroll-into-view effect below
   // watches for this element to actually exist (it may not yet, if we just
   // switched rooms and that room's messages are still loading).
@@ -1761,6 +1763,16 @@ export function MeetingHub({
               )}
               <button
                 type="button"
+                onClick={() => setShowVideoCall(true)}
+                className="btn-icon flex-none"
+                style={{ width: 30, height: 30, padding: 0 }}
+                aria-label="Gọi video"
+                title="Gọi video cả phòng"
+              >
+                📹
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setShowMedia((v) => !v);
                   setShowSearch(false);
@@ -2512,6 +2524,14 @@ export function MeetingHub({
       )}
       {showBrowse && (
         <BrowseRoomsModal rooms={browsableRooms} onClose={() => setShowBrowse(false)} onJoined={handleJoined} />
+      )}
+      {showVideoCall && activeChannel && (
+        <VideoCallModal
+          roomKey={`hop-${activeChannel.id}`}
+          label={`📹 ${activeChannel.name}`}
+          displayName={currentUser.display_name}
+          onClose={() => setShowVideoCall(false)}
+        />
       )}
       {showLabelsEditor &&
         (() => {
