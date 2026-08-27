@@ -1270,11 +1270,23 @@ create policy "members can add teammates to the channel"
   to authenticated
   with check (public.is_meeting_channel_member(channel_id));
 
+-- The room creator can also remove *other* people's memberships (the "mời
+-- ra" swipe action in the room-info panel) — checked against
+-- meeting_channels directly rather than meeting_channel_members, so it
+-- doesn't hit the same self-reference recursion the select policy works
+-- around above.
 drop policy if exists "staff can leave channels themselves" on public.meeting_channel_members;
-create policy "staff can leave channels themselves"
+create policy "staff or room owner can remove memberships"
   on public.meeting_channel_members for delete
   to authenticated
-  using (profile_id = auth.uid() or public.current_access_role() = 'director');
+  using (
+    profile_id = auth.uid()
+    or public.current_access_role() = 'director'
+    or exists (
+      select 1 from public.meeting_channels c
+      where c.id = meeting_channel_members.channel_id and c.created_by = auth.uid()
+    )
+  );
 
 drop policy if exists "channel members can read messages" on public.meeting_messages;
 create policy "channel members can read messages"

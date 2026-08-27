@@ -152,6 +152,17 @@ export async function leaveChannel(channelId: string) {
   revalidatePath("/workspace/hop");
 }
 
+// Lets the room's creator kick someone out (the "mời ra" swipe action). The
+// "staff or room owner can remove memberships" RLS policy is what actually
+// enforces "caller must be that member, a director, or this room's creator"
+// — a non-owner calling this just silently affects zero rows.
+export async function removeChannelMember(channelId: string, profileId: string) {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.from("meeting_channel_members").delete().eq("channel_id", channelId).eq("profile_id", profileId);
+  if (error) throw new Error("Không thể mời thành viên ra khỏi phòng");
+  revalidatePath("/workspace/hop");
+}
+
 export async function listChannelMembers(channelId: string): Promise<Profile[]> {
   const { supabase } = await requireUser();
   const { data: memberRows } = await supabase.from("meeting_channel_members").select("profile_id").eq("channel_id", channelId);
