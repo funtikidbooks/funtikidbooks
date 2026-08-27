@@ -377,6 +377,7 @@ function RoomInfoDropdown({
   profiles,
   onClose,
   onUpdated,
+  onMemberAdded,
 }: {
   channelId: string;
   channelName: string;
@@ -385,6 +386,7 @@ function RoomInfoDropdown({
   profiles: Profile[];
   onClose: () => void;
   onUpdated: (patch: { name?: string; has_password?: boolean }) => void;
+  onMemberAdded: (profileId: string) => void;
 }) {
   const [memberIds, setMemberIds] = useState<Set<string> | null>(null);
   const [search, setSearch] = useState("");
@@ -461,6 +463,7 @@ function RoomInfoDropdown({
     try {
       await addChannelMember(channelId, profileId);
       setMemberIds((prev) => new Set(prev).add(profileId));
+      onMemberAdded(profileId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
@@ -637,6 +640,7 @@ export function MeetingHub({
   const [expandedRoomIds, setExpandedRoomIds] = useState<Set<string>>(new Set());
   const [showBrowse, setShowBrowse] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [roomMembers, setRoomMembers] = useState<Profile[]>([]);
   // The room list is a persistent column at sm+, but a full-screen overlay
   // on phones (no room for it beside the chat panel) — toggled from a
   // hamburger button in the chat panel's own header.
@@ -719,6 +723,21 @@ export function MeetingHub({
   const dmTotalUnread = useMemo(() => Object.values(dmUnreadCounts).reduce((sum, n) => sum + n, 0), [dmUnreadCounts]);
   const browsableRooms = useMemo(() => channels.filter((c) => !c.joined), [channels]);
   const activeChannel = channels.find((c) => c.id === activeId) ?? null;
+  // Only custom rooms track explicit membership rows — "Chung" is open to
+  // every staff member implicitly, so there's no meaningful roster to show.
+  const activeRoomIdForMembers = activeChannel && !activeChannel.is_general ? activeChannel.id : null;
+
+  useEffect(() => {
+    if (!activeRoomIdForMembers) return;
+    let cancelled = false;
+    listChannelMembers(activeRoomIdForMembers)
+      .then((members) => !cancelled && setRoomMembers(members))
+      .catch(() => !cancelled && setRoomMembers([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [activeRoomIdForMembers]);
+  const displayedRoomMembers = activeRoomIdForMembers ? roomMembers : [];
 
   const namesPattern = useMemo(() => {
     const names = profiles
@@ -1386,6 +1405,32 @@ export function MeetingHub({
                 )}
                 <span className="font-bold truncate">{activeChannel.name}</span>
               </span>
+              {displayedRoomMembers.length > 0 && (
+                <span
+                  className="hidden sm:flex items-center -space-x-2 flex-none"
+                  title={displayedRoomMembers.map((m) => m.display_name).join(", ")}
+                >
+                  {displayedRoomMembers.slice(0, 5).map((m) => (
+                    <span key={m.id} className="rounded-full" style={{ border: "2px solid var(--color-surface)" }}>
+                      <Avatar profile={m} size={22} />
+                    </span>
+                  ))}
+                  {displayedRoomMembers.length > 5 && (
+                    <span
+                      className="flex items-center justify-center rounded-full text-[10px] font-bold flex-none"
+                      style={{
+                        width: 22,
+                        height: 22,
+                        background: "var(--color-neutral-200)",
+                        color: "var(--color-neutral-600)",
+                        border: "2px solid var(--color-surface)",
+                      }}
+                    >
+                      +{displayedRoomMembers.length - 5}
+                    </span>
+                  )}
+                </span>
+              )}
               {!activeChannel.is_general && !activeChannel.parent_channel_id && (
                 <button
                   type="button"
@@ -1695,6 +1740,10 @@ export function MeetingHub({
                 profiles={profiles.filter((p) => p.id !== currentUser.id)}
                 onClose={() => setShowAddMember(false)}
                 onUpdated={(patch) => handleChannelUpdated(activeChannel.id, patch)}
+                onMemberAdded={(profileId) => {
+                  const p = profiles.find((pr) => pr.id === profileId);
+                  if (p) setRoomMembers((prev) => (prev.some((m) => m.id === p.id) ? prev : [...prev, p]));
+                }}
               />
             )}
 
