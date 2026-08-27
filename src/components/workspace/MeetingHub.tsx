@@ -428,11 +428,27 @@ function AddMemberDropdown({
     <div
       ref={popoverRef}
       className="card elev-lg flex flex-col gap-3 p-4"
-      style={{ position: "absolute", top: "100%", right: 0, marginTop: 6, width: 300, zIndex: 20 }}
+      style={{
+        position: "absolute",
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: 320,
+        maxWidth: "90%",
+        zIndex: 20,
+        borderTopRightRadius: 0,
+        borderBottomRightRadius: 0,
+        overflow: "hidden",
+      }}
     >
-      <h3 className="text-sm font-bold">Thêm thành viên</h3>
+      <div className="flex items-center justify-between flex-none">
+        <h3 className="text-sm font-bold">Thêm thành viên</h3>
+        <button type="button" onClick={onClose} className="btn-icon flex-none" style={{ width: 26, height: 26, padding: 0 }} aria-label="Đóng">
+          ✕
+        </button>
+      </div>
       <input
-        className="input"
+        className="input flex-none"
         type="text"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
@@ -454,7 +470,7 @@ function AddMemberDropdown({
           Không tìm thấy ai.
         </p>
       ) : (
-        <div className="flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: 320 }}>
+        <div className="flex flex-col gap-1 overflow-y-auto flex-1">
           {rows.map((p) => {
             const isMember = memberIds.has(p.id);
             return (
@@ -1231,7 +1247,7 @@ export function MeetingHub({
       </div>
 
       {/* Chat panel */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0" style={{ position: "relative" }}>
         {activeId === DM_TAB_ID ? (
           <DirectMessagesPanel
             currentUser={currentUser}
@@ -1293,31 +1309,27 @@ export function MeetingHub({
                 </button>
               )}
               {!activeChannel.is_general && (
-                <span className="relative flex-none">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddMember((v) => !v)}
-                    className="btn-icon flex-none"
-                    style={{ width: 30, height: 30, padding: 0 }}
-                    aria-label="Thêm thành viên"
-                    title="Thêm thành viên vào phòng"
-                  >
-                    👥
-                  </button>
-                  {showAddMember && (
-                    <AddMemberDropdown
-                      channelId={activeChannel.id}
-                      profiles={profiles.filter((p) => p.id !== currentUser.id)}
-                      onClose={() => setShowAddMember(false)}
-                    />
-                  )}
-                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddMember((v) => !v);
+                    setShowMedia(false);
+                    setShowSearch(false);
+                  }}
+                  className="btn-icon flex-none"
+                  style={{ width: 30, height: 30, padding: 0 }}
+                  aria-label="Thêm thành viên"
+                  title="Thêm thành viên vào phòng"
+                >
+                  👥
+                </button>
               )}
               <button
                 type="button"
                 onClick={() => {
                   setShowMedia((v) => !v);
                   setShowSearch(false);
+                  setShowAddMember(false);
                 }}
                 className="btn-icon flex-none"
                 style={{ width: 30, height: 30, padding: 0 }}
@@ -1331,6 +1343,7 @@ export function MeetingHub({
                 onClick={() => {
                   setShowSearch((v) => !v);
                   setShowMedia(false);
+                  setShowAddMember(false);
                 }}
                 className="btn-icon flex-none"
                 style={{ width: 30, height: 30, padding: 0 }}
@@ -1426,7 +1439,21 @@ export function MeetingHub({
             )}
 
             {showMedia && (
-              <div className="flex-none flex flex-col" style={{ borderBottom: "1px solid var(--color-neutral-200)", maxHeight: 360 }}>
+              <div
+                className="card elev-lg flex flex-col"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  right: 0,
+                  bottom: 0,
+                  width: 340,
+                  maxWidth: "90%",
+                  zIndex: 20,
+                  borderTopRightRadius: 0,
+                  borderBottomRightRadius: 0,
+                  overflow: "hidden",
+                }}
+              >
                 <div className="flex items-center gap-2 px-4 pt-2.5">
                   {(
                     [
@@ -1470,7 +1497,7 @@ export function MeetingHub({
                     style={{ padding: "6px 10px", fontSize: 13 }}
                   />
                 </div>
-                <div className="overflow-y-auto px-4 pb-3" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+                <div className="overflow-y-auto px-4 pb-3 flex-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
                   {mediaTab === "images" &&
                     (() => {
                       const q = mediaSearch.trim().toLowerCase();
@@ -1564,6 +1591,14 @@ export function MeetingHub({
                     })()}
                 </div>
               </div>
+            )}
+
+            {showAddMember && (
+              <AddMemberDropdown
+                channelId={activeChannel.id}
+                profiles={profiles.filter((p) => p.id !== currentUser.id)}
+                onClose={() => setShowAddMember(false)}
+              />
             )}
 
             <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col p-4">
