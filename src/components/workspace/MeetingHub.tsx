@@ -1223,14 +1223,25 @@ export function MeetingHub({
               </div>
             )}
 
-            <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
+            <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col p-4">
               {messages.length === 0 && (
                 <p className="text-[13px] text-center mt-4" style={{ color: "var(--color-neutral-500)" }}>
                   Chưa có tin nhắn nào trong phòng này.
                 </p>
               )}
-              {messages.map((m) => {
+              {messages.map((m, index) => {
                 const sender = profileById.get(m.sender_id);
+                // Zalo/Messenger-style grouping: consecutive messages from the
+                // same person within a few minutes only show the avatar/name
+                // once, with tight spacing between them — the repeated
+                // avatar + name + full gap on every single message (even
+                // several in a row from the same person seconds apart) was
+                // exactly the "too much dead space" staff were pointing out.
+                const prev = index > 0 ? messages[index - 1] : null;
+                const isGroupStart =
+                  !prev ||
+                  prev.sender_id !== m.sender_id ||
+                  new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() > 5 * 60 * 1000;
                 const mine = m.sender_id === currentUser.id;
                 const msgReactions = reactions.filter((r) => r.message_id === m.id);
                 const grouped = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
@@ -1318,12 +1329,19 @@ export function MeetingHub({
                 );
 
                 return (
-                  <div key={m.id} id={`meeting-msg-${m.id}`} className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}>
-                    <Avatar profile={sender} />
+                  <div
+                    key={m.id}
+                    id={`meeting-msg-${m.id}`}
+                    className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}
+                    style={{ marginTop: isGroupStart ? 12 : 2 }}
+                  >
+                    {isGroupStart ? <Avatar profile={sender} /> : <span className="flex-none" style={{ width: 28 }} />}
                     <div className={`flex flex-col ${mine ? "items-end" : "items-start"} max-w-[75%]`}>
-                      <span className="text-[11px] font-semibold mb-0.5" style={{ color: "var(--color-neutral-500)" }}>
-                        {mine ? "Bạn" : (sender?.display_name ?? "Ẩn danh")}
-                      </span>
+                      {isGroupStart && (
+                        <span className="text-[11px] font-semibold mb-0.5" style={{ color: "var(--color-neutral-500)" }}>
+                          {mine ? "Bạn" : (sender?.display_name ?? "Ẩn danh")}
+                        </span>
+                      )}
                       {m.is_recalled ? (
                         <div
                           className="rounded-[12px] px-3 py-2 text-sm italic"
