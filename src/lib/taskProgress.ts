@@ -1,3 +1,12 @@
+// A task's "done" state is entirely derived from which column it's sitting
+// in — there's no per-task completed flag. A column counts as the done
+// stage if its title says so directly ("hoàn thành") or names the final
+// delivery stage ("Final ..." — e.g. "Final 2026", renamed every year).
+export function isDoneColumnTitle(title: string): boolean {
+  const t = title.trim().toLowerCase();
+  return t.includes("hoàn thành") || t.startsWith("final");
+}
+
 // Progress is a time-urgency bar, not a manually-set completion percentage:
 // it climbs automatically from the task's start date to its due date, and
 // re-shortens on its own if the deadline gets pushed back — there is no

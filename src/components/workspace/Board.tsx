@@ -17,6 +17,7 @@ import { TaskCard } from "./TaskCard";
 import { AddTaskDialog } from "./AddTaskDialog";
 import { EditTaskDialog } from "./EditTaskDialog";
 import { createColumn, deleteColumn, reorderTasks } from "@/lib/actions/board";
+import { isDoneColumnTitle } from "@/lib/taskProgress";
 
 export function WorkspaceBoard({
   board,
@@ -56,7 +57,7 @@ export function WorkspaceBoard({
   );
 
   const allTasks = useMemo(() => Object.values(tasksByColumn).flat(), [tasksByColumn]);
-  const doneColumn = columns.find((c) => c.title.toLowerCase().includes("hoàn thành"));
+  const doneColumn = columns.find((c) => isDoneColumnTitle(c.title));
   const doneCount = doneColumn ? (tasksByColumn[doneColumn.id]?.length ?? 0) : 0;
   const activeTask = activeTaskId ? allTasks.find((t) => t.id === activeTaskId) : null;
 

@@ -6,6 +6,7 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import type { BoardColumn, TaskWithAssignee } from "@/lib/types";
 import { TaskCard } from "./TaskCard";
 import { renameColumn } from "@/lib/actions/board";
+import { isDoneColumnTitle } from "@/lib/taskProgress";
 
 export function Column({
   column,
@@ -23,7 +24,7 @@ export function Column({
   const { setNodeRef } = useDroppable({ id: column.id });
   const [title, setTitle] = useState(column.title);
   const [menuOpen, setMenuOpen] = useState(false);
-  const isDone = column.title.toLowerCase().includes("hoàn thành");
+  const isDone = isDoneColumnTitle(column.title);
 
   return (
     <div
