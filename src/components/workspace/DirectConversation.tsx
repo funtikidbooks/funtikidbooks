@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import { getConversation, sendDirectMessage } from "@/lib/actions/messages";
+import { getConversation, markDirectMessagesRead, sendDirectMessage } from "@/lib/actions/messages";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import type { DirectMessage, Profile } from "@/lib/types";
 
@@ -153,6 +153,15 @@ export function DirectConversation({
     };
   }, [resync]);
 
+  // Marks every unread message from the peer as read the moment this
+  // conversation is open and has anything to show — mirrors Messenger's
+  // behavior of marking things read just by having the thread open. Safe to
+  // call redundantly: the update only ever touches rows still unread.
+  useEffect(() => {
+    if (messages.length === 0) return;
+    markDirectMessagesRead(peer.id).catch(() => {});
+  }, [peer.id, messages]);
+
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -171,6 +180,21 @@ export function DirectConversation({
             if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
             setPeerTyping(false);
           }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "direct_messages" },
+        (payload) => {
+          // Only read_at ever changes on an existing row — this is what
+          // makes the "Đã xem" marker below update live once the peer opens
+          // the conversation, instead of only after a resync.
+          const row = payload.new as DirectMessage;
+          const belongsHere =
+            (row.sender_id === currentUser.id && row.recipient_id === peer.id) ||
+            (row.sender_id === peer.id && row.recipient_id === currentUser.id);
+          if (!belongsHere) return;
+          setMessages((prev) => prev.map((m) => (m.id === row.id ? row : m)));
         },
       )
       .on("broadcast", { event: "typing" }, (msg) => {
@@ -259,6 +283,17 @@ export function DirectConversation({
     }
   }
 
+  // Messenger-style: only the LAST of my messages the peer has actually
+  // seen gets the "Đã xem" label, not every read message — walk from the
+  // end since that's the most recent qualifying one.
+  const lastSeenMineMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.sender_id === currentUser.id && m.read_at) return m.id;
+    }
+    return null;
+  }, [messages, currentUser.id]);
+
   return (
     <>
       <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col gap-2 p-3">
@@ -321,6 +356,24 @@ export function DirectConversation({
               <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
                 {formatTime(m.created_at)}
               </span>
+              {m.id === lastSeenMineMessageId && (
+                <span className="flex items-center gap-1 mt-0.5" title={`${peer.display_name} đã xem`}>
+                  <span
+                    className="flex items-center justify-center rounded-full text-[8px] font-bold overflow-hidden flex-none"
+                    style={{ width: 12, height: 12, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+                  >
+                    {peer.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={thumbnailUrl(peer.avatar_url, 24)} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      peer.display_name.charAt(0).toUpperCase()
+                    )}
+                  </span>
+                  <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
+                    Đã xem
+                  </span>
+                </span>
+              )}
             </div>
           );
         })}

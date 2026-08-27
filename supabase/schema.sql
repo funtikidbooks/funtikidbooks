@@ -112,6 +112,11 @@ create table if not exists public.direct_messages (
 create index if not exists direct_messages_pair_idx
   on public.direct_messages (least(sender_id, recipient_id), greatest(sender_id, recipient_id), created_at);
 
+-- Messenger-style "Đã xem" receipt — set by the recipient (never the sender)
+-- the moment they have the conversation open, so the sender's own window can
+-- show exactly which of their messages the other person has actually seen.
+alter table public.direct_messages add column if not exists read_at timestamptz;
+
 alter table public.direct_messages enable row level security;
 
 drop policy if exists "staff can read their own conversations" on public.direct_messages;
@@ -125,6 +130,13 @@ create policy "staff can send messages as themselves"
   on public.direct_messages for insert
   to authenticated
   with check (auth.uid() = sender_id);
+
+drop policy if exists "recipient can mark messages read" on public.direct_messages;
+create policy "recipient can mark messages read"
+  on public.direct_messages for update
+  to authenticated
+  using (auth.uid() = recipient_id)
+  with check (auth.uid() = recipient_id);
 
 -- Required for the chat window to receive new messages live. Wrapped so
 -- re-running this script doesn't error if it's already a publication member.

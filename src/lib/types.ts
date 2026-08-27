@@ -81,6 +81,7 @@ export type DirectMessage = {
   attachment_mime: string | null;
   attachment_size: number | null;
   created_at: string;
+  read_at: string | null;
 };
 
 // A direct_messages row plus who the OTHER person in that conversation is —

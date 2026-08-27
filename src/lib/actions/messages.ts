@@ -30,6 +30,22 @@ export async function getConversation(otherUserId: string): Promise<DirectMessag
   return (data ?? []) as DirectMessage[];
 }
 
+// Stamps read_at on every unread message the peer sent me — the recipient
+// is the only one allowed to set this (see the "recipient can mark messages
+// read" RLS policy), so the sender's own open window can show a Messenger-
+// style "Đã xem" under the last message that's actually been seen. Safe to
+// call anytime the conversation is open/updates: the .is("read_at", null)
+// filter makes it a no-op once everything's already marked.
+export async function markDirectMessagesRead(peerId: string) {
+  const { supabase, user } = await requireUser();
+  await supabase
+    .from("direct_messages")
+    .update({ read_at: new Date().toISOString() })
+    .eq("sender_id", peerId)
+    .eq("recipient_id", user.id)
+    .is("read_at", null);
+}
+
 export async function searchDirectMessages(query: string): Promise<DirectMessageSearchResult[]> {
   const { supabase, user } = await requireUser();
   const trimmed = query.trim();
