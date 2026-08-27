@@ -1220,6 +1220,26 @@ create policy "creator or director can delete channels"
   to authenticated
   using (created_by = auth.uid() or public.current_access_role() = 'director');
 
+-- A policy on meeting_channel_members can't check membership by querying
+-- meeting_channel_members inline — Postgres re-applies the same policy to
+-- that inner query, which references itself again, and so on forever
+-- ("infinite recursion detected in policy for relation
+-- meeting_channel_members"). A security definer function sidesteps this: it
+-- runs as its owner, which bypasses RLS on the table it queries, so the
+-- lookup inside it never re-triggers the very policy calling it. Same
+-- pattern as can_manage_hr() above.
+create or replace function public.is_meeting_channel_member(p_channel_id uuid, p_profile_id uuid default auth.uid())
+returns boolean
+language sql
+security definer set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.meeting_channel_members m
+    where m.channel_id = p_channel_id and m.profile_id = p_profile_id
+  );
+$$;
+
 -- A member seeing the rest of their own room's roster is what lets
 -- createChannel() actually copy a parent room's members into a new
 -- sub-room (previously that select only ever returned the caller's own
@@ -1232,10 +1252,7 @@ create policy "staff can see channel memberships"
   using (
     profile_id = auth.uid()
     or public.current_access_role() = 'director'
-    or exists (
-      select 1 from public.meeting_channel_members m
-      where m.channel_id = meeting_channel_members.channel_id and m.profile_id = auth.uid()
-    )
+    or public.is_meeting_channel_member(channel_id)
   );
 
 drop policy if exists "staff can join channels themselves" on public.meeting_channel_members;
@@ -1251,12 +1268,7 @@ drop policy if exists "members can add teammates to the channel" on public.meeti
 create policy "members can add teammates to the channel"
   on public.meeting_channel_members for insert
   to authenticated
-  with check (
-    exists (
-      select 1 from public.meeting_channel_members m
-      where m.channel_id = meeting_channel_members.channel_id and m.profile_id = auth.uid()
-    )
-  );
+  with check (public.is_meeting_channel_member(channel_id));
 
 drop policy if exists "staff can leave channels themselves" on public.meeting_channel_members;
 create policy "staff can leave channels themselves"
