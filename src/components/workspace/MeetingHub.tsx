@@ -622,6 +622,14 @@ function RoomInfoDropdown({
                 className="flex items-center gap-2 px-1.5 py-1.5 rounded-[8px]"
                 style={{
                   background: "var(--color-surface)",
+                  // Without an explicit position, this row is a static
+                  // element and the "Mời ra" button behind it — despite
+                  // coming first in the DOM — is `position: absolute`, so it
+                  // paints on top regardless of swipe state. Making the row
+                  // itself positioned (and later in the DOM) puts it back on
+                  // top at rest, fully covering the button until a swipe
+                  // physically moves the row's box out of the way.
+                  position: canKick ? "relative" : undefined,
                   transform: canKick && offset !== 0 ? `translateX(${offset}px)` : undefined,
                   transition: draggingId === p.id ? "none" : "transform 0.2s ease",
                   touchAction: canKick ? "pan-y" : undefined,
