@@ -81,6 +81,17 @@ export function WorkspaceBoard({
   const doneCount = doneColumn ? (tasksByColumn[doneColumn.id]?.length ?? 0) : 0;
   const activeTask = activeTaskId ? allTasks.find((t) => t.id === activeTaskId) : null;
 
+  // One "Final <year>" column per year of archived work (renamed every year,
+  // per isDoneColumnTitle) — surface how many cards landed in each year
+  // rather than only the grand total, in board column order (newest first).
+  const yearStats = columns
+    .map((c) => {
+      const match = c.title.match(/final\s*(\d{4})/i);
+      if (!match) return null;
+      return { year: match[1], count: tasksByColumn[c.id]?.length ?? 0 };
+    })
+    .filter((v): v is { year: string; count: number } => v !== null);
+
   function findColumnIdOfTask(taskId: string) {
     for (const [colId, tasks] of Object.entries(tasksByColumn)) {
       if (tasks.some((t) => t.id === taskId)) return colId;
@@ -297,6 +308,15 @@ export function WorkspaceBoard({
         <div className="flex items-center gap-5 text-sm" style={{ color: "var(--color-neutral-600)" }}>
           <span>✅ {doneCount}/{allTasks.length} hoàn thành</span>
         </div>
+        {yearStats.length > 0 && (
+          <div className="flex items-center gap-5 text-sm" style={{ color: "var(--color-neutral-600)" }}>
+            {yearStats.map((y) => (
+              <span key={y.year}>
+                Năm {y.year}: <strong style={{ color: "var(--color-neutral-800)" }}>{y.count}</strong> dự án
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex items-center -space-x-2 ml-auto">
           {profiles.slice(0, 6).map((p) => (
             <div
