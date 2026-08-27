@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
@@ -375,6 +375,10 @@ export function MeetingHub({
   const channelRef = useRef<RealtimeChannel | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
   const lastMarkedReadIdRef = useRef<string | null>(null);
+  const activeIdRef = useRef(activeId);
+  useEffect(() => {
+    activeIdRef.current = activeId;
+  }, [activeId]);
   const popoverRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
@@ -470,30 +474,58 @@ export function MeetingHub({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showEmojiPicker, reactionPickerFor]);
 
-  useEffect(() => {
-    if (!activeId || activeId === DM_TAB_ID) return;
-    let cancelled = false;
-    lastMarkedReadIdRef.current = null;
-    getMeetingMessages(activeId)
+  // Re-fetches messages/reactions/reads for the active channel and replaces
+  // local state wholesale — the realtime subscription below can silently
+  // miss an INSERT sent while the websocket was disconnected (phone screen
+  // locked, tab backgrounded, a network blip...), which showed up to staff
+  // as a push notification arriving but the message itself never appearing
+  // until a manual reload. Called on room switch, on tab focus/visibility,
+  // and whenever the channel below (re)subscribes. Guards against a slow
+  // fetch for a room the user has since switched away from resolving late
+  // and clobbering whatever the current room already loaded.
+  const resync = useCallback(() => {
+    const id = activeId;
+    if (!id || id === DM_TAB_ID) return;
+    getMeetingMessages(id)
       .then((msgs) => {
-        if (cancelled) return;
+        if (activeIdRef.current !== id) return undefined;
         setMessages(msgs);
         return getReactions(msgs.map((m) => m.id));
       })
-      .then((rx) => !cancelled && rx && setReactions(rx))
+      .then((rx) => {
+        if (rx && activeIdRef.current === id) setReactions(rx);
+      })
       .catch(() => {
-        if (!cancelled) {
+        if (activeIdRef.current === id) {
           setMessages([]);
           setReactions([]);
         }
       });
-    getChannelReads(activeId)
-      .then((rd) => !cancelled && setReads(rd))
-      .catch(() => !cancelled && setReads([]));
-    return () => {
-      cancelled = true;
-    };
+    getChannelReads(id)
+      .then((rd) => {
+        if (activeIdRef.current === id) setReads(rd);
+      })
+      .catch(() => {
+        if (activeIdRef.current === id) setReads([]);
+      });
   }, [activeId]);
+
+  useEffect(() => {
+    lastMarkedReadIdRef.current = null;
+    resync();
+  }, [resync]);
+
+  useEffect(() => {
+    function handleVisible() {
+      if (document.visibilityState === "visible") resync();
+    }
+    document.addEventListener("visibilitychange", handleVisible);
+    window.addEventListener("focus", resync);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisible);
+      window.removeEventListener("focus", resync);
+    };
+  }, [resync]);
 
   // Mark the newest message in the currently-open channel as "seen by me" —
   // fires again whenever a fresh message arrives while the channel stays
@@ -575,7 +607,12 @@ export function MeetingHub({
           setReads((prev) => [...prev.filter((r) => r.profile_id !== row.profile_id), row]);
         },
       )
-      .subscribe();
+      // Fires with "SUBSCRIBED" both on the initial connect and after any
+      // reconnect — resyncing here is what catches up on messages that
+      // arrived during a drop, since Realtime doesn't replay missed events.
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") resync();
+      });
 
     channelRef.current = channel;
 
@@ -583,7 +620,7 @@ export function MeetingHub({
       channelRef.current = null;
       supabase.removeChannel(channel);
     };
-  }, [activeId, currentUser.id]);
+  }, [activeId, currentUser.id, resync]);
 
   // Keyed on activeId too, not just messages.length — switching to a room
   // whose message count happens to match the previous one wouldn't

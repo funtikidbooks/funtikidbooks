@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { getConversation, sendDirectMessage } from "@/lib/actions/messages";
@@ -122,17 +122,36 @@ export function DirectConversation({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showEmojiPicker]);
 
-  useEffect(() => {
-    let cancelled = false;
+  // Re-fetches the whole conversation and replaces local state wholesale —
+  // the realtime subscription below can silently miss an INSERT sent while
+  // the websocket was disconnected (phone screen locked, tab backgrounded, a
+  // network blip...), which showed up to staff as a push notification
+  // arriving but the message itself never appearing until a manual reload.
+  // Called on mount, on tab focus/visibility, and whenever the channel below
+  // (re)subscribes.
+  const resync = useCallback(() => {
     getConversation(peer.id)
-      .then((msgs) => !cancelled && setMessages(msgs))
+      .then((msgs) => setMessages(msgs))
       .catch(() => {
         // no live backend yet (e.g. workspace-demo) — chat just starts empty
       });
-    return () => {
-      cancelled = true;
-    };
   }, [peer.id]);
+
+  useEffect(() => {
+    resync();
+  }, [resync]);
+
+  useEffect(() => {
+    function handleVisible() {
+      if (document.visibilityState === "visible") resync();
+    }
+    document.addEventListener("visibilitychange", handleVisible);
+    window.addEventListener("focus", resync);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisible);
+      window.removeEventListener("focus", resync);
+    };
+  }, [resync]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -160,7 +179,12 @@ export function DirectConversation({
         if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
         peerTypingTimeoutRef.current = setTimeout(() => setPeerTyping(false), TYPING_IDLE_MS);
       })
-      .subscribe();
+      // Fires with "SUBSCRIBED" both on the initial connect and after any
+      // reconnect — resyncing here is what catches up on messages that
+      // arrived during a drop, since Realtime doesn't replay missed events.
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") resync();
+      });
 
     channelRef.current = channel;
 
@@ -170,7 +194,7 @@ export function DirectConversation({
       setPeerTyping(false);
       supabase.removeChannel(channel);
     };
-  }, [currentUser.id, peer.id]);
+  }, [currentUser.id, peer.id, resync]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
