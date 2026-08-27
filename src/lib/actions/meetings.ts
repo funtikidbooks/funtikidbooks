@@ -180,6 +180,27 @@ export async function addChannelMember(channelId: string, profileId: string) {
   revalidatePath("/workspace/hop");
 }
 
+// Rename and/or set/change/remove the room password. The "creator or
+// director can update channels" RLS policy on meeting_channels is the real
+// gate here (the UI only ever shows this to the creator, matching how
+// "Xoá phòng" is already gated) — this just turns a plain-text password
+// into a hash before it touches the row, same as createChannel().
+export async function updateChannel(channelId: string, input: { name?: string; password?: string | null }) {
+  const { supabase } = await requireUser();
+  const patch: { name?: string; password_hash?: string | null } = {};
+  if (input.name !== undefined) {
+    const trimmed = input.name.trim();
+    if (!trimmed) throw new Error("Thiếu tên phòng");
+    patch.name = trimmed;
+  }
+  if (input.password !== undefined) {
+    patch.password_hash = input.password && input.password.trim() ? hashPassword(input.password.trim()) : null;
+  }
+  const { error } = await supabase.from("meeting_channels").update(patch).eq("id", channelId);
+  if (error) throw new Error("Không thể cập nhật phòng");
+  revalidatePath("/workspace/hop");
+}
+
 export async function deleteChannel(channelId: string) {
   const { supabase } = await requireUser();
 

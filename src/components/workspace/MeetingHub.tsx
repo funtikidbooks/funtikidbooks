@@ -24,6 +24,7 @@ import {
   removeReaction,
   searchMeetingMessages,
   sendMeetingMessage,
+  updateChannel,
 } from "@/lib/actions/meetings";
 import type {
   MeetingChannelPublic,
@@ -368,20 +369,63 @@ function BrowseRoomsModal({
 // staff member is always listed, already-in-room people sorted to the top
 // with a filled checkmark instead of disappearing, so picking someone gives
 // immediate, visible confirmation without losing your place in the list.
-function AddMemberDropdown({
+function RoomInfoDropdown({
   channelId,
+  channelName,
+  hasPassword,
+  isOwner,
   profiles,
   onClose,
+  onUpdated,
 }: {
   channelId: string;
+  channelName: string;
+  hasPassword: boolean;
+  isOwner: boolean;
   profiles: Profile[];
   onClose: () => void;
+  onUpdated: (patch: { name?: string; has_password?: boolean }) => void;
 }) {
   const [memberIds, setMemberIds] = useState<Set<string> | null>(null);
   const [search, setSearch] = useState("");
   const [addingId, setAddingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  const [nameInput, setNameInput] = useState(channelName);
+  const [passwordEnabled, setPasswordEnabled] = useState(hasPassword);
+  const [currentHasPassword, setCurrentHasPassword] = useState(hasPassword);
+  const [passwordInput, setPasswordInput] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  async function saveSettings(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingSettings(true);
+    setSettingsError(null);
+    setSettingsSaved(false);
+    try {
+      const patch: { name?: string; password?: string | null } = {};
+      const trimmedName = nameInput.trim();
+      if (trimmedName && trimmedName !== channelName) patch.name = trimmedName;
+      if (!passwordEnabled && currentHasPassword) patch.password = null;
+      else if (passwordEnabled && passwordInput.trim()) patch.password = passwordInput.trim();
+
+      if (Object.keys(patch).length > 0) {
+        await updateChannel(channelId, patch);
+        onUpdated({ name: patch.name, has_password: passwordEnabled });
+        setCurrentHasPassword(passwordEnabled);
+        setPasswordInput("");
+      }
+      setSettingsSaved(true);
+      setTimeout(() => setSettingsSaved(false), 2000);
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setSavingSettings(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -427,7 +471,7 @@ function AddMemberDropdown({
   return (
     <div
       ref={popoverRef}
-      className="card elev-lg flex flex-col gap-3 p-4"
+      className="card elev-lg flex flex-col"
       style={{
         position: "absolute",
         top: 0,
@@ -441,36 +485,80 @@ function AddMemberDropdown({
         overflow: "hidden",
       }}
     >
-      <div className="flex items-center justify-between flex-none">
-        <h3 className="text-sm font-bold">Thêm thành viên</h3>
+      <div className="flex items-center justify-between flex-none p-4 pb-0">
+        <h3 className="text-sm font-bold">Thông tin phòng</h3>
         <button type="button" onClick={onClose} className="btn-icon flex-none" style={{ width: 26, height: 26, padding: 0 }} aria-label="Đóng">
           ✕
         </button>
       </div>
-      <input
-        className="input flex-none"
-        type="text"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Tìm tên nhân viên…"
-        style={{ padding: "6px 10px", fontSize: 13 }}
-        autoFocus
-      />
-      {error && (
-        <p className="text-[12px] font-semibold" style={{ color: "var(--status-red)" }}>
-          {error}
-        </p>
-      )}
-      {memberIds === null ? (
-        <p className="text-[12px] text-center py-3" style={{ color: "var(--color-neutral-500)" }}>
-          Đang tải…
-        </p>
-      ) : rows.length === 0 ? (
-        <p className="text-[12px] text-center py-3" style={{ color: "var(--color-neutral-500)" }}>
-          Không tìm thấy ai.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-1 overflow-y-auto flex-1">
+
+      <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
+        {isOwner && (
+          <form onSubmit={saveSettings} className="flex flex-col gap-2 pb-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+            <div className="field">
+              <label htmlFor="room-edit-name" className="text-[11px]">
+                Tên phòng
+              </label>
+              <input
+                id="room-edit-name"
+                className="input"
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value.slice(0, 60))}
+                style={{ padding: "6px 10px", fontSize: 13 }}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-[12px] font-semibold cursor-pointer">
+              <input type="checkbox" checked={passwordEnabled} onChange={(e) => setPasswordEnabled(e.target.checked)} />
+              🔒 Đặt mật khẩu (phòng riêng tư)
+            </label>
+            {passwordEnabled && (
+              <input
+                className="input"
+                type="text"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder={currentHasPassword ? "Để trống nếu không đổi mật khẩu" : "Mật khẩu để tham gia phòng"}
+                style={{ padding: "6px 10px", fontSize: 13 }}
+              />
+            )}
+            {settingsError && (
+              <p className="text-[12px] font-semibold" style={{ color: "var(--status-red)" }}>
+                {settingsError}
+              </p>
+            )}
+            <button type="submit" disabled={savingSettings} className="btn btn-secondary btn-sm">
+              {savingSettings ? "Đang lưu…" : settingsSaved ? "✓ Đã lưu" : "Lưu thay đổi"}
+            </button>
+          </form>
+        )}
+
+        <h4 className="text-[12px] font-bold" style={{ color: "var(--color-neutral-500)" }}>
+          THÀNH VIÊN
+        </h4>
+        <input
+          className="input flex-none"
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Tìm tên nhân viên…"
+          style={{ padding: "6px 10px", fontSize: 13 }}
+        />
+        {error && (
+          <p className="text-[12px] font-semibold" style={{ color: "var(--status-red)" }}>
+            {error}
+          </p>
+        )}
+        {memberIds === null ? (
+          <p className="text-[12px] text-center py-3" style={{ color: "var(--color-neutral-500)" }}>
+            Đang tải…
+          </p>
+        ) : rows.length === 0 ? (
+          <p className="text-[12px] text-center py-3" style={{ color: "var(--color-neutral-500)" }}>
+            Không tìm thấy ai.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1">
           {rows.map((p) => {
             const isMember = memberIds.has(p.id);
             return (
@@ -510,8 +598,9 @@ function AddMemberDropdown({
               </div>
             );
           })}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -925,6 +1014,10 @@ export function MeetingHub({
     selectChannel(id);
   }
 
+  function handleChannelUpdated(id: string, patch: { name?: string; has_password?: boolean }) {
+    setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  }
+
   function toggleRoomExpanded(id: string) {
     setExpandedRoomIds((prev) => {
       const next = new Set(prev);
@@ -1318,8 +1411,8 @@ export function MeetingHub({
                   }}
                   className="btn-icon flex-none"
                   style={{ width: 30, height: 30, padding: 0 }}
-                  aria-label="Thêm thành viên"
-                  title="Thêm thành viên vào phòng"
+                  aria-label="Thông tin phòng"
+                  title="Thông tin phòng & thành viên"
                 >
                   👥
                 </button>
@@ -1594,10 +1687,14 @@ export function MeetingHub({
             )}
 
             {showAddMember && (
-              <AddMemberDropdown
+              <RoomInfoDropdown
                 channelId={activeChannel.id}
+                channelName={activeChannel.name}
+                hasPassword={activeChannel.has_password}
+                isOwner={activeChannel.created_by === currentUser.id}
                 profiles={profiles.filter((p) => p.id !== currentUser.id)}
                 onClose={() => setShowAddMember(false)}
+                onUpdated={(patch) => handleChannelUpdated(activeChannel.id, patch)}
               />
             )}
 
