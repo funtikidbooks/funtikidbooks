@@ -43,14 +43,24 @@ export function DirectMessagesPanel({
   currentUser,
   profiles,
   onOpenRoomList,
+  initialPeerId,
 }: {
   currentUser: Pick<Profile, "id" | "display_name">;
   profiles: Profile[];
   onOpenRoomList: () => void;
+  initialPeerId?: string | null;
 }) {
   const { unreadCounts, recentSenderOrder, clearDmUnread } = useChatManager();
   const onlineIds = usePresence(currentUser.id);
-  const [selectedPeer, setSelectedPeer] = useState<Profile | null>(null);
+  const [selectedPeer, setSelectedPeer] = useState<Profile | null>(() =>
+    initialPeerId ? (profiles.find((p) => p.id === initialPeerId) ?? null) : null,
+  );
+
+  // Deep-linked in from a push notification click — clear that peer's
+  // unread badge the same way clicking their row in the rail would.
+  useEffect(() => {
+    if (initialPeerId) clearDmUnread(initialPeerId);
+  }, [initialPeerId, clearDmUnread]);
   const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");

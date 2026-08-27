@@ -126,6 +126,7 @@ export async function sendDirectMessage(recipientId: string, content: string, fo
       title: senderProfile?.display_name ?? "Tin nhắn mới",
       body: trimmed || (attachment ? "📎 Đã gửi một tệp đính kèm" : ""),
       senderId: user.id,
+      url: `/workspace/hop?dm=${user.id}`,
     }).catch(() => {});
   });
 

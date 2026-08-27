@@ -399,7 +399,7 @@ async function notifyChannelMembers(
           title,
           body,
           senderId,
-          url: "/workspace/hop",
+          url: `/workspace/hop?room=${channelId}`,
           tag: `funti-channel-${channelId}`,
         }).catch(() => {}),
       ),
@@ -453,6 +453,30 @@ export async function addReaction(messageId: string, emoji: string) {
     .from("meeting_message_reactions")
     .upsert({ message_id: messageId, profile_id: user.id, emoji }, { onConflict: "message_id,profile_id,emoji" });
   if (error) throw new Error("Không thể thả cảm xúc");
+
+  // Same after()-wrapped fire-and-forget push as sendMeetingMessage — see
+  // its comment for why a plain un-awaited promise silently gets cut off on
+  // Vercel's serverless runtime.
+  after(() => notifyReaction(supabase, messageId, user.id, emoji).catch(() => {}));
+}
+
+async function notifyReaction(supabase: Awaited<ReturnType<typeof createClient>>, messageId: string, reactorId: string, emoji: string) {
+  const { data: message } = await supabase.from("meeting_messages").select("sender_id, channel_id").eq("id", messageId).maybeSingle();
+  if (!message || message.sender_id === reactorId) return;
+
+  const [{ data: reactor }, { data: channel }] = await Promise.all([
+    supabase.from("profiles").select("display_name").eq("id", reactorId).maybeSingle(),
+    supabase.from("meeting_channels").select("name").eq("id", message.channel_id as string).maybeSingle(),
+  ]);
+  const reactorName = reactor?.display_name ?? "Ai đó";
+
+  await sendPushToUser(message.sender_id as string, {
+    title: `#${channel?.name ?? ""} · ${reactorName}`,
+    body: `Đã thả ${emoji} vào tin nhắn của bạn`,
+    senderId: reactorId,
+    url: `/workspace/hop?room=${message.channel_id}`,
+    tag: `funti-reaction-${messageId}`,
+  }).catch(() => {});
 }
 
 export async function removeReaction(messageId: string, emoji: string) {

@@ -716,6 +716,38 @@ export function MeetingHub({
   const [activeId, setActiveId] = useState<string | null>(
     initialChannels.find((c) => c.is_general)?.id ?? initialChannels[0]?.id ?? null,
   );
+  // Deep-linking from a push notification click: sw.js sends the browser to
+  // /workspace/hop?room=<id> or ?dm=<peerId>, so a click goes straight to
+  // the room/conversation instead of just opening the workspace generically
+  // to whatever room was open. This has to happen in an effect, not a
+  // useState lazy initializer that reads window.location directly — the
+  // server has no URL to read, so it always renders the default room, and a
+  // lazy initializer that behaves differently on the client's first render
+  // than what the server sent is exactly what causes a hydration mismatch.
+  // Reading it post-mount instead means the first client render still
+  // matches the server, and this effect nudges it over right after.
+  const [initialDmPeerId, setInitialDmPeerId] = useState<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const dm = params.get("dm");
+    const room = params.get("room");
+    if (!dm && !room) return;
+    // set-state-in-effect normally flags this as a smell because it usually
+    // means state is being needlessly mirrored from other React state — but
+    // here it's genuinely synchronizing with an external system (the URL a
+    // notification click landed on), which has no server-side equivalent to
+    // read during the initial render. It runs once, not on a loop.
+    if (dm) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setInitialDmPeerId(dm);
+      setActiveId(DM_TAB_ID);
+    } else if (room && initialChannels.some((c) => c.id === room)) {
+      setActiveId(room);
+    }
+    // Deliberately only runs once, off the URL the notification click
+    // landed on — not meant to react to later in-app room switches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [messages, setMessages] = useState<MeetingMessage[]>([]);
   const [reactions, setReactions] = useState<MeetingReaction[]>([]);
   const [reads, setReads] = useState<MeetingChannelRead[]>([]);
@@ -1459,6 +1491,7 @@ export function MeetingHub({
             currentUser={currentUser}
             profiles={profiles}
             onOpenRoomList={() => setShowRoomListMobile(true)}
+            initialPeerId={initialDmPeerId}
           />
         ) : !activeChannel ? (
           <div className="flex-1 flex flex-col">
