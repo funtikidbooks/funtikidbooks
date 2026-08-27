@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getMonthAttendance } from "@/lib/actions/attendance";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { AttendanceMonthDetail } from "@/components/admin/AttendanceMonthDetail";
@@ -21,9 +22,28 @@ export function AttendanceBoard({
   initialEntries: AttendanceEntry[];
   staff: Profile[];
 }) {
-  const [entries] = useState(initialEntries);
+  const entries = initialEntries;
   const [detail, setDetail] = useState<{ profile: Profile; entries: AttendanceEntry[] } | null>(null);
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
+  const router = useRouter();
+
+  // initialEntries is a snapshot from the server render — Next.js's client
+  // router cache can keep serving that same snapshot when navigating back to
+  // this page, so refresh explicitly whenever the page (re)mounts or the tab
+  // regains focus, instead of leaving staff to hard-reload to see new
+  // check-ins.
+  useEffect(() => {
+    router.refresh();
+    function handleVisible() {
+      if (document.visibilityState === "visible") router.refresh();
+    }
+    document.addEventListener("visibilitychange", handleVisible);
+    window.addEventListener("focus", handleVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisible);
+      window.removeEventListener("focus", handleVisible);
+    };
+  }, [router]);
 
   const today = vnToday();
 

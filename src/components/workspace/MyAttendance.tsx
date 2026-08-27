@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { listMyMonthAttendance } from "@/lib/actions/attendance";
 import {
   MONTH_LABELS,
@@ -20,8 +21,36 @@ import type { AttendanceEntry } from "@/lib/types";
 
 export function MyAttendance({ initialEntries }: { initialEntries: AttendanceEntry[] }) {
   const [monthStart, setMonthStart] = useState(() => firstOfMonth(vnToday()));
-  const [entries, setEntries] = useState(initialEntries);
+  // page.tsx always fetches the current month, so for that month the freshly
+  // refreshed initialEntries prop is used directly rather than a frozen copy
+  // — otherwise we'd need an effect just to re-sync state to a prop, which
+  // causes an extra render for no benefit. Only navigating to a past/future
+  // month needs its own fetched state.
+  const [otherMonthEntries, setOtherMonthEntries] = useState<AttendanceEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  const isCurrentMonth = monthStart === firstOfMonth(vnToday());
+  const entries = useMemo(
+    () => (isCurrentMonth ? initialEntries : (otherMonthEntries ?? [])),
+    [isCurrentMonth, initialEntries, otherMonthEntries],
+  );
+
+  // The client router cache can keep serving the same server-rendered
+  // snapshot when navigating back to this page, so refresh explicitly
+  // whenever it (re)mounts or the tab regains focus, instead of leaving
+  // people to hard-reload to see today's check-in.
+  useEffect(() => {
+    router.refresh();
+    function handleVisible() {
+      if (document.visibilityState === "visible") router.refresh();
+    }
+    document.addEventListener("visibilitychange", handleVisible);
+    window.addEventListener("focus", handleVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisible);
+      window.removeEventListener("focus", handleVisible);
+    };
+  }, [router]);
 
   const today = vnToday();
   const byDate = useMemo(() => new Map(entries.map((e) => [e.work_date, e])), [entries]);
@@ -29,11 +58,15 @@ export function MyAttendance({ initialEntries }: { initialEntries: AttendanceEnt
 
   async function goToMonth(newStart: string) {
     setMonthStart(newStart);
+    if (newStart === firstOfMonth(vnToday())) {
+      setOtherMonthEntries(null);
+      return;
+    }
     setLoading(true);
     try {
-      setEntries(await listMyMonthAttendance(newStart));
+      setOtherMonthEntries(await listMyMonthAttendance(newStart));
     } catch {
-      setEntries([]);
+      setOtherMonthEntries([]);
     } finally {
       setLoading(false);
     }
