@@ -134,11 +134,22 @@ function Avatar({ profile, size = 28 }: { profile: Pick<Profile, "display_name" 
   );
 }
 
-function CreateRoomModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+function CreateRoomModal({
+  onClose,
+  onCreated,
+  parentOptions,
+  initialParentId,
+}: {
+  onClose: () => void;
+  onCreated: (id: string) => void;
+  parentOptions: MeetingChannelPublic[];
+  initialParentId?: string | null;
+}) {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [locked, setLocked] = useState(false);
   const [icon, setIcon] = useState(ROOM_ICONS[0]);
+  const [parentId, setParentId] = useState(initialParentId ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -152,7 +163,7 @@ function CreateRoomModal({ onClose, onCreated }: { onClose: () => void; onCreate
     setSaving(true);
     setError(null);
     try {
-      const id = await createChannel(name, locked ? password : "", icon);
+      const id = await createChannel(name, locked ? password : "", icon, parentId || null);
       onCreated(id);
       onClose();
     } catch (err) {
@@ -165,7 +176,26 @@ function CreateRoomModal({ onClose, onCreated }: { onClose: () => void; onCreate
   return (
     <Modal onClose={onClose} maxWidth={420}>
       <form onSubmit={submit} className="flex flex-col gap-4 p-6">
-        <h2 className="text-lg">Tạo phòng mới</h2>
+        <h2 className="text-lg">{initialParentId ? "Tạo phòng con" : "Tạo phòng mới"}</h2>
+
+        {parentOptions.length > 0 && (
+          <div className="field">
+            <label htmlFor="room-parent">Thuộc phòng (tuỳ chọn)</label>
+            <select id="room-parent" className="input" value={parentId} onChange={(e) => setParentId(e.target.value)}>
+              <option value="">Không — phòng độc lập</option>
+              {parentOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.icon} {p.name}
+                </option>
+              ))}
+            </select>
+            {parentId && (
+              <p className="text-[11px] mt-1" style={{ color: "var(--color-neutral-500)" }}>
+                Thành viên hiện tại của phòng đó sẽ tự động có mặt trong phòng con này.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="field">
           <label>Biểu tượng</label>
@@ -354,6 +384,14 @@ export function MeetingHub({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [createParentId, setCreateParentId] = useState<string | null>(null);
+  // Top-level rooms only (a sub-room can't itself have sub-rooms) that I'm
+  // already in, since I'd need to be a member to see/nest under one anyway.
+  const nestableRooms = useMemo(
+    () => channels.filter((c) => c.joined && !c.is_general && !c.parent_channel_id),
+    [channels],
+  );
+  const [expandedRoomIds, setExpandedRoomIds] = useState<Set<string>>(new Set());
   const [showBrowse, setShowBrowse] = useState(false);
   // The room list is a persistent column at sm+, but a full-screen overlay
   // on phones (no room for it beside the chat panel) — toggled from a
@@ -417,6 +455,20 @@ export function MeetingHub({
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const joinedRooms = useMemo(() => channels.filter((c) => c.joined), [channels]);
+  // Top-level rooms render in the list as usual; sub-rooms are grouped under
+  // their parent instead, shown indented and only while that parent is
+  // expanded — same "folder" pattern as the workspace's other tree views.
+  const topLevelJoinedRooms = useMemo(() => joinedRooms.filter((c) => !c.parent_channel_id), [joinedRooms]);
+  const childRoomsByParent = useMemo(() => {
+    const map = new Map<string, MeetingChannelPublic[]>();
+    for (const c of joinedRooms) {
+      if (!c.parent_channel_id) continue;
+      const list = map.get(c.parent_channel_id);
+      if (list) list.push(c);
+      else map.set(c.parent_channel_id, [c]);
+    }
+    return map;
+  }, [joinedRooms]);
   const dmTotalUnread = useMemo(() => Object.values(dmUnreadCounts).reduce((sum, n) => sum + n, 0), [dmUnreadCounts]);
   const browsableRooms = useMemo(() => channels.filter((c) => !c.joined), [channels]);
   const activeChannel = channels.find((c) => c.id === activeId) ?? null;
@@ -692,6 +744,15 @@ export function MeetingHub({
     selectChannel(id);
   }
 
+  function toggleRoomExpanded(id: string) {
+    setExpandedRoomIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   function handleJoined(id: string) {
     refreshChannel(id, { joined: true });
     setShowBrowse(false);
@@ -708,10 +769,16 @@ export function MeetingHub({
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Xoá phòng này? Toàn bộ tin nhắn sẽ mất.")) return;
+    const childIds = channels.filter((c) => c.parent_channel_id === id).map((c) => c.id);
+    const warning =
+      childIds.length > 0
+        ? `Xoá phòng này? Toàn bộ tin nhắn và ${childIds.length} phòng con bên trong sẽ mất.`
+        : "Xoá phòng này? Toàn bộ tin nhắn sẽ mất.";
+    if (!confirm(warning)) return;
     await deleteChannel(id);
-    setChannels((prev) => prev.filter((c) => c.id !== id));
-    if (activeId === id) {
+    const removedIds = new Set([id, ...childIds]);
+    setChannels((prev) => prev.filter((c) => !removedIds.has(c.id)));
+    if (activeId && removedIds.has(activeId)) {
       selectChannel(channels.find((c) => c.is_general)?.id ?? null);
     }
   }
@@ -889,33 +956,83 @@ export function MeetingHub({
           </div>
         </div>
         <div className="flex flex-col gap-1 overflow-y-auto flex-1">
-          {joinedRooms.map((r) => {
+          {topLevelJoinedRooms.map((r) => {
             const roomUnread = meetingUnreadCounts[r.id] ?? 0;
+            const children = childRoomsByParent.get(r.id) ?? [];
+            const expanded = expandedRoomIds.has(r.id);
             return (
             <div key={r.id} className="contents">
-              <button
-                type="button"
-                onClick={() => selectChannel(r.id)}
-                className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
-                style={{
-                  background: activeId === r.id ? "var(--color-accent-100)" : undefined,
-                  color: activeId === r.id ? "var(--color-accent-700)" : "var(--color-text)",
-                }}
-              >
-                <span aria-hidden>{r.icon}</span>
-                <span className="flex-1 truncate">{r.name}</span>
-                {r.has_password && !r.is_general && (
-                  <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
-                )}
-                {roomUnread > 0 && (
-                  <span
-                    className="flex items-center justify-center rounded-full font-bold flex-none"
-                    style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+              <div className="flex items-center gap-0.5">
+                {children.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleRoomExpanded(r.id)}
+                    className="btn-icon flex-none"
+                    style={{ width: 18, height: 18, padding: 0, fontSize: 10 }}
+                    aria-label={expanded ? "Thu gọn phòng con" : "Xổ phòng con"}
                   >
-                    {roomUnread > 9 ? "9+" : roomUnread}
-                  </span>
+                    {expanded ? "▾" : "▸"}
+                  </button>
+                ) : (
+                  <span className="flex-none" style={{ width: 18 }} />
                 )}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => selectChannel(r.id)}
+                  className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold flex-1 min-w-0"
+                  style={{
+                    background: activeId === r.id ? "var(--color-accent-100)" : undefined,
+                    color: activeId === r.id ? "var(--color-accent-700)" : "var(--color-text)",
+                  }}
+                >
+                  <span aria-hidden>{r.icon}</span>
+                  <span className="flex-1 truncate">{r.name}</span>
+                  {r.has_password && !r.is_general && (
+                    <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
+                  )}
+                  {roomUnread > 0 && (
+                    <span
+                      className="flex items-center justify-center rounded-full font-bold flex-none"
+                      style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                    >
+                      {roomUnread > 9 ? "9+" : roomUnread}
+                    </span>
+                  )}
+                </button>
+              </div>
+              {expanded &&
+                children.map((child) => {
+                  const childUnread = meetingUnreadCounts[child.id] ?? 0;
+                  return (
+                    <button
+                      key={child.id}
+                      type="button"
+                      onClick={() => selectChannel(child.id)}
+                      className="ws-nav-link flex items-center gap-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
+                      style={{
+                        marginLeft: 26,
+                        paddingLeft: 8,
+                        paddingRight: 8,
+                        background: activeId === child.id ? "var(--color-accent-100)" : undefined,
+                        color: activeId === child.id ? "var(--color-accent-700)" : "var(--color-text)",
+                      }}
+                    >
+                      <span aria-hidden>{child.icon}</span>
+                      <span className="flex-1 truncate">{child.name}</span>
+                      {child.has_password && (
+                        <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
+                      )}
+                      {childUnread > 0 && (
+                        <span
+                          className="flex items-center justify-center rounded-full font-bold flex-none"
+                          style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                        >
+                          {childUnread > 9 ? "9+" : childUnread}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
               {r.is_general && (
                 <button
                   type="button"
@@ -987,7 +1104,29 @@ export function MeetingHub({
                 ☰
               </button>
               <span aria-hidden style={{ fontSize: 18 }}>{activeChannel.icon}</span>
-              <span className="font-bold flex-1 truncate">{activeChannel.name}</span>
+              <span className="flex-1 min-w-0 flex flex-col">
+                {activeChannel.parent_channel_id && (
+                  <span className="text-[10px] truncate" style={{ color: "var(--color-neutral-500)" }}>
+                    ↳ {channels.find((c) => c.id === activeChannel.parent_channel_id)?.name ?? ""}
+                  </span>
+                )}
+                <span className="font-bold truncate">{activeChannel.name}</span>
+              </span>
+              {!activeChannel.is_general && !activeChannel.parent_channel_id && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateParentId(activeChannel.id);
+                    setShowCreate(true);
+                  }}
+                  className="btn-icon flex-none"
+                  style={{ width: 30, height: 30, padding: 0 }}
+                  aria-label="Tạo phòng con"
+                  title="Tạo phòng con trong phòng này"
+                >
+                  ➕
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowSearch((v) => !v)}
@@ -1503,7 +1642,20 @@ export function MeetingHub({
         )}
       </div>
 
-      {showCreate && <CreateRoomModal onClose={() => setShowCreate(false)} onCreated={handleCreated} />}
+      {showCreate && (
+        <CreateRoomModal
+          onClose={() => {
+            setShowCreate(false);
+            setCreateParentId(null);
+          }}
+          onCreated={(id) => {
+            if (createParentId) setExpandedRoomIds((prev) => new Set(prev).add(createParentId));
+            handleCreated(id);
+          }}
+          parentOptions={nestableRooms}
+          initialParentId={createParentId}
+        />
+      )}
       {showBrowse && (
         <BrowseRoomsModal rooms={browsableRooms} onClose={() => setShowBrowse(false)} onJoined={handleJoined} />
       )}

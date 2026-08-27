@@ -106,6 +106,7 @@ export type MeetingChannel = {
   password_hash: string | null;
   created_by: string | null;
   created_at: string;
+  parent_channel_id: string | null;
 };
 
 // What the client actually receives for a channel — password_hash is never

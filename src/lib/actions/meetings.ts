@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
-import type { MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, MeetingSearchResult } from "@/lib/types";
+import type { MeetingChannel, MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, MeetingSearchResult } from "@/lib/types";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -34,14 +34,27 @@ function verifyPassword(password: string, stored: string) {
 
 export async function listChannels(): Promise<MeetingChannelPublic[]> {
   const { supabase, user } = await requireUser();
-  const [{ data: channels }, { data: memberships }] = await Promise.all([
+  const [channelsResult, { data: memberships }] = await Promise.all([
     supabase
       .from("meeting_channels")
-      .select("id, name, icon, is_general, created_by, created_at, password_hash")
+      .select("id, name, icon, is_general, created_by, created_at, password_hash, parent_channel_id")
       .order("is_general", { ascending: false })
       .order("created_at", { ascending: true }),
     supabase.from("meeting_channel_members").select("channel_id").eq("profile_id", user.id),
   ]);
+
+  // parent_channel_id might not exist yet if supabase/schema.sql's sub-room
+  // migration hasn't been re-run in Supabase — fall back to the same query
+  // without it so the whole room list doesn't break in the meantime.
+  let channels: Array<Record<string, unknown>> | null = channelsResult.data;
+  if (channelsResult.error) {
+    const fallback = await supabase
+      .from("meeting_channels")
+      .select("id, name, icon, is_general, created_by, created_at, password_hash")
+      .order("is_general", { ascending: false })
+      .order("created_at", { ascending: true });
+    channels = fallback.data;
+  }
 
   const joinedIds = new Set((memberships ?? []).map((m) => m.channel_id as string));
 
@@ -52,31 +65,57 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
     is_general: c.is_general as boolean,
     created_by: c.created_by as string | null,
     created_at: c.created_at as string,
+    parent_channel_id: (c.parent_channel_id as string | null | undefined) ?? null,
     has_password: !!c.password_hash,
     joined: (c.is_general as boolean) || joinedIds.has(c.id as string),
   }));
 }
 
-export async function createChannel(name: string, password: string, icon: string) {
+export async function createChannel(name: string, password: string, icon: string, parentChannelId?: string | null) {
   const { supabase, user } = await requireUser();
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Thiếu tên phòng");
 
-  const { data, error } = await supabase
-    .from("meeting_channels")
-    .insert({
-      name: trimmed,
-      icon: icon.trim() || "💬",
-      is_general: false,
-      password_hash: password.trim() ? hashPassword(password.trim()) : null,
-      created_by: user.id,
-    })
-    .select("id")
-    .single();
+  // parent_channel_id is only ever included when actually nesting under a
+  // room, so a director who hasn't re-run supabase/schema.sql yet (adding
+  // that column) can still create ordinary top-level rooms without erroring
+  // — only the sub-room feature itself needs that migration.
+  const insertRow: Partial<MeetingChannel> & { name: string; icon: string; is_general: boolean; created_by: string } = {
+    name: trimmed,
+    icon: icon.trim() || "💬",
+    is_general: false,
+    password_hash: password.trim() ? hashPassword(password.trim()) : null,
+    created_by: user.id,
+  };
+  if (parentChannelId) insertRow.parent_channel_id = parentChannelId;
+
+  const { data, error } = await supabase.from("meeting_channels").insert(insertRow).select("id").single();
 
   if (error || !data) throw new Error("Không thể tạo phòng");
 
   await supabase.from("meeting_channel_members").insert({ channel_id: data.id, profile_id: user.id });
+
+  // "Tự động giống hệt phòng cha" — copy every current member of the parent
+  // room into this sub-room too, so nobody has to be re-invited by hand.
+  // A one-time copy, not a live link: someone who joins the parent later
+  // isn't retroactively added to sub-rooms created before they joined.
+  if (parentChannelId) {
+    const { data: parentMembers } = await supabase
+      .from("meeting_channel_members")
+      .select("profile_id")
+      .eq("channel_id", parentChannelId);
+    const others = (parentMembers ?? [])
+      .map((m) => m.profile_id as string)
+      .filter((id) => id !== user.id);
+    if (others.length > 0) {
+      await supabase
+        .from("meeting_channel_members")
+        .upsert(
+          others.map((profile_id) => ({ channel_id: data.id, profile_id })),
+          { onConflict: "channel_id,profile_id" },
+        );
+    }
+  }
 
   revalidatePath("/workspace/hop");
   return data.id as string;
@@ -116,13 +155,17 @@ export async function leaveChannel(channelId: string) {
 export async function deleteChannel(channelId: string) {
   const { supabase } = await requireUser();
 
-  // meeting_messages cascade-deletes with the channel at the DB level, but
-  // that never touches Supabase Storage — clean up every attachment first
-  // or they'd sit there orphaned forever.
+  // A room's own sub-rooms cascade-delete with it at the DB level (see
+  // parent_channel_id's "on delete cascade"), so their messages' attachments
+  // need cleaning up here too, or they'd sit there orphaned forever — the
+  // cascade never touches Supabase Storage either way.
+  const { data: childChannels } = await supabase.from("meeting_channels").select("id").eq("parent_channel_id", channelId);
+  const channelIds = [channelId, ...(childChannels ?? []).map((c) => c.id as string)];
+
   const { data: messagesWithFiles } = await supabase
     .from("meeting_messages")
     .select("attachment_url")
-    .eq("channel_id", channelId)
+    .in("channel_id", channelIds)
     .not("attachment_url", "is", null);
   const paths = (messagesWithFiles ?? [])
     .map((m) => storagePathFromPublicUrl(m.attachment_url as string, "task-attachments"))

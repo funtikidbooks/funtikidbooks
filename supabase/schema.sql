@@ -1142,6 +1142,18 @@ create table if not exists public.meeting_channels (
   created_at timestamptz not null default now()
 );
 
+-- Optional sub-room nesting ("phòng nhỏ" for a project's phases, inside a
+-- regular room) — one level deep only, enforced app-side (the parent picker
+-- only ever offers top-level rooms, and a room that already has a parent
+-- doesn't get a "create sub-room" affordance). A sub-room's own membership
+-- row set is just a one-time copy of the parent's members at creation time
+-- (see createChannel) rather than a live join — simpler than teaching every
+-- RLS policy about the hierarchy, and matches the ask: nobody has to be
+-- re-invited by hand, but membership isn't meant to stay magically in sync
+-- forever after.
+alter table public.meeting_channels add column if not exists parent_channel_id uuid references public.meeting_channels (id) on delete cascade;
+create index if not exists meeting_channels_parent_idx on public.meeting_channels (parent_channel_id);
+
 create table if not exists public.meeting_channel_members (
   channel_id uuid not null references public.meeting_channels (id) on delete cascade,
   profile_id uuid not null references public.profiles (id) on delete cascade,
