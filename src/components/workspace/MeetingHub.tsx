@@ -7,6 +7,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { DirectMessagesPanel } from "@/components/workspace/DirectMessagesPanel";
 import { VideoCallModal } from "@/components/workspace/VideoCallModal";
+import { useCallPresence } from "@/lib/useCallPresence";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import {
   addChannelMember,
@@ -962,6 +963,11 @@ export function MeetingHub({
   // Only custom rooms track explicit membership rows — "Chung" is open to
   // every staff member implicitly, so there's no meaningful roster to show.
   const activeRoomIdForMembers = activeChannel && !activeChannel.is_general ? activeChannel.id : null;
+  // Watches (without joining) whether anyone's currently on a call in this
+  // room — the banner below is how a member other than the one who started
+  // it finds out there's a call to join at all.
+  const activeCallParticipants = useCallPresence(activeChannel ? `hop-${activeChannel.id}` : null);
+  const othersOnCall = activeCallParticipants.filter((p) => p.id !== currentUser.id);
 
   useEffect(() => {
     if (!activeRoomIdForMembers) return;
@@ -1813,6 +1819,25 @@ export function MeetingHub({
               )}
             </div>
 
+            {othersOnCall.length > 0 && !showVideoCall && (
+              <div
+                className="flex-none flex items-center gap-2 px-4 py-2"
+                style={{ background: "var(--color-accent-100)", color: "var(--color-accent-700)" }}
+              >
+                <span
+                  className="rounded-full flex-none"
+                  style={{ width: 7, height: 7, background: "var(--status-red)" }}
+                  aria-hidden
+                />
+                <span className="text-[13px] font-semibold flex-1 truncate">
+                  📹 {othersOnCall.map((p) => p.display_name).join(", ")} đang gọi video
+                </span>
+                <button type="button" onClick={() => setShowVideoCall(true)} className="btn btn-primary btn-sm flex-none">
+                  Tham gia
+                </button>
+              </div>
+            )}
+
             {showSearch && (
               <div className="flex-none flex flex-col" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
                 <div className="flex items-center gap-2 px-4 py-2">
@@ -2529,6 +2554,7 @@ export function MeetingHub({
         <VideoCallModal
           roomKey={`hop-${activeChannel.id}`}
           label={`📹 ${activeChannel.name}`}
+          selfId={currentUser.id}
           displayName={currentUser.display_name}
           onClose={() => setShowVideoCall(false)}
         />

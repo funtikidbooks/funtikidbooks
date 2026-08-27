@@ -6,6 +6,7 @@ import { DirectConversation } from "@/components/workspace/DirectConversation";
 import { VideoCallModal } from "@/components/workspace/VideoCallModal";
 import { searchDirectMessages } from "@/lib/actions/messages";
 import { thumbnailUrl } from "@/lib/imageTransform";
+import { useCallPresence } from "@/lib/useCallPresence";
 import { usePresence } from "@/lib/usePresence";
 import type { DirectMessageSearchResult, Profile } from "@/lib/types";
 
@@ -72,6 +73,11 @@ export function DirectMessagesPanel({
   const [searching, setSearching] = useState(false);
 
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
+
+  // Sorted so both sides land on the same key regardless of who calls first.
+  const dmCallRoomKey = selectedPeer ? `dm-${[currentUser.id, selectedPeer.id].sort().join("-")}` : null;
+  const callParticipants = useCallPresence(dmCallRoomKey);
+  const othersOnCall = callParticipants.filter((p) => p.id !== currentUser.id);
 
   // Debounced live search across every 1:1 conversation the user has. Doesn't
   // bother resetting searchResults/searching when the query gets too short —
@@ -162,6 +168,22 @@ export function DirectMessagesPanel({
                 📹
               </button>
             </div>
+            {othersOnCall.length > 0 && !showVideoCall && (
+              <div
+                className="flex-none flex items-center gap-2 px-4 py-2"
+                style={{ background: "var(--color-accent-100)", color: "var(--color-accent-700)" }}
+              >
+                <span
+                  className="rounded-full flex-none"
+                  style={{ width: 7, height: 7, background: "var(--status-red)" }}
+                  aria-hidden
+                />
+                <span className="text-[13px] font-semibold flex-1 truncate">📹 {selectedPeer.display_name} đang gọi video</span>
+                <button type="button" onClick={() => setShowVideoCall(true)} className="btn btn-primary btn-sm flex-none">
+                  Tham gia
+                </button>
+              </div>
+            )}
             <DirectConversation
               peer={selectedPeer}
               currentUser={currentUser}
@@ -170,10 +192,9 @@ export function DirectMessagesPanel({
             />
             {showVideoCall && (
               <VideoCallModal
-                // Sorted so both sides land in the same Jitsi room no matter
-                // who taps "Gọi video" first.
-                roomKey={`dm-${[currentUser.id, selectedPeer.id].sort().join("-")}`}
+                roomKey={dmCallRoomKey!}
                 label={`📹 ${selectedPeer.display_name}`}
+                selfId={currentUser.id}
                 displayName={currentUser.display_name}
                 onClose={() => setShowVideoCall(false)}
               />

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { useCallPresence } from "@/lib/useCallPresence";
 
 type JitsiMeetAPI = {
   dispose: () => void;
@@ -42,17 +43,25 @@ function loadJitsiScript(): Promise<void> {
 export function VideoCallModal({
   roomKey,
   label,
+  selfId,
   displayName,
   onClose,
 }: {
   roomKey: string;
   label: string;
+  selfId: string;
   displayName: string;
   onClose: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const apiRef = useRef<JitsiMeetAPI | null>(null);
   const [loadError, setLoadError] = useState(false);
+
+  // Announces "I'm in this call" on the shared presence channel for this
+  // room — see useCallPresence.ts. Any chat view watching the same roomKey
+  // (without joining) picks this up and shows a "📹 X đang gọi — Tham gia"
+  // banner, which is how someone finds out a call has started at all.
+  useCallPresence(roomKey, { id: selfId, display_name: displayName });
 
   useEffect(() => {
     let cancelled = false;
