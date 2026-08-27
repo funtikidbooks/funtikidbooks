@@ -938,6 +938,12 @@ export function MeetingHub({
   // their parent instead, shown indented and only while that parent is
   // expanded — same "folder" pattern as the workspace's other tree views.
   const topLevelJoinedRooms = useMemo(() => joinedRooms.filter((c) => !c.parent_channel_id), [joinedRooms]);
+  // "Chung" (with "Riêng" right under it) renders in its own "TRÒ CHUYỆN"
+  // section above a divider, separate from the custom rooms under "PHÒNG
+  // HỌP" below it — Chung can't have sub-rooms (see nestableRooms), so it
+  // doesn't need the expand/children machinery the rooms below it do.
+  const generalRoom = useMemo(() => topLevelJoinedRooms.find((c) => c.is_general) ?? null, [topLevelJoinedRooms]);
+  const customTopLevelRooms = useMemo(() => topLevelJoinedRooms.filter((c) => !c.is_general), [topLevelJoinedRooms]);
   const childRoomsByParent = useMemo(() => {
     const map = new Map<string, MeetingChannelPublic[]>();
     for (const c of joinedRooms) {
@@ -1459,7 +1465,7 @@ export function MeetingHub({
       >
         <div className="flex items-center justify-between px-1">
           <span className="text-[11px] font-bold tracking-[0.08em]" style={{ color: "var(--color-neutral-500)" }}>
-            PHÒNG HỌP
+            TRÒ CHUYỆN
           </span>
           <div className="flex items-center gap-1">
             {isDirectorOrPm && (
@@ -1474,9 +1480,6 @@ export function MeetingHub({
                 ✏️
               </button>
             )}
-            <button type="button" onClick={() => setShowCreate(true)} className="btn-icon" style={{ width: 24, height: 24, padding: 0 }} aria-label="Tạo phòng">
-              ＋
-            </button>
             <button
               type="button"
               onClick={() => setShowRoomListMobile(false)}
@@ -1488,8 +1491,72 @@ export function MeetingHub({
             </button>
           </div>
         </div>
+        <div className="flex flex-col gap-1 flex-none">
+          {generalRoom && (() => {
+            const roomUnread = meetingUnreadCounts[generalRoom.id] ?? 0;
+            return (
+              <div className="flex items-center gap-0.5">
+                <span className="flex-none" style={{ width: 18 }} />
+                <button
+                  type="button"
+                  onClick={() => selectChannel(generalRoom.id)}
+                  className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold flex-1 min-w-0"
+                  style={{
+                    background: activeId === generalRoom.id ? "var(--color-accent-100)" : undefined,
+                    color: activeId === generalRoom.id ? "var(--color-accent-700)" : "var(--color-text)",
+                  }}
+                >
+                  <span aria-hidden>{generalRoom.icon}</span>
+                  <span className="flex-1 truncate">{generalRoom.name}</span>
+                  {roomUnread > 0 && (
+                    <span
+                      className="flex items-center justify-center rounded-full font-bold flex-none"
+                      style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                    >
+                      {roomUnread > 9 ? "9+" : roomUnread}
+                    </span>
+                  )}
+                </button>
+              </div>
+            );
+          })()}
+          <div className="flex items-center gap-0.5">
+            <span className="flex-none" style={{ width: 18 }} />
+            <button
+              type="button"
+              onClick={() => selectChannel(DM_TAB_ID)}
+              className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold flex-1 min-w-0"
+              style={{
+                background: activeId === DM_TAB_ID ? "var(--color-accent-100)" : undefined,
+                color: activeId === DM_TAB_ID ? "var(--color-accent-700)" : "var(--color-text)",
+              }}
+            >
+              <span aria-hidden>👤</span>
+              <span className="flex-1 truncate">{dmTabLabel}</span>
+              {dmTotalUnread > 0 && (
+                <span
+                  className="flex items-center justify-center rounded-full font-bold flex-none"
+                  style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                >
+                  {dmTotalUnread > 9 ? "9+" : dmTotalUnread}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-none" style={{ borderTop: "1px solid var(--color-neutral-200)" }} />
+
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[11px] font-bold tracking-[0.08em]" style={{ color: "var(--color-neutral-500)" }}>
+            PHÒNG HỌP
+          </span>
+          <button type="button" onClick={() => setShowCreate(true)} className="btn-icon" style={{ width: 24, height: 24, padding: 0 }} aria-label="Tạo phòng">
+            ＋
+          </button>
+        </div>
         <div className="flex flex-col gap-1 overflow-y-auto flex-1">
-          {topLevelJoinedRooms.map((r) => {
+          {customTopLevelRooms.map((r) => {
             const roomUnread = meetingUnreadCounts[r.id] ?? 0;
             const children = childRoomsByParent.get(r.id) ?? [];
             const expanded = expandedRoomIds.has(r.id);
@@ -1520,7 +1587,7 @@ export function MeetingHub({
                 >
                   <span aria-hidden>{r.icon}</span>
                   <span className="flex-1 truncate">{r.name}</span>
-                  {r.has_password && !r.is_general && (
+                  {r.has_password && (
                     <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
                   )}
                   {roomUnread > 0 && (
@@ -1566,31 +1633,6 @@ export function MeetingHub({
                     </button>
                   );
                 })}
-              {r.is_general && (
-                <div className="flex items-center gap-0.5">
-                  <span className="flex-none" style={{ width: 18 }} />
-                  <button
-                    type="button"
-                    onClick={() => selectChannel(DM_TAB_ID)}
-                    className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold flex-1 min-w-0"
-                    style={{
-                      background: activeId === DM_TAB_ID ? "var(--color-accent-100)" : undefined,
-                      color: activeId === DM_TAB_ID ? "var(--color-accent-700)" : "var(--color-text)",
-                    }}
-                  >
-                    <span aria-hidden>👤</span>
-                    <span className="flex-1 truncate">{dmTabLabel}</span>
-                    {dmTotalUnread > 0 && (
-                      <span
-                        className="flex items-center justify-center rounded-full font-bold flex-none"
-                        style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
-                      >
-                        {dmTotalUnread > 9 ? "9+" : dmTotalUnread}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              )}
             </div>
             );
           })}
