@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
@@ -98,12 +99,19 @@ export async function sendDirectMessage(recipientId: string, content: string, fo
     throw new Error("Không thể gửi tin nhắn");
   }
 
-  const { data: senderProfile } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
-  sendPushToUser(recipientId, {
-    title: senderProfile?.display_name ?? "Tin nhắn mới",
-    body: trimmed || (attachment ? "📎 Đã gửi một tệp đính kèm" : ""),
-    senderId: user.id,
-  }).catch(() => {});
+  // Scheduled with after() rather than fired-and-forgotten inline — on
+  // Vercel's serverless runtime, a plain un-awaited promise can get cut off
+  // the moment the response is sent, which showed up to staff as push
+  // notifications arriving late or not at all. after() guarantees this runs
+  // to completion without delaying the response itself.
+  after(async () => {
+    const { data: senderProfile } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
+    await sendPushToUser(recipientId, {
+      title: senderProfile?.display_name ?? "Tin nhắn mới",
+      body: trimmed || (attachment ? "📎 Đã gửi một tệp đính kèm" : ""),
+      senderId: user.id,
+    }).catch(() => {});
+  });
 
   return data as DirectMessage;
 }

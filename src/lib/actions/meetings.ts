@@ -2,6 +2,7 @@
 
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
@@ -243,7 +244,12 @@ export async function sendMeetingMessage(
     throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
   }
 
-  notifyChannelMembers(supabase, channelId, user.id, trimmed, !!attachment).catch(() => {});
+  // Scheduled with after() rather than fired-and-forgotten inline — on
+  // Vercel's serverless runtime, a plain un-awaited promise can get cut off
+  // the moment the response is sent, which showed up to staff as push
+  // notifications arriving late or not at all. after() guarantees this runs
+  // to completion without delaying the response itself.
+  after(() => notifyChannelMembers(supabase, channelId, user.id, trimmed, !!attachment).catch(() => {}));
 
   return data as MeetingMessage;
 }
