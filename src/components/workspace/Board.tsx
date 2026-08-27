@@ -4,7 +4,8 @@ import { useMemo, useState, useTransition } from "react";
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCorners,
   useSensor,
   useSensors,
@@ -52,8 +53,15 @@ export function WorkspaceBoard({
   const [newColumnTitle, setNewColumnTitle] = useState("");
   const [, startTransition] = useTransition();
 
+  // A plain PointerSensor's distance-based activation also fires for touch
+  // scroll gestures — a few px of finger movement while scrolling a column
+  // gets misread as a drag start, which is what was making iPad scrolling
+  // feel like it was "sticking" to cards. Splitting mouse and touch lets
+  // touch require a short hold (delay) before a drag activates, so a quick
+  // scroll swipe never triggers it.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
   const allTasks = useMemo(() => Object.values(tasksByColumn).flat(), [tasksByColumn]);

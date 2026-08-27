@@ -406,10 +406,12 @@ h4 {
 /* ---------- Workspace board ---------- */
 .fk-task-card {
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-  /* Without this, touch devices (iPad) interpret the initial touch-move as a
-     page scroll gesture and never hand it to dnd-kit's PointerSensor, so
-     dragging never starts. */
-  touch-action: none;
+  /* pan-y (not none): lets iPad scroll a column with a normal swipe, while
+     the Board's TouchSensor delay still gets to see a press-and-hold long
+     enough to start a drag. touch-action: none used to claim the gesture
+     from the very first touch-move, so every scroll attempt on a card got
+     swallowed instead of scrolling the column. */
+  touch-action: pan-y;
 }
 .fk-task-card:hover {
   transform: translateY(-2px);
