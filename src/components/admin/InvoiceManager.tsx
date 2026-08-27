@@ -4,7 +4,12 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { createInvoice, deleteInvoice, updateInvoiceStatus } from "@/lib/actions/invoices";
 import { Modal } from "@/components/ui/Modal";
-import type { Invoice, InvoiceItem, InvoiceStatus } from "@/lib/types";
+import type { Invoice, InvoiceItem, InvoiceStatus, PageType } from "@/lib/types";
+
+const PAGE_TYPE_LABELS: Record<PageType, string> = {
+  single: "Trang đơn",
+  double: "Trang đôi",
+};
 
 const STATUS_LABELS: Record<InvoiceStatus, string> = {
   draft: "Nháp",
@@ -37,10 +42,10 @@ function invoiceTotal(inv: Pick<Invoice, "items" | "tax_rate">) {
 // field can genuinely go empty while typing — a plain number input whose
 // value snaps back to 0 the instant it's cleared makes it look like the
 // last digit can never be deleted.
-type ItemDraft = { description: string; quantity: number | ""; unit_price: number | "" };
+type ItemDraft = { description: string; quantity: number | ""; pageType: PageType; unit_price: number | "" };
 
 function emptyItem(): ItemDraft {
-  return { description: "", quantity: 1, unit_price: "" };
+  return { description: "", quantity: 1, pageType: "single", unit_price: "" };
 }
 
 function CreateInvoiceModal({ onClose, onCreated }: { onClose: () => void; onCreated: (inv: Invoice) => void }) {
@@ -73,6 +78,7 @@ function CreateInvoiceModal({ onClose, onCreated }: { onClose: () => void; onCre
       .map((it) => ({
         description: it.description.trim(),
         quantity: Number(it.quantity) || 0,
+        page_type: it.pageType,
         unit_price: Number(it.unit_price) || 0,
       }))
       .filter((it) => it.description);
@@ -156,14 +162,15 @@ function CreateInvoiceModal({ onClose, onCreated }: { onClose: () => void; onCre
           <div className="field">
             <label>Nội dung *</label>
             <div className="flex flex-col gap-2 mt-1">
-              <div className="hidden sm:grid gap-2 text-[11px] font-bold px-1" style={{ gridTemplateColumns: "1fr 90px 130px 32px", color: "var(--color-neutral-500)" }}>
+              <div className="hidden sm:grid gap-2 text-[11px] font-bold px-1" style={{ gridTemplateColumns: "1fr 110px 120px 130px 32px", color: "var(--color-neutral-500)" }}>
                 <span>Mô tả</span>
-                <span>Số lượng</span>
+                <span>Số lượng trang</span>
+                <span>Kiểu trang</span>
                 <span>Đơn giá</span>
                 <span />
               </div>
               {items.map((it, i) => (
-                <div key={i} className="grid gap-2" style={{ gridTemplateColumns: "1fr 90px 130px 32px" }}>
+                <div key={i} className="grid gap-2" style={{ gridTemplateColumns: "1fr 110px 120px 130px 32px" }}>
                   <input
                     className="input"
                     placeholder="VD: Minh hoạ bìa sách"
@@ -177,6 +184,17 @@ function CreateInvoiceModal({ onClose, onCreated }: { onClose: () => void; onCre
                     value={it.quantity}
                     onChange={(e) => updateItem(i, { quantity: e.target.value === "" ? "" : Number(e.target.value) })}
                   />
+                  <select
+                    className="input"
+                    value={it.pageType}
+                    onChange={(e) => updateItem(i, { pageType: e.target.value as PageType })}
+                  >
+                    {(Object.keys(PAGE_TYPE_LABELS) as PageType[]).map((t) => (
+                      <option key={t} value={t}>
+                        {PAGE_TYPE_LABELS[t]}
+                      </option>
+                    ))}
+                  </select>
                   <input
                     type="number"
                     min={0}

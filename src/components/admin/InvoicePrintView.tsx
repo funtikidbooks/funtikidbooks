@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import type { Invoice } from "@/lib/types";
+import type { Invoice, PageType } from "@/lib/types";
+
+const PAGE_TYPE_LABELS: Record<PageType, string> = {
+  single: "Trang đơn",
+  double: "Trang đôi",
+};
 
 const COMPANY = {
   name: "Công ty TNHH Funti Kidbooks",
@@ -96,7 +101,8 @@ export function InvoicePrintView({ invoice }: { invoice: Invoice }) {
           <thead>
             <tr style={{ borderBottom: "1.5px solid #141211" }}>
               <th className="text-left py-2">Mô tả</th>
-              <th className="text-right py-2" style={{ width: 70 }}>SL</th>
+              <th className="text-right py-2" style={{ width: 70 }}>SL trang</th>
+              <th className="text-right py-2" style={{ width: 90 }}>Kiểu trang</th>
               <th className="text-right py-2" style={{ width: 120 }}>Đơn giá</th>
               <th className="text-right py-2" style={{ width: 130 }}>Thành tiền</th>
             </tr>
@@ -106,6 +112,7 @@ export function InvoicePrintView({ invoice }: { invoice: Invoice }) {
               <tr key={i} style={{ borderBottom: "1px solid #e5e0d8" }}>
                 <td className="py-2">{it.description}</td>
                 <td className="py-2 text-right">{it.quantity}</td>
+                <td className="py-2 text-right">{PAGE_TYPE_LABELS[it.page_type ?? "single"]}</td>
                 <td className="py-2 text-right">{formatVnd(it.unit_price)}</td>
                 <td className="py-2 text-right">{formatVnd(it.quantity * it.unit_price)}</td>
               </tr>

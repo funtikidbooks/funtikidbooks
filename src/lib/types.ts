@@ -261,9 +261,14 @@ export type StaffSalary = {
   updated_at: string;
 };
 
+export type PageType = "single" | "double";
+
 export type InvoiceItem = {
   description: string;
   quantity: number;
+  // Optional so invoices created before this field existed still render —
+  // treated as "single" wherever it's missing.
+  page_type?: PageType;
   unit_price: number;
 };
 
