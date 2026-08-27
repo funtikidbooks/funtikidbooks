@@ -922,6 +922,12 @@ alter table public.brushes add column if not exists category text not null defau
 alter table public.brushes drop constraint if exists brushes_category_check;
 alter table public.brushes add constraint brushes_category_check check (category in ('photoshop', 'procreate', 'clip_studio'));
 
+-- A brush's own file (.abr/.brushset/.sut) can't be rendered by a browser
+-- the way a font file can, so there's no automatic stroke preview — this
+-- holds a manually-attached swatch image instead, shown in place of the
+-- generic icon when set.
+alter table public.brushes add column if not exists preview_url text;
+
 alter table public.brushes enable row level security;
 
 drop policy if exists "staff can read brushes" on public.brushes;
@@ -932,6 +938,13 @@ create policy "staff can add brushes"
   on public.brushes for insert
   to authenticated
   with check (public.current_access_role() in ('director', 'admin', 'staff'));
+
+drop policy if exists "uploader or director can update brushes" on public.brushes;
+create policy "uploader or director can update brushes"
+  on public.brushes for update
+  to authenticated
+  using (uploaded_by = auth.uid() or public.current_access_role() = 'director')
+  with check (uploaded_by = auth.uid() or public.current_access_role() = 'director');
 
 drop policy if exists "uploader or director can delete brushes" on public.brushes;
 create policy "uploader or director can delete brushes"

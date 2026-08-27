@@ -67,6 +67,11 @@ export type BrushAsset = {
   file_url: string;
   file_ext: string;
   size_bytes: number | null;
+  // A manually-attached stroke-sample image — brush files (.abr/.brushset/
+  // .sut) aren't renderable by a browser the way a font file is, so this is
+  // the closest equivalent to the live font preview: optional, added after
+  // upload via BrushLibrary's own "ảnh mẫu" control.
+  preview_url: string | null;
   uploaded_by: string | null;
   created_at: string;
 };

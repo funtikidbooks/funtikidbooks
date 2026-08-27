@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { deleteBrush, recordBrush } from "@/lib/actions/brushes";
+import { deleteBrush, recordBrush, setBrushPreview } from "@/lib/actions/brushes";
 import { BRUSH_CATEGORIES, BRUSH_CATEGORY_EXT, BRUSH_CATEGORY_LABELS } from "@/lib/brushCategory";
 import type { BrushAsset, BrushCategory } from "@/lib/types";
 
@@ -30,6 +30,9 @@ export function BrushLibrary({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewInputRef = useRef<HTMLInputElement>(null);
+  const [previewTargetId, setPreviewTargetId] = useState<string | null>(null);
+  const [previewUploadingId, setPreviewUploadingId] = useState<string | null>(null);
 
   const visibleBrushes = useMemo(
     () => (filter === "all" ? brushes : brushes.filter((b) => b.category === filter)),
@@ -83,10 +86,41 @@ export function BrushLibrary({
     if (!confirm(`Xoá brush "${brush.name}"?`)) return;
     setBrushes((prev) => prev.filter((b) => b.id !== brush.id));
     try {
-      await deleteBrush(brush.id, brush.storage_path);
+      await deleteBrush(brush.id, brush.storage_path, brush.preview_url);
     } catch {
       setError("Không thể xoá brush. Vui lòng thử lại.");
       setBrushes((prev) => [...prev, brush].sort((a, b) => a.name.localeCompare(b.name)));
+    }
+  }
+
+  // A brush file (.abr/.brushset/.sut) can't be rendered by the browser the
+  // way a font file can (see FontLibrary's live @font-face preview) — this
+  // is the closest equivalent: a manually-attached stroke-sample image,
+  // uploaded straight to Storage from the browser like the brush file itself.
+  async function handlePreviewFile(file: File | undefined) {
+    const brushId = previewTargetId;
+    if (!file || !brushId) return;
+    setPreviewUploadingId(brushId);
+    setError(null);
+    try {
+      if (!file.type.startsWith("image/")) throw new Error("Ảnh mẫu phải là PNG, JPG, GIF hoặc WEBP");
+      const supabase = createClient();
+      const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+      const storagePath = `previews/${brushId}-${crypto.randomUUID()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("brushes")
+        .upload(storagePath, file, { contentType: file.type });
+      if (uploadError) throw new Error("Không thể tải ảnh mẫu lên");
+
+      const { data: publicUrlData } = supabase.storage.from("brushes").getPublicUrl(storagePath);
+      await setBrushPreview(brushId, publicUrlData.publicUrl);
+      setBrushes((prev) => prev.map((b) => (b.id === brushId ? { ...b, preview_url: publicUrlData.publicUrl } : b)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể tải ảnh mẫu lên");
+    } finally {
+      setPreviewUploadingId(null);
+      setPreviewTargetId(null);
+      if (previewInputRef.current) previewInputRef.current.value = "";
     }
   }
 
@@ -122,6 +156,13 @@ export function BrushLibrary({
           accept={BRUSH_CATEGORY_EXT[uploadCategory].map((e) => `.${e}`).join(",")}
           className="hidden"
           onChange={(e) => handleFile(e.target.files?.[0])}
+        />
+        <input
+          ref={previewInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => handlePreviewFile(e.target.files?.[0])}
         />
       </div>
 
@@ -160,13 +201,40 @@ export function BrushLibrary({
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {visibleBrushes.map((b) => (
               <div key={b.id} className="card elev-sm flex items-center gap-3 p-3">
-                <span
-                  className="flex items-center justify-center rounded-[10px] flex-none"
-                  style={{ width: 44, height: 44, fontSize: 20, background: "var(--color-surface)" }}
-                  aria-hidden
-                >
-                  🖌️
-                </span>
+                <div className="relative flex-none group">
+                  {b.preview_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={b.preview_url}
+                      alt=""
+                      className="rounded-[10px] object-cover"
+                      style={{ width: 64, height: 64, background: "var(--color-surface)" }}
+                    />
+                  ) : (
+                    <span
+                      className="flex items-center justify-center rounded-[10px]"
+                      style={{ width: 64, height: 64, fontSize: 24, background: "var(--color-surface)" }}
+                      aria-hidden
+                    >
+                      🖌️
+                    </span>
+                  )}
+                  {(isDirector || b.uploaded_by === currentUserId) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPreviewTargetId(b.id);
+                        previewInputRef.current?.click();
+                      }}
+                      disabled={previewUploadingId === b.id}
+                      className="absolute inset-0 flex items-center justify-center rounded-[10px] text-[10px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ background: "rgba(20,18,17,.6)", color: "#fff" }}
+                      title={b.preview_url ? "Đổi ảnh mẫu" : "Thêm ảnh mẫu"}
+                    >
+                      {previewUploadingId === b.id ? "…" : b.preview_url ? "Đổi ảnh" : "🖼 + Ảnh mẫu"}
+                    </button>
+                  )}
+                </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-bold truncate" title={b.name}>
                     {b.name}

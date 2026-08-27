@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { BrushAsset, BrushCategory } from "@/lib/types";
 
 async function requireUser() {
@@ -51,9 +52,31 @@ export async function recordBrush(input: {
   return data as BrushAsset;
 }
 
-export async function deleteBrush(brushId: string, storagePath: string) {
+// The swatch image itself is uploaded client-side straight to Storage (see
+// BrushLibrary.tsx), same reasoning as the brush file itself — this just
+// records the resulting URL and cleans up whatever preview it's replacing.
+export async function setBrushPreview(brushId: string, previewUrl: string): Promise<void> {
   const { supabase } = await requireUser();
-  await supabase.storage.from("brushes").remove([storagePath]);
+  const { data: current } = await supabase.from("brushes").select("preview_url").eq("id", brushId).maybeSingle();
+
+  const { error } = await supabase.from("brushes").update({ preview_url: previewUrl }).eq("id", brushId);
+  if (error) throw new Error("Không thể lưu ảnh mẫu — chỉ người tải brush lên hoặc Giám đốc mới sửa được.");
+
+  if (current?.preview_url && current.preview_url !== previewUrl) {
+    const oldPath = storagePathFromPublicUrl(current.preview_url, "brushes");
+    if (oldPath) await supabase.storage.from("brushes").remove([oldPath]).catch(() => {});
+  }
+  revalidatePath("/workspace/kho-font");
+}
+
+export async function deleteBrush(brushId: string, storagePath: string, previewUrl?: string | null) {
+  const { supabase } = await requireUser();
+  const paths = [storagePath];
+  if (previewUrl) {
+    const previewPath = storagePathFromPublicUrl(previewUrl, "brushes");
+    if (previewPath) paths.push(previewPath);
+  }
+  await supabase.storage.from("brushes").remove(paths);
   const { error } = await supabase.from("brushes").delete().eq("id", brushId);
   if (error) throw new Error("Không thể xoá brush — chỉ người tải lên hoặc Giám đốc mới xoá được.");
   revalidatePath("/workspace/kho-font");
