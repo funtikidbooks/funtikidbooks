@@ -296,16 +296,35 @@ export function DirectConversation({
 
   return (
     <>
-      <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col gap-2 p-3">
+      <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col p-3">
         {messages.length === 0 && (
           <p className="text-[12px] text-center mt-4" style={{ color: "var(--color-neutral-500)" }}>
             Chưa có tin nhắn nào.
           </p>
         )}
-        {messages.map((m) => {
+        {messages.map((m, index) => {
           const mine = m.sender_id === currentUser.id;
+          // Same Zalo/Messenger-style grouping as the room chats (MeetingHub):
+          // consecutive messages from the same person within a few minutes
+          // sit tight together, with only the last one in the run showing a
+          // timestamp, instead of every single message getting its own gap.
+          const prev = index > 0 ? messages[index - 1] : null;
+          const next = index < messages.length - 1 ? messages[index + 1] : null;
+          const isGroupStart =
+            !prev ||
+            prev.sender_id !== m.sender_id ||
+            new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() > 5 * 60 * 1000;
+          const isGroupEnd =
+            !next ||
+            next.sender_id !== m.sender_id ||
+            new Date(next.created_at).getTime() - new Date(m.created_at).getTime() > 5 * 60 * 1000;
           return (
-            <div id={`dm-msg-${m.id}`} key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
+            <div
+              id={`dm-msg-${m.id}`}
+              key={m.id}
+              className={`flex flex-col ${mine ? "items-end" : "items-start"}`}
+              style={{ marginTop: isGroupStart ? 12 : 2 }}
+            >
               {m.content && (
                 <div
                   className="rounded-[12px] px-3 py-1.5 text-[17px] max-w-[70%] whitespace-pre-wrap break-words"
@@ -353,9 +372,11 @@ export function DirectConversation({
                     📄 {m.attachment_filename}
                   </a>
                 ))}
-              <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
-                {formatTime(m.created_at)}
-              </span>
+              {isGroupEnd && (
+                <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
+                  {formatTime(m.created_at)}
+                </span>
+              )}
               {m.id === lastSeenMineMessageId && (
                 <span className="flex items-center gap-1 mt-0.5" title={`${peer.display_name} đã xem`}>
                   <span
