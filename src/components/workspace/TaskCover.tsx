@@ -1,8 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { removeTaskCover, setTaskCover } from "@/lib/actions/board";
+import { removeTaskCover, setTaskCoverUrl } from "@/lib/actions/board";
+import { createClient } from "@/lib/supabase/client";
 import { thumbnailUrl } from "@/lib/imageTransform";
+
+const ALLOWED_COVER_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+const MAX_COVER_SIZE = 20 * 1024 * 1024;
 
 export function TaskCover({
   taskId,
@@ -19,12 +23,31 @@ export function TaskCover({
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
+    if (!ALLOWED_COVER_TYPES.has(file.type)) {
+      setError("Chỉ hỗ trợ ảnh PNG, JPG, GIF hoặc WEBP");
+      return;
+    }
+    if (file.size > MAX_COVER_SIZE) {
+      setError("Ảnh vượt quá 20MB");
+      return;
+    }
     setUploading(true);
     setError(null);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const url = await setTaskCover(taskId, formData);
+      // Uploaded straight to Supabase Storage from the browser, not through
+      // a Server Action — Vercel caps a Server Action's request body at
+      // 4.5MB regardless of Next.js's own bodySizeLimit config, and real
+      // illustration files routinely exceed that.
+      const supabase = createClient();
+      const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+      const storagePath = `${taskId}/cover-${crypto.randomUUID()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("task-attachments")
+        .upload(storagePath, file, { contentType: file.type });
+      if (uploadError) throw new Error("Không thể tải ảnh lên");
+
+      const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
+      const url = await setTaskCoverUrl(taskId, publicUrlData.publicUrl);
       onChange(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể tải ảnh lên");

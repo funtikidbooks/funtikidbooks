@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { Task } from "@/lib/types";
@@ -139,38 +138,26 @@ export async function removeTaskAssignee(taskId: string, profileId: string) {
   revalidatePath("/workspace");
 }
 
-const ALLOWED_COVER_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
-const MAX_COVER_SIZE = 20 * 1024 * 1024;
-
-export async function setTaskCover(taskId: string, formData: FormData) {
+// The file itself is uploaded client-side, straight to Supabase Storage
+// (see TaskCover.tsx) — never routed through this action. A Server Action's
+// body goes through Vercel's serverless function invocation, which caps
+// request bodies at 4.5MB regardless of Next.js's own configured
+// bodySizeLimit; real illustration files routinely exceed that. This action
+// only ever receives the resulting URL, a tiny payload with no such limit.
+export async function setTaskCoverUrl(taskId: string, url: string) {
   const { supabase } = await requireUser();
-  const file = formData.get("file");
-  if (!(file instanceof File)) throw new Error("Thiếu tệp tin");
-  if (!ALLOWED_COVER_TYPES.has(file.type)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF hoặc WEBP");
-  if (file.size > MAX_COVER_SIZE) throw new Error("Ảnh vượt quá 20MB");
-
   const { data: currentTask } = await supabase.from("tasks").select("cover_image_url").eq("id", taskId).maybeSingle();
 
-  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
-  const storagePath = `${taskId}/cover-${randomUUID()}.${ext}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from("task-attachments")
-    .upload(storagePath, file, { contentType: file.type });
-  if (uploadError) throw new Error("Không thể tải ảnh lên");
-
-  const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
-
-  await supabase.from("tasks").update({ cover_image_url: publicUrlData.publicUrl }).eq("id", taskId);
+  await supabase.from("tasks").update({ cover_image_url: url }).eq("id", taskId);
 
   // Old cover is now unreferenced — free the space it was taking up.
-  if (currentTask?.cover_image_url) {
+  if (currentTask?.cover_image_url && currentTask.cover_image_url !== url) {
     const oldPath = storagePathFromPublicUrl(currentTask.cover_image_url, "task-attachments");
     if (oldPath) await supabase.storage.from("task-attachments").remove([oldPath]).catch(() => {});
   }
 
   revalidatePath("/workspace");
-  return publicUrlData.publicUrl;
+  return url;
 }
 
 export async function removeTaskCover(taskId: string) {
