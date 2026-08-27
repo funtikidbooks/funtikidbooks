@@ -92,6 +92,16 @@ export function WorkspaceBoard({
     })
     .filter((v): v is { year: string; count: number } => v !== null);
 
+  // A "Final <year>" board tracks work by archive year, so the header badge
+  // should read as "N/N hoàn thành" for whichever year is currently active
+  // (the first Final column in board order) — it climbs to 119, 120, ... as
+  // more cards land there, rather than comparing against the whole board's
+  // all-time total across every past year. Boards without any Final column
+  // (e.g. a plain "Hoàn thành" column) keep the classic done/total reading.
+  const currentYearStat = yearStats[0];
+  const headerDoneCount = currentYearStat ? currentYearStat.count : doneCount;
+  const headerTotalCount = currentYearStat ? currentYearStat.count : allTasks.length;
+
   function findColumnIdOfTask(taskId: string) {
     for (const [colId, tasks] of Object.entries(tasksByColumn)) {
       if (tasks.some((t) => t.id === taskId)) return colId;
@@ -306,7 +316,7 @@ export function WorkspaceBoard({
       <div className="flex flex-wrap items-center gap-6 px-6 py-4" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
         <h1 className="text-xl">{board.title}</h1>
         <div className="flex items-center gap-5 text-sm" style={{ color: "var(--color-neutral-600)" }}>
-          <span>✅ {doneCount}/{allTasks.length} hoàn thành</span>
+          <span>✅ {headerDoneCount}/{headerTotalCount} hoàn thành</span>
         </div>
         {yearStats.length > 0 && (
           <div className="flex items-center gap-5 text-sm" style={{ color: "var(--color-neutral-600)" }}>
