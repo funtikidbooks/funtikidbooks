@@ -364,14 +364,16 @@ function BrowseRoomsModal({
   );
 }
 
-function AddMemberModal({
+// A dropdown (not a centered modal) anchored under the 👥 button — every
+// staff member is always listed, already-in-room people sorted to the top
+// with a filled checkmark instead of disappearing, so picking someone gives
+// immediate, visible confirmation without losing your place in the list.
+function AddMemberDropdown({
   channelId,
-  channelName,
   profiles,
   onClose,
 }: {
   channelId: string;
-  channelName: string;
   profiles: Profile[];
   onClose: () => void;
 }) {
@@ -379,6 +381,7 @@ function AddMemberModal({
   const [search, setSearch] = useState("");
   const [addingId, setAddingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -390,10 +393,23 @@ function AddMemberModal({
     };
   }, [channelId]);
 
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [onClose]);
+
   const q = search.trim().toLowerCase();
-  const candidates = profiles.filter(
-    (p) => !memberIds?.has(p.id) && (q === "" || p.display_name.toLowerCase().includes(q)),
-  );
+  const rows = profiles
+    .filter((p) => q === "" || p.display_name.toLowerCase().includes(q))
+    .sort((a, b) => {
+      const aIn = memberIds?.has(a.id) ?? false;
+      const bIn = memberIds?.has(b.id) ?? false;
+      if (aIn !== bIn) return aIn ? -1 : 1;
+      return a.display_name.localeCompare(b.display_name);
+    });
 
   async function add(profileId: string) {
     setAddingId(profileId);
@@ -409,46 +425,47 @@ function AddMemberModal({
   }
 
   return (
-    <Modal onClose={onClose} maxWidth={420}>
-      <div className="flex flex-col gap-4 p-6">
-        <div>
-          <h2 className="text-lg">Thêm thành viên</h2>
-          <p className="text-xs mt-1" style={{ color: "var(--color-neutral-500)" }}>
-            Vào phòng {channelName}
-          </p>
-        </div>
-        <input
-          className="input"
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm tên nhân viên…"
-          autoFocus
-        />
-        {error && (
-          <p className="text-sm font-semibold" style={{ color: "var(--status-red)" }}>
-            {error}
-          </p>
-        )}
-        {memberIds === null ? (
-          <p className="text-sm text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
-            Đang tải…
-          </p>
-        ) : candidates.length === 0 ? (
-          <p className="text-sm text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
-            {q ? "Không tìm thấy ai." : "Mọi người đều đã ở trong phòng này rồi."}
-          </p>
-        ) : (
-          <div className="flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: 320 }}>
-            {candidates.map((p) => (
-              <div key={p.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-[8px]" style={{ background: "var(--color-surface)" }}>
+    <div
+      ref={popoverRef}
+      className="card elev-lg flex flex-col gap-3 p-4"
+      style={{ position: "absolute", top: "100%", right: 0, marginTop: 6, width: 300, zIndex: 20 }}
+    >
+      <h3 className="text-sm font-bold">Thêm thành viên</h3>
+      <input
+        className="input"
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Tìm tên nhân viên…"
+        style={{ padding: "6px 10px", fontSize: 13 }}
+        autoFocus
+      />
+      {error && (
+        <p className="text-[12px] font-semibold" style={{ color: "var(--status-red)" }}>
+          {error}
+        </p>
+      )}
+      {memberIds === null ? (
+        <p className="text-[12px] text-center py-3" style={{ color: "var(--color-neutral-500)" }}>
+          Đang tải…
+        </p>
+      ) : rows.length === 0 ? (
+        <p className="text-[12px] text-center py-3" style={{ color: "var(--color-neutral-500)" }}>
+          Không tìm thấy ai.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: 320 }}>
+          {rows.map((p) => {
+            const isMember = memberIds.has(p.id);
+            return (
+              <div key={p.id} className="flex items-center gap-2 px-1.5 py-1.5 rounded-[8px]" style={{ background: "var(--color-surface)" }}>
                 <span
-                  className="flex items-center justify-center rounded-full text-[12px] font-bold overflow-hidden flex-none"
-                  style={{ width: 32, height: 32, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+                  className="flex items-center justify-center rounded-full text-[11px] font-bold overflow-hidden flex-none"
+                  style={{ width: 28, height: 28, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
                 >
                   {p.avatar_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={thumbnailUrl(p.avatar_url, 64)} alt="" className="w-full h-full object-cover" />
+                    <img src={thumbnailUrl(p.avatar_url, 56)} alt="" className="w-full h-full object-cover" />
                   ) : (
                     p.display_name.charAt(0).toUpperCase()
                   )}
@@ -459,25 +476,27 @@ function AddMemberModal({
                     {p.role ?? ""}
                   </span>
                 </span>
-                <button
-                  type="button"
-                  onClick={() => add(p.id)}
-                  disabled={addingId === p.id}
-                  className="btn btn-secondary btn-sm flex-none"
-                >
-                  {addingId === p.id ? "Đang thêm…" : "+ Thêm"}
-                </button>
+                {isMember ? (
+                  <span className="flex items-center gap-1 flex-none text-[11px] font-bold" style={{ color: "var(--status-green)" }}>
+                    <span aria-hidden>✓</span> Đã vào phòng
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => add(p.id)}
+                    disabled={addingId === p.id}
+                    className="btn btn-secondary btn-sm flex-none"
+                    style={{ padding: "4px 10px", fontSize: 11 }}
+                  >
+                    {addingId === p.id ? "Đang thêm…" : "+ Thêm"}
+                  </button>
+                )}
               </div>
-            ))}
-          </div>
-        )}
-        <div className="flex items-center justify-end">
-          <button type="button" onClick={onClose} className="btn btn-ghost">
-            Xong
-          </button>
+            );
+          })}
         </div>
-      </div>
-    </Modal>
+      )}
+    </div>
   );
 }
 
@@ -524,6 +543,9 @@ export function MeetingHub({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MeetingSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [showMedia, setShowMedia] = useState(false);
+  const [mediaTab, setMediaTab] = useState<"images" | "links" | "files">("images");
+  const [mediaSearch, setMediaSearch] = useState("");
   // Set when a search result is picked — the scroll-into-view effect below
   // watches for this element to actually exist (it may not yet, if we just
   // switched rooms and that room's messages are still loading).
@@ -615,6 +637,29 @@ export function MeetingHub({
     }
     return map;
   }, [reads, currentUser.id]);
+
+  // "Các tệp hình ảnh/link/file" panel — derived straight from the messages
+  // already loaded for this room (up to the 300 getMeetingMessages fetches),
+  // no extra round trip needed since reactions/seenBy already work the same
+  // way.
+  const channelMedia = useMemo(() => {
+    const images: MeetingMessage[] = [];
+    const files: MeetingMessage[] = [];
+    const links: { url: string; message: MeetingMessage }[] = [];
+    const urlPattern = /(https?:\/\/[^\s]+)/g;
+    for (const m of messages) {
+      if (m.is_recalled) continue;
+      if (m.attachment_url) {
+        if (isImage(m.attachment_mime)) images.push(m);
+        else files.push(m);
+      }
+      if (m.content) {
+        const found = m.content.match(urlPattern);
+        if (found) for (const url of found) links.push({ url, message: m });
+      }
+    }
+    return { images, files, links };
+  }, [messages]);
 
   const mentionMatch = /(^|\s)@([\p{L}0-9]*)$/u.exec(text);
   const mentionQuery = mentionMatch ? mentionMatch[2] : null;
@@ -1248,20 +1293,45 @@ export function MeetingHub({
                 </button>
               )}
               {!activeChannel.is_general && (
-                <button
-                  type="button"
-                  onClick={() => setShowAddMember(true)}
-                  className="btn-icon flex-none"
-                  style={{ width: 30, height: 30, padding: 0 }}
-                  aria-label="Thêm thành viên"
-                  title="Thêm thành viên vào phòng"
-                >
-                  👥
-                </button>
+                <span className="relative flex-none">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddMember((v) => !v)}
+                    className="btn-icon flex-none"
+                    style={{ width: 30, height: 30, padding: 0 }}
+                    aria-label="Thêm thành viên"
+                    title="Thêm thành viên vào phòng"
+                  >
+                    👥
+                  </button>
+                  {showAddMember && (
+                    <AddMemberDropdown
+                      channelId={activeChannel.id}
+                      profiles={profiles.filter((p) => p.id !== currentUser.id)}
+                      onClose={() => setShowAddMember(false)}
+                    />
+                  )}
+                </span>
               )}
               <button
                 type="button"
-                onClick={() => setShowSearch((v) => !v)}
+                onClick={() => {
+                  setShowMedia((v) => !v);
+                  setShowSearch(false);
+                }}
+                className="btn-icon flex-none"
+                style={{ width: 30, height: 30, padding: 0 }}
+                aria-label="Ảnh, link & file"
+                title="Ảnh, link & file đã chia sẻ trong phòng"
+              >
+                🖼
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSearch((v) => !v);
+                  setShowMedia(false);
+                }}
                 className="btn-icon flex-none"
                 style={{ width: 30, height: 30, padding: 0 }}
                 aria-label="Tìm kiếm tin nhắn"
@@ -1352,6 +1422,147 @@ export function MeetingHub({
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {showMedia && (
+              <div className="flex-none flex flex-col" style={{ borderBottom: "1px solid var(--color-neutral-200)", maxHeight: 360 }}>
+                <div className="flex items-center gap-2 px-4 pt-2.5">
+                  {(
+                    [
+                      ["images", `🖼 Hình ảnh (${channelMedia.images.length})`],
+                      ["links", `🔗 Link (${channelMedia.links.length})`],
+                      ["files", `📄 File (${channelMedia.files.length})`],
+                    ] as const
+                  ).map(([tab, label]) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setMediaTab(tab)}
+                      className="px-2.5 py-1.5 text-[12px] font-semibold rounded-[8px]"
+                      style={{
+                        background: mediaTab === tab ? "var(--color-accent-100)" : "transparent",
+                        color: mediaTab === tab ? "var(--color-accent-700)" : "var(--color-neutral-600)",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setShowMedia(false)}
+                    className="btn-icon flex-none ml-auto"
+                    style={{ width: 26, height: 26, padding: 0 }}
+                    aria-label="Đóng"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="px-4 py-2">
+                  <input
+                    type="text"
+                    value={mediaSearch}
+                    onChange={(e) => setMediaSearch(e.target.value)}
+                    placeholder={
+                      mediaTab === "images" ? "Tìm ảnh theo tên tệp…" : mediaTab === "links" ? "Tìm link…" : "Tìm tên tệp…"
+                    }
+                    className="input"
+                    style={{ padding: "6px 10px", fontSize: 13 }}
+                  />
+                </div>
+                <div className="overflow-y-auto px-4 pb-3" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+                  {mediaTab === "images" &&
+                    (() => {
+                      const q = mediaSearch.trim().toLowerCase();
+                      const items = channelMedia.images.filter((m) => !q || (m.attachment_filename ?? "").toLowerCase().includes(q));
+                      return items.length === 0 ? (
+                        <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
+                          Chưa có ảnh nào.
+                        </p>
+                      ) : (
+                        <div className="grid gap-2 pt-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))" }}>
+                          {items.map((m) => (
+                            <a key={m.id} href={m.attachment_url ?? undefined} target="_blank" rel="noreferrer" title={m.attachment_filename ?? ""}>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={thumbnailUrl(m.attachment_url, 180)}
+                                alt={m.attachment_filename ?? ""}
+                                className="rounded-[8px] object-cover w-full"
+                                style={{ aspectRatio: "1 / 1" }}
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  {mediaTab === "links" &&
+                    (() => {
+                      const q = mediaSearch.trim().toLowerCase();
+                      const items = channelMedia.links.filter((l) => !q || l.url.toLowerCase().includes(q));
+                      return items.length === 0 ? (
+                        <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
+                          Chưa có link nào.
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-1 pt-2">
+                          {items.map((l, i) => {
+                            const sender = profileById.get(l.message.sender_id);
+                            return (
+                              <a
+                                key={`${l.message.id}-${i}`}
+                                href={l.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex flex-col gap-0.5 rounded-[8px] px-2.5 py-1.5"
+                                style={{ background: "var(--color-surface)" }}
+                              >
+                                <span className="text-[12px] font-semibold truncate" style={{ color: "var(--color-accent-700)" }}>
+                                  {l.url}
+                                </span>
+                                <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
+                                  {sender?.display_name ?? "Ẩn danh"} · {formatTime(l.message.created_at)}
+                                </span>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  {mediaTab === "files" &&
+                    (() => {
+                      const q = mediaSearch.trim().toLowerCase();
+                      const items = channelMedia.files.filter((m) => !q || (m.attachment_filename ?? "").toLowerCase().includes(q));
+                      return items.length === 0 ? (
+                        <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
+                          Chưa có file nào.
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-1 pt-2">
+                          {items.map((m) => {
+                            const sender = profileById.get(m.sender_id);
+                            return (
+                              <a
+                                key={m.id}
+                                href={m.attachment_url ?? undefined}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-2 rounded-[8px] px-2.5 py-1.5"
+                                style={{ background: "var(--color-surface)" }}
+                              >
+                                <span aria-hidden>📄</span>
+                                <span className="flex-1 min-w-0">
+                                  <span className="block text-[12px] font-semibold truncate">{m.attachment_filename}</span>
+                                  <span className="block text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
+                                    {sender?.display_name ?? "Ẩn danh"} · {formatTime(m.created_at)}
+                                  </span>
+                                </span>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                </div>
               </div>
             )}
 
@@ -1820,14 +2031,6 @@ export function MeetingHub({
       )}
       {showBrowse && (
         <BrowseRoomsModal rooms={browsableRooms} onClose={() => setShowBrowse(false)} onJoined={handleJoined} />
-      )}
-      {showAddMember && activeChannel && (
-        <AddMemberModal
-          channelId={activeChannel.id}
-          channelName={activeChannel.name}
-          profiles={profiles.filter((p) => p.id !== currentUser.id)}
-          onClose={() => setShowAddMember(false)}
-        />
       )}
     </div>
   );
