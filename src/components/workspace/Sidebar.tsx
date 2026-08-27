@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
 import { useChatManager } from "@/components/workspace/ChatManager";
+import { ThemeToggle } from "@/components/workspace/ThemeToggle";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { resetThemeOnSignOut } from "@/lib/useTheme";
 import type { Profile } from "@/lib/types";
@@ -96,6 +97,7 @@ export function Sidebar({
       </div>
 
       <div className="mt-auto flex flex-col gap-3">
+        <ThemeToggle />
         <div className="flex items-center gap-2 px-2">
           <div
             className="flex items-center justify-center rounded-full text-xs font-bold flex-none overflow-hidden"

@@ -8,7 +8,6 @@ import { ChatHeadBubbles } from "@/components/workspace/ChatHeadBubbles";
 import { TabNotificationBadge } from "@/components/workspace/TabNotificationBadge";
 import { ThemeSync } from "@/components/workspace/ThemeSync";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
-import { ThemeToggle } from "@/components/workspace/ThemeToggle";
 import { MessengerButton } from "@/components/workspace/MessengerButton";
 import { MobileNav } from "@/components/workspace/MobileNav";
 import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
@@ -102,9 +101,6 @@ export default async function WorkspaceLayout({
                     🛠
                   </Link>
                 )}
-                <span className="hidden md:inline-flex">
-                  <ThemeToggle compact />
-                </span>
                 <MessengerButton currentUserId={user.id} profiles={(allProfiles ?? []) as Profile[]} />
                 <ProfileMenu profile={myProfile} />
               </div>
