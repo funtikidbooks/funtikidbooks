@@ -1238,10 +1238,18 @@ export function MeetingHub({
                 // several in a row from the same person seconds apart) was
                 // exactly the "too much dead space" staff were pointing out.
                 const prev = index > 0 ? messages[index - 1] : null;
+                const next = index < messages.length - 1 ? messages[index + 1] : null;
                 const isGroupStart =
                   !prev ||
                   prev.sender_id !== m.sender_id ||
                   new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() > 5 * 60 * 1000;
+                // Same idea in reverse — only the last message of a run shows
+                // its time, like Zalo/Messenger, instead of repeating it under
+                // every single message in the group.
+                const isGroupEnd =
+                  !next ||
+                  next.sender_id !== m.sender_id ||
+                  new Date(next.created_at).getTime() - new Date(m.created_at).getTime() > 5 * 60 * 1000;
                 const mine = m.sender_id === currentUser.id;
                 const msgReactions = reactions.filter((r) => r.message_id === m.id);
                 const grouped = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
@@ -1444,16 +1452,20 @@ export function MeetingHub({
                         </>
                       )}
 
-                      <span className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
-                          {formatTime(m.created_at)}
+                      {(isGroupEnd || (!m.content && !m.is_recalled)) && (
+                        <span className="flex items-center gap-1.5 mt-0.5">
+                          {isGroupEnd && (
+                            <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
+                              {formatTime(m.created_at)}
+                            </span>
+                          )}
+                          {!m.content && !m.is_recalled && (
+                            <span className="fk-msg-actions relative inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {actionButtons}
+                            </span>
+                          )}
                         </span>
-                        {!m.content && !m.is_recalled && (
-                          <span className="fk-msg-actions relative inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {actionButtons}
-                          </span>
-                        )}
-                      </span>
+                      )}
                       {seenBy.length > 0 && (
                         <span className="flex items-center -space-x-1 mt-0.5" title={seenBy.map((id) => profileById.get(id)?.display_name ?? "").filter(Boolean).join(", ")}>
                           {seenBy.map((id) => (
