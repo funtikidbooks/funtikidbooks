@@ -1341,7 +1341,7 @@ export function MeetingHub({
                     key={m.id}
                     id={`meeting-msg-${m.id}`}
                     className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}
-                    style={{ marginTop: isGroupStart ? 12 : 0 }}
+                    style={{ marginTop: isGroupStart ? 12 : 2 }}
                   >
                     {isGroupStart ? <Avatar profile={sender} /> : <span className="flex-none" style={{ width: 28 }} />}
                     <div className={`flex flex-col ${mine ? "items-end" : "items-start"} max-w-[75%]`}>
