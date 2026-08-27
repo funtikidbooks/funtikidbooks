@@ -62,7 +62,7 @@ export function TaskCard({
       onClick={onOpen}
       className="fk-task-card card elev-sm p-2.5 flex flex-col gap-2 cursor-pointer select-none"
     >
-      {task.cover_image_url ? (
+      {task.cover_image_url && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={thumbnailUrl(task.cover_image_url, 480, 180)}
@@ -70,14 +70,6 @@ export function TaskCard({
           className="rounded-[6px] w-full object-cover"
           style={{ height: 90 }}
         />
-      ) : (
-        <div
-          className="flex items-center justify-center rounded-[6px] text-lg"
-          style={{ height: 64, background: "var(--color-surface)" }}
-          aria-hidden
-        >
-          🖼️
-        </div>
       )}
       {task.labels.length > 0 && (
         <div className="flex flex-wrap gap-1">
