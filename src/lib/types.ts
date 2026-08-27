@@ -119,17 +119,12 @@ export type MeetingChannel = {
 export type MeetingChannelPublic = Omit<MeetingChannel, "password_hash"> & {
   has_password: boolean;
   joined: boolean;
-  // True until this member opens the room for the first time — see
-  // meeting_channel_members.seen_at. Always false for "Chung", which every
-  // staff member is implicitly in rather than explicitly invited to.
-  is_new: boolean;
 };
 
 export type MeetingChannelMember = {
   channel_id: string;
   profile_id: string;
   joined_at: string;
-  seen_at: string | null;
 };
 
 export type MeetingReaction = {

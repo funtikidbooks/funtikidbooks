@@ -34,13 +34,13 @@ function verifyPassword(password: string, stored: string) {
 
 export async function listChannels(): Promise<MeetingChannelPublic[]> {
   const { supabase, user } = await requireUser();
-  const [channelsResult, membershipsResult] = await Promise.all([
+  const [channelsResult, { data: memberships }] = await Promise.all([
     supabase
       .from("meeting_channels")
       .select("id, name, icon, is_general, created_by, created_at, password_hash, parent_channel_id")
       .order("is_general", { ascending: false })
       .order("created_at", { ascending: true }),
-    supabase.from("meeting_channel_members").select("channel_id, seen_at").eq("profile_id", user.id),
+    supabase.from("meeting_channel_members").select("channel_id").eq("profile_id", user.id),
   ]);
 
   // parent_channel_id might not exist yet if supabase/schema.sql's sub-room
@@ -56,35 +56,19 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
     channels = fallback.data;
   }
 
-  // seen_at might not exist yet either (same reasoning) — fall back to a
-  // plain membership list, which just means "is_new" reads true for every
-  // joined room until the migration is re-run, a harmless cosmetic default.
-  let memberships: Array<{ channel_id: string; seen_at: string | null }> | null = membershipsResult.data as
-    | Array<{ channel_id: string; seen_at: string | null }>
-    | null;
-  if (membershipsResult.error) {
-    const fallback = await supabase.from("meeting_channel_members").select("channel_id").eq("profile_id", user.id);
-    memberships = (fallback.data ?? []).map((m) => ({ channel_id: m.channel_id as string, seen_at: null }));
-  }
+  const joinedIds = new Set((memberships ?? []).map((m) => m.channel_id as string));
 
-  const seenAtByChannelId = new Map((memberships ?? []).map((m) => [m.channel_id, m.seen_at]));
-
-  return (channels ?? []).map((c) => {
-    const isGeneral = c.is_general as boolean;
-    const joined = isGeneral || seenAtByChannelId.has(c.id as string);
-    return {
-      id: c.id as string,
-      name: c.name as string,
-      icon: c.icon as string,
-      is_general: isGeneral,
-      created_by: c.created_by as string | null,
-      created_at: c.created_at as string,
-      parent_channel_id: (c.parent_channel_id as string | null | undefined) ?? null,
-      has_password: !!c.password_hash,
-      joined,
-      is_new: !isGeneral && joined && seenAtByChannelId.get(c.id as string) == null,
-    };
-  });
+  return (channels ?? []).map((c) => ({
+    id: c.id as string,
+    name: c.name as string,
+    icon: c.icon as string,
+    is_general: c.is_general as boolean,
+    created_by: c.created_by as string | null,
+    created_at: c.created_at as string,
+    parent_channel_id: (c.parent_channel_id as string | null | undefined) ?? null,
+    has_password: !!c.password_hash,
+    joined: (c.is_general as boolean) || joinedIds.has(c.id as string),
+  }));
 }
 
 export async function createChannel(name: string, password: string, icon: string, parentChannelId?: string | null) {
@@ -160,19 +144,6 @@ export async function joinChannel(channelId: string, password: string) {
   if (error) throw new Error("Không thể tham gia phòng");
 
   revalidatePath("/workspace/hop");
-}
-
-// Clears the sidebar's "you were just added to this room" flag the first
-// time the member actually opens it. No revalidatePath — purely cosmetic,
-// the caller already updates its own local state optimistically.
-export async function markRoomSeen(channelId: string) {
-  const { supabase, user } = await requireUser();
-  await supabase
-    .from("meeting_channel_members")
-    .update({ seen_at: new Date().toISOString() })
-    .eq("channel_id", channelId)
-    .eq("profile_id", user.id)
-    .is("seen_at", null);
 }
 
 export async function leaveChannel(channelId: string) {

@@ -20,7 +20,6 @@ import {
   listChannelMembers,
   listChannels,
   markChannelRead,
-  markRoomSeen,
   recallMeetingMessage,
   removeChannelMember,
   removeReaction,
@@ -1260,16 +1259,6 @@ export function MeetingHub({
     setReplyingTo(null);
     setActiveId(id);
     setShowRoomListMobile(false);
-
-    // Opening a room you were just added to clears its sidebar "new" flag —
-    // optimistic locally, fire-and-forget on the server (see markRoomSeen).
-    if (id && id !== DM_TAB_ID) {
-      const channel = channels.find((c) => c.id === id);
-      if (channel?.is_new) {
-        setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, is_new: false } : c)));
-        markRoomSeen(id).catch(() => {});
-      }
-    }
   }
 
   async function handleCreated(id: string) {
@@ -1598,13 +1587,11 @@ export function MeetingHub({
                 >
                   <span aria-hidden>{r.icon}</span>
                   <span className="flex-1 truncate">{r.name}</span>
-                  {r.is_new && (
-                    <span
-                      className="flex-none rounded-full"
-                      style={{ width: 7, height: 7, background: "var(--status-red)" }}
-                      title="Bạn vừa được thêm vào phòng này"
-                    />
-                  )}
+                  <span
+                    className="flex-none rounded-full"
+                    style={{ width: 7, height: 7, background: "var(--status-red)" }}
+                    title="Bạn đang là thành viên phòng này"
+                  />
                   {r.has_password && (
                     <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
                   )}
@@ -1637,13 +1624,11 @@ export function MeetingHub({
                     >
                       <span aria-hidden>{child.icon}</span>
                       <span className="flex-1 truncate">{child.name}</span>
-                      {child.is_new && (
-                        <span
-                          className="flex-none rounded-full"
-                          style={{ width: 7, height: 7, background: "var(--status-red)" }}
-                          title="Bạn vừa được thêm vào phòng này"
-                        />
-                      )}
+                      <span
+                        className="flex-none rounded-full"
+                        style={{ width: 7, height: 7, background: "var(--status-red)" }}
+                        title="Bạn đang là thành viên phòng này"
+                      />
                       {child.has_password && (
                         <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
                       )}
