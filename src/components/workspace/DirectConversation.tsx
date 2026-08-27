@@ -273,7 +273,7 @@ export function DirectConversation({
             <div id={`dm-msg-${m.id}`} key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
               {m.content && (
                 <div
-                  className="rounded-[12px] px-3 py-1.5 text-[13px] max-w-[70%] whitespace-pre-wrap break-words"
+                  className="rounded-[12px] px-3 py-1.5 text-[15px] max-w-[70%] whitespace-pre-wrap break-words"
                   style={{
                     background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
                     color: mine ? "#fff" : "var(--color-text)",
