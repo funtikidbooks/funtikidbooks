@@ -1191,6 +1191,13 @@ create table if not exists public.meeting_channel_members (
   primary key (channel_id, profile_id)
 );
 
+-- Null until the member actually opens the room for the first time — lets
+-- the sidebar flag "you were just added to this room" (e.g. by a director
+-- inviting you while you weren't looking), distinct from unread messages.
+-- Stays null for a self-initiated join/create since selectChannel() opens
+-- the room immediately in that flow, clearing it right away.
+alter table public.meeting_channel_members add column if not exists seen_at timestamptz;
+
 create table if not exists public.meeting_messages (
   id uuid primary key default gen_random_uuid(),
   channel_id uuid not null references public.meeting_channels (id) on delete cascade,
@@ -1309,6 +1316,13 @@ create policy "members can add teammates to the channel"
 -- meeting_channels directly rather than meeting_channel_members, so it
 -- doesn't hit the same self-reference recursion the select policy works
 -- around above.
+drop policy if exists "member can mark their own membership seen" on public.meeting_channel_members;
+create policy "member can mark their own membership seen"
+  on public.meeting_channel_members for update
+  to authenticated
+  using (profile_id = auth.uid())
+  with check (profile_id = auth.uid());
+
 drop policy if exists "staff can leave channels themselves" on public.meeting_channel_members;
 create policy "staff or room owner can remove memberships"
   on public.meeting_channel_members for delete
