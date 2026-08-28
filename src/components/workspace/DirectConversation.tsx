@@ -602,13 +602,13 @@ export function DirectConversation({
             <div
               id={`dm-msg-${m.id}`}
               key={m.id}
-              className={`group flex flex-col ${mine ? "items-end" : "items-start"}`}
+              className={`group flex flex-col ${mine ? "items-end" : "items-start"} max-w-[82%]`}
               style={{ marginTop: isGroupStart ? 12 : 2 }}
             >
               {m.content && (
                 <div className={`flex items-end gap-1 min-w-0 ${mine ? "flex-row-reverse" : ""}`}>
                   <div
-                    className="rounded-[12px] px-3 py-1.5 text-[17px] max-w-[82%] whitespace-pre-wrap break-words"
+                    className="min-w-0 rounded-[12px] px-3 py-1.5 text-[17px] whitespace-pre-wrap break-words"
                     style={{
                       background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
                       color: mine ? "#fff" : "var(--color-text)",
