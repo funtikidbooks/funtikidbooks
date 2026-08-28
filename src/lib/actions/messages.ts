@@ -16,9 +16,13 @@ async function requireUser() {
   return { supabase, user };
 }
 
-export async function getConversation(otherUserId: string): Promise<DirectMessage[]> {
+// `afterCreatedAt` (exclusive) lets a caller that already has a page of
+// messages ask for only what's new since the last one it holds, instead of
+// re-fetching the whole capped 200 every time — see DirectConversation's
+// resync().
+export async function getConversation(otherUserId: string, afterCreatedAt?: string): Promise<DirectMessage[]> {
   const { supabase, user } = await requireUser();
-  const { data } = await supabase
+  let query = supabase
     .from("direct_messages")
     .select("*")
     .or(
@@ -26,6 +30,8 @@ export async function getConversation(otherUserId: string): Promise<DirectMessag
     )
     .order("created_at", { ascending: true })
     .limit(200);
+  if (afterCreatedAt) query = query.gt("created_at", afterCreatedAt);
+  const { data } = await query;
 
   return (data ?? []) as DirectMessage[];
 }

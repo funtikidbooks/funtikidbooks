@@ -90,6 +90,14 @@ export function DirectConversation({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  // Latest messages array, read (not reacted to) from inside resync() below
+  // — kept out of its dependency array so a new message doesn't tear down
+  // and recreate the realtime channel subscription every time one arrives.
+  const messagesRef = useRef<DirectMessage[]>([]);
+  // Which peer resync() last actually fetched — lets it tell "just switched
+  // conversations, need the full history" apart from "same conversation,
+  // only catching up on what was missed".
+  const lastSyncedPeerIdRef = useRef<string | null>(null);
   const peerTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentAtRef = useRef(0);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -122,18 +130,42 @@ export function DirectConversation({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showEmojiPicker]);
 
-  // Re-fetches the whole conversation and replaces local state wholesale —
-  // the realtime subscription below can silently miss an INSERT sent while
-  // the websocket was disconnected (phone screen locked, tab backgrounded, a
-  // network blip...), which showed up to staff as a push notification
-  // arriving but the message itself never appearing until a manual reload.
-  // Called on mount, on tab focus/visibility, and whenever the channel below
+  // Catches up this conversation after the realtime subscription below may
+  // have silently missed an INSERT while the websocket was disconnected
+  // (phone screen locked, tab backgrounded, a network blip...) — that used
+  // to show up to staff as a push notification arriving but the message
+  // itself never appearing until a manual reload. Called on mount/peer
+  // switch, on tab focus/visibility, and whenever the channel below
   // (re)subscribes.
+  //
+  // On an actual switch to a different conversation this loads the full
+  // (up to 200-message) history same as before. Everywhere else — tab
+  // refocus, a reconnect while still looking at the same conversation — it
+  // only asks for messages newer than the last one already on screen and
+  // appends them, instead of re-fetching and replacing all ~200 every time.
   const resync = useCallback(() => {
-    getConversation(peer.id)
-      .then((msgs) => setMessages(msgs))
+    const isNewPeer = lastSyncedPeerIdRef.current !== peer.id;
+    lastSyncedPeerIdRef.current = peer.id;
+    const after =
+      !isNewPeer && messagesRef.current.length > 0
+        ? messagesRef.current[messagesRef.current.length - 1].created_at
+        : undefined;
+
+    getConversation(peer.id, after)
+      .then((msgs) => {
+        if (isNewPeer) {
+          setMessages(msgs);
+        } else if (msgs.length > 0) {
+          setMessages((prev) => {
+            const seen = new Set(prev.map((m) => m.id));
+            const fresh = msgs.filter((m) => !seen.has(m.id));
+            return fresh.length > 0 ? [...prev, ...fresh] : prev;
+          });
+        }
+      })
       .catch(() => {
         // no live backend yet (e.g. workspace-demo) — chat just starts empty
+        if (isNewPeer) setMessages([]);
       });
   }, [peer.id]);
 
@@ -161,6 +193,10 @@ export function DirectConversation({
     if (messages.length === 0) return;
     markDirectMessagesRead(peer.id).catch(() => {});
   }, [peer.id, messages]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     const supabase = createClient();

@@ -289,14 +289,19 @@ export async function deleteChannel(channelId: string) {
   revalidatePath("/workspace/hop");
 }
 
-export async function getMeetingMessages(channelId: string): Promise<MeetingMessage[]> {
+// `afterCreatedAt` (exclusive) lets a caller that already has a page of
+// messages ask for only what's new since the last one it holds, instead of
+// re-fetching the whole capped 300 every time — see MeetingHub's resync().
+export async function getMeetingMessages(channelId: string, afterCreatedAt?: string): Promise<MeetingMessage[]> {
   const { supabase } = await requireUser();
-  const { data } = await supabase
+  let query = supabase
     .from("meeting_messages")
     .select("*")
     .eq("channel_id", channelId)
     .order("created_at", { ascending: true })
     .limit(300);
+  if (afterCreatedAt) query = query.gt("created_at", afterCreatedAt);
+  const { data } = await query;
   return (data ?? []) as MeetingMessage[];
 }
 
