@@ -255,6 +255,41 @@ export function DirectConversation({
     channelRef.current?.send({ type: "broadcast", event: "typing", payload: { userId: currentUser.id } });
   }
 
+  // Lets a screenshot copied to the clipboard (or any image) go straight
+  // into the composer with Ctrl+V, same as the room chat's composer —
+  // checks clipboardData.files first (the simplest, most broadly-supported
+  // path) and only falls back to walking clipboardData.items — which some
+  // screenshot tools use instead — if that comes up empty.
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const clipboardData = e.clipboardData;
+    if (!clipboardData) return;
+
+    let file: File | null = null;
+
+    if (clipboardData.files && clipboardData.files.length > 0) {
+      file = Array.from(clipboardData.files).find((f) => f.type.startsWith("image/")) ?? null;
+    }
+
+    if (!file && clipboardData.items) {
+      for (const item of Array.from(clipboardData.items)) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          file = item.getAsFile();
+          if (file) break;
+        }
+      }
+    }
+
+    if (!file) return;
+
+    e.preventDefault();
+    if (file.size > 20 * 1024 * 1024) {
+      setError("Tệp vượt quá 20MB");
+      return;
+    }
+    setError(null);
+    setPendingFile(file);
+  }
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = text.trim();
@@ -523,7 +558,7 @@ export function DirectConversation({
             className="input flex-1 resize-none"
             style={{ padding: "6px 10px", fontSize: 13, maxHeight: 140, overflowY: "auto" }}
             rows={1}
-            placeholder="Nhắn tin…"
+            placeholder="Nhắn tin… (dán ảnh bằng Ctrl+V)"
             value={text}
             onChange={(e) => {
               setText(e.target.value);
@@ -535,6 +570,7 @@ export function DirectConversation({
                 composerFormRef.current?.requestSubmit();
               }
             }}
+            onPaste={handlePaste}
           />
           <button type="submit" disabled={sending} className="btn btn-primary btn-sm flex-none" style={{ padding: "6px 12px" }}>
             Gửi
