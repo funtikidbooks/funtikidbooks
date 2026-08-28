@@ -35,8 +35,22 @@ export function ChatHeadBubbles({ profiles }: { profiles: Profile[] }) {
 
   if (bubbles.length === 0) return null;
 
+  // ChatDock's open chat windows anchor to this exact same bottom-right
+  // corner (bottom: 0, right: 24px, 380px tall — see ChatWindow.tsx) — with
+  // no open windows, the bubble sits just above the mobile tab bar / the
+  // screen edge on desktop as before; with any window open, it has to clear
+  // that whole 380px regardless of how many windows are open side by side
+  // (they only spread out horizontally), or it renders on top of one,
+  // looking like a broken overlapping mess instead of two distinct pieces
+  // of UI.
+  const anyChatOpen = openChats.length > 0;
+
   return (
-    <div className="fixed z-40 flex flex-col-reverse items-end gap-2 bottom-[76px] right-4 md:bottom-4">
+    <div
+      className={`fixed z-40 flex flex-col-reverse items-end gap-2 right-4 ${
+        anyChatOpen ? "bottom-[456px] md:bottom-[404px]" : "bottom-[76px] md:bottom-4"
+      }`}
+    >
       {bubbles.map((p) => (
         <button
           key={p.id}
