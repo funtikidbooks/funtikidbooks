@@ -2733,7 +2733,7 @@ export function MeetingHub({
                 className="flex items-center justify-center rounded-full elev-lg"
                 style={{
                   position: "absolute",
-                  right: 20,
+                  left: 20,
                   bottom: 84,
                   width: 40,
                   height: 40,

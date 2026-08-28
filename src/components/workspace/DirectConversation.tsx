@@ -766,7 +766,7 @@ export function DirectConversation({
           className="flex items-center justify-center rounded-full elev-lg"
           style={{
             position: "absolute",
-            right: 16,
+            left: 16,
             bottom: 12,
             width: 36,
             height: 36,
