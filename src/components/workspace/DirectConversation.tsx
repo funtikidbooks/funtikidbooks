@@ -107,6 +107,7 @@ export function DirectConversation({
   // tooltip.
   const [hoveredReaction, setHoveredReaction] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ url: string; filename: string | null } | null>(null);
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -356,7 +357,21 @@ export function DirectConversation({
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (force || distanceFromBottom < 150) {
       el.scrollTo({ top: el.scrollHeight });
+      setShowJumpToBottom(false);
+    } else {
+      setShowJumpToBottom(distanceFromBottom > 400);
     }
+  }, []);
+
+  // Fires on manual scroll — catches the reader scrolling away from the
+  // bottom themselves, which the effect-driven stickToBottomIfNear calls
+  // (new message/read-receipt updates) don't see since nothing about the
+  // data changed.
+  const handleListScroll = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowJumpToBottom(distanceFromBottom > 400);
   }, []);
 
   // A read-receipt UPDATE (the "Đã xem" label appearing) changes an
@@ -507,7 +522,8 @@ export function DirectConversation({
 
   return (
     <>
-      <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col p-3">
+      <div className="flex-1 flex flex-col min-h-0" style={{ position: "relative" }}>
+      <div ref={listRef} onScroll={handleListScroll} className="flex-1 overflow-y-auto flex flex-col p-3">
         {messages.length === 0 && (
           <p className="text-[12px] text-center mt-4" style={{ color: "var(--color-neutral-500)" }}>
             Chưa có tin nhắn nào.
@@ -592,7 +608,7 @@ export function DirectConversation({
               {m.content && (
                 <div className={`flex items-end gap-1 min-w-0 ${mine ? "flex-row-reverse" : ""}`}>
                   <div
-                    className="rounded-[12px] px-3 py-1.5 text-[17px] max-w-[70%] whitespace-pre-wrap break-words"
+                    className="rounded-[12px] px-3 py-1.5 text-[17px] max-w-[82%] whitespace-pre-wrap break-words"
                     style={{
                       background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
                       color: mine ? "#fff" : "var(--color-text)",
@@ -643,7 +659,7 @@ export function DirectConversation({
                         src={thumbnailUrl(m.attachment_url, 480)}
                         alt={m.attachment_filename ?? ""}
                         className="rounded-[10px] object-cover"
-                        style={{ maxWidth: 240, maxHeight: 240 }}
+                        style={{ maxWidth: 340, maxHeight: 340 }}
                         onLoad={() => stickToBottomIfNear(false)}
                       />
                     </button>
@@ -742,6 +758,29 @@ export function DirectConversation({
             </div>
           </div>
         )}
+      </div>
+      {showJumpToBottom && (
+        <button
+          type="button"
+          onClick={() => stickToBottomIfNear(true)}
+          className="flex items-center justify-center rounded-full elev-lg"
+          style={{
+            position: "absolute",
+            right: 16,
+            bottom: 12,
+            width: 36,
+            height: 36,
+            background: "var(--color-accent-500)",
+            color: "#fff",
+            fontSize: 16,
+            zIndex: 15,
+          }}
+          aria-label="Xuống tin nhắn mới nhất"
+          title="Xuống tin nhắn mới nhất"
+        >
+          ↓
+        </button>
+      )}
       </div>
 
       <div className="flex-none" style={{ borderTop: "1px solid var(--color-neutral-200)", position: "relative" }}>

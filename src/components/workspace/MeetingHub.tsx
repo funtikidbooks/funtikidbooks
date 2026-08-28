@@ -907,6 +907,12 @@ export function MeetingHub({
   const [pinnedMessages, setPinnedMessages] = useState<MeetingMessage[]>([]);
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [lightbox, setLightbox] = useState<{ url: string; filename: string | null } | null>(null);
+  // Shows a floating "jump to latest" button once the reader has scrolled
+  // far enough from the bottom that the auto-stick-to-bottom behavior
+  // (stickToBottomIfNear) won't kick back in on its own — a manual escape
+  // hatch for whenever the room lands mid-conversation instead of at the
+  // newest message.
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   // `${messageId}:${emoji}` of the reaction pill currently hovered — drives a
   // bigger, readable "who reacted" popover instead of the tiny native title
   // tooltip staff found hard to read.
@@ -1319,7 +1325,21 @@ export function MeetingHub({
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (force || distanceFromBottom < 150) {
       el.scrollTo({ top: el.scrollHeight });
+      setShowJumpToBottom(false);
+    } else {
+      setShowJumpToBottom(distanceFromBottom > 400);
     }
+  }, []);
+
+  // Fires on every manual scroll of the message list — catches the reader
+  // scrolling themselves away from the bottom, which the effect-driven
+  // stickToBottomIfNear calls (message/reaction updates) don't see on their
+  // own since nothing about the data changed.
+  const handleListScroll = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setShowJumpToBottom(distanceFromBottom > 400);
   }, []);
 
   // Reactions and "seen by" read receipts now load independently of
@@ -2394,7 +2414,7 @@ export function MeetingHub({
               />
             )}
 
-            <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col p-4">
+            <div ref={listRef} onScroll={handleListScroll} className="flex-1 overflow-y-auto flex flex-col p-4">
               {messages.length === 0 && (
                 <p className="text-[13px] text-center mt-4" style={{ color: "var(--color-neutral-500)" }}>
                   Chưa có tin nhắn nào trong phòng này.
@@ -2542,7 +2562,7 @@ export function MeetingHub({
                     style={{ marginTop: isGroupStart ? 12 : 2 }}
                   >
                     {isGroupStart ? <Avatar profile={sender} /> : <span className="flex-none" style={{ width: 28 }} />}
-                    <div className={`flex flex-col ${mine ? "items-end" : "items-start"} max-w-[75%]`}>
+                    <div className={`flex flex-col ${mine ? "items-end" : "items-start"} max-w-[85%]`}>
                       {isGroupStart && (
                         <span className="text-[11px] font-semibold mb-0.5" style={{ color: "var(--color-neutral-500)" }}>
                           {mine ? "Bạn" : (sender?.display_name ?? "Ẩn danh")}
@@ -2618,7 +2638,7 @@ export function MeetingHub({
                               src={thumbnailUrl(m.attachment_url, 480)}
                               alt={m.attachment_filename ?? ""}
                               className="rounded-[10px] object-cover"
-                              style={{ maxWidth: 240, maxHeight: 240 }}
+                              style={{ maxWidth: 340, maxHeight: 340 }}
                               onLoad={() => stickToBottomIfNear(false)}
                             />
                           </button>
@@ -2705,6 +2725,29 @@ export function MeetingHub({
                 );
               })}
             </div>
+
+            {showJumpToBottom && (
+              <button
+                type="button"
+                onClick={() => stickToBottomIfNear(true)}
+                className="flex items-center justify-center rounded-full elev-lg"
+                style={{
+                  position: "absolute",
+                  right: 20,
+                  bottom: 84,
+                  width: 40,
+                  height: 40,
+                  background: "var(--color-accent-500)",
+                  color: "#fff",
+                  fontSize: 18,
+                  zIndex: 15,
+                }}
+                aria-label="Xuống tin nhắn mới nhất"
+                title="Xuống tin nhắn mới nhất"
+              >
+                ↓
+              </button>
+            )}
 
             <div className="flex-none" style={{ borderTop: "1px solid var(--color-neutral-200)", position: "relative" }}>
               {(mentionCandidates.length > 0 || showAllMentionOption) && (
