@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { DirectConversation } from "@/components/workspace/DirectConversation";
 import { VideoCallModal } from "@/components/workspace/VideoCallModal";
@@ -78,6 +78,27 @@ export function DirectMessagesPanel({
   const dmCallRoomKey = selectedPeer ? `dm-${[currentUser.id, selectedPeer.id].sort().join("-")}` : null;
   const callParticipants = useCallPresence(dmCallRoomKey);
   const othersOnCall = callParticipants.filter((p) => p.id !== currentUser.id);
+
+  const callRingAudioRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    const ring = new Audio("/sounds/call-ring.mp3");
+    ring.loop = true;
+    callRingAudioRef.current = ring;
+  }, []);
+
+  // Rings on loop for as long as the peer is on a call and I haven't joined
+  // yet — stops the moment I join, they hang up, or I switch to a different
+  // conversation (callParticipants tracks only the currently selected peer).
+  useEffect(() => {
+    const audio = callRingAudioRef.current;
+    if (!audio) return;
+    if (othersOnCall.length > 0 && !showVideoCall) {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+    }
+  }, [othersOnCall.length, showVideoCall]);
 
   // Debounced live search across every 1:1 conversation the user has. Doesn't
   // bother resetting searchResults/searching when the query gets too short —

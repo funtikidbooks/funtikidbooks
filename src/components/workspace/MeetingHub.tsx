@@ -952,6 +952,7 @@ export function MeetingHub({
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
   const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
+  const callRingAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // A real thumbnail of the pending image beats a filename chip — lets
   // people confirm it's the right screenshot before sending. Computed
@@ -970,6 +971,9 @@ export function MeetingHub({
 
   useEffect(() => {
     notificationAudioRef.current = new Audio("/sounds/dm-message.mp3");
+    const ring = new Audio("/sounds/call-ring.mp3");
+    ring.loop = true;
+    callRingAudioRef.current = ring;
   }, []);
 
   // Tells the global tab-badge tracker which room is open right now, so it
@@ -1015,6 +1019,21 @@ export function MeetingHub({
   // it finds out there's a call to join at all.
   const activeCallParticipants = useCallPresence(activeChannel ? `hop-${activeChannel.id}` : null);
   const othersOnCall = activeCallParticipants.filter((p) => p.id !== currentUser.id);
+
+  // Rings on loop for as long as someone else is on a call in this room and
+  // I haven't joined yet — stops the moment I join, the caller hangs up, or
+  // I switch to a different room (activeCallParticipants tracks the newly
+  // active room only).
+  useEffect(() => {
+    const audio = callRingAudioRef.current;
+    if (!audio) return;
+    if (othersOnCall.length > 0 && !showVideoCall) {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+    }
+  }, [othersOnCall.length, showVideoCall]);
 
   useEffect(() => {
     if (!activeRoomIdForMembers) return;
