@@ -121,6 +121,13 @@ export function DirectConversation({
   // "just switched conversations, always snap to bottom" apart from "same
   // conversation, only snap if already near the bottom" (see that effect).
   const scrolledPeerIdRef = useRef<string | null>(null);
+  // Holds a conversation switch "stuck to bottom" past the single triggering
+  // render — an attachment image with no reserved height can finish loading
+  // a full second or more after the switch, and that onLoad call
+  // (force=false) needs to still win during this window instead of only
+  // re-snapping when already within 150px, or the view is left sitting
+  // above the true bottom.
+  const stickyUntilRef = useRef(0);
   const channelRef = useRef<RealtimeChannel | null>(null);
   // Latest messages/reactions arrays, read (not reacted to) from inside
   // resync() below — kept out of its dependency array so a new message or
@@ -361,7 +368,7 @@ export function DirectConversation({
     const el = listRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (force || distanceFromBottom < 150) {
+    if (force || Date.now() < stickyUntilRef.current || distanceFromBottom < 150) {
       el.scrollTo({ top: el.scrollHeight });
       setShowJumpToBottom(false);
     } else {
@@ -393,6 +400,7 @@ export function DirectConversation({
   // scrolled up reading history.
   useEffect(() => {
     const isPeerSwitch = scrolledPeerIdRef.current !== peer.id;
+    if (isPeerSwitch) stickyUntilRef.current = Date.now() + 3000;
     stickToBottomIfNear(isPeerSwitch);
     // Only marks the switch as handled once there's actual content to have
     // scrolled to — see the same guard in MeetingHub's version of this
@@ -400,7 +408,10 @@ export function DirectConversation({
     if (messages.length > 0) {
       scrolledPeerIdRef.current = peer.id;
     }
-  }, [peer.id, messages, peerTyping, stickToBottomIfNear]);
+    // reactions is included so a pill landing after the initial fetch (see
+    // resync()'s two independent requests) re-triggers the same near-bottom
+    // check MeetingHub's equivalent effect already does.
+  }, [peer.id, messages, reactions, peerTyping, stickToBottomIfNear]);
 
   // Scrolling to a search hit is a separate concern from the scroll-to-bottom
   // effect above — declared after it so it wins when both would fire off the

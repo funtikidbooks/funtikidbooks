@@ -928,6 +928,12 @@ export function MeetingHub({
   // "just switched rooms, always snap to bottom" apart from "same room,
   // only snap if already near the bottom" (see that effect for why).
   const scrolledRoomIdRef = useRef<string | null>(null);
+  // Holds a room switch "stuck to bottom" past the single triggering render
+  // — an attachment image with no reserved height can finish loading a full
+  // second or more after the switch, and that onLoad call (force=false)
+  // needs to still win during this window instead of only re-snapping when
+  // already within 150px, or the view is left sitting above the true bottom.
+  const stickyUntilRef = useRef(0);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
   // Latest messages array, read (not reacted to) from inside resync() below —
@@ -1357,7 +1363,7 @@ export function MeetingHub({
     const el = listRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (force || distanceFromBottom < 150) {
+    if (force || Date.now() < stickyUntilRef.current || distanceFromBottom < 150) {
       el.scrollTo({ top: el.scrollHeight });
       setShowJumpToBottom(false);
     } else {
@@ -1391,6 +1397,7 @@ export function MeetingHub({
   // scrolled up reading history doesn't yank them back down.
   useEffect(() => {
     const isRoomSwitch = scrolledRoomIdRef.current !== activeId;
+    if (isRoomSwitch) stickyUntilRef.current = Date.now() + 3000;
     stickToBottomIfNear(isRoomSwitch);
     // Only marks the switch as handled once there's actual content to have
     // scrolled to — the very first run after switching rooms fires with an
