@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
-import type { DirectMessage, DirectMessageSearchResult } from "@/lib/types";
+import type { DirectMessage, DirectMessageReaction, DirectMessageSearchResult } from "@/lib/types";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -34,6 +34,63 @@ export async function getConversation(otherUserId: string, afterCreatedAt?: stri
   const { data } = await query;
 
   return (data ?? []) as DirectMessage[];
+}
+
+// Every reaction in this conversation created after `afterCreatedAt` (or all
+// of them, for the initial load) — same delta-fetch shape as
+// getReactionsSince() in meetings.ts, and for the same reason: a reaction
+// added to a message already on screen needs to be caught up on too, not
+// just reactions on brand-new messages.
+export async function getDirectReactionsSince(otherUserId: string, afterCreatedAt?: string): Promise<DirectMessageReaction[]> {
+  const { supabase, user } = await requireUser();
+  let query = supabase
+    .from("direct_message_reactions")
+    .select("message_id, profile_id, emoji, created_at, direct_messages!inner(sender_id, recipient_id)")
+    .or(
+      `and(direct_messages.sender_id.eq.${user.id},direct_messages.recipient_id.eq.${otherUserId}),and(direct_messages.sender_id.eq.${otherUserId},direct_messages.recipient_id.eq.${user.id})`,
+    )
+    .order("created_at", { ascending: true })
+    .limit(500);
+  if (afterCreatedAt) query = query.gt("created_at", afterCreatedAt);
+  const { data, error } = await query;
+  if (error || !data) return [];
+  return data.map((r) => ({
+    message_id: r.message_id as string,
+    profile_id: r.profile_id as string,
+    emoji: r.emoji as string,
+    created_at: r.created_at as string,
+  }));
+}
+
+export async function addDirectReaction(messageId: string, emoji: string) {
+  const { supabase, user } = await requireUser();
+  const { error } = await supabase
+    .from("direct_message_reactions")
+    .upsert({ message_id: messageId, profile_id: user.id, emoji }, { onConflict: "message_id,profile_id,emoji" });
+  if (error) throw new Error("Không thể thả cảm xúc");
+
+  after(async () => {
+    const { data: message } = await supabase.from("direct_messages").select("sender_id").eq("id", messageId).maybeSingle();
+    if (!message || message.sender_id === user.id) return;
+    const { data: reactor } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
+    await sendPushToUser(message.sender_id as string, {
+      title: reactor?.display_name ?? "Ai đó",
+      body: `Đã thả ${emoji} vào tin nhắn của bạn`,
+      senderId: user.id,
+      url: `/workspace/hop?dm=${user.id}`,
+      tag: `funti-dm-reaction-${messageId}`,
+    }).catch(() => {});
+  });
+}
+
+export async function removeDirectReaction(messageId: string, emoji: string) {
+  const { supabase, user } = await requireUser();
+  await supabase
+    .from("direct_message_reactions")
+    .delete()
+    .eq("message_id", messageId)
+    .eq("profile_id", user.id)
+    .eq("emoji", emoji);
 }
 
 // Stamps read_at on every unread message the peer sent me — the recipient
@@ -126,6 +183,46 @@ export async function sendDirectMessage(recipientId: string, content: string, fo
   // the moment the response is sent, which showed up to staff as push
   // notifications arriving late or not at all. after() guarantees this runs
   // to completion without delaying the response itself.
+  after(async () => {
+    const { data: senderProfile } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
+    await sendPushToUser(recipientId, {
+      title: senderProfile?.display_name ?? "Tin nhắn mới",
+      body: trimmed || (attachment ? "📎 Đã gửi một tệp đính kèm" : ""),
+      senderId: user.id,
+      url: `/workspace/hop?dm=${user.id}`,
+    }).catch(() => {});
+  });
+
+  return data as DirectMessage;
+}
+
+// Forwards a message someone already has on screen into a 1:1 conversation
+// — same idea as forwardMeetingMessage in meetings.ts, reusing the existing
+// attachment URL instead of re-uploading the file.
+export async function forwardDirectMessage(
+  recipientId: string,
+  content: string,
+  attachment: { url: string; filename: string | null; mime: string | null; size: number | null } | null,
+) {
+  const { supabase, user } = await requireUser();
+  const trimmed = content.trim();
+  if (!trimmed && !attachment) return null;
+
+  const { data, error } = await supabase
+    .from("direct_messages")
+    .insert({
+      sender_id: user.id,
+      recipient_id: recipientId,
+      content: trimmed,
+      attachment_url: attachment?.url ?? null,
+      attachment_filename: attachment?.filename ?? null,
+      attachment_mime: attachment?.mime ?? null,
+      attachment_size: attachment?.size ?? null,
+    })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error("Không thể chuyển tiếp tin nhắn");
+
   after(async () => {
     const { data: senderProfile } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
     await sendPushToUser(recipientId, {

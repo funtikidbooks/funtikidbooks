@@ -7,6 +7,8 @@ import { Modal } from "@/components/ui/Modal";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { DirectMessagesPanel } from "@/components/workspace/DirectMessagesPanel";
 import { VideoCallModal } from "@/components/workspace/VideoCallModal";
+import { ImageLightbox } from "@/components/workspace/ImageLightbox";
+import { ForwardMessageModal, type ForwardableAttachment } from "@/components/workspace/ForwardMessageModal";
 import { useCallPresence } from "@/lib/useCallPresence";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import {
@@ -16,6 +18,7 @@ import {
   deleteChannel,
   getChannelReads,
   getMeetingMessages,
+  getPinnedMessages,
   getReactionsSince,
   joinChannel,
   leaveChannel,
@@ -29,6 +32,7 @@ import {
   searchMeetingMessages,
   sendMeetingMessage,
   setDmTabLabel,
+  togglePinMessage,
   updateChannel,
 } from "@/lib/actions/meetings";
 import type {
@@ -96,15 +100,28 @@ function renderContent(text: string, namesPattern: string | null, mine: boolean)
     if (!part) return null;
     if (/^https?:\/\//.test(part)) {
       return (
-        <a
-          key={i}
-          href={part}
-          target="_blank"
-          rel="noreferrer"
-          style={{ color: mine ? "#fff" : "var(--color-accent-700)", textDecoration: "underline" }}
-        >
-          {part}
-        </a>
+        <span key={i} className="inline-flex items-center gap-0.5">
+          <a
+            href={part}
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: mine ? "#fff" : "var(--color-accent-700)", textDecoration: "underline" }}
+          >
+            {part}
+          </a>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              navigator.clipboard?.writeText(part).catch(() => {});
+            }}
+            aria-label="Sao chép link"
+            title="Sao chép link"
+            style={{ fontSize: 11, opacity: mine ? 0.85 : 0.6, lineHeight: 1 }}
+          >
+            📋
+          </button>
+        </span>
       );
     }
     if (part.startsWith("@")) {
@@ -374,6 +391,96 @@ function RoomLabelsEditor({
   );
 }
 
+function BrowseRoomsModal({
+  rooms,
+  onClose,
+  onJoined,
+}: {
+  rooms: MeetingChannelPublic[];
+  onClose: () => void;
+  onJoined: (id: string) => void;
+}) {
+  const [passwordFor, setPasswordFor] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function join(id: string, pwd: string) {
+    setBusyId(id);
+    setError(null);
+    try {
+      await joinChannel(id, pwd);
+      setPasswordFor(null);
+      setPassword("");
+      onJoined(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <Modal onClose={onClose} maxWidth={440}>
+      <div className="flex flex-col gap-4 p-6">
+        <h2 className="text-lg">Khám phá phòng</h2>
+        {rooms.length === 0 ? (
+          <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
+            Không có phòng nào để tham gia.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {rooms.map((r) => (
+              <div key={r.id} className="flex flex-col gap-2 rounded-[10px] px-3 py-2.5" style={{ background: "var(--color-surface)" }}>
+                <div className="flex items-center gap-2">
+                  <span aria-hidden>{r.icon}</span>
+                  <span className="text-sm font-bold flex-1 truncate">{r.name}</span>
+                  {r.has_password && <span aria-hidden title="Có mật khẩu">🔒</span>}
+                  {passwordFor === r.id ? null : (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm flex-none"
+                      disabled={busyId === r.id}
+                      onClick={() => (r.has_password ? setPasswordFor(r.id) : join(r.id, ""))}
+                    >
+                      {busyId === r.id ? "Đang vào…" : "Tham gia"}
+                    </button>
+                  )}
+                </div>
+                {passwordFor === r.id && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="input flex-1"
+                      style={{ padding: "6px 10px", fontSize: 13 }}
+                      type="text"
+                      placeholder="Nhập mật khẩu"
+                      value={password}
+                      autoFocus
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm flex-none"
+                      disabled={busyId === r.id}
+                      onClick={() => join(r.id, password)}
+                    >
+                      Vào
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {error && (
+          <p className="text-sm font-semibold" style={{ color: "var(--status-red)" }}>
+            {error}
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
 
 // A dropdown (not a centered modal) anchored under the 👥 button — every
 // staff member is always listed, already-in-room people sorted to the top
@@ -779,13 +886,7 @@ export function MeetingHub({
     [channels],
   );
   const [expandedRoomIds, setExpandedRoomIds] = useState<Set<string>>(new Set());
-  // Inline join prompt for a not-yet-joined room clicked straight from the
-  // main "PHÒNG HỌP" list (every room shows there now, joined or not — see
-  // customTopLevelRooms) — only asks for a password when the room has one.
-  const [joinPasswordFor, setJoinPasswordFor] = useState<string | null>(null);
-  const [joinPassword, setJoinPassword] = useState("");
-  const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
-  const [joinError, setJoinError] = useState<string | null>(null);
+  const [showBrowse, setShowBrowse] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [roomMembers, setRoomMembers] = useState<Profile[]>([]);
   // The room list is a persistent column at sm+, but a full-screen overlay
@@ -802,7 +903,15 @@ export function MeetingHub({
   const [showMedia, setShowMedia] = useState(false);
   const [mediaTab, setMediaTab] = useState<"images" | "links" | "files">("images");
   const [mediaSearch, setMediaSearch] = useState("");
+  const [showPinned, setShowPinned] = useState(false);
+  const [pinnedMessages, setPinnedMessages] = useState<MeetingMessage[]>([]);
   const [showVideoCall, setShowVideoCall] = useState(false);
+  const [lightbox, setLightbox] = useState<{ url: string; filename: string | null } | null>(null);
+  // `${messageId}:${emoji}` of the reaction pill currently hovered — drives a
+  // bigger, readable "who reacted" popover instead of the tiny native title
+  // tooltip staff found hard to read.
+  const [hoveredReaction, setHoveredReaction] = useState<string | null>(null);
+  const [forwarding, setForwarding] = useState<{ content: string; attachment: ForwardableAttachment } | null>(null);
   // Set when a search result is picked — the scroll-into-view effect below
   // watches for this element to actually exist (it may not yet, if we just
   // switched rooms and that room's messages are still loading).
@@ -869,30 +978,28 @@ export function MeetingHub({
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const joinedRooms = useMemo(() => channels.filter((c) => c.joined), [channels]);
+  // Top-level rooms render in the list as usual; sub-rooms are grouped under
+  // their parent instead, shown indented and only while that parent is
+  // expanded — same "folder" pattern as the workspace's other tree views.
+  const topLevelJoinedRooms = useMemo(() => joinedRooms.filter((c) => !c.parent_channel_id), [joinedRooms]);
   // "Chung" (with "Riêng" right under it) renders in its own "TRÒ CHUYỆN"
   // section above a divider, separate from the custom rooms under "PHÒNG
   // HỌP" below it — Chung can't have sub-rooms (see nestableRooms), so it
   // doesn't need the expand/children machinery the rooms below it do.
-  const generalRoom = useMemo(() => joinedRooms.find((c) => c.is_general) ?? null, [joinedRooms]);
-  // Every top-level custom room shows in "PHÒNG HỌP" now, joined or not —
-  // clicking one you haven't joined prompts to join instead of opening it
-  // (see attemptJoin), so there's no separate "Khám phá phòng" list to dig
-  // through anymore.
-  const customTopLevelRooms = useMemo(
-    () => channels.filter((c) => !c.is_general && !c.parent_channel_id),
-    [channels],
-  );
+  const generalRoom = useMemo(() => topLevelJoinedRooms.find((c) => c.is_general) ?? null, [topLevelJoinedRooms]);
+  const customTopLevelRooms = useMemo(() => topLevelJoinedRooms.filter((c) => !c.is_general), [topLevelJoinedRooms]);
   const childRoomsByParent = useMemo(() => {
     const map = new Map<string, MeetingChannelPublic[]>();
-    for (const c of channels) {
+    for (const c of joinedRooms) {
       if (!c.parent_channel_id) continue;
       const list = map.get(c.parent_channel_id);
       if (list) list.push(c);
       else map.set(c.parent_channel_id, [c]);
     }
     return map;
-  }, [channels]);
+  }, [joinedRooms]);
   const dmTotalUnread = useMemo(() => Object.values(dmUnreadCounts).reduce((sum, n) => sum + n, 0), [dmUnreadCounts]);
+  const browsableRooms = useMemo(() => channels.filter((c) => !c.joined), [channels]);
   const activeChannel = channels.find((c) => c.id === activeId) ?? null;
   // Only custom rooms track explicit membership rows — "Chung" is open to
   // every staff member implicitly, so there's no meaningful roster to show.
@@ -1070,6 +1177,19 @@ export function MeetingHub({
       .catch(() => {
         if (activeIdRef.current === id) setReads([]);
       });
+
+    // Pinned messages change rarely — only refetched on an actual room
+    // switch, not every incremental resync poll. togglePin() above updates
+    // this list optimistically for changes made from this tab.
+    if (isNewRoom) {
+      getPinnedMessages(id)
+        .then((pinned) => {
+          if (activeIdRef.current === id) setPinnedMessages(pinned);
+        })
+        .catch(() => {
+          if (activeIdRef.current === id) setPinnedMessages([]);
+        });
+    }
   }, [activeId]);
 
   useEffect(() => {
@@ -1316,30 +1436,8 @@ export function MeetingHub({
 
   function handleJoined(id: string) {
     refreshChannel(id, { joined: true });
+    setShowBrowse(false);
     selectChannel(id);
-  }
-
-  // Clicking a not-yet-joined room in the main list: locked rooms open an
-  // inline password field first; open ones join straight away.
-  async function attemptJoin(room: MeetingChannelPublic) {
-    if (room.has_password && joinPasswordFor !== room.id) {
-      setJoinPasswordFor(room.id);
-      setJoinPassword("");
-      setJoinError(null);
-      return;
-    }
-    setJoiningRoomId(room.id);
-    setJoinError(null);
-    try {
-      await joinChannel(room.id, room.has_password ? joinPassword : "");
-      setJoinPasswordFor(null);
-      setJoinPassword("");
-      handleJoined(room.id);
-    } catch (err) {
-      setJoinError(err instanceof Error ? err.message : "Có lỗi xảy ra");
-    } finally {
-      setJoiningRoomId(null);
-    }
   }
 
   async function handleLeave(id: string) {
@@ -1393,6 +1491,23 @@ export function MeetingHub({
     } catch {
       // optimistic update may drift from the server on failure — next
       // channel load or a realtime event from another tab will correct it
+    }
+  }
+
+  async function togglePin(message: MeetingMessage) {
+    const pin = !message.pinned_at;
+    const patch = { pinned_at: pin ? new Date().toISOString() : null, pinned_by: pin ? currentUser.id : null };
+    setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, ...patch } : m)));
+    setPinnedMessages((prev) =>
+      pin ? [{ ...message, ...patch }, ...prev] : prev.filter((m) => m.id !== message.id),
+    );
+    try {
+      await togglePinMessage(message.id, pin);
+    } catch (err) {
+      // revert the optimistic update on failure
+      setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
+      setPinnedMessages((prev) => (pin ? prev.filter((m) => m.id !== message.id) : [message, ...prev]));
+      alert(err instanceof Error ? err.message : "Không thể ghim tin nhắn");
     }
   }
 
@@ -1607,9 +1722,14 @@ export function MeetingHub({
           <span className="text-[11px] font-bold tracking-[0.08em]" style={{ color: "var(--color-neutral-500)" }}>
             PHÒNG HỌP
           </span>
-          <button type="button" onClick={() => setShowCreate(true)} className="btn-icon" style={{ width: 24, height: 24, padding: 0 }} aria-label="Tạo phòng">
-            ＋
-          </button>
+          <span className="flex items-center gap-0.5">
+            <button type="button" onClick={() => setShowBrowse(true)} className="btn-icon" style={{ width: 28, height: 28, padding: 0, fontSize: 14 }} aria-label="Khám phá phòng">
+              🔍
+            </button>
+            <button type="button" onClick={() => setShowCreate(true)} className="btn-icon" style={{ width: 28, height: 28, padding: 0, fontSize: 16 }} aria-label="Tạo phòng">
+              ＋
+            </button>
+          </span>
         </div>
         <div className="flex flex-col gap-1 overflow-y-auto flex-1">
           {customTopLevelRooms.map((r) => {
@@ -1634,16 +1754,15 @@ export function MeetingHub({
                 )}
                 <button
                   type="button"
-                  onClick={() => (r.joined ? selectChannel(r.id) : attemptJoin(r))}
-                  disabled={joiningRoomId === r.id}
+                  onClick={() => selectChannel(r.id)}
                   className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold flex-1 min-w-0"
                   style={{
                     background: activeId === r.id ? "var(--color-accent-100)" : undefined,
-                    color: activeId === r.id ? "var(--color-accent-700)" : r.joined ? "var(--color-text)" : "var(--color-neutral-500)",
+                    color: activeId === r.id ? "var(--color-accent-700)" : "var(--color-text)",
                   }}
                 >
-                  <span aria-hidden style={{ opacity: r.joined ? 1 : 0.6 }}>{r.icon}</span>
-                  <span className="flex-1 truncate" style={{ opacity: r.joined ? 1 : 0.8 }}>{r.name}</span>
+                  <span aria-hidden>{r.icon}</span>
+                  <span className="flex-1 truncate">{r.name}</span>
                   {r.is_new && (
                     <span
                       className="flex-none rounded-full"
@@ -1654,61 +1773,16 @@ export function MeetingHub({
                   {r.has_password && (
                     <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
                   )}
-                  {!r.joined ? (
-                    <span className="flex-none text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
-                      {joiningRoomId === r.id ? "Đang vào…" : "Tham gia"}
+                  {roomUnread > 0 && (
+                    <span
+                      className="flex items-center justify-center rounded-full font-bold flex-none"
+                      style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                    >
+                      {roomUnread > 9 ? "9+" : roomUnread}
                     </span>
-                  ) : (
-                    roomUnread > 0 && (
-                      <span
-                        className="flex items-center justify-center rounded-full font-bold flex-none"
-                        style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
-                      >
-                        {roomUnread > 9 ? "9+" : roomUnread}
-                      </span>
-                    )
                   )}
                 </button>
               </div>
-              {joinPasswordFor === r.id && (
-                <div className="flex flex-col gap-1" style={{ paddingLeft: 26, paddingRight: 4 }}>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      autoFocus
-                      type="text"
-                      className="input flex-1"
-                      style={{ padding: "5px 8px", fontSize: 12 }}
-                      placeholder="Mật khẩu phòng"
-                      value={joinPassword}
-                      onChange={(e) => setJoinPassword(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && attemptJoin(r)}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => attemptJoin(r)}
-                      disabled={joiningRoomId === r.id}
-                      className="btn btn-primary btn-sm flex-none"
-                      style={{ padding: "4px 10px" }}
-                    >
-                      Vào
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setJoinPasswordFor(null)}
-                      className="btn-icon flex-none"
-                      style={{ width: 22, height: 22, padding: 0 }}
-                      aria-label="Huỷ"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  {joinError && (
-                    <p className="text-[11px]" style={{ color: "var(--status-red)" }}>
-                      {joinError}
-                    </p>
-                  )}
-                </div>
-              )}
               {expanded &&
                 children.map((child) => {
                   const childUnread = meetingUnreadCounts[child.id] ?? 0;
@@ -1716,19 +1790,18 @@ export function MeetingHub({
                     <div key={child.id} className="contents">
                       <button
                         type="button"
-                        onClick={() => (child.joined ? selectChannel(child.id) : attemptJoin(child))}
-                        disabled={joiningRoomId === child.id}
+                        onClick={() => selectChannel(child.id)}
                         className="ws-nav-link flex items-center gap-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
                         style={{
                           marginLeft: 26,
                           paddingLeft: 8,
                           paddingRight: 8,
                           background: activeId === child.id ? "var(--color-accent-100)" : undefined,
-                          color: activeId === child.id ? "var(--color-accent-700)" : child.joined ? "var(--color-text)" : "var(--color-neutral-500)",
+                          color: activeId === child.id ? "var(--color-accent-700)" : "var(--color-text)",
                         }}
                       >
-                        <span aria-hidden style={{ opacity: child.joined ? 1 : 0.6 }}>{child.icon}</span>
-                        <span className="flex-1 truncate" style={{ opacity: child.joined ? 1 : 0.8 }}>{child.name}</span>
+                        <span aria-hidden>{child.icon}</span>
+                        <span className="flex-1 truncate">{child.name}</span>
                         {child.is_new && (
                           <span
                             className="flex-none rounded-full"
@@ -1739,60 +1812,15 @@ export function MeetingHub({
                         {child.has_password && (
                           <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
                         )}
-                        {!child.joined ? (
-                          <span className="flex-none text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
-                            {joiningRoomId === child.id ? "Đang vào…" : "Tham gia"}
+                        {childUnread > 0 && (
+                          <span
+                            className="flex items-center justify-center rounded-full font-bold flex-none"
+                            style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                          >
+                            {childUnread > 9 ? "9+" : childUnread}
                           </span>
-                        ) : (
-                          childUnread > 0 && (
-                            <span
-                              className="flex items-center justify-center rounded-full font-bold flex-none"
-                              style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
-                            >
-                              {childUnread > 9 ? "9+" : childUnread}
-                            </span>
-                          )
                         )}
                       </button>
-                      {joinPasswordFor === child.id && (
-                        <div className="flex flex-col gap-1" style={{ paddingLeft: 52, paddingRight: 4 }}>
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              autoFocus
-                              type="text"
-                              className="input flex-1"
-                              style={{ padding: "5px 8px", fontSize: 12 }}
-                              placeholder="Mật khẩu phòng"
-                              value={joinPassword}
-                              onChange={(e) => setJoinPassword(e.target.value)}
-                              onKeyDown={(e) => e.key === "Enter" && attemptJoin(child)}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => attemptJoin(child)}
-                              disabled={joiningRoomId === child.id}
-                              className="btn btn-primary btn-sm flex-none"
-                              style={{ padding: "4px 10px" }}
-                            >
-                              Vào
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setJoinPasswordFor(null)}
-                              className="btn-icon flex-none"
-                              style={{ width: 22, height: 22, padding: 0 }}
-                              aria-label="Huỷ"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                          {joinError && (
-                            <p className="text-[11px]" style={{ color: "var(--status-red)" }}>
-                              {joinError}
-                            </p>
-                          )}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
@@ -1885,7 +1913,7 @@ export function MeetingHub({
                     setShowCreate(true);
                   }}
                   className="btn-icon flex-none"
-                  style={{ width: 30, height: 30, padding: 0 }}
+                  style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
                   aria-label="Tạo phòng con"
                   title="Tạo phòng con trong phòng này"
                 >
@@ -1899,9 +1927,10 @@ export function MeetingHub({
                     setShowAddMember((v) => !v);
                     setShowMedia(false);
                     setShowSearch(false);
+                    setShowPinned(false);
                   }}
                   className="btn-icon flex-none"
-                  style={{ width: 30, height: 30, padding: 0 }}
+                  style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
                   aria-label="Thông tin phòng"
                   title="Thông tin phòng & thành viên"
                 >
@@ -1912,7 +1941,7 @@ export function MeetingHub({
                 type="button"
                 onClick={() => setShowVideoCall(true)}
                 className="btn-icon flex-none"
-                style={{ width: 30, height: 30, padding: 0 }}
+                style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
                 aria-label="Gọi video"
                 title="Gọi video cả phòng"
               >
@@ -1924,9 +1953,10 @@ export function MeetingHub({
                   setShowMedia((v) => !v);
                   setShowSearch(false);
                   setShowAddMember(false);
+                  setShowPinned(false);
                 }}
                 className="btn-icon flex-none"
-                style={{ width: 30, height: 30, padding: 0 }}
+                style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
                 aria-label="Ảnh, link & file"
                 title="Ảnh, link & file đã chia sẻ trong phòng"
               >
@@ -1935,12 +1965,45 @@ export function MeetingHub({
               <button
                 type="button"
                 onClick={() => {
+                  setShowPinned((v) => !v);
+                  setShowMedia(false);
+                  setShowSearch(false);
+                  setShowAddMember(false);
+                }}
+                className="btn-icon flex-none relative"
+                style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
+                aria-label="Tin đã ghim"
+                title="Tin nhắn đã ghim"
+              >
+                📌
+                {pinnedMessages.length > 0 && (
+                  <span
+                    className="absolute flex items-center justify-center rounded-full font-bold"
+                    style={{
+                      top: -2,
+                      right: -2,
+                      minWidth: 14,
+                      height: 14,
+                      padding: "0 3px",
+                      fontSize: 8,
+                      background: "var(--status-red)",
+                      color: "#fff",
+                    }}
+                  >
+                    {pinnedMessages.length > 9 ? "9+" : pinnedMessages.length}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
                   setShowSearch((v) => !v);
                   setShowMedia(false);
                   setShowAddMember(false);
+                  setShowPinned(false);
                 }}
                 className="btn-icon flex-none"
-                style={{ width: 30, height: 30, padding: 0 }}
+                style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
                 aria-label="Tìm kiếm tin nhắn"
                 title="Tìm kiếm tin nhắn"
               >
@@ -2104,7 +2167,11 @@ export function MeetingHub({
                     value={mediaSearch}
                     onChange={(e) => setMediaSearch(e.target.value)}
                     placeholder={
-                      mediaTab === "images" ? "Tìm ảnh theo tên tệp…" : mediaTab === "links" ? "Tìm link…" : "Tìm tên tệp…"
+                      mediaTab === "images"
+                        ? "Tìm theo tên tệp hoặc người gửi…"
+                        : mediaTab === "links"
+                          ? "Tìm theo link hoặc người gửi…"
+                          : "Tìm theo tên tệp hoặc người gửi…"
                     }
                     className="input"
                     style={{ padding: "6px 10px", fontSize: 13 }}
@@ -2114,31 +2181,54 @@ export function MeetingHub({
                   {mediaTab === "images" &&
                     (() => {
                       const q = mediaSearch.trim().toLowerCase();
-                      const items = channelMedia.images.filter((m) => !q || (m.attachment_filename ?? "").toLowerCase().includes(q));
+                      const items = channelMedia.images.filter((m) => {
+                        if (!q) return true;
+                        const sender = profileById.get(m.sender_id);
+                        return (
+                          (m.attachment_filename ?? "").toLowerCase().includes(q) ||
+                          (sender?.display_name ?? "").toLowerCase().includes(q)
+                        );
+                      });
                       return items.length === 0 ? (
                         <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
                           Chưa có ảnh nào.
                         </p>
                       ) : (
                         <div className="grid gap-2 pt-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))" }}>
-                          {items.map((m) => (
-                            <a key={m.id} href={m.attachment_url ?? undefined} target="_blank" rel="noreferrer" title={m.attachment_filename ?? ""}>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={thumbnailUrl(m.attachment_url, 180)}
-                                alt={m.attachment_filename ?? ""}
-                                className="rounded-[8px] object-cover w-full"
-                                style={{ aspectRatio: "1 / 1" }}
-                              />
-                            </a>
-                          ))}
+                          {items.map((m) => {
+                            const sender = profileById.get(m.sender_id);
+                            return (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => m.attachment_url && setLightbox({ url: m.attachment_url, filename: m.attachment_filename })}
+                                title={`${m.attachment_filename ?? ""} · ${sender?.display_name ?? "Ẩn danh"}`}
+                                className="flex flex-col gap-0.5"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={thumbnailUrl(m.attachment_url, 180)}
+                                  alt={m.attachment_filename ?? ""}
+                                  className="rounded-[8px] object-cover w-full"
+                                  style={{ aspectRatio: "1 / 1" }}
+                                />
+                                <span className="text-[10px] truncate" style={{ color: "var(--color-neutral-500)" }}>
+                                  {sender?.display_name ?? "Ẩn danh"}
+                                </span>
+                              </button>
+                            );
+                          })}
                         </div>
                       );
                     })()}
                   {mediaTab === "links" &&
                     (() => {
                       const q = mediaSearch.trim().toLowerCase();
-                      const items = channelMedia.links.filter((l) => !q || l.url.toLowerCase().includes(q));
+                      const items = channelMedia.links.filter((l) => {
+                        if (!q) return true;
+                        const sender = profileById.get(l.message.sender_id);
+                        return l.url.toLowerCase().includes(q) || (sender?.display_name ?? "").toLowerCase().includes(q);
+                      });
                       return items.length === 0 ? (
                         <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
                           Chưa có link nào.
@@ -2171,7 +2261,14 @@ export function MeetingHub({
                   {mediaTab === "files" &&
                     (() => {
                       const q = mediaSearch.trim().toLowerCase();
-                      const items = channelMedia.files.filter((m) => !q || (m.attachment_filename ?? "").toLowerCase().includes(q));
+                      const items = channelMedia.files.filter((m) => {
+                        if (!q) return true;
+                        const sender = profileById.get(m.sender_id);
+                        return (
+                          (m.attachment_filename ?? "").toLowerCase().includes(q) ||
+                          (sender?.display_name ?? "").toLowerCase().includes(q)
+                        );
+                      });
                       return items.length === 0 ? (
                         <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
                           Chưa có file nào.
@@ -2202,6 +2299,78 @@ export function MeetingHub({
                         </div>
                       );
                     })()}
+                </div>
+              </div>
+            )}
+
+            {showPinned && (
+              <div
+                className="card elev-lg flex flex-col"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  right: 0,
+                  bottom: 0,
+                  width: 340,
+                  maxWidth: "90%",
+                  zIndex: 20,
+                  borderTopRightRadius: 0,
+                  borderBottomRightRadius: 0,
+                  overflow: "hidden",
+                }}
+              >
+                <div className="flex items-center gap-2 px-4 pt-2.5 pb-2">
+                  <span className="text-sm font-bold flex-1">📌 Tin đã ghim ({pinnedMessages.length})</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPinned(false)}
+                    className="btn-icon flex-none"
+                    style={{ width: 26, height: 26, padding: 0 }}
+                    aria-label="Đóng"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="overflow-y-auto px-4 pb-3 flex-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+                  {pinnedMessages.length === 0 ? (
+                    <p className="text-[12px] text-center py-4" style={{ color: "var(--color-neutral-500)" }}>
+                      Chưa có tin nhắn nào được ghim.
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-2 pt-2">
+                      {pinnedMessages.map((m) => {
+                        const sender = profileById.get(m.sender_id);
+                        return (
+                          <div key={m.id} className="flex flex-col gap-1 rounded-[8px] px-2.5 py-2" style={{ background: "var(--color-surface)" }}>
+                            <button
+                              type="button"
+                              className="text-left"
+                              onClick={() => {
+                                setShowPinned(false);
+                                const el = document.getElementById(`meeting-msg-${m.id}`);
+                                el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                                el?.classList.add("fk-flash-highlight");
+                                setTimeout(() => el?.classList.remove("fk-flash-highlight"), 1600);
+                              }}
+                            >
+                              <span className="block text-[12px] font-semibold">{sender?.display_name ?? "Ẩn danh"}</span>
+                              <span className="block text-[12px] truncate" style={{ color: "var(--color-neutral-500)" }}>
+                                {m.content || (m.attachment_url ? "📎 Tệp đính kèm" : "")}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => togglePin(m)}
+                              className="self-end text-[11px] font-bold"
+                              style={{ color: "var(--color-accent-700)" }}
+                            >
+                              Bỏ ghim
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -2275,6 +2444,33 @@ export function MeetingHub({
                       aria-label="Trả lời tin nhắn"
                     >
                       ↩
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForwarding({
+                          content: m.content,
+                          attachment: m.attachment_url
+                            ? { url: m.attachment_url, filename: m.attachment_filename, mime: m.attachment_mime, size: m.attachment_size }
+                            : null,
+                        })
+                      }
+                      className="btn-icon"
+                      style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
+                      aria-label="Chuyển tiếp tin nhắn"
+                      title="Chuyển tiếp"
+                    >
+                      ➡️
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => togglePin(m)}
+                      className="btn-icon"
+                      style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
+                      aria-label={m.pinned_at ? "Bỏ ghim tin nhắn" : "Ghim tin nhắn"}
+                      title={m.pinned_at ? "Bỏ ghim" : "Ghim"}
+                    >
+                      📌
                     </button>
                     <button
                       type="button"
@@ -2352,6 +2548,11 @@ export function MeetingHub({
                           {mine ? "Bạn" : (sender?.display_name ?? "Ẩn danh")}
                         </span>
                       )}
+                      {m.pinned_at && (
+                        <span className="text-[10px] font-semibold mb-0.5" style={{ color: "var(--color-accent-700)" }} title="Đã ghim">
+                          📌 Đã ghim
+                        </span>
+                      )}
                       {m.is_recalled ? (
                         <div
                           className="rounded-[12px] px-3 py-2 text-sm italic"
@@ -2407,7 +2608,11 @@ export function MeetingHub({
                       )}
                       {m.attachment_url &&
                         (isImage(m.attachment_mime) ? (
-                          <a href={m.attachment_url} target="_blank" rel="noreferrer" className="mt-1">
+                          <button
+                            type="button"
+                            onClick={() => setLightbox({ url: m.attachment_url!, filename: m.attachment_filename })}
+                            className="mt-1 block"
+                          >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img
                               src={thumbnailUrl(m.attachment_url, 480)}
@@ -2416,7 +2621,7 @@ export function MeetingHub({
                               style={{ maxWidth: 240, maxHeight: 240 }}
                               onLoad={() => stickToBottomIfNear(false)}
                             />
-                          </a>
+                          </button>
                         ) : (
                           <a
                             href={m.attachment_url}
@@ -2433,21 +2638,40 @@ export function MeetingHub({
                         <div className="flex flex-wrap gap-1 mt-1">
                           {Object.entries(grouped).map(([emoji, ids]) => {
                             const reactedByMe = ids.includes(currentUser.id);
+                            const reactionKey = `${m.id}:${emoji}`;
+                            const names = ids.map((id) => profileById.get(id)?.display_name ?? "").filter(Boolean);
                             return (
-                              <button
-                                key={emoji}
-                                type="button"
-                                onClick={() => toggleReaction(m.id, emoji)}
-                                className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold"
-                                style={{
-                                  background: reactedByMe ? "var(--color-accent-100)" : "var(--color-surface)",
-                                  border: `1px solid ${reactedByMe ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
-                                }}
-                                title={ids.map((id) => profileById.get(id)?.display_name ?? "").filter(Boolean).join(", ")}
-                              >
-                                <span aria-hidden>{emoji}</span>
-                                {ids.length}
-                              </button>
+                              <span key={emoji} className="relative inline-block">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleReaction(m.id, emoji)}
+                                  onMouseEnter={() => setHoveredReaction(reactionKey)}
+                                  onMouseLeave={() => setHoveredReaction((prev) => (prev === reactionKey ? null : prev))}
+                                  className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold"
+                                  style={{
+                                    background: reactedByMe ? "var(--color-accent-100)" : "var(--color-surface)",
+                                    border: `1px solid ${reactedByMe ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
+                                  }}
+                                >
+                                  <span aria-hidden>{emoji}</span>
+                                  {ids.length}
+                                </button>
+                                {hoveredReaction === reactionKey && names.length > 0 && (
+                                  <span
+                                    className="absolute z-10 rounded-[8px] px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap"
+                                    style={{
+                                      bottom: "calc(100% + 6px)",
+                                      left: "50%",
+                                      transform: "translateX(-50%)",
+                                      background: "var(--color-neutral-900, #1a1a1a)",
+                                      color: "#fff",
+                                      boxShadow: "var(--shadow-md, 0 2px 8px rgba(0,0,0,.25))",
+                                    }}
+                                  >
+                                    {emoji} {names.join(", ")}
+                                  </span>
+                                )}
+                              </span>
                             );
                           })}
                         </div>
@@ -2617,7 +2841,7 @@ export function MeetingHub({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   className="btn-icon flex-none"
-                  style={{ width: 34, height: 34, padding: 0 }}
+                  style={{ width: 34, height: 34, padding: 0, fontSize: 18 }}
                   aria-label="Gửi ảnh hoặc tệp"
                 >
                   📎
@@ -2629,7 +2853,7 @@ export function MeetingHub({
                     setShowEmojiPicker((v) => !v);
                   }}
                   className="btn-icon flex-none"
-                  style={{ width: 34, height: 34, padding: 0 }}
+                  style={{ width: 34, height: 34, padding: 0, fontSize: 18 }}
                   aria-label="Chọn biểu tượng cảm xúc"
                 >
                   😀
@@ -2696,6 +2920,20 @@ export function MeetingHub({
           selfId={currentUser.id}
           displayName={currentUser.display_name}
           onClose={() => setShowVideoCall(false)}
+        />
+      )}
+      {lightbox && (
+        <ImageLightbox url={lightbox.url} filename={lightbox.filename} onClose={() => setLightbox(null)} />
+      )}
+      {showBrowse && (
+        <BrowseRoomsModal rooms={browsableRooms} onClose={() => setShowBrowse(false)} onJoined={handleJoined} />
+      )}
+      {forwarding && (
+        <ForwardMessageModal
+          content={forwarding.content}
+          attachment={forwarding.attachment}
+          currentUserId={currentUser.id}
+          onClose={() => setForwarding(null)}
         />
       )}
       {showLabelsEditor &&

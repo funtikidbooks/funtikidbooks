@@ -139,6 +139,13 @@ export type MeetingReaction = {
   created_at: string;
 };
 
+export type DirectMessageReaction = {
+  message_id: string;
+  profile_id: string;
+  emoji: string;
+  created_at: string;
+};
+
 export type MeetingChannelRead = {
   channel_id: string;
   profile_id: string;
@@ -163,6 +170,8 @@ export type MeetingMessage = {
   attachment_size: number | null;
   reply_to_message_id: string | null;
   is_recalled: boolean;
+  pinned_at: string | null;
+  pinned_by: string | null;
   created_at: string;
 };
 
@@ -555,6 +564,12 @@ export type Database = {
         Row: DirectMessage;
         Insert: Partial<DirectMessage> & { sender_id: string; recipient_id: string };
         Update: Partial<DirectMessage>;
+        Relationships: [];
+      };
+      direct_message_reactions: {
+        Row: DirectMessageReaction;
+        Insert: { message_id: string; profile_id: string; emoji: string };
+        Update: Partial<DirectMessageReaction>;
         Relationships: [];
       };
       dm_reads: {

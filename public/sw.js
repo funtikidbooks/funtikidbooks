@@ -36,12 +36,16 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = event.notification.data?.url || "/workspace";
 
+  // Prefer focusing the tab that's already open and letting its own router
+  // do a client-side transition — client.navigate() did a full hard reload
+  // of the whole app on every single notification click, even when the
+  // right tab was already sitting right there.
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
         if ("focus" in client) {
           client.focus();
-          if ("navigate" in client) client.navigate(url).catch(() => {});
+          client.postMessage({ type: "notification-click", url });
           return;
         }
       }

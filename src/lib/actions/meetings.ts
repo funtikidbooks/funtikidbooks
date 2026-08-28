@@ -415,6 +415,39 @@ export async function sendMeetingMessage(
   return data as MeetingMessage;
 }
 
+// Forwards a message someone already has on screen to another room they're
+// a member of — takes the content/attachment fields straight from that
+// message instead of re-uploading, since the attachment is already sitting
+// in storage under its own URL.
+export async function forwardMeetingMessage(
+  targetChannelId: string,
+  content: string,
+  attachment: { url: string; filename: string | null; mime: string | null; size: number | null } | null,
+) {
+  const { supabase, user } = await requireUser();
+  const trimmed = content.trim();
+  if (!trimmed && !attachment) return null;
+
+  const { data, error } = await supabase
+    .from("meeting_messages")
+    .insert({
+      channel_id: targetChannelId,
+      sender_id: user.id,
+      content: trimmed,
+      attachment_url: attachment?.url ?? null,
+      attachment_filename: attachment?.filename ?? null,
+      attachment_mime: attachment?.mime ?? null,
+      attachment_size: attachment?.size ?? null,
+    })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error("Không thể chuyển tiếp — bạn cần tham gia phòng trước.");
+
+  after(() => notifyChannelMembers(supabase, targetChannelId, user.id, trimmed, !!attachment).catch(() => {}));
+
+  return data as MeetingMessage;
+}
+
 // Fire-and-forget: pushes a real OS notification to everyone who should
 // hear about this message — every staff member for the always-open
 // "Chung" channel, or just that room's members for a private one — the
@@ -496,6 +529,34 @@ export async function recallMeetingMessage(messageId: string) {
     const path = storagePathFromPublicUrl(existing.attachment_url as string, "task-attachments");
     if (path) await supabase.storage.from("task-attachments").remove([path]).catch(() => {});
   }
+}
+
+// Any room member can pin/unpin any message — collaborative like reactions,
+// not restricted to the sender the way recall is. Returns the new pinned
+// state so the caller doesn't need a separate read to know it stuck.
+export async function togglePinMessage(messageId: string, pin: boolean) {
+  const { supabase, user } = await requireUser();
+  const { error } = await supabase
+    .from("meeting_messages")
+    .update(pin ? { pinned_at: new Date().toISOString(), pinned_by: user.id } : { pinned_at: null, pinned_by: null })
+    .eq("id", messageId);
+  if (error) throw new Error("Không thể ghim tin nhắn — bạn cần tham gia phòng trước.");
+}
+
+// Pulls pinned messages straight from the table rather than filtering
+// whatever's currently loaded in the message list — the list is capped/
+// paginated, so an old pinned message can easily have scrolled out of what
+// the client already has in memory.
+export async function getPinnedMessages(channelId: string): Promise<MeetingMessage[]> {
+  const { supabase } = await requireUser();
+  const { data, error } = await supabase
+    .from("meeting_messages")
+    .select("*")
+    .eq("channel_id", channelId)
+    .not("pinned_at", "is", null)
+    .order("pinned_at", { ascending: false });
+  if (error || !data) return [];
+  return data as MeetingMessage[];
 }
 
 // Every reaction in the channel created after `afterCreatedAt` (or all of

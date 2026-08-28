@@ -3,15 +3,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import { getConversation, markDirectMessagesRead, sendDirectMessage } from "@/lib/actions/messages";
+import {
+  addDirectReaction,
+  getConversation,
+  getDirectReactionsSince,
+  markDirectMessagesRead,
+  removeDirectReaction,
+  sendDirectMessage,
+} from "@/lib/actions/messages";
 import { thumbnailUrl } from "@/lib/imageTransform";
-import type { DirectMessage, Profile } from "@/lib/types";
+import { ImageLightbox } from "@/components/workspace/ImageLightbox";
+import type { DirectMessage, DirectMessageReaction, Profile } from "@/lib/types";
 
 // How long the peer's "typing…" indicator stays up after their last
 // keystroke broadcast, and the minimum gap between our own outgoing
 // typing broadcasts (no point spamming one per keystroke).
 const TYPING_IDLE_MS = 3000;
 const TYPING_BROADCAST_THROTTLE_MS = 2000;
+
+// Same quick-pick set as the room chat's reaction popover (MeetingHub) —
+// kept as its own local copy rather than a shared import since it's just a
+// six-item literal, not worth a shared module for.
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀", "🙏"];
 
 // A curated set of quick-pick emoji for a small popover — no need to pull
 // in a whole emoji-picker dependency for a work chat.
@@ -81,23 +94,33 @@ export function DirectConversation({
   onScrolledTo?: () => void;
 }) {
   const [messages, setMessages] = useState<DirectMessage[]>([]);
+  const [reactions, setReactions] = useState<DirectMessageReaction[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [peerTyping, setPeerTyping] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
+  // `${messageId}:${emoji}` of the reaction pill currently hovered — same
+  // bigger "who reacted" popover as MeetingHub's, instead of a native title
+  // tooltip.
+  const [hoveredReaction, setHoveredReaction] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ url: string; filename: string | null } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   // Which peer the bottom-scroll effect below last handled — lets it tell
   // "just switched conversations, always snap to bottom" apart from "same
   // conversation, only snap if already near the bottom" (see that effect).
   const scrolledPeerIdRef = useRef<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
-  // Latest messages array, read (not reacted to) from inside resync() below
-  // — kept out of its dependency array so a new message doesn't tear down
-  // and recreate the realtime channel subscription every time one arrives.
+  // Latest messages/reactions arrays, read (not reacted to) from inside
+  // resync() below — kept out of its dependency array so a new message or
+  // reaction doesn't tear down and recreate the realtime channel
+  // subscription every time one arrives.
   const messagesRef = useRef<DirectMessage[]>([]);
+  const reactionsRef = useRef<DirectMessageReaction[]>([]);
   // Which peer resync() last actually fetched — lets it tell "just switched
   // conversations, need the full history" apart from "same conversation,
   // only catching up on what was missed".
@@ -134,6 +157,17 @@ export function DirectConversation({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showEmojiPicker]);
 
+  useEffect(() => {
+    if (!reactionPickerFor) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setReactionPickerFor(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [reactionPickerFor]);
+
   // Catches up this conversation after the realtime subscription below may
   // have silently missed an INSERT while the websocket was disconnected
   // (phone screen locked, tab backgrounded, a network blip...) — that used
@@ -150,12 +184,18 @@ export function DirectConversation({
   const resync = useCallback(() => {
     const isNewPeer = lastSyncedPeerIdRef.current !== peer.id;
     lastSyncedPeerIdRef.current = peer.id;
-    const after =
-      !isNewPeer && messagesRef.current.length > 0
-        ? messagesRef.current[messagesRef.current.length - 1].created_at
-        : undefined;
 
-    getConversation(peer.id, after)
+    // Reduce rather than "just read the last element" — a realtime INSERT
+    // can append out of arrival order, so the newest created_at isn't
+    // guaranteed to be the last item in either array (see MeetingHub's
+    // resync for the same reasoning).
+    const latestOf = (timestamps: string[]) =>
+      timestamps.length === 0 ? undefined : timestamps.reduce((max, t) => (t > max ? t : max));
+
+    const messagesAfter = isNewPeer ? undefined : latestOf(messagesRef.current.map((m) => m.created_at));
+    const reactionsAfter = isNewPeer ? undefined : latestOf(reactionsRef.current.map((r) => r.created_at));
+
+    getConversation(peer.id, messagesAfter)
       .then((msgs) => {
         if (isNewPeer) {
           setMessages(msgs);
@@ -170,6 +210,23 @@ export function DirectConversation({
       .catch(() => {
         // no live backend yet (e.g. workspace-demo) — chat just starts empty
         if (isNewPeer) setMessages([]);
+      });
+
+    getDirectReactionsSince(peer.id, reactionsAfter)
+      .then((rx) => {
+        if (isNewPeer) {
+          setReactions(rx);
+        } else if (rx.length > 0) {
+          setReactions((prev) => {
+            const key = (r: DirectMessageReaction) => `${r.message_id}:${r.profile_id}:${r.emoji}`;
+            const seen = new Set(prev.map(key));
+            const fresh = rx.filter((r) => !seen.has(key(r)));
+            return fresh.length > 0 ? [...prev, ...fresh] : prev;
+          });
+        }
+      })
+      .catch(() => {
+        if (isNewPeer) setReactions([]);
       });
   }, [peer.id]);
 
@@ -201,6 +258,10 @@ export function DirectConversation({
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    reactionsRef.current = reactions;
+  }, [reactions]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -235,6 +296,29 @@ export function DirectConversation({
             (row.sender_id === peer.id && row.recipient_id === currentUser.id);
           if (!belongsHere) return;
           setMessages((prev) => prev.map((m) => (m.id === row.id ? row : m)));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "direct_message_reactions" },
+        (payload) => {
+          const row = payload.new as DirectMessageReaction;
+          if (!messagesRef.current.some((m) => m.id === row.message_id)) return;
+          setReactions((prev) =>
+            prev.some((r) => r.message_id === row.message_id && r.profile_id === row.profile_id && r.emoji === row.emoji)
+              ? prev
+              : [...prev, row],
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "direct_message_reactions" },
+        (payload) => {
+          const old = payload.old as { message_id: string; profile_id: string; emoji: string };
+          setReactions((prev) =>
+            prev.filter((r) => !(r.message_id === old.message_id && r.profile_id === old.profile_id && r.emoji === old.emoji)),
+          );
         },
       )
       .on("broadcast", { event: "typing" }, (msg) => {
@@ -326,6 +410,25 @@ export function DirectConversation({
     if (now - lastTypingSentAtRef.current < TYPING_BROADCAST_THROTTLE_MS) return;
     lastTypingSentAtRef.current = now;
     channelRef.current?.send({ type: "broadcast", event: "typing", payload: { userId: currentUser.id } });
+  }
+
+  async function toggleReaction(messageId: string, emoji: string) {
+    const already = reactions.some(
+      (r) => r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji,
+    );
+    setReactions((prev) =>
+      already
+        ? prev.filter((r) => !(r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji))
+        : [...prev, { message_id: messageId, profile_id: currentUser.id, emoji, created_at: new Date().toISOString() }],
+    );
+    setReactionPickerFor(null);
+    try {
+      if (already) await removeDirectReaction(messageId, emoji);
+      else await addDirectReaction(messageId, emoji);
+    } catch {
+      // optimistic update may drift from the server on failure — next
+      // resync or a realtime event from another tab will correct it
+    }
   }
 
   // Lets a screenshot copied to the clipboard (or any image) go straight
@@ -426,50 +529,126 @@ export function DirectConversation({
             !next ||
             next.sender_id !== m.sender_id ||
             new Date(next.created_at).getTime() - new Date(m.created_at).getTime() > 5 * 60 * 1000;
+          const msgReactions = reactions.filter((r) => r.message_id === m.id);
+          const grouped = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
+            (acc[r.emoji] ??= []).push(r.profile_id);
+            return acc;
+          }, {});
+          const reactionButton = (
+            <span className="relative inline-flex flex-none">
+              <button
+                type="button"
+                onClick={() => setReactionPickerFor(reactionPickerFor === m.id ? null : m.id)}
+                className="fk-msg-actions btn-icon opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
+                aria-label="Thả cảm xúc"
+              >
+                😊
+              </button>
+              {reactionPickerFor === m.id && (
+                <div
+                  ref={popoverRef}
+                  className="card elev-lg flex items-center gap-1 p-1.5"
+                  style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, marginBottom: 6, zIndex: 10 }}
+                >
+                  {QUICK_REACTIONS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => toggleReaction(m.id, emoji)}
+                      className="btn-icon"
+                      style={{ width: 26, height: 26, padding: 0, fontSize: 15 }}
+                      aria-label={emoji}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                  {m.content && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(m.content).catch(() => {});
+                        setReactionPickerFor(null);
+                      }}
+                      className="btn-icon"
+                      style={{ width: 26, height: 26, padding: 0, fontSize: 13 }}
+                      aria-label="Sao chép"
+                      title="Sao chép"
+                    >
+                      📋
+                    </button>
+                  )}
+                </div>
+              )}
+            </span>
+          );
           return (
             <div
               id={`dm-msg-${m.id}`}
               key={m.id}
-              className={`flex flex-col ${mine ? "items-end" : "items-start"}`}
+              className={`group flex flex-col ${mine ? "items-end" : "items-start"}`}
               style={{ marginTop: isGroupStart ? 12 : 2 }}
             >
               {m.content && (
-                <div
-                  className="rounded-[12px] px-3 py-1.5 text-[17px] max-w-[70%] whitespace-pre-wrap break-words"
-                  style={{
-                    background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
-                    color: mine ? "#fff" : "var(--color-text)",
-                  }}
-                >
-                  {linkify(m.content).map((part, i) =>
-                    typeof part === "string" ? (
-                      part
-                    ) : (
-                      <a
-                        key={i}
-                        href={part.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{ color: mine ? "#fff" : "var(--color-accent-700)", textDecoration: "underline" }}
-                      >
-                        {part.url}
-                      </a>
-                    ),
-                  )}
+                <div className={`flex items-end gap-1 min-w-0 ${mine ? "flex-row-reverse" : ""}`}>
+                  <div
+                    className="rounded-[12px] px-3 py-1.5 text-[17px] max-w-[70%] whitespace-pre-wrap break-words"
+                    style={{
+                      background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
+                      color: mine ? "#fff" : "var(--color-text)",
+                    }}
+                  >
+                    {linkify(m.content).map((part, i) =>
+                      typeof part === "string" ? (
+                        part
+                      ) : (
+                        <span key={i} className="inline-flex items-center gap-0.5">
+                          <a
+                            href={part.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ color: mine ? "#fff" : "var(--color-accent-700)", textDecoration: "underline" }}
+                          >
+                            {part.url}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              navigator.clipboard?.writeText(part.url).catch(() => {});
+                            }}
+                            aria-label="Sao chép link"
+                            title="Sao chép link"
+                            style={{ fontSize: 11, opacity: mine ? 0.85 : 0.6, lineHeight: 1 }}
+                          >
+                            📋
+                          </button>
+                        </span>
+                      ),
+                    )}
+                  </div>
+                  {reactionButton}
                 </div>
               )}
               {m.attachment_url &&
                 (isImage(m.attachment_mime) ? (
-                  <a href={m.attachment_url} target="_blank" rel="noreferrer" className="mt-1">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={thumbnailUrl(m.attachment_url, 480)}
-                      alt={m.attachment_filename ?? ""}
-                      className="rounded-[10px] object-cover"
-                      style={{ maxWidth: 240, maxHeight: 240 }}
-                      onLoad={() => stickToBottomIfNear(false)}
-                    />
-                  </a>
+                  <div className={`flex items-end gap-1 mt-1 ${mine ? "flex-row-reverse" : ""}`}>
+                    <button
+                      type="button"
+                      onClick={() => setLightbox({ url: m.attachment_url!, filename: m.attachment_filename })}
+                      className="block"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={thumbnailUrl(m.attachment_url, 480)}
+                        alt={m.attachment_filename ?? ""}
+                        className="rounded-[10px] object-cover"
+                        style={{ maxWidth: 240, maxHeight: 240 }}
+                        onLoad={() => stickToBottomIfNear(false)}
+                      />
+                    </button>
+                    {!m.content && reactionButton}
+                  </div>
                 ) : (
                   <a
                     href={m.attachment_url}
@@ -481,6 +660,51 @@ export function DirectConversation({
                     📄 {m.attachment_filename}
                   </a>
                 ))}
+              {Object.keys(grouped).length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {Object.entries(grouped).map(([emoji, ids]) => {
+                    const reactedByMe = ids.includes(currentUser.id);
+                    const reactionKey = `${m.id}:${emoji}`;
+                    // Only two people can ever be in this conversation, so
+                    // there's no need for a profile lookup — just tell the
+                    // two apart directly.
+                    const names = ids.map((id) => (id === currentUser.id ? "Bạn" : peer.display_name));
+                    return (
+                      <span key={emoji} className="relative inline-block">
+                        <button
+                          type="button"
+                          onClick={() => toggleReaction(m.id, emoji)}
+                          onMouseEnter={() => setHoveredReaction(reactionKey)}
+                          onMouseLeave={() => setHoveredReaction((prev) => (prev === reactionKey ? null : prev))}
+                          className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold"
+                          style={{
+                            background: reactedByMe ? "var(--color-accent-100)" : "var(--color-surface)",
+                            border: `1px solid ${reactedByMe ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
+                          }}
+                        >
+                          <span aria-hidden>{emoji}</span>
+                          {ids.length}
+                        </button>
+                        {hoveredReaction === reactionKey && (
+                          <span
+                            className="absolute z-10 rounded-[8px] px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap"
+                            style={{
+                              bottom: "calc(100% + 6px)",
+                              left: "50%",
+                              transform: "translateX(-50%)",
+                              background: "var(--color-neutral-900, #1a1a1a)",
+                              color: "#fff",
+                              boxShadow: "var(--shadow-md, 0 2px 8px rgba(0,0,0,.25))",
+                            }}
+                          >
+                            {emoji} {names.join(", ")}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
               {isGroupEnd && (
                 <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
                   {formatTime(m.created_at)}
@@ -597,7 +821,7 @@ export function DirectConversation({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             className="btn-icon flex-none"
-            style={{ width: 30, height: 30, padding: 0 }}
+            style={{ width: 34, height: 34, padding: 0, fontSize: 18 }}
             aria-label="Gửi ảnh hoặc tệp"
           >
             📎
@@ -606,7 +830,7 @@ export function DirectConversation({
             type="button"
             onClick={() => setShowEmojiPicker((v) => !v)}
             className="btn-icon flex-none"
-            style={{ width: 30, height: 30, padding: 0 }}
+            style={{ width: 34, height: 34, padding: 0, fontSize: 18 }}
             aria-label="Chọn biểu tượng cảm xúc"
           >
             😀
@@ -630,7 +854,7 @@ export function DirectConversation({
           <textarea
             ref={textInputRef}
             className="input flex-1 resize-none"
-            style={{ padding: "6px 10px", fontSize: 13, maxHeight: 140, overflowY: "auto" }}
+            style={{ maxHeight: 140, overflowY: "auto" }}
             rows={1}
             placeholder="Nhắn tin… (dán ảnh bằng Ctrl+V)"
             value={text}
@@ -651,6 +875,9 @@ export function DirectConversation({
           </button>
         </form>
       </div>
+      {lightbox && (
+        <ImageLightbox url={lightbox.url} filename={lightbox.filename} onClose={() => setLightbox(null)} />
+      )}
     </>
   );
 }

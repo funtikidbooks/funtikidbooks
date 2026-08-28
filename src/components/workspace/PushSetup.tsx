@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { isIos, isStandalone, subscribeToPush } from "@/lib/pushClient";
 
 // Registers the service worker and subscribes this device to Web Push so
@@ -11,9 +12,26 @@ import { isIos, isStandalone, subscribeToPush } from "@/lib/pushClient";
 // permission prompt (now stuck on "denied") can retry manually from the
 // "Bật thông báo" button in their profile (ProfileMenu.tsx).
 export function PushSetup() {
+  const router = useRouter();
+
   useEffect(() => {
     subscribeToPush();
   }, []);
+
+  // sw.js focuses the existing tab on a notification click instead of doing
+  // a hard client.navigate() (which reloaded the whole app every time) —
+  // this is the other half: it posts the target URL here so we can hand it
+  // to Next's own router for a normal client-side transition instead.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    function onMessage(event: MessageEvent) {
+      if (event.data?.type === "notification-click" && typeof event.data.url === "string") {
+        router.push(event.data.url);
+      }
+    }
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [router]);
 
   return null;
 }

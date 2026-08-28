@@ -150,6 +150,61 @@ begin
   end if;
 end $$;
 
+-- direct_message_reactions: same idea as meeting_message_reactions, but for
+-- a 1:1 conversation — one row per (message, person, emoji). Read/insert/
+-- delete are all gated on being one of the two people in that conversation
+-- (checked via the parent direct_messages row) rather than room membership.
+create table if not exists public.direct_message_reactions (
+  message_id uuid not null references public.direct_messages (id) on delete cascade,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  emoji text not null,
+  created_at timestamptz not null default now(),
+  primary key (message_id, profile_id, emoji)
+);
+
+alter table public.direct_message_reactions enable row level security;
+
+drop policy if exists "conversation members can read reactions" on public.direct_message_reactions;
+create policy "conversation members can read reactions"
+  on public.direct_message_reactions for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.direct_messages dm
+      where dm.id = direct_message_reactions.message_id
+        and (dm.sender_id = auth.uid() or dm.recipient_id = auth.uid())
+    )
+  );
+
+drop policy if exists "staff can react as themselves in dm" on public.direct_message_reactions;
+create policy "staff can react as themselves in dm"
+  on public.direct_message_reactions for insert
+  to authenticated
+  with check (
+    profile_id = auth.uid()
+    and exists (
+      select 1 from public.direct_messages dm
+      where dm.id = direct_message_reactions.message_id
+        and (dm.sender_id = auth.uid() or dm.recipient_id = auth.uid())
+    )
+  );
+
+drop policy if exists "staff can remove their own dm reaction" on public.direct_message_reactions;
+create policy "staff can remove their own dm reaction"
+  on public.direct_message_reactions for delete
+  to authenticated
+  using (profile_id = auth.uid());
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'direct_message_reactions'
+  ) then
+    alter publication supabase_realtime add table public.direct_message_reactions;
+  end if;
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- dm_reads: per-user "I've read this conversation up to here" marker, one row
 -- per (me, peer) pair. Used to compute the unread-message badge shown next
@@ -1223,6 +1278,13 @@ alter table public.meeting_messages add column if not exists reply_to_message_id
 -- it was, instead of the message silently vanishing without a trace.
 alter table public.meeting_messages add column if not exists is_recalled boolean not null default false;
 
+-- Pinning ("ghim tin nhắn") — non-null pinned_at is what makes a message
+-- pinned; pinned_by records who did it (shown in the pinned-messages panel).
+-- Any room member can pin/unpin, not just the sender — same collaborative
+-- model as reactions, not an ownership thing like recall.
+alter table public.meeting_messages add column if not exists pinned_at timestamptz;
+alter table public.meeting_messages add column if not exists pinned_by uuid references public.profiles (id) on delete set null;
+
 alter table public.meeting_channels enable row level security;
 alter table public.meeting_channel_members enable row level security;
 alter table public.meeting_messages enable row level security;
@@ -1376,6 +1438,30 @@ create policy "sender can recall their own messages"
   to authenticated
   using (sender_id = auth.uid())
   with check (sender_id = auth.uid());
+
+-- Separate (permissive) policy for pinning — any room member can pin/unpin
+-- any message, not just their own. The server action is the actual gate on
+-- which columns an update touches (togglePinMessage only ever sets
+-- pinned_at/pinned_by); this policy just grants row access.
+drop policy if exists "channel members can pin messages" on public.meeting_messages;
+create policy "channel members can pin messages"
+  on public.meeting_messages for update
+  to authenticated
+  using (
+    exists (
+      select 1 from public.meeting_channels c
+      where c.id = meeting_messages.channel_id
+        and (
+          c.is_general
+          or exists (
+            select 1 from public.meeting_channel_members m
+            where m.channel_id = c.id and m.profile_id = auth.uid()
+          )
+        )
+    )
+    or public.current_access_role() = 'director'
+  )
+  with check (true);
 
 do $$
 begin

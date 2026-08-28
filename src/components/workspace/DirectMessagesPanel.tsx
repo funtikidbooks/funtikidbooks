@@ -161,7 +161,7 @@ export function DirectMessagesPanel({
                 type="button"
                 onClick={() => setShowVideoCall(true)}
                 className="btn-icon flex-none"
-                style={{ width: 30, height: 30, padding: 0 }}
+                style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
                 aria-label="Gọi video"
                 title="Gọi video"
               >
@@ -222,7 +222,7 @@ export function DirectMessagesPanel({
             type="button"
             onClick={() => setShowSearch((v) => !v)}
             className="btn-icon flex-none"
-            style={{ width: 26, height: 26, padding: 0 }}
+            style={{ width: 30, height: 30, padding: 0, fontSize: 15 }}
             aria-label="Tìm kiếm tin nhắn"
             title="Tìm kiếm tin nhắn"
           >

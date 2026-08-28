@@ -15,6 +15,16 @@ async function requireUser() {
   return { supabase, user };
 }
 
+// Every teammate's basic profile — used by pickers (forward-message
+// destinations, @mentions) that need the full roster but aren't the
+// director/PM-only "Nhân sự" screens, so this deliberately skips
+// requireDirectorOrPM and just requires being signed in.
+export async function listWorkspaceProfiles(): Promise<Profile[]> {
+  const { supabase } = await requireUser();
+  const { data } = await supabase.from("profiles").select("*").order("display_name", { ascending: true });
+  return (data ?? []) as Profile[];
+}
+
 // Self-service profile editing — `role` (job title) is deliberately not
 // accepted here: it's assigned by the director via Nhân sự, not editable
 // by the staff member themselves (the RLS "own profile" update policy also
@@ -44,24 +54,48 @@ export async function updateMyTheme(theme: "light" | "dark") {
   await supabase.from("profiles").update({ theme }).eq("id", user.id);
 }
 
-const ALLOWED_AVATAR_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+const ALLOWED_AVATAR_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  // iPhone camera photos default to HEIC/HEIF — Supabase's image render
+  // endpoint (see thumbnailUrl in imageTransform.ts) can transform these
+  // fine for display, so there's no reason to reject the upload itself.
+  "image/heic",
+  "image/heif",
+]);
+const EXT_TO_MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  heic: "image/heic",
+  heif: "image/heif",
+};
 const MAX_AVATAR_SIZE = 8 * 1024 * 1024;
 
 export async function updateMyAvatar(formData: FormData) {
   const { supabase, user } = await requireUser();
   const file = formData.get("file");
   if (!(file instanceof File)) throw new Error("Thiếu tệp tin");
-  if (!ALLOWED_AVATAR_TYPES.has(file.type)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF hoặc WEBP");
+
+  const ext = file.name.includes(".") ? file.name.split(".").pop()!.toLowerCase() : "";
+  // Some mobile browsers/camera apps send an empty or generic file.type
+  // (e.g. "application/octet-stream") for a perfectly normal photo — fall
+  // back to guessing from the file extension instead of rejecting it.
+  const mime = ALLOWED_AVATAR_TYPES.has(file.type) ? file.type : EXT_TO_MIME[ext];
+  if (!mime) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF, WEBP hoặc HEIC");
   if (file.size > MAX_AVATAR_SIZE) throw new Error("Ảnh vượt quá 8MB");
 
   const { data: currentProfile } = await supabase.from("profiles").select("avatar_url").eq("id", user.id).maybeSingle();
 
-  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
-  const storagePath = `avatars/${user.id}-${randomUUID()}.${ext}`;
+  const storagePath = `avatars/${user.id}-${randomUUID()}.${ext || mime.split("/")[1]}`;
 
   const { error: uploadError } = await supabase.storage
     .from("task-attachments")
-    .upload(storagePath, file, { contentType: file.type });
+    .upload(storagePath, file, { contentType: mime });
   if (uploadError) throw new Error("Không thể tải ảnh lên");
 
   const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
