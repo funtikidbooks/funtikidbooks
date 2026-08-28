@@ -86,19 +86,34 @@ export function DirectMessagesPanel({
     callRingAudioRef.current = ring;
   }, []);
 
+  // "Từ chối" hides the banner (and stops the ring) for this specific call
+  // without ending it for the peer — cleared automatically the moment a
+  // fresh call starts (0 → >0 transition) or the selected peer changes, so
+  // declining one call doesn't silently swallow the next one too.
+  const [dismissedCallKey, setDismissedCallKey] = useState<string | null>(null);
+  const prevOthersOnCallCountRef = useRef(0);
+  useEffect(() => {
+    if (prevOthersOnCallCountRef.current === 0 && othersOnCall.length > 0) {
+      setDismissedCallKey(null);
+    }
+    prevOthersOnCallCountRef.current = othersOnCall.length;
+  }, [othersOnCall.length]);
+  const showCallBanner = othersOnCall.length > 0 && !showVideoCall && dismissedCallKey !== dmCallRoomKey;
+
   // Rings on loop for as long as the peer is on a call and I haven't joined
-  // yet — stops the moment I join, they hang up, or I switch to a different
-  // conversation (callParticipants tracks only the currently selected peer).
+  // or declined it — stops the moment I join, decline, they hang up, or I
+  // switch to a different conversation (callParticipants tracks only the
+  // currently selected peer).
   useEffect(() => {
     const audio = callRingAudioRef.current;
     if (!audio) return;
-    if (othersOnCall.length > 0 && !showVideoCall) {
+    if (showCallBanner) {
       audio.currentTime = 0;
       audio.play().catch(() => {});
     } else {
       audio.pause();
     }
-  }, [othersOnCall.length, showVideoCall]);
+  }, [showCallBanner]);
 
   // Debounced live search across every 1:1 conversation the user has. Doesn't
   // bother resetting searchResults/searching when the query gets too short —
@@ -179,7 +194,7 @@ export function DirectMessagesPanel({
               </span>
               <span className="font-bold flex-1 truncate">{selectedPeer.display_name}</span>
             </div>
-            {othersOnCall.length > 0 && !showVideoCall && (
+            {showCallBanner && (
               <div
                 className="flex-none flex items-center gap-2 px-4 py-2"
                 style={{ background: "var(--color-accent-100)", color: "var(--color-accent-700)" }}
@@ -190,6 +205,13 @@ export function DirectMessagesPanel({
                   aria-hidden
                 />
                 <span className="text-[13px] font-semibold flex-1 truncate">📹 {selectedPeer.display_name} đang gọi video</span>
+                <button
+                  type="button"
+                  onClick={() => setDismissedCallKey(dmCallRoomKey)}
+                  className="btn btn-secondary btn-sm flex-none"
+                >
+                  Từ chối
+                </button>
                 <button type="button" onClick={() => setShowVideoCall(true)} className="btn btn-primary btn-sm flex-none">
                   Tham gia
                 </button>

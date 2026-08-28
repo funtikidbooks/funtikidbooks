@@ -1017,23 +1017,38 @@ export function MeetingHub({
   // Watches (without joining) whether anyone's currently on a call in this
   // room — the banner below is how a member other than the one who started
   // it finds out there's a call to join at all.
-  const activeCallParticipants = useCallPresence(activeChannel ? `hop-${activeChannel.id}` : null);
+  const callRoomKey = activeChannel ? `hop-${activeChannel.id}` : null;
+  const activeCallParticipants = useCallPresence(callRoomKey);
   const othersOnCall = activeCallParticipants.filter((p) => p.id !== currentUser.id);
 
+  // "Từ chối" hides the banner (and stops the ring) for this specific call
+  // without ending it for anyone else — cleared automatically the moment a
+  // fresh call starts (0 → >0 transition) so declining one call doesn't
+  // silently swallow the next one too.
+  const [dismissedCallKey, setDismissedCallKey] = useState<string | null>(null);
+  const prevOthersOnCallCountRef = useRef(0);
+  useEffect(() => {
+    if (prevOthersOnCallCountRef.current === 0 && othersOnCall.length > 0) {
+      setDismissedCallKey(null);
+    }
+    prevOthersOnCallCountRef.current = othersOnCall.length;
+  }, [othersOnCall.length]);
+  const showCallBanner = othersOnCall.length > 0 && !showVideoCall && dismissedCallKey !== callRoomKey;
+
   // Rings on loop for as long as someone else is on a call in this room and
-  // I haven't joined yet — stops the moment I join, the caller hangs up, or
-  // I switch to a different room (activeCallParticipants tracks the newly
-  // active room only).
+  // I haven't joined or declined it — stops the moment I join, decline, the
+  // caller hangs up, or I switch to a different room (activeCallParticipants
+  // tracks the newly active room only).
   useEffect(() => {
     const audio = callRingAudioRef.current;
     if (!audio) return;
-    if (othersOnCall.length > 0 && !showVideoCall) {
+    if (showCallBanner) {
       audio.currentTime = 0;
       audio.play().catch(() => {});
     } else {
       audio.pause();
     }
-  }, [othersOnCall.length, showVideoCall]);
+  }, [showCallBanner]);
 
   useEffect(() => {
     if (!activeRoomIdForMembers) return;
@@ -2052,7 +2067,7 @@ export function MeetingHub({
               )}
             </div>
 
-            {othersOnCall.length > 0 && !showVideoCall && (
+            {showCallBanner && (
               <div
                 className="flex-none flex items-center gap-2 px-4 py-2"
                 style={{ background: "var(--color-accent-100)", color: "var(--color-accent-700)" }}
@@ -2065,6 +2080,13 @@ export function MeetingHub({
                 <span className="text-[13px] font-semibold flex-1 truncate">
                   📹 {othersOnCall.map((p) => p.display_name).join(", ")} đang gọi video
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setDismissedCallKey(callRoomKey)}
+                  className="btn btn-secondary btn-sm flex-none"
+                >
+                  Từ chối
+                </button>
                 <button type="button" onClick={() => setShowVideoCall(true)} className="btn btn-primary btn-sm flex-none">
                   Tham gia
                 </button>
