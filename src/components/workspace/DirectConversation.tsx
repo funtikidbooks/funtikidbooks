@@ -260,6 +260,21 @@ export function DirectConversation({
     };
   }, [currentUser.id, peer.id, resync]);
 
+  // Shared by the effect below and each message image's onLoad — an
+  // attachment thumbnail has no reserved width/height (just a max-size
+  // cap), so the browser doesn't know its real height until the image data
+  // actually arrives over the network, which can land well after messages/
+  // read receipts have already settled. That late layout shift is another
+  // way the view can end up sitting short of the true bottom.
+  const stickToBottomIfNear = useCallback((force: boolean) => {
+    const el = listRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (force || distanceFromBottom < 150) {
+      el.scrollTo({ top: el.scrollHeight });
+    }
+  }, []);
+
   // A read-receipt UPDATE (the "Đã xem" label appearing) changes an
   // existing message's read_at in place via .map(), which doesn't change
   // messages.length — so keying only on that left the view sitting just
@@ -272,20 +287,15 @@ export function DirectConversation({
   // of the bottom — so it doesn't yank someone back down while they're
   // scrolled up reading history.
   useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
     const isPeerSwitch = scrolledPeerIdRef.current !== peer.id;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (isPeerSwitch || distanceFromBottom < 150) {
-      el.scrollTo({ top: el.scrollHeight });
-    }
+    stickToBottomIfNear(isPeerSwitch);
     // Only marks the switch as handled once there's actual content to have
     // scrolled to — see the same guard in MeetingHub's version of this
     // effect for why consuming the flag on an empty first render breaks it.
     if (messages.length > 0) {
       scrolledPeerIdRef.current = peer.id;
     }
-  }, [peer.id, messages, peerTyping]);
+  }, [peer.id, messages, peerTyping, stickToBottomIfNear]);
 
   // Scrolling to a search hit is a separate concern from the scroll-to-bottom
   // effect above — declared after it so it wins when both would fire off the
@@ -457,6 +467,7 @@ export function DirectConversation({
                       alt={m.attachment_filename ?? ""}
                       className="rounded-[10px] object-cover"
                       style={{ maxWidth: 240, maxHeight: 240 }}
+                      onLoad={() => stickToBottomIfNear(false)}
                     />
                   </a>
                 ) : (

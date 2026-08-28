@@ -1184,6 +1184,24 @@ export function MeetingHub({
     };
   }, [activeId, currentUser.id, resync]);
 
+  // Shared by the effect below and each message image's onLoad — an
+  // attachment thumbnail has no reserved width/height (just a max-size
+  // cap), so the browser doesn't know its real height until the image
+  // data actually arrives over the network, which can easily land well
+  // after messages/reactions/reads have all already settled and React has
+  // stopped re-running effects. That late layout shift was the remaining
+  // way the view ended up sitting short of the true bottom (Chung has a
+  // lot of screenshots in its history) even after accounting for reactions
+  // and read receipts.
+  const stickToBottomIfNear = useCallback((force: boolean) => {
+    const el = listRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (force || distanceFromBottom < 150) {
+      el.scrollTo({ top: el.scrollHeight });
+    }
+  }, []);
+
   // Reactions and "seen by" read receipts now load independently of
   // messages (see resync()) and can settle a beat after the message list
   // itself renders — each adds a little height (a reaction pill, an avatar
@@ -1198,13 +1216,8 @@ export function MeetingHub({
   // bottom — so a reaction landing on an old message while someone's
   // scrolled up reading history doesn't yank them back down.
   useEffect(() => {
-    const el = listRef.current;
-    if (!el) return;
     const isRoomSwitch = scrolledRoomIdRef.current !== activeId;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (isRoomSwitch || distanceFromBottom < 150) {
-      el.scrollTo({ top: el.scrollHeight });
-    }
+    stickToBottomIfNear(isRoomSwitch);
     // Only marks the switch as handled once there's actual content to have
     // scrolled to — the very first run after switching rooms fires with an
     // still-empty (or stale, previous room's) list before the real fetch
@@ -1214,7 +1227,7 @@ export function MeetingHub({
     if (messages.length > 0) {
       scrolledRoomIdRef.current = activeId;
     }
-  }, [activeId, messages, reactions, reads]);
+  }, [activeId, messages, reactions, reads, stickToBottomIfNear]);
 
   // Jumps to a picked search result once its message actually exists in the
   // DOM — runs again every time `messages` changes, which covers having
@@ -2401,6 +2414,7 @@ export function MeetingHub({
                               alt={m.attachment_filename ?? ""}
                               className="rounded-[10px] object-cover"
                               style={{ maxWidth: 240, maxHeight: 240 }}
+                              onLoad={() => stickToBottomIfNear(false)}
                             />
                           </a>
                         ) : (
