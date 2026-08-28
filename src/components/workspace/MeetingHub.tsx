@@ -2552,7 +2552,7 @@ export function MeetingHub({
                     style={{ marginTop: isGroupStart ? 12 : 2 }}
                   >
                     {isGroupStart ? <Avatar profile={sender} /> : <span className="flex-none" style={{ width: 28 }} />}
-                    <div className={`flex flex-col ${mine ? "items-end" : "items-start"} max-w-[85%]`}>
+                    <div className={`flex flex-col min-w-0 ${mine ? "items-end" : "items-start"} max-w-[85%]`}>
                       {isGroupStart && (
                         <span className="text-[11px] font-semibold mb-0.5" style={{ color: "var(--color-neutral-500)" }}>
                           {mine ? "Bạn" : (sender?.display_name ?? "Ẩn danh")}
@@ -2594,7 +2594,7 @@ export function MeetingHub({
                         </button>
                       )}
                       {m.content && (
-                        <div className={`flex items-end gap-1 min-w-0 ${mine ? "flex-row-reverse" : ""}`}>
+                        <div className={`flex items-end gap-1 min-w-0 max-w-full ${mine ? "flex-row-reverse" : ""}`}>
                           <div
                             className="min-w-0 rounded-[12px] px-3 py-2 text-[17px] whitespace-pre-wrap break-words"
                             style={{

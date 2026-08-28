@@ -608,11 +608,11 @@ export function DirectConversation({
             <div
               id={`dm-msg-${m.id}`}
               key={m.id}
-              className={`group flex flex-col ${mine ? "items-end" : "items-start"} max-w-[82%]`}
+              className={`group flex flex-col min-w-0 ${mine ? "items-end" : "items-start"} max-w-[82%]`}
               style={{ marginTop: isGroupStart ? 12 : 2 }}
             >
               {m.content && (
-                <div className={`flex items-end gap-1 min-w-0 ${mine ? "flex-row-reverse" : ""}`}>
+                <div className={`flex items-end gap-1 min-w-0 max-w-full ${mine ? "flex-row-reverse" : ""}`}>
                   <div
                     className="min-w-0 rounded-[12px] px-3 py-1.5 text-[17px] whitespace-pre-wrap break-words"
                     style={{
