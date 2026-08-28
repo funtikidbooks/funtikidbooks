@@ -157,16 +157,6 @@ export function DirectMessagesPanel({
                 )}
               </span>
               <span className="font-bold flex-1 truncate">{selectedPeer.display_name}</span>
-              <button
-                type="button"
-                onClick={() => setShowVideoCall(true)}
-                className="btn-icon flex-none"
-                style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
-                aria-label="Gọi video"
-                title="Gọi video"
-              >
-                📹
-              </button>
             </div>
             {othersOnCall.length > 0 && !showVideoCall && (
               <div
@@ -189,6 +179,7 @@ export function DirectMessagesPanel({
               currentUser={currentUser}
               scrollToMessageId={scrollToMessageId}
               onScrolledTo={() => setScrollToMessageId(null)}
+              onCallClick={() => setShowVideoCall(true)}
             />
             {showVideoCall && (
               <VideoCallModal

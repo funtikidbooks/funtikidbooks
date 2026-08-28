@@ -1959,16 +1959,6 @@ export function MeetingHub({
               )}
               <button
                 type="button"
-                onClick={() => setShowVideoCall(true)}
-                className="btn-icon flex-none"
-                style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
-                aria-label="Gọi video"
-                title="Gọi video cả phòng"
-              >
-                📹
-              </button>
-              <button
-                type="button"
                 onClick={() => {
                   setShowMedia((v) => !v);
                   setShowSearch(false);
@@ -2900,6 +2890,16 @@ export function MeetingHub({
                   aria-label="Chọn biểu tượng cảm xúc"
                 >
                   😀
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowVideoCall(true)}
+                  className="btn-icon flex-none"
+                  style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
+                  aria-label="Gọi video"
+                  title="Gọi video cả phòng"
+                >
+                  📞
                 </button>
                 <input
                   ref={fileInputRef}

@@ -87,11 +87,17 @@ export function DirectConversation({
   currentUser,
   scrollToMessageId,
   onScrolledTo,
+  onCallClick,
 }: {
   peer: Profile;
   currentUser: Pick<Profile, "id" | "display_name">;
   scrollToMessageId?: string | null;
   onScrolledTo?: () => void;
+  // Renders a phone-icon button in the composer, next to the emoji picker,
+  // when provided — the call itself (VideoCallModal, presence banner) is
+  // the caller's concern, same as before; this just moves where the button
+  // that starts it lives, out of the header and down by the composer.
+  onCallClick?: () => void;
 }) {
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [reactions, setReactions] = useState<DirectMessageReaction[]>([]);
@@ -874,6 +880,18 @@ export function DirectConversation({
           >
             😀
           </button>
+          {onCallClick && (
+            <button
+              type="button"
+              onClick={onCallClick}
+              className="btn-icon flex-none"
+              style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
+              aria-label="Gọi video"
+              title="Gọi video"
+            >
+              📞
+            </button>
+          )}
           <input
             ref={fileInputRef}
             type="file"
