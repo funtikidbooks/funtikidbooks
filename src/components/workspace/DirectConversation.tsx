@@ -103,7 +103,13 @@ export function DirectConversation({
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [reactions, setReactions] = useState<DirectMessageReaction[]>([]);
   const [text, setText] = useState("");
-  const [sending, setSending] = useState(false);
+  // Temp (client-generated) ids currently in flight or that failed — drives
+  // the "Đang gửi…" / "Gửi lỗi" footer on an optimistic bubble. See
+  // handleSend/attemptSend below for why messages appear instantly instead
+  // of waiting on the server round-trip.
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
+  const pendingPayloadsRef = useRef<Map<string, { content: string; file: File | null }>>(new Map());
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [peerTyping, setPeerTyping] = useState(false);
@@ -187,6 +193,36 @@ export function DirectConversation({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [reactionPickerFor]);
 
+  // Reconciles a server-confirmed row against the optimistic placeholder
+  // that's standing in for it. Matches by tempId when the caller knows it
+  // (our own send resolving); otherwise (the realtime INSERT echoing our
+  // own message back) falls back to matching the oldest still-pending
+  // temp bubble with the same content, so the rare case of the realtime
+  // event arriving before our own await does doesn't leave a duplicate.
+  const mergeServerMessage = useCallback(
+    (prev: DirectMessage[], confirmed: DirectMessage, tempId?: string) => {
+      if (prev.some((m) => m.id === confirmed.id)) return prev;
+      if (tempId) {
+        const idx = prev.findIndex((m) => m.id === tempId);
+        if (idx !== -1) {
+          const next = [...prev];
+          next[idx] = confirmed;
+          return next;
+        }
+      }
+      if (confirmed.sender_id === currentUser.id) {
+        const idx = prev.findIndex((m) => m.id.startsWith("temp-") && m.content === confirmed.content);
+        if (idx !== -1) {
+          const next = [...prev];
+          next[idx] = confirmed;
+          return next;
+        }
+      }
+      return [...prev, confirmed];
+    },
+    [currentUser.id],
+  );
+
   // Catches up this conversation after the realtime subscription below may
   // have silently missed an INSERT while the websocket was disconnected
   // (phone screen locked, tab backgrounded, a network blip...) — that used
@@ -219,11 +255,7 @@ export function DirectConversation({
         if (isNewPeer) {
           setMessages(msgs);
         } else if (msgs.length > 0) {
-          setMessages((prev) => {
-            const seen = new Set(prev.map((m) => m.id));
-            const fresh = msgs.filter((m) => !seen.has(m.id));
-            return fresh.length > 0 ? [...prev, ...fresh] : prev;
-          });
+          setMessages((prev) => msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev));
         }
       })
       .catch(() => {
@@ -247,7 +279,7 @@ export function DirectConversation({
       .catch(() => {
         if (isNewPeer) setReactions([]);
       });
-  }, [peer.id]);
+  }, [peer.id, mergeServerMessage]);
 
   useEffect(() => {
     resync();
@@ -295,7 +327,7 @@ export function DirectConversation({
             (row.sender_id === currentUser.id && row.recipient_id === peer.id) ||
             (row.sender_id === peer.id && row.recipient_id === currentUser.id);
           if (!belongsHere) return;
-          setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+          setMessages((prev) => mergeServerMessage(prev, row));
           if (row.sender_id === peer.id) {
             if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
             setPeerTyping(false);
@@ -361,7 +393,7 @@ export function DirectConversation({
       setPeerTyping(false);
       supabase.removeChannel(channel);
     };
-  }, [currentUser.id, peer.id, resync]);
+  }, [currentUser.id, peer.id, resync, mergeServerMessage]);
 
   // Shared by the effect below and each message image's onLoad — an
   // attachment thumbnail has no reserved width/height (just a max-size
@@ -503,32 +535,78 @@ export function DirectConversation({
     setPendingFile(file);
   }
 
-  async function handleSend(e: React.FormEvent) {
+  const attemptSend = useCallback(
+    async (tempId: string, content: string, file: File | null) => {
+      setFailedIds((prev) => {
+        if (!prev.has(tempId)) return prev;
+        const next = new Set(prev);
+        next.delete(tempId);
+        return next;
+      });
+      setPendingIds((prev) => new Set(prev).add(tempId));
+      try {
+        let formData: FormData | undefined;
+        if (file) {
+          formData = new FormData();
+          formData.append("file", file);
+        }
+        const sent = await sendDirectMessage(peer.id, content, formData);
+        if (sent) {
+          setMessages((prev) => mergeServerMessage(prev, sent, tempId));
+          pendingPayloadsRef.current.delete(tempId);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Không thể gửi tin nhắn. Vui lòng thử lại.");
+        setFailedIds((prev) => new Set(prev).add(tempId));
+      } finally {
+        setPendingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(tempId);
+          return next;
+        });
+      }
+    },
+    [peer.id, mergeServerMessage],
+  );
+
+  // Appears instantly instead of waiting on the send round-trip — matches
+  // how Zalo/Messenger feel, versus the message only showing up once the
+  // server confirms it. Failed sends stay in the list (tagged in
+  // failedIds) with a retry affordance rather than dumping the text back
+  // into the composer.
+  function handleSend(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = text.trim();
     const file = pendingFile;
     if (!trimmed && !file) return;
-    setSending(true);
+
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const optimistic: DirectMessage = {
+      id: tempId,
+      sender_id: currentUser.id,
+      recipient_id: peer.id,
+      content: trimmed,
+      attachment_url: null,
+      attachment_filename: file?.name ?? null,
+      attachment_mime: file?.type ?? null,
+      attachment_size: file?.size ?? null,
+      created_at: new Date().toISOString(),
+      read_at: null,
+    };
+
     setError(null);
     setText("");
     setPendingFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    pendingPayloadsRef.current.set(tempId, { content: trimmed, file });
+    setMessages((prev) => [...prev, optimistic]);
+    attemptSend(tempId, trimmed, file);
+  }
 
-    try {
-      let formData: FormData | undefined;
-      if (file) {
-        formData = new FormData();
-        formData.append("file", file);
-      }
-      const sent = await sendDirectMessage(peer.id, trimmed, formData);
-      if (sent) setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Không thể gửi tin nhắn. Vui lòng thử lại.");
-      setText(trimmed);
-      setPendingFile(file ?? null);
-    } finally {
-      setSending(false);
-    }
+  function retrySend(tempId: string) {
+    const payload = pendingPayloadsRef.current.get(tempId);
+    if (!payload) return;
+    attemptSend(tempId, payload.content, payload.file);
   }
 
   // Messenger-style: only the LAST of my messages the peer has actually
@@ -558,6 +636,8 @@ export function DirectConversation({
         )}
         {messages.map((m, index) => {
           const mine = m.sender_id === currentUser.id;
+          const isPending = pendingIds.has(m.id);
+          const isFailed = failedIds.has(m.id);
           // Same Zalo/Messenger-style grouping as the room chats (MeetingHub):
           // consecutive messages from the same person within a few minutes
           // sit tight together, with only the last one in the run showing a
@@ -630,15 +710,15 @@ export function DirectConversation({
               id={`dm-msg-${m.id}`}
               key={m.id}
               className={`group flex flex-col min-w-0 ${mine ? "items-end" : "items-start"} max-w-[82%]`}
-              style={{ marginTop: isGroupStart ? 12 : 2 }}
+              style={{ marginTop: isGroupStart ? 12 : 2, opacity: isPending ? 0.6 : 1 }}
             >
               {m.content && (
                 <div className={`flex items-end gap-1 min-w-0 max-w-full ${mine ? "flex-row-reverse" : ""}`}>
                   <div
                     className="min-w-0 rounded-[12px] px-3 py-1.5 text-[17px] whitespace-pre-wrap break-words"
                     style={{
-                      background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
-                      color: mine ? "#fff" : "var(--color-text)",
+                      background: isFailed ? "var(--status-red-100, #fde2e2)" : mine ? "var(--color-accent-500)" : "var(--color-surface)",
+                      color: isFailed ? "var(--status-red, #c22)" : mine ? "#fff" : "var(--color-text)",
                     }}
                   >
                     {linkify(m.content).map((part, i) =>
@@ -703,6 +783,14 @@ export function DirectConversation({
                     📄 {m.attachment_filename}
                   </a>
                 ))}
+              {!m.attachment_url && m.attachment_filename && (
+                <div
+                  className="mt-1 flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold"
+                  style={{ background: "var(--color-surface)", color: "var(--color-neutral-500)" }}
+                >
+                  📎 {m.attachment_filename} {isFailed ? "— chưa gửi được" : "— đang gửi…"}
+                </div>
+              )}
               {Object.keys(grouped).length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {Object.entries(grouped).map(([emoji, ids]) => {
@@ -748,10 +836,25 @@ export function DirectConversation({
                   })}
                 </div>
               )}
-              {isGroupEnd && (
+              {isFailed ? (
+                <button
+                  type="button"
+                  onClick={() => retrySend(m.id)}
+                  className="text-[11px] font-semibold mt-0.5"
+                  style={{ color: "var(--status-red, #c22)" }}
+                >
+                  ⚠️ Gửi lỗi — Bấm để gửi lại
+                </button>
+              ) : isPending ? (
                 <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
-                  {formatTime(m.created_at)}
+                  Đang gửi…
                 </span>
+              ) : (
+                isGroupEnd && (
+                  <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
+                    {formatTime(m.created_at)}
+                  </span>
+                )
               )}
               {m.id === lastSeenMineMessageId && (
                 <span className="flex items-center gap-1 mt-0.5" title={`${peer.display_name} đã xem`}>
@@ -948,7 +1051,7 @@ export function DirectConversation({
             }}
             onPaste={handlePaste}
           />
-          <button type="submit" disabled={sending} className="btn btn-primary btn-sm flex-none" style={{ padding: "6px 12px" }}>
+          <button type="submit" className="btn btn-primary btn-sm flex-none" style={{ padding: "6px 12px" }}>
             Gửi
           </button>
         </form>

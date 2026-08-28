@@ -876,7 +876,15 @@ export function MeetingHub({
   const [reads, setReads] = useState<MeetingChannelRead[]>([]);
   const [text, setText] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [sending, setSending] = useState(false);
+  // Temp (client-generated) ids currently in flight or that failed — drives
+  // the "Đang gửi…" / "Gửi lỗi" footer on an optimistic bubble. See
+  // handleSend/attemptSend below for why messages appear instantly instead
+  // of waiting on the server round-trip.
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
+  const pendingPayloadsRef = useRef<Map<string, { content: string; file: File | null; replyId: string | null }>>(
+    new Map(),
+  );
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [createParentId, setCreateParentId] = useState<string | null>(null);
@@ -1154,6 +1162,36 @@ export function MeetingHub({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showEmojiPicker, reactionPickerFor]);
 
+  // Reconciles a server-confirmed row against the optimistic placeholder
+  // that's standing in for it. Matches by tempId when the caller knows it
+  // (our own send resolving); otherwise (the realtime INSERT echoing our
+  // own message back) falls back to matching the oldest still-pending
+  // temp bubble with the same content, so the rare case of the realtime
+  // event arriving before our own await does doesn't leave a duplicate.
+  const mergeServerMessage = useCallback(
+    (prev: MeetingMessage[], confirmed: MeetingMessage, tempId?: string) => {
+      if (prev.some((m) => m.id === confirmed.id)) return prev;
+      if (tempId) {
+        const idx = prev.findIndex((m) => m.id === tempId);
+        if (idx !== -1) {
+          const next = [...prev];
+          next[idx] = confirmed;
+          return next;
+        }
+      }
+      if (confirmed.sender_id === currentUser.id) {
+        const idx = prev.findIndex((m) => m.id.startsWith("temp-") && m.content === confirmed.content);
+        if (idx !== -1) {
+          const next = [...prev];
+          next[idx] = confirmed;
+          return next;
+        }
+      }
+      return [...prev, confirmed];
+    },
+    [currentUser.id],
+  );
+
   // Catches up the active channel after the realtime subscription below may
   // have silently missed an event while the websocket was disconnected
   // (phone screen locked, tab backgrounded, a network blip...) — that used
@@ -1192,11 +1230,7 @@ export function MeetingHub({
         if (isNewRoom) {
           setMessages(msgs);
         } else if (msgs.length > 0) {
-          setMessages((prev) => {
-            const seen = new Set(prev.map((m) => m.id));
-            const fresh = msgs.filter((m) => !seen.has(m.id));
-            return fresh.length > 0 ? [...prev, ...fresh] : prev;
-          });
+          setMessages((prev) => msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev));
         }
       })
       .catch(() => {
@@ -1241,7 +1275,7 @@ export function MeetingHub({
           if (activeIdRef.current === id) setPinnedMessages([]);
         });
     }
-  }, [activeId]);
+  }, [activeId, mergeServerMessage]);
 
   useEffect(() => {
     lastMarkedReadIdRef.current = null;
@@ -1290,7 +1324,7 @@ export function MeetingHub({
               audio.play().catch(() => {});
             }
           }
-          setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+          setMessages((prev) => mergeServerMessage(prev, row));
         },
       )
       .on(
@@ -1353,7 +1387,7 @@ export function MeetingHub({
       channelRef.current = null;
       supabase.removeChannel(channel);
     };
-  }, [activeId, currentUser.id, resync]);
+  }, [activeId, currentUser.id, resync, mergeServerMessage]);
 
   // Shared by the effect below and each message image's onLoad — an
   // attachment thumbnail has no reserved width/height (just a max-size
@@ -1662,35 +1696,85 @@ export function MeetingHub({
     textInputRef.current?.focus();
   }
 
-  async function handleSend(e: React.FormEvent) {
+  const attemptSend = useCallback(
+    async (channelId: string, tempId: string, content: string, file: File | null, replyId: string | null) => {
+      setFailedIds((prev) => {
+        if (!prev.has(tempId)) return prev;
+        const next = new Set(prev);
+        next.delete(tempId);
+        return next;
+      });
+      setPendingIds((prev) => new Set(prev).add(tempId));
+      try {
+        let formData: FormData | undefined;
+        if (file) {
+          formData = new FormData();
+          formData.append("file", file);
+        }
+        const sent = await sendMeetingMessage(channelId, content, formData, replyId);
+        if (sent) {
+          setMessages((prev) => mergeServerMessage(prev, sent, tempId));
+          pendingPayloadsRef.current.delete(tempId);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Không thể gửi tin nhắn.");
+        setFailedIds((prev) => new Set(prev).add(tempId));
+      } finally {
+        setPendingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(tempId);
+          return next;
+        });
+      }
+    },
+    [mergeServerMessage],
+  );
+
+  // Appears instantly instead of waiting on the send round-trip — matches
+  // how Zalo/Messenger feel, versus the message only showing up once the
+  // server confirms it. Failed sends stay in the list (tagged in
+  // failedIds) with a retry affordance rather than dumping the text back
+  // into the composer.
+  function handleSend(e: React.FormEvent) {
     e.preventDefault();
     if (!activeId) return;
     const trimmed = text.trim();
     const file = pendingFile;
     if (!trimmed && !file) return;
     const replyId = replyingTo?.id ?? null;
-    setSending(true);
+
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const optimistic: MeetingMessage = {
+      id: tempId,
+      channel_id: activeId,
+      sender_id: currentUser.id,
+      content: trimmed,
+      attachment_url: null,
+      attachment_filename: file?.name ?? null,
+      attachment_mime: file?.type ?? null,
+      attachment_size: file?.size ?? null,
+      reply_to_message_id: replyId,
+      is_recalled: false,
+      pinned_at: null,
+      pinned_by: null,
+      created_at: new Date().toISOString(),
+    };
+
     setError(null);
     setText("");
     setPendingFile(null);
     setReplyingTo(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+    pendingPayloadsRef.current.set(tempId, { content: trimmed, file, replyId });
+    setMessages((prev) => [...prev, optimistic]);
+    attemptSend(activeId, tempId, trimmed, file, replyId);
+  }
 
-    try {
-      let formData: FormData | undefined;
-      if (file) {
-        formData = new FormData();
-        formData.append("file", file);
-      }
-      const sent = await sendMeetingMessage(activeId, trimmed, formData, replyId);
-      if (sent) setMessages((prev) => (prev.some((m) => m.id === sent.id) ? prev : [...prev, sent]));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Không thể gửi tin nhắn.");
-      setText(trimmed);
-      setPendingFile(file ?? null);
-    } finally {
-      setSending(false);
-    }
+  function retrySend(tempId: string) {
+    if (!activeId) return;
+    const payload = pendingPayloadsRef.current.get(tempId);
+    if (!payload) return;
+    attemptSend(activeId, tempId, payload.content, payload.file, payload.replyId);
   }
 
   return (
@@ -2490,6 +2574,8 @@ export function MeetingHub({
                   next.sender_id !== m.sender_id ||
                   new Date(next.created_at).getTime() - new Date(m.created_at).getTime() > 5 * 60 * 1000;
                 const mine = m.sender_id === currentUser.id;
+                const isPending = pendingIds.has(m.id);
+                const isFailed = failedIds.has(m.id);
                 const msgReactions = reactions.filter((r) => r.message_id === m.id);
                 const grouped = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
                   (acc[r.emoji] ??= []).push(r.profile_id);
@@ -2607,7 +2693,7 @@ export function MeetingHub({
                     key={m.id}
                     id={`meeting-msg-${m.id}`}
                     className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}
-                    style={{ marginTop: isGroupStart ? 12 : 2 }}
+                    style={{ marginTop: isGroupStart ? 12 : 2, opacity: isPending ? 0.6 : 1 }}
                   >
                     {isGroupStart ? <Avatar profile={sender} /> : <span className="flex-none" style={{ width: 28 }} />}
                     <div className={`flex flex-col min-w-0 ${mine ? "items-end" : "items-start"} max-w-[85%]`}>
@@ -2656,8 +2742,12 @@ export function MeetingHub({
                           <div
                             className="min-w-0 rounded-[12px] px-3 py-2 text-[17px] whitespace-pre-wrap break-words"
                             style={{
-                              background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
-                              color: mine ? "#fff" : "var(--color-text)",
+                              background: isFailed
+                                ? "var(--status-red-100, #fde2e2)"
+                                : mine
+                                  ? "var(--color-accent-500)"
+                                  : "var(--color-surface)",
+                              color: isFailed ? "var(--status-red, #c22)" : mine ? "#fff" : "var(--color-text)",
                             }}
                             onPointerDown={(e) => handleBubblePressStart(e, m.id)}
                             onPointerUp={cancelBubblePress}
@@ -2701,6 +2791,14 @@ export function MeetingHub({
                             📄 {m.attachment_filename}
                           </a>
                         ))}
+                      {!m.attachment_url && m.attachment_filename && (
+                        <div
+                          className="mt-1 flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold"
+                          style={{ background: "var(--color-surface)", color: "var(--color-neutral-500)" }}
+                        >
+                          📎 {m.attachment_filename} {isFailed ? "— chưa gửi được" : "— đang gửi…"}
+                        </div>
+                      )}
 
                       {Object.keys(grouped).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -2747,7 +2845,21 @@ export function MeetingHub({
                         </>
                       )}
 
-                      {(isGroupEnd || (!m.content && !m.is_recalled)) && (
+                      {isFailed ? (
+                        <button
+                          type="button"
+                          onClick={() => retrySend(m.id)}
+                          className="text-[11px] font-semibold mt-0.5"
+                          style={{ color: "var(--status-red, #c22)" }}
+                        >
+                          ⚠️ Gửi lỗi — Bấm để gửi lại
+                        </button>
+                      ) : isPending ? (
+                        <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
+                          Đang gửi…
+                        </span>
+                      ) : (
+                        (isGroupEnd || (!m.content && !m.is_recalled)) && (
                         <span className="flex items-center gap-1.5 mt-0.5">
                           {isGroupEnd && (
                             <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
@@ -2760,6 +2872,7 @@ export function MeetingHub({
                             </span>
                           )}
                         </span>
+                        )
                       )}
                       {seenBy.length > 0 && (
                         <span className="flex items-center -space-x-1 mt-0.5" title={seenBy.map((id) => profileById.get(id)?.display_name ?? "").filter(Boolean).join(", ")}>
@@ -2991,7 +3104,7 @@ export function MeetingHub({
                     }
                   }}
                 />
-                <button type="submit" disabled={sending} className="btn btn-primary flex-none">
+                <button type="submit" className="btn btn-primary flex-none">
                   Gửi
                 </button>
               </form>
