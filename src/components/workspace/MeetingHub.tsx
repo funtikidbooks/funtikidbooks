@@ -809,6 +809,10 @@ export function MeetingHub({
   const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // Which room the bottom-scroll effect below last handled — lets it tell
+  // "just switched rooms, always snap to bottom" apart from "same room,
+  // only snap if already near the bottom" (see that effect for why).
+  const scrolledRoomIdRef = useRef<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
   // Latest messages array, read (not reacted to) from inside resync() below —
@@ -1180,13 +1184,37 @@ export function MeetingHub({
     };
   }, [activeId, currentUser.id, resync]);
 
-  // Keyed on activeId too, not just messages.length — switching to a room
-  // whose message count happens to match the previous one wouldn't
-  // otherwise re-trigger this, leaving the view stuck scrolled wherever it
-  // was instead of jumping to that room's latest message.
+  // Reactions and "seen by" read receipts now load independently of
+  // messages (see resync()) and can settle a beat after the message list
+  // itself renders — each adds a little height (a reaction pill, an avatar
+  // row under the last message), so scrolling to bottom only when
+  // messages.length changed left the view sitting just short of the true
+  // bottom once those finished loading, looking "stuck halfway" instead of
+  // flush against the composer.
+  //
+  // Re-checks on every relevant update instead: always snaps to bottom
+  // right after switching rooms (scrolledRoomIdRef changing), and otherwise
+  // only re-snaps if the view was already within a small margin of the
+  // bottom — so a reaction landing on an old message while someone's
+  // scrolled up reading history doesn't yank them back down.
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [activeId, messages.length]);
+    const el = listRef.current;
+    if (!el) return;
+    const isRoomSwitch = scrolledRoomIdRef.current !== activeId;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (isRoomSwitch || distanceFromBottom < 150) {
+      el.scrollTo({ top: el.scrollHeight });
+    }
+    // Only marks the switch as handled once there's actual content to have
+    // scrolled to — the very first run after switching rooms fires with an
+    // still-empty (or stale, previous room's) list before the real fetch
+    // resolves, and consuming the flag there would let that render's
+    // near-empty scrollHeight fool the *next* run (the real content
+    // arriving a beat later) into thinking it wasn't a fresh room anymore.
+    if (messages.length > 0) {
+      scrolledRoomIdRef.current = activeId;
+    }
+  }, [activeId, messages, reactions, reads]);
 
   // Jumps to a picked search result once its message actually exists in the
   // DOM — runs again every time `messages` changes, which covers having

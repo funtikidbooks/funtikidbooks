@@ -89,6 +89,10 @@ export function DirectConversation({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // Which peer the bottom-scroll effect below last handled — lets it tell
+  // "just switched conversations, always snap to bottom" apart from "same
+  // conversation, only snap if already near the bottom" (see that effect).
+  const scrolledPeerIdRef = useRef<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   // Latest messages array, read (not reacted to) from inside resync() below
   // — kept out of its dependency array so a new message doesn't tear down
@@ -256,9 +260,32 @@ export function DirectConversation({
     };
   }, [currentUser.id, peer.id, resync]);
 
+  // A read-receipt UPDATE (the "Đã xem" label appearing) changes an
+  // existing message's read_at in place via .map(), which doesn't change
+  // messages.length — so keying only on that left the view sitting just
+  // short of the true bottom once "Đã xem" popped in under the last
+  // message, looking "stuck halfway" instead of flush against the composer.
+  //
+  // Re-checks on every relevant update instead: always snaps to bottom
+  // right after switching conversations (scrolledPeerIdRef changing), and
+  // otherwise only re-snaps if the view was already within a small margin
+  // of the bottom — so it doesn't yank someone back down while they're
+  // scrolled up reading history.
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages.length, peerTyping]);
+    const el = listRef.current;
+    if (!el) return;
+    const isPeerSwitch = scrolledPeerIdRef.current !== peer.id;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (isPeerSwitch || distanceFromBottom < 150) {
+      el.scrollTo({ top: el.scrollHeight });
+    }
+    // Only marks the switch as handled once there's actual content to have
+    // scrolled to — see the same guard in MeetingHub's version of this
+    // effect for why consuming the flag on an empty first render breaks it.
+    if (messages.length > 0) {
+      scrolledPeerIdRef.current = peer.id;
+    }
+  }, [peer.id, messages, peerTyping]);
 
   // Scrolling to a search hit is a separate concern from the scroll-to-bottom
   // effect above — declared after it so it wins when both would fire off the
