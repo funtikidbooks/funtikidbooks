@@ -6,6 +6,7 @@ import { useState } from "react";
 import { signOut } from "@/lib/actions/auth";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { resetThemeOnSignOut, useTheme } from "@/lib/useTheme";
+import { useShowsIphoneAppNav } from "@/lib/useIsStandalone";
 
 // The 4 most-used sections get a permanent thumb-reachable tab; everything
 // else (plus theme + sign out, previously only reachable from the
@@ -25,11 +26,26 @@ const MORE_NAV = [
   { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐" },
 ];
 
+// The installed iPhone app trades the "4 most-used + everything else behind
+// Thêm" tradeoff for just the sections the director actually wants on the
+// home screen — Chấm công moves up to a primary tab, Thành viên and the
+// other MORE_NAV sections drop out of the nav entirely. iPad keeps the
+// regular nav even when installed the same way (see useShowsIphoneAppNav).
+const PRIMARY_NAV_IPHONE_APP = [
+  { href: "/workspace", label: "Công việc", icon: "📊" },
+  { href: "/workspace/hop", label: "Trò chuyện", icon: "💬" },
+  { href: "/workspace/lich", label: "Lịch", icon: "📅" },
+  { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐" },
+];
+
 export function MobileNav({ isDirector }: { isDirector: boolean }) {
   const pathname = usePathname();
   const [showMore, setShowMore] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const { totalUnreadCount } = useChatManager();
+  const showsIphoneAppNav = useShowsIphoneAppNav();
+  const primaryNav = showsIphoneAppNav ? PRIMARY_NAV_IPHONE_APP : PRIMARY_NAV;
+  const moreNav = showsIphoneAppNav ? [] : MORE_NAV;
 
   return (
     <>
@@ -37,7 +53,7 @@ export function MobileNav({ isDirector }: { isDirector: boolean }) {
         className="md:hidden flex-none flex items-stretch"
         style={{ background: "var(--color-panel)", borderTop: "1px solid var(--color-neutral-200)" }}
       >
-        {PRIMARY_NAV.map((item) => {
+        {primaryNav.map((item) => {
           const active = pathname === item.href;
           return (
             <Link
@@ -89,7 +105,7 @@ export function MobileNav({ isDirector }: { isDirector: boolean }) {
                 ✕
               </button>
             </div>
-            {MORE_NAV.map((item) => (
+            {moreNav.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

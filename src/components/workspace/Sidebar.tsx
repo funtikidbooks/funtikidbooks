@@ -8,6 +8,7 @@ import { useChatManager } from "@/components/workspace/ChatManager";
 import { ThemeToggle } from "@/components/workspace/ThemeToggle";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { resetThemeOnSignOut } from "@/lib/useTheme";
+import { STANDALONE_ALLOWED_HREFS, useShowsIphoneAppNav } from "@/lib/useIsStandalone";
 import type { Profile } from "@/lib/types";
 
 const NAV = [
@@ -34,6 +35,8 @@ export function Sidebar({
   const pathname = usePathname();
   const { totalUnreadCount } = useChatManager();
   const myAvatarUrl = profiles.find((p) => p.id === currentUserId)?.avatar_url ?? null;
+  const showsIphoneAppNav = useShowsIphoneAppNav();
+  const visibleNav = showsIphoneAppNav ? NAV.filter((item) => STANDALONE_ALLOWED_HREFS.has(item.href)) : NAV;
 
   return (
     <aside
@@ -58,7 +61,7 @@ export function Sidebar({
         >
           KHÔNG GIAN LÀM VIỆC
         </div>
-        {NAV.map((item) => {
+        {visibleNav.map((item) => {
           const active = item.enabled && pathname === item.href;
           return (
             <Link
