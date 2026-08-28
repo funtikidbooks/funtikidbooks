@@ -2460,7 +2460,7 @@ export function MeetingHub({
             <div
               ref={listRef}
               onScroll={handleListScroll}
-              className="flex-1 overflow-y-auto flex flex-col p-4"
+              className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col p-4"
               style={{ touchAction: "pan-y" }}
             >
               {messages.length === 0 && (
