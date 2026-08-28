@@ -498,11 +498,32 @@ export async function recallMeetingMessage(messageId: string) {
   }
 }
 
-export async function getReactions(messageIds: string[]): Promise<MeetingReaction[]> {
+// Every reaction in the channel created after `afterCreatedAt` (or all of
+// them, for the initial load of a room) — not scoped to a specific set of
+// message ids, so a reaction added to a message the caller already had
+// loaded (not just a brand new message) still gets picked up. That gap is
+// exactly what made a reaction show up as a push notification but never as
+// an actual heart on the message: the live realtime event for it can be
+// missed the same way a message INSERT can (websocket drop, tab
+// backgrounded...), and the old resync only re-fetched reactions for
+// messages it had *just* fetched, never for ones already on screen.
+export async function getReactionsSince(channelId: string, afterCreatedAt?: string): Promise<MeetingReaction[]> {
   const { supabase } = await requireUser();
-  if (messageIds.length === 0) return [];
-  const { data } = await supabase.from("meeting_message_reactions").select("*").in("message_id", messageIds);
-  return (data ?? []) as MeetingReaction[];
+  let query = supabase
+    .from("meeting_message_reactions")
+    .select("message_id, profile_id, emoji, created_at, meeting_messages!inner(channel_id)")
+    .eq("meeting_messages.channel_id", channelId)
+    .order("created_at", { ascending: true })
+    .limit(500);
+  if (afterCreatedAt) query = query.gt("created_at", afterCreatedAt);
+  const { data, error } = await query;
+  if (error || !data) return [];
+  return data.map((r) => ({
+    message_id: r.message_id as string,
+    profile_id: r.profile_id as string,
+    emoji: r.emoji as string,
+    created_at: r.created_at as string,
+  }));
 }
 
 export async function addReaction(messageId: string, emoji: string) {

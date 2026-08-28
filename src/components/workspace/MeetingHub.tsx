@@ -16,7 +16,7 @@ import {
   deleteChannel,
   getChannelReads,
   getMeetingMessages,
-  getReactions,
+  getReactionsSince,
   joinChannel,
   leaveChannel,
   listChannelMembers,
@@ -816,6 +816,8 @@ export function MeetingHub({
   // new message arriving doesn't tear down and recreate the realtime
   // channel subscription on every single message.
   const messagesRef = useRef<MeetingMessage[]>([]);
+  // Same idea as messagesRef, for the reactions delta-fetch in resync().
+  const reactionsRef = useRef<MeetingReaction[]>([]);
   // Which room resync() last actually fetched — lets it tell "just switched
   // rooms, need the full history" apart from "same room, only catching up
   // on what was missed" without that also being a reactive dependency.
@@ -975,6 +977,10 @@ export function MeetingHub({
   }, [messages]);
 
   useEffect(() => {
+    reactionsRef.current = reactions;
+  }, [reactions]);
+
+  useEffect(() => {
     if (!showEmojiPicker && !reactionPickerFor) return;
     function handleClickOutside(e: MouseEvent) {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
@@ -987,33 +993,40 @@ export function MeetingHub({
   }, [showEmojiPicker, reactionPickerFor]);
 
   // Catches up the active channel after the realtime subscription below may
-  // have silently missed an INSERT while the websocket was disconnected
+  // have silently missed an event while the websocket was disconnected
   // (phone screen locked, tab backgrounded, a network blip...) — that used
-  // to show up to staff as a push notification arriving but the message
-  // itself never appearing until a manual reload. Called on room switch, on
-  // tab focus/visibility, and whenever the channel below (re)subscribes.
+  // to show up to staff as a push notification arriving (for a new message,
+  // or someone reacting) but nothing actually changing on screen until a
+  // manual reload. Called on room switch, on tab focus/visibility, and
+  // whenever the channel below (re)subscribes.
   //
-  // On an actual room switch this loads the full (up to 300-message)
-  // history same as before. Everywhere else — tab refocus, a reconnect
-  // while still looking at the same room — it only asks for messages newer
-  // than the last one already on screen and appends them, instead of
-  // re-fetching and replacing all ~300 every time. Staff alt-tabbing all
-  // day were paying for a full reload (and a full re-render of the message
-  // list) on every single tab switch even when nothing had changed.
+  // On an actual room switch this loads the full history same as before.
+  // Everywhere else — tab refocus, a reconnect while still looking at the
+  // same room — messages and reactions each fetch only what's newer than
+  // the newest one already held (independently of each other, since a
+  // reaction can land on a message that isn't new) and get appended,
+  // instead of re-fetching and replacing everything every time. Staff
+  // alt-tabbing all day were paying for a full reload (and a full re-render
+  // of the message list) on every single tab switch even when nothing had
+  // changed.
   const resync = useCallback(() => {
     const id = activeId;
     if (!id || id === DM_TAB_ID) return;
     const isNewRoom = lastSyncedChannelIdRef.current !== id;
     lastSyncedChannelIdRef.current = id;
-    const after =
-      !isNewRoom && messagesRef.current.length > 0
-        ? messagesRef.current[messagesRef.current.length - 1].created_at
-        : undefined;
 
-    getMeetingMessages(id, after)
-      .then(async (msgs) => {
+    // Reduce rather than "just read the last element" — a realtime INSERT
+    // can append out of arrival order, so the newest created_at isn't
+    // guaranteed to be the last item in either array.
+    const latestOf = (timestamps: string[]) =>
+      timestamps.length === 0 ? undefined : timestamps.reduce((max, t) => (t > max ? t : max));
+
+    const messagesAfter = isNewRoom ? undefined : latestOf(messagesRef.current.map((m) => m.created_at));
+    const reactionsAfter = isNewRoom ? undefined : latestOf(reactionsRef.current.map((r) => r.created_at));
+
+    getMeetingMessages(id, messagesAfter)
+      .then((msgs) => {
         if (activeIdRef.current !== id) return;
-
         if (isNewRoom) {
           setMessages(msgs);
         } else if (msgs.length > 0) {
@@ -1023,9 +1036,13 @@ export function MeetingHub({
             return fresh.length > 0 ? [...prev, ...fresh] : prev;
           });
         }
+      })
+      .catch(() => {
+        if (isNewRoom && activeIdRef.current === id) setMessages([]);
+      });
 
-        if (!isNewRoom && msgs.length === 0) return;
-        const rx = await getReactions(msgs.map((m) => m.id));
+    getReactionsSince(id, reactionsAfter)
+      .then((rx) => {
         if (activeIdRef.current !== id) return;
         if (isNewRoom) {
           setReactions(rx);
@@ -1039,11 +1056,9 @@ export function MeetingHub({
         }
       })
       .catch(() => {
-        if (isNewRoom && activeIdRef.current === id) {
-          setMessages([]);
-          setReactions([]);
-        }
+        if (isNewRoom && activeIdRef.current === id) setReactions([]);
       });
+
     getChannelReads(id)
       .then((rd) => {
         if (activeIdRef.current === id) setReads(rd);
