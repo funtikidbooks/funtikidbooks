@@ -34,13 +34,16 @@ export async function getJaasCallCredentials(): Promise<{ appId: string; jwt: st
       user: {
         id: user.id,
         name: profile?.display_name ?? "Funtikidbooks",
-        moderator: true,
+        // 8x8's own JWT sample (jaas_demo/jaas-jwt-samples/js) sends these as
+        // the strings "true"/"false", not booleans — a boolean here fails
+        // JaaS's auth check with a generic "Authentication failed".
+        moderator: "true",
       },
       features: {
-        livestreaming: false,
-        recording: false,
-        transcription: false,
-        "outbound-call": false,
+        livestreaming: "false",
+        recording: "false",
+        transcription: "false",
+        "outbound-call": "false",
       },
     },
     room: "*",
@@ -50,7 +53,10 @@ export async function getJaasCallCredentials(): Promise<{ appId: string; jwt: st
     .setAudience("jitsi")
     .setSubject(appId)
     .setIssuedAt(now)
-    .setNotBefore(now - 10)
+    // A generous backdate absorbs server clock skew — if this machine's
+    // clock runs a few minutes ahead of 8x8's, a tight nbf gets the token
+    // rejected as "not yet valid" before it's even used.
+    .setNotBefore(now - 60 * 15)
     .setExpirationTime(now + 60 * 60 * 2)
     .sign(privateKey);
 
