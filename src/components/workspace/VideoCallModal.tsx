@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useCallPresence } from "@/lib/useCallPresence";
+import { getJaasCallCredentials } from "@/lib/actions/jaas";
 
 type JitsiMeetAPI = {
   dispose: () => void;
@@ -15,20 +16,31 @@ declare global {
   }
 }
 
-const JITSI_DOMAIN = "meet.jit.si";
-const SCRIPT_SRC = `https://${JITSI_DOMAIN}/external_api.js`;
+// The public meet.jit.si server now requires whoever starts a room to log
+// into a Google/Jitsi account to become moderator, which just stalls things
+// for a work chat. JaaS (8x8.vc) issues a signed JWT instead so the first
+// person in is trusted as moderator with no login prompt — used whenever
+// JAAS credentials are configured (see jaas.ts), falling back to the plain
+// meet.jit.si embed otherwise.
+const PUBLIC_JITSI_DOMAIN = "meet.jit.si";
+const JAAS_DOMAIN = "8x8.vc";
 
-function loadJitsiScript(): Promise<void> {
+function scriptSrcFor(domain: string, appId: string | null) {
+  return appId ? `https://${domain}/${appId}/external_api.js` : `https://${domain}/external_api.js`;
+}
+
+function loadJitsiScript(domain: string, appId: string | null): Promise<void> {
   if (window.JitsiMeetExternalAPI) return Promise.resolve();
+  const src = scriptSrcFor(domain, appId);
   return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(`script[src="${SCRIPT_SRC}"]`);
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`);
     if (existing) {
       existing.addEventListener("load", () => resolve());
       existing.addEventListener("error", () => reject(new Error("Không thể tải Jitsi")));
       return;
     }
     const script = document.createElement("script");
-    script.src = SCRIPT_SRC;
+    script.src = src;
     script.async = true;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error("Không thể tải Jitsi"));
@@ -65,20 +77,29 @@ export function VideoCallModal({
 
   useEffect(() => {
     let cancelled = false;
-    loadJitsiScript()
-      .then(() => {
-        if (cancelled || !containerRef.current || !window.JitsiMeetExternalAPI) return;
-        const api = new window.JitsiMeetExternalAPI(JITSI_DOMAIN, {
-          // Channel/DM ids are UUIDs, so this is effectively unguessable —
-          // nobody lands in this room without already being in the app.
-          roomName: `funtikidbooks-${roomKey}`,
-          parentNode: containerRef.current,
-          width: "100%",
-          height: "100%",
-          userInfo: { displayName },
+    // Channel/DM ids are UUIDs, so this is effectively unguessable — nobody
+    // lands in this room without already being in the app.
+    const bareRoomName = `funtikidbooks-${roomKey}`;
+
+    getJaasCallCredentials()
+      .catch(() => null)
+      .then((creds) => {
+        if (cancelled) return;
+        const domain = creds ? JAAS_DOMAIN : PUBLIC_JITSI_DOMAIN;
+        const roomName = creds ? `${creds.appId}/${bareRoomName}` : bareRoomName;
+        return loadJitsiScript(domain, creds?.appId ?? null).then(() => {
+          if (cancelled || !containerRef.current || !window.JitsiMeetExternalAPI) return;
+          const api = new window.JitsiMeetExternalAPI(domain, {
+            roomName,
+            parentNode: containerRef.current,
+            width: "100%",
+            height: "100%",
+            userInfo: { displayName },
+            ...(creds ? { jwt: creds.jwt } : {}),
+          });
+          api.addEventListener("readyToClose", onClose);
+          apiRef.current = api;
         });
-        api.addEventListener("readyToClose", onClose);
-        apiRef.current = api;
       })
       .catch(() => !cancelled && setLoadError(true));
     return () => {
