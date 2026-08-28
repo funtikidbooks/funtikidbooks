@@ -1191,6 +1191,13 @@ create table if not exists public.meeting_channel_members (
   primary key (channel_id, profile_id)
 );
 
+-- Null until the member actually opens the room for the first time — lets
+-- the sidebar flag "you were just added to this room" (e.g. by a director
+-- inviting you while you weren't looking) with a dot that clears itself the
+-- first time they open it. Stays null for a self-initiated join/create
+-- since selectChannel() opens the room immediately in that flow.
+alter table public.meeting_channel_members add column if not exists seen_at timestamptz;
+
 create table if not exists public.meeting_messages (
   id uuid primary key default gen_random_uuid(),
   channel_id uuid not null references public.meeting_channels (id) on delete cascade,
@@ -1303,6 +1310,13 @@ create policy "members can add teammates to the channel"
   on public.meeting_channel_members for insert
   to authenticated
   with check (public.is_meeting_channel_member(channel_id));
+
+drop policy if exists "member can mark their own membership seen" on public.meeting_channel_members;
+create policy "member can mark their own membership seen"
+  on public.meeting_channel_members for update
+  to authenticated
+  using (profile_id = auth.uid())
+  with check (profile_id = auth.uid());
 
 -- The room creator can also remove *other* people's memberships (the "mời
 -- ra" swipe action in the room-info panel) — checked against

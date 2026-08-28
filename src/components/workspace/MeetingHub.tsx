@@ -22,6 +22,7 @@ import {
   listChannelMembers,
   listChannels,
   markChannelRead,
+  markRoomSeen,
   recallMeetingMessage,
   removeChannelMember,
   removeReaction,
@@ -373,96 +374,6 @@ function RoomLabelsEditor({
   );
 }
 
-function BrowseRoomsModal({
-  rooms,
-  onClose,
-  onJoined,
-}: {
-  rooms: MeetingChannelPublic[];
-  onClose: () => void;
-  onJoined: (id: string) => void;
-}) {
-  const [passwordFor, setPasswordFor] = useState<string | null>(null);
-  const [password, setPassword] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function join(id: string, pwd: string) {
-    setBusyId(id);
-    setError(null);
-    try {
-      await joinChannel(id, pwd);
-      setPasswordFor(null);
-      setPassword("");
-      onJoined(id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  return (
-    <Modal onClose={onClose} maxWidth={440}>
-      <div className="flex flex-col gap-4 p-6">
-        <h2 className="text-lg">Khám phá phòng</h2>
-        {rooms.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
-            Không có phòng nào để tham gia.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {rooms.map((r) => (
-              <div key={r.id} className="flex flex-col gap-2 rounded-[10px] px-3 py-2.5" style={{ background: "var(--color-surface)" }}>
-                <div className="flex items-center gap-2">
-                  <span aria-hidden>{r.icon}</span>
-                  <span className="text-sm font-bold flex-1 truncate">{r.name}</span>
-                  {r.has_password && <span aria-hidden title="Có mật khẩu">🔒</span>}
-                  {passwordFor === r.id ? null : (
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm flex-none"
-                      disabled={busyId === r.id}
-                      onClick={() => (r.has_password ? setPasswordFor(r.id) : join(r.id, ""))}
-                    >
-                      {busyId === r.id ? "Đang vào…" : "Tham gia"}
-                    </button>
-                  )}
-                </div>
-                {passwordFor === r.id && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      className="input flex-1"
-                      style={{ padding: "6px 10px", fontSize: 13 }}
-                      type="text"
-                      placeholder="Nhập mật khẩu"
-                      value={password}
-                      autoFocus
-                      onChange={(e) => setPassword(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm flex-none"
-                      disabled={busyId === r.id}
-                      onClick={() => join(r.id, password)}
-                    >
-                      Vào
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        {error && (
-          <p className="text-sm font-semibold" style={{ color: "var(--status-red)" }}>
-            {error}
-          </p>
-        )}
-      </div>
-    </Modal>
-  );
-}
 
 // A dropdown (not a centered modal) anchored under the 👥 button — every
 // staff member is always listed, already-in-room people sorted to the top
@@ -868,7 +779,13 @@ export function MeetingHub({
     [channels],
   );
   const [expandedRoomIds, setExpandedRoomIds] = useState<Set<string>>(new Set());
-  const [showBrowse, setShowBrowse] = useState(false);
+  // Inline join prompt for a not-yet-joined room clicked straight from the
+  // main "PHÒNG HỌP" list (every room shows there now, joined or not — see
+  // customTopLevelRooms) — only asks for a password when the room has one.
+  const [joinPasswordFor, setJoinPasswordFor] = useState<string | null>(null);
+  const [joinPassword, setJoinPassword] = useState("");
+  const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
   const [roomMembers, setRoomMembers] = useState<Profile[]>([]);
   // The room list is a persistent column at sm+, but a full-screen overlay
@@ -937,28 +854,30 @@ export function MeetingHub({
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const joinedRooms = useMemo(() => channels.filter((c) => c.joined), [channels]);
-  // Top-level rooms render in the list as usual; sub-rooms are grouped under
-  // their parent instead, shown indented and only while that parent is
-  // expanded — same "folder" pattern as the workspace's other tree views.
-  const topLevelJoinedRooms = useMemo(() => joinedRooms.filter((c) => !c.parent_channel_id), [joinedRooms]);
   // "Chung" (with "Riêng" right under it) renders in its own "TRÒ CHUYỆN"
   // section above a divider, separate from the custom rooms under "PHÒNG
   // HỌP" below it — Chung can't have sub-rooms (see nestableRooms), so it
   // doesn't need the expand/children machinery the rooms below it do.
-  const generalRoom = useMemo(() => topLevelJoinedRooms.find((c) => c.is_general) ?? null, [topLevelJoinedRooms]);
-  const customTopLevelRooms = useMemo(() => topLevelJoinedRooms.filter((c) => !c.is_general), [topLevelJoinedRooms]);
+  const generalRoom = useMemo(() => joinedRooms.find((c) => c.is_general) ?? null, [joinedRooms]);
+  // Every top-level custom room shows in "PHÒNG HỌP" now, joined or not —
+  // clicking one you haven't joined prompts to join instead of opening it
+  // (see attemptJoin), so there's no separate "Khám phá phòng" list to dig
+  // through anymore.
+  const customTopLevelRooms = useMemo(
+    () => channels.filter((c) => !c.is_general && !c.parent_channel_id),
+    [channels],
+  );
   const childRoomsByParent = useMemo(() => {
     const map = new Map<string, MeetingChannelPublic[]>();
-    for (const c of joinedRooms) {
+    for (const c of channels) {
       if (!c.parent_channel_id) continue;
       const list = map.get(c.parent_channel_id);
       if (list) list.push(c);
       else map.set(c.parent_channel_id, [c]);
     }
     return map;
-  }, [joinedRooms]);
+  }, [channels]);
   const dmTotalUnread = useMemo(() => Object.values(dmUnreadCounts).reduce((sum, n) => sum + n, 0), [dmUnreadCounts]);
-  const browsableRooms = useMemo(() => channels.filter((c) => !c.joined), [channels]);
   const activeChannel = channels.find((c) => c.id === activeId) ?? null;
   // Only custom rooms track explicit membership rows — "Chung" is open to
   // every staff member implicitly, so there's no meaningful roster to show.
@@ -1267,6 +1186,16 @@ export function MeetingHub({
     setReplyingTo(null);
     setActiveId(id);
     setShowRoomListMobile(false);
+
+    // Opening a room you were just added to clears its sidebar dot —
+    // optimistic locally, fire-and-forget on the server (see markRoomSeen).
+    if (id && id !== DM_TAB_ID) {
+      const channel = channels.find((c) => c.id === id);
+      if (channel?.is_new) {
+        setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, is_new: false } : c)));
+        markRoomSeen(id).catch(() => {});
+      }
+    }
   }
 
   async function handleCreated(id: string) {
@@ -1290,8 +1219,30 @@ export function MeetingHub({
 
   function handleJoined(id: string) {
     refreshChannel(id, { joined: true });
-    setShowBrowse(false);
     selectChannel(id);
+  }
+
+  // Clicking a not-yet-joined room in the main list: locked rooms open an
+  // inline password field first; open ones join straight away.
+  async function attemptJoin(room: MeetingChannelPublic) {
+    if (room.has_password && joinPasswordFor !== room.id) {
+      setJoinPasswordFor(room.id);
+      setJoinPassword("");
+      setJoinError(null);
+      return;
+    }
+    setJoiningRoomId(room.id);
+    setJoinError(null);
+    try {
+      await joinChannel(room.id, room.has_password ? joinPassword : "");
+      setJoinPasswordFor(null);
+      setJoinPassword("");
+      handleJoined(room.id);
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setJoiningRoomId(null);
+    }
   }
 
   async function handleLeave(id: string) {
@@ -1586,79 +1537,172 @@ export function MeetingHub({
                 )}
                 <button
                   type="button"
-                  onClick={() => selectChannel(r.id)}
+                  onClick={() => (r.joined ? selectChannel(r.id) : attemptJoin(r))}
+                  disabled={joiningRoomId === r.id}
                   className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold flex-1 min-w-0"
                   style={{
                     background: activeId === r.id ? "var(--color-accent-100)" : undefined,
-                    color: activeId === r.id ? "var(--color-accent-700)" : "var(--color-text)",
+                    color: activeId === r.id ? "var(--color-accent-700)" : r.joined ? "var(--color-text)" : "var(--color-neutral-500)",
                   }}
                 >
-                  <span aria-hidden>{r.icon}</span>
-                  <span className="flex-1 truncate">{r.name}</span>
-                  <span
-                    className="flex-none rounded-full"
-                    style={{ width: 7, height: 7, background: "var(--status-red)" }}
-                    title="Bạn đang là thành viên phòng này"
-                  />
+                  <span aria-hidden style={{ opacity: r.joined ? 1 : 0.6 }}>{r.icon}</span>
+                  <span className="flex-1 truncate" style={{ opacity: r.joined ? 1 : 0.8 }}>{r.name}</span>
+                  {r.is_new && (
+                    <span
+                      className="flex-none rounded-full"
+                      style={{ width: 7, height: 7, background: "var(--status-red)" }}
+                      title="Bạn vừa được thêm vào phòng này"
+                    />
+                  )}
                   {r.has_password && (
                     <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
                   )}
-                  {roomUnread > 0 && (
-                    <span
-                      className="flex items-center justify-center rounded-full font-bold flex-none"
-                      style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
-                    >
-                      {roomUnread > 9 ? "9+" : roomUnread}
+                  {!r.joined ? (
+                    <span className="flex-none text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
+                      {joiningRoomId === r.id ? "Đang vào…" : "Tham gia"}
                     </span>
+                  ) : (
+                    roomUnread > 0 && (
+                      <span
+                        className="flex items-center justify-center rounded-full font-bold flex-none"
+                        style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                      >
+                        {roomUnread > 9 ? "9+" : roomUnread}
+                      </span>
+                    )
                   )}
                 </button>
               </div>
+              {joinPasswordFor === r.id && (
+                <div className="flex flex-col gap-1" style={{ paddingLeft: 26, paddingRight: 4 }}>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      autoFocus
+                      type="text"
+                      className="input flex-1"
+                      style={{ padding: "5px 8px", fontSize: 12 }}
+                      placeholder="Mật khẩu phòng"
+                      value={joinPassword}
+                      onChange={(e) => setJoinPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && attemptJoin(r)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => attemptJoin(r)}
+                      disabled={joiningRoomId === r.id}
+                      className="btn btn-primary btn-sm flex-none"
+                      style={{ padding: "4px 10px" }}
+                    >
+                      Vào
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setJoinPasswordFor(null)}
+                      className="btn-icon flex-none"
+                      style={{ width: 22, height: 22, padding: 0 }}
+                      aria-label="Huỷ"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {joinError && (
+                    <p className="text-[11px]" style={{ color: "var(--status-red)" }}>
+                      {joinError}
+                    </p>
+                  )}
+                </div>
+              )}
               {expanded &&
                 children.map((child) => {
                   const childUnread = meetingUnreadCounts[child.id] ?? 0;
                   return (
-                    <button
-                      key={child.id}
-                      type="button"
-                      onClick={() => selectChannel(child.id)}
-                      className="ws-nav-link flex items-center gap-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
-                      style={{
-                        marginLeft: 26,
-                        paddingLeft: 8,
-                        paddingRight: 8,
-                        background: activeId === child.id ? "var(--color-accent-100)" : undefined,
-                        color: activeId === child.id ? "var(--color-accent-700)" : "var(--color-text)",
-                      }}
-                    >
-                      <span aria-hidden>{child.icon}</span>
-                      <span className="flex-1 truncate">{child.name}</span>
-                      <span
-                        className="flex-none rounded-full"
-                        style={{ width: 7, height: 7, background: "var(--status-red)" }}
-                        title="Bạn đang là thành viên phòng này"
-                      />
-                      {child.has_password && (
-                        <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
+                    <div key={child.id} className="contents">
+                      <button
+                        type="button"
+                        onClick={() => (child.joined ? selectChannel(child.id) : attemptJoin(child))}
+                        disabled={joiningRoomId === child.id}
+                        className="ws-nav-link flex items-center gap-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
+                        style={{
+                          marginLeft: 26,
+                          paddingLeft: 8,
+                          paddingRight: 8,
+                          background: activeId === child.id ? "var(--color-accent-100)" : undefined,
+                          color: activeId === child.id ? "var(--color-accent-700)" : child.joined ? "var(--color-text)" : "var(--color-neutral-500)",
+                        }}
+                      >
+                        <span aria-hidden style={{ opacity: child.joined ? 1 : 0.6 }}>{child.icon}</span>
+                        <span className="flex-1 truncate" style={{ opacity: child.joined ? 1 : 0.8 }}>{child.name}</span>
+                        {child.is_new && (
+                          <span
+                            className="flex-none rounded-full"
+                            style={{ width: 7, height: 7, background: "var(--status-red)" }}
+                            title="Bạn vừa được thêm vào phòng này"
+                          />
+                        )}
+                        {child.has_password && (
+                          <span aria-hidden style={{ fontSize: 11 }}>🔒</span>
+                        )}
+                        {!child.joined ? (
+                          <span className="flex-none text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
+                            {joiningRoomId === child.id ? "Đang vào…" : "Tham gia"}
+                          </span>
+                        ) : (
+                          childUnread > 0 && (
+                            <span
+                              className="flex items-center justify-center rounded-full font-bold flex-none"
+                              style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                            >
+                              {childUnread > 9 ? "9+" : childUnread}
+                            </span>
+                          )
+                        )}
+                      </button>
+                      {joinPasswordFor === child.id && (
+                        <div className="flex flex-col gap-1" style={{ paddingLeft: 52, paddingRight: 4 }}>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              autoFocus
+                              type="text"
+                              className="input flex-1"
+                              style={{ padding: "5px 8px", fontSize: 12 }}
+                              placeholder="Mật khẩu phòng"
+                              value={joinPassword}
+                              onChange={(e) => setJoinPassword(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && attemptJoin(child)}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => attemptJoin(child)}
+                              disabled={joiningRoomId === child.id}
+                              className="btn btn-primary btn-sm flex-none"
+                              style={{ padding: "4px 10px" }}
+                            >
+                              Vào
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setJoinPasswordFor(null)}
+                              className="btn-icon flex-none"
+                              style={{ width: 22, height: 22, padding: 0 }}
+                              aria-label="Huỷ"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          {joinError && (
+                            <p className="text-[11px]" style={{ color: "var(--status-red)" }}>
+                              {joinError}
+                            </p>
+                          )}
+                        </div>
                       )}
-                      {childUnread > 0 && (
-                        <span
-                          className="flex items-center justify-center rounded-full font-bold flex-none"
-                          style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
-                        >
-                          {childUnread > 9 ? "9+" : childUnread}
-                        </span>
-                      )}
-                    </button>
+                    </div>
                   );
                 })}
             </div>
             );
           })}
         </div>
-        <button type="button" onClick={() => setShowBrowse(true)} className="btn btn-secondary btn-sm w-full">
-          🔍 Khám phá phòng
-          {browsableRooms.length > 0 && ` (${browsableRooms.length})`}
-        </button>
       </div>
 
       {/* Chat panel */}
@@ -2546,9 +2590,6 @@ export function MeetingHub({
           parentOptions={nestableRooms}
           initialParentId={createParentId}
         />
-      )}
-      {showBrowse && (
-        <BrowseRoomsModal rooms={browsableRooms} onClose={() => setShowBrowse(false)} onJoined={handleJoined} />
       )}
       {showVideoCall && activeChannel && (
         <VideoCallModal
