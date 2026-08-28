@@ -12,6 +12,7 @@ import {
   sendDirectMessage,
 } from "@/lib/actions/messages";
 import { thumbnailUrl } from "@/lib/imageTransform";
+import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import type { DirectMessage, DirectMessageReaction, Profile } from "@/lib/types";
 
@@ -117,6 +118,10 @@ export function DirectConversation({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  // On phone there's no Ctrl+V and no room to spare — the hint text is
+  // desktop-only guidance, so mobile gets a blank placeholder instead of a
+  // truncated, half-useful version of it.
+  const isMobile = useIsMobileViewport();
   // Which peer the bottom-scroll effect below last handled — lets it tell
   // "just switched conversations, always snap to bottom" apart from "same
   // conversation, only snap if already near the bottom" (see that effect).
@@ -540,7 +545,12 @@ export function DirectConversation({
   return (
     <>
       <div className="flex-1 flex flex-col min-h-0" style={{ position: "relative" }}>
-      <div ref={listRef} onScroll={handleListScroll} className="flex-1 overflow-y-auto flex flex-col p-3">
+      <div
+        ref={listRef}
+        onScroll={handleListScroll}
+        className="flex-1 overflow-y-auto flex flex-col p-3"
+        style={{ touchAction: "pan-y" }}
+      >
         {messages.length === 0 && (
           <p className="text-[12px] text-center mt-4" style={{ color: "var(--color-neutral-500)" }}>
             Chưa có tin nhắn nào.
@@ -924,7 +934,7 @@ export function DirectConversation({
             className="input flex-1 resize-none"
             style={{ maxHeight: 140, overflowY: "auto" }}
             rows={1}
-            placeholder="Nhắn tin… (dán ảnh bằng Ctrl+V)"
+            placeholder={isMobile ? "" : "Nhắn tin… (dán ảnh bằng Ctrl+V)"}
             value={text}
             onChange={(e) => {
               setText(e.target.value);

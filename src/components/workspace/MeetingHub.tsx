@@ -10,6 +10,7 @@ import { VideoCallModal } from "@/components/workspace/VideoCallModal";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import { ForwardMessageModal, type ForwardableAttachment } from "@/components/workspace/ForwardMessageModal";
 import { useCallPresence } from "@/lib/useCallPresence";
+import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import {
   addChannelMember,
@@ -959,6 +960,10 @@ export function MeetingHub({
   const composerFormRef = useRef<HTMLFormElement>(null);
   const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
   const callRingAudioRef = useRef<HTMLAudioElement | null>(null);
+  // On phone there's no Ctrl+V and no room to spare — the hint text (and
+  // "gõ @ để nhắc ai đó") is desktop-only guidance, so mobile gets a blank
+  // placeholder instead of a truncated, half-useful version of it.
+  const isMobile = useIsMobileViewport();
 
   // A real thumbnail of the pending image beats a filename chip — lets
   // people confirm it's the right screenshot before sending. Computed
@@ -2452,7 +2457,12 @@ export function MeetingHub({
               />
             )}
 
-            <div ref={listRef} onScroll={handleListScroll} className="flex-1 overflow-y-auto flex flex-col p-4">
+            <div
+              ref={listRef}
+              onScroll={handleListScroll}
+              className="flex-1 overflow-y-auto flex flex-col p-4"
+              style={{ touchAction: "pan-y" }}
+            >
               {messages.length === 0 && (
                 <p className="text-[13px] text-center mt-4" style={{ color: "var(--color-neutral-500)" }}>
                   Chưa có tin nhắn nào trong phòng này.
@@ -2970,7 +2980,7 @@ export function MeetingHub({
                   className="input flex-1 resize-none"
                   style={{ maxHeight: 160, overflowY: "auto" }}
                   rows={1}
-                  placeholder={`Nhắn vào #${activeChannel.name}… (gõ @ để nhắc ai đó, dán ảnh bằng Ctrl+V)`}
+                  placeholder={isMobile ? "" : `Nhắn vào #${activeChannel.name}… (gõ @ để nhắc ai đó, dán ảnh bằng Ctrl+V)`}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onPaste={handlePaste}
