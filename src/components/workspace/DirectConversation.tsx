@@ -709,7 +709,14 @@ export function DirectConversation({
             <div
               id={`dm-msg-${m.id}`}
               key={m.id}
-              className={`group flex flex-col min-w-0 ${mine ? "items-end" : "items-start"} max-w-[82%]`}
+              // items-end/items-start only aligns THIS wrapper's own children
+              // — inside the outer flex-col message list (align-items:
+              // stretch by default), the wrapper itself still anchors to the
+              // left and just gets capped at 82% width, leaving the missing
+              // 18% as a gap on the right instead of at the true edge for
+              // "mine" messages. self-end/self-start positions the wrapper
+              // itself within that list.
+              className={`group flex flex-col min-w-0 ${mine ? "items-end self-end" : "items-start self-start"} max-w-[82%]`}
               style={{ marginTop: isGroupStart ? 12 : 2, opacity: isPending ? 0.6 : 1 }}
             >
               {m.content && (
