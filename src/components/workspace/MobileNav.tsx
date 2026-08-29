@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { signOut } from "@/lib/actions/auth";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { resetThemeOnSignOut, useTheme } from "@/lib/useTheme";
@@ -46,12 +46,58 @@ export function MobileNav({ isDirector }: { isDirector: boolean }) {
   const showsIphoneAppNav = useShowsIphoneAppNav();
   const primaryNav = showsIphoneAppNav ? PRIMARY_NAV_IPHONE_APP : PRIMARY_NAV;
   const moreNav = showsIphoneAppNav ? [] : MORE_NAV;
+  const navRef = useRef<HTMLElement>(null);
+  const [navHeight, setNavHeight] = useState(60);
+
+  // iOS Safari pins `position: fixed` elements to the *layout* viewport,
+  // which doesn't change size as its toolbar/tab-bar chrome animates away —
+  // meanwhile the *visual* viewport (what's actually on screen) pans
+  // independently during that animation, which is why a plain `bottom: 0`
+  // bar visibly slides as you drag even though the page itself never
+  // scrolls. Watching `window.visualViewport` and translating the bar by
+  // the live gap between the two viewports keeps it glued to the true
+  // bottom edge instead of the stale layout one.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    const nav = navRef.current;
+    if (!vv || !nav) return;
+    function sync() {
+      const offset = window.innerHeight - (vv!.height + vv!.offsetTop);
+      nav!.style.transform = offset > 0.5 ? `translateY(-${offset}px)` : "";
+    }
+    sync();
+    vv.addEventListener("resize", sync);
+    vv.addEventListener("scroll", sync);
+    return () => {
+      vv.removeEventListener("resize", sync);
+      vv.removeEventListener("scroll", sync);
+    };
+  }, []);
+
+  // Measures the bar's real rendered height so the spacer below can
+  // reserve exactly that much space — avoids hand-picking a pixel value
+  // that could drift out of sync with font/safe-area changes.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const ro = new ResizeObserver(() => setNavHeight(nav.offsetHeight));
+    ro.observe(nav);
+    return () => ro.disconnect();
+  }, []);
 
   return (
     <>
+      {/* Sits in normal flow purely to reserve the fixed bar's height so
+          page content doesn't render underneath it. */}
+      <div className="md:hidden flex-none" style={{ height: navHeight }} aria-hidden />
       <nav
-        className="md:hidden flex-none flex items-stretch"
-        style={{ background: "var(--color-panel)", borderTop: "1px solid var(--color-neutral-200)" }}
+        ref={navRef}
+        className="md:hidden fixed inset-x-0 bottom-0 z-40 flex items-stretch"
+        style={{
+          background: "var(--color-panel)",
+          borderTop: "1px solid var(--color-neutral-200)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
       >
         {primaryNav.map((item) => {
           const active = pathname === item.href;
