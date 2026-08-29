@@ -70,7 +70,13 @@ export default async function WorkspaceLayout({
       <TabNotificationBadge />
       <ThemeSync serverTheme={myProfile.theme} />
       <PushSetup />
-      <div className="flex flex-col min-h-screen" style={{ background: "var(--color-bg)" }}>
+      {/* 100vh on iOS Safari is sized for the toolbar fully collapsed (the
+          largest the viewport ever gets) — taller than what's actually
+          visible on load, and it doesn't track the toolbar collapsing/
+          expanding as the page scrolls. That's what was making the fixed
+          bottom nav visibly drift up and down while scrolling. 100dvh
+          (dynamic viewport height) tracks the real visible height instead. */}
+      <div className="flex flex-col min-h-[100dvh]" style={{ background: "var(--color-bg)" }}>
         <IosInstallHint />
         <div className="flex flex-1 min-h-0">
           <Sidebar
