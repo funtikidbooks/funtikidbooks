@@ -155,7 +155,7 @@ export function summarizeAttendance(
     else if (e.status === "leave") leave++;
     else if (e.status === "present" && e.check_in_at) {
       present++;
-      if (isMonToFri(e.work_date) && isLateCheckIn(e.check_in_at)) late++;
+      if (isLateCheckIn(e.check_in_at)) late++;
     }
   }
   return { present, late, absent, leave };

@@ -130,7 +130,7 @@ export function AttendanceMonthDetail({
                   } else if (entry?.status === "absent") {
                     badge = <span style={{ color: "var(--status-red)" }}>Vắng</span>;
                   } else if (entry?.check_in_at) {
-                    const late = weekday && isLateCheckIn(entry.check_in_at);
+                    const late = isLateCheckIn(entry.check_in_at);
                     badge = (
                       <span style={{ color: late ? "var(--status-yellow)" : "var(--status-green)" }}>
                         {formatCheckInTime(entry.check_in_at)}

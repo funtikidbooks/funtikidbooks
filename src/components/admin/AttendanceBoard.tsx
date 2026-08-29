@@ -98,7 +98,7 @@ export function AttendanceBoard({
                 </span>
               );
             } else if (entry?.check_in_at) {
-              const late = weekday && isLateCheckIn(entry.check_in_at);
+              const late = isLateCheckIn(entry.check_in_at);
               statusNode = (
                 <span className="flex items-center gap-1.5">
                   <span className="text-sm font-bold">🕐 {formatCheckInTime(entry.check_in_at)}</span>
