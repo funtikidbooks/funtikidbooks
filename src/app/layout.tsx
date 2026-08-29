@@ -80,7 +80,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="vi"
-      className={`${headingFont.variable} ${beVietnamPro.variable} h-full antialiased`}
+      // `height: 100%` on the root element resolves on iOS Safari against
+      // the large (toolbar-collapsed) viewport, not what's actually visible
+      // — the same historical bug as 100vh. Since `body` below is
+      // `min-h-full` (a percentage of this), it inherited that oversized
+      // floor too, leaving the page just tall enough to rubber-band scroll
+      // on iOS whenever the toolbar was showing — which is what still let
+      // the workspace's fixed bottom nav drift even after that shell was
+      // capped to 100dvh. `100dvh` here tracks the real visible height so
+      // nothing downstream gets an inflated floor to scroll into.
+      className={`${headingFont.variable} ${beVietnamPro.variable} h-[100dvh] antialiased`}
       suppressHydrationWarning
     >
       <head>
