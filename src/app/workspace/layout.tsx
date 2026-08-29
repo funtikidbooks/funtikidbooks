@@ -70,13 +70,16 @@ export default async function WorkspaceLayout({
       <TabNotificationBadge />
       <ThemeSync serverTheme={myProfile.theme} />
       <PushSetup />
-      {/* 100vh on iOS Safari is sized for the toolbar fully collapsed (the
-          largest the viewport ever gets) — taller than what's actually
-          visible on load, and it doesn't track the toolbar collapsing/
-          expanding as the page scrolls. That's what was making the fixed
-          bottom nav visibly drift up and down while scrolling. 100dvh
-          (dynamic viewport height) tracks the real visible height instead. */}
-      <div className="flex flex-col min-h-[100dvh]" style={{ background: "var(--color-bg)" }}>
+      {/* Locked to exactly 100dvh (not min-h) with overflow hidden so this
+          shell can never grow taller than the visible viewport and hand
+          scrolling off to the page/body. If it did, the whole shell —
+          bottom nav included, since it's just the last flex item here —
+          would drift up and down as the body scrolled (the iOS rubber-band
+          bounce made this easy to trigger by dragging near the bottom).
+          Every page under /workspace already scrolls its own content via
+          an inner `flex-1 min-h-0` + `overflow-y-auto` region, so nothing
+          needs body-level scroll — the bottom nav now truly can't move. */}
+      <div className="flex flex-col h-[100dvh] overflow-hidden" style={{ background: "var(--color-bg)" }}>
         <IosInstallHint />
         <div className="flex flex-1 min-h-0">
           <Sidebar
