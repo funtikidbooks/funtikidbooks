@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { listMyMonthAttendance } from "@/lib/actions/attendance";
 import {
   MONTH_LABELS,
@@ -19,26 +20,43 @@ import {
 } from "@/lib/constants/attendance";
 import type { AttendanceEntry } from "@/lib/types";
 
-export function MyAttendance({ initialEntries }: { initialEntries: AttendanceEntry[] }) {
+export function MyAttendance({
+  initialEntries,
+  currentUserId,
+}: {
+  initialEntries: AttendanceEntry[];
+  currentUserId: string;
+}) {
   const [monthStart, setMonthStart] = useState(() => firstOfMonth(vnToday()));
-  // page.tsx always fetches the current month, so for that month the freshly
-  // refreshed initialEntries prop is used directly rather than a frozen copy
-  // — otherwise we'd need an effect just to re-sync state to a prop, which
-  // causes an extra render for no benefit. Only navigating to a past/future
-  // month needs its own fetched state.
+  // Rows the realtime subscription below has seen since mount for the
+  // current month, keyed by id (null = deleted) — merged over initialEntries
+  // at render time rather than mirrored into its own useState, so a
+  // router.refresh() bringing fresher server data is never fought by a
+  // stale copy sitting in state.
+  const [liveOverlay, setLiveOverlay] = useState<Map<string, AttendanceEntry | null>>(new Map());
+  const currentMonthEntries = useMemo(() => {
+    if (liveOverlay.size === 0) return initialEntries;
+    const byId = new Map(initialEntries.map((e) => [e.id, e]));
+    for (const [id, row] of liveOverlay) {
+      if (row) byId.set(id, row);
+      else byId.delete(id);
+    }
+    return Array.from(byId.values());
+  }, [initialEntries, liveOverlay]);
   const [otherMonthEntries, setOtherMonthEntries] = useState<AttendanceEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const isCurrentMonth = monthStart === firstOfMonth(vnToday());
   const entries = useMemo(
-    () => (isCurrentMonth ? initialEntries : (otherMonthEntries ?? [])),
-    [isCurrentMonth, initialEntries, otherMonthEntries],
+    () => (isCurrentMonth ? currentMonthEntries : (otherMonthEntries ?? [])),
+    [isCurrentMonth, currentMonthEntries, otherMonthEntries],
   );
 
   // The client router cache can keep serving the same server-rendered
   // snapshot when navigating back to this page, so refresh explicitly
-  // whenever it (re)mounts or the tab regains focus, instead of leaving
-  // people to hard-reload to see today's check-in.
+  // whenever it (re)mounts or the tab regains focus — a fallback for
+  // whatever the realtime subscription below missed while disconnected,
+  // rather than the primary way new check-ins show up now.
   useEffect(() => {
     router.refresh();
     function handleVisible() {
@@ -51,6 +69,40 @@ export function MyAttendance({ initialEntries }: { initialEntries: AttendanceEnt
       window.removeEventListener("focus", handleVisible);
     };
   }, [router]);
+
+  // A check-in (from this device or another) or a director/PM edit to this
+  // month's attendance shows up immediately instead of waiting for the next
+  // focus/visibility-triggered router.refresh() — attendance is meant to be
+  // transparent in real time, not just eventually consistent.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`attendance-${currentUserId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "attendance", filter: `profile_id=eq.${currentUserId}` },
+        (payload) => {
+          const isDelete = payload.eventType === "DELETE";
+          const row = (isDelete ? payload.old : payload.new) as AttendanceEntry;
+          const monthOfRow = firstOfMonth(row.work_date);
+          if (monthOfRow === firstOfMonth(vnToday())) {
+            setLiveOverlay((prev) => new Map(prev).set(row.id, isDelete ? null : row));
+          }
+          if (monthOfRow === monthStart) {
+            setOtherMonthEntries((prev) => {
+              if (!prev) return prev;
+              if (isDelete) return prev.filter((e) => e.id !== row.id);
+              return prev.some((e) => e.id === row.id) ? prev.map((e) => (e.id === row.id ? row : e)) : [...prev, row];
+            });
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId, monthStart]);
 
   const today = vnToday();
   const byDate = useMemo(() => new Map(entries.map((e) => [e.work_date, e])), [entries]);

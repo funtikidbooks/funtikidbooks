@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { getMonthAttendance } from "@/lib/actions/attendance";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { AttendanceMonthDetail } from "@/components/admin/AttendanceMonthDetail";
@@ -22,7 +23,20 @@ export function AttendanceBoard({
   initialEntries: AttendanceEntry[];
   staff: Profile[];
 }) {
-  const entries = initialEntries;
+  // Rows the realtime subscription below has seen since mount, keyed by id
+  // (null = deleted) — merged over initialEntries at render time rather than
+  // mirrored into its own useState, so a router.refresh() bringing fresher
+  // server data is never fought by a stale copy sitting in state.
+  const [liveOverlay, setLiveOverlay] = useState<Map<string, AttendanceEntry | null>>(new Map());
+  const entries = useMemo(() => {
+    if (liveOverlay.size === 0) return initialEntries;
+    const byId = new Map(initialEntries.map((e) => [e.id, e]));
+    for (const [id, row] of liveOverlay) {
+      if (row) byId.set(id, row);
+      else byId.delete(id);
+    }
+    return Array.from(byId.values());
+  }, [initialEntries, liveOverlay]);
   const [detail, setDetail] = useState<{ profile: Profile; entries: AttendanceEntry[] } | null>(null);
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
   const router = useRouter();
@@ -30,8 +44,9 @@ export function AttendanceBoard({
   // initialEntries is a snapshot from the server render — Next.js's client
   // router cache can keep serving that same snapshot when navigating back to
   // this page, so refresh explicitly whenever the page (re)mounts or the tab
-  // regains focus, instead of leaving staff to hard-reload to see new
-  // check-ins.
+  // regains focus — a fallback for whatever the realtime subscription below
+  // missed while disconnected, rather than the primary way new check-ins
+  // show up now.
   useEffect(() => {
     router.refresh();
     function handleVisible() {
@@ -44,6 +59,27 @@ export function AttendanceBoard({
       window.removeEventListener("focus", handleVisible);
     };
   }, [router]);
+
+  // Attendance is meant to be transparent in real time — a staff member
+  // checking in, or another director/PM editing an entry, shows up on this
+  // board immediately instead of only after the next focus/visibility
+  // refresh. This week's board only ever shows the current week, so any
+  // row for a date outside it is simply ignored.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("attendance-board-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "attendance" }, (payload) => {
+        const isDelete = payload.eventType === "DELETE";
+        const row = (isDelete ? payload.old : payload.new) as AttendanceEntry;
+        setLiveOverlay((prev) => new Map(prev).set(row.id, isDelete ? null : row));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const today = vnToday();
 

@@ -783,6 +783,19 @@ create policy "director or pm can manage attendance"
   using (public.can_manage_hr())
   with check (public.can_manage_hr());
 
+-- Without this, a check-in (or a director/PM edit) only showed up on the
+-- admin board / staff's own "Chấm công" page after the next focus/visibility
+-- refresh — attendance is meant to be transparent in real time.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'attendance'
+  ) then
+    alter publication supabase_realtime add table public.attendance;
+  end if;
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- payroll_records: monthly salary sheet, director-only end to end — staff
 -- never get a read policy here at all, unlike attendance. Line items
