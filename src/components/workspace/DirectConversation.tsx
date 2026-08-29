@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions/messages";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
+import { translateMessage } from "@/lib/actions/translate";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import type { DirectMessage, DirectMessageReaction, Profile } from "@/lib/types";
 
@@ -115,6 +116,11 @@ export function DirectConversation({
   const [peerTyping, setPeerTyping] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
+  // Per-message translate-on-demand — cached by message id so toggling a
+  // translation back on doesn't re-hit the (free, unofficial) endpoint.
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
+  const [shownTranslationIds, setShownTranslationIds] = useState<Set<string>>(new Set());
   // `${messageId}:${emoji}` of the reaction pill currently hovered — same
   // bigger "who reacted" popover as MeetingHub's, instead of a native title
   // tooltip.
@@ -500,6 +506,38 @@ export function DirectConversation({
     }
   }
 
+  // Free unofficial Google endpoint (see translate.ts) rather than dumping
+  // the whole conversation through a translator — only when actually
+  // needed for a specific message.
+  async function toggleTranslate(message: DirectMessage) {
+    if (shownTranslationIds.has(message.id)) {
+      setShownTranslationIds((prev) => {
+        const next = new Set(prev);
+        next.delete(message.id);
+        return next;
+      });
+      return;
+    }
+    if (translations[message.id] !== undefined) {
+      setShownTranslationIds((prev) => new Set(prev).add(message.id));
+      return;
+    }
+    setTranslatingIds((prev) => new Set(prev).add(message.id));
+    try {
+      const { translated } = await translateMessage(message.content);
+      setTranslations((prev) => ({ ...prev, [message.id]: translated }));
+      setShownTranslationIds((prev) => new Set(prev).add(message.id));
+    } catch {
+      alert("Không thể dịch lúc này, thử lại sau.");
+    } finally {
+      setTranslatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(message.id);
+        return next;
+      });
+    }
+  }
+
   // Lets a screenshot copied to the clipboard (or any image) go straight
   // into the composer with Ctrl+V, same as the room chat's composer —
   // checks clipboardData.files first (the simplest, most broadly-supported
@@ -657,6 +695,19 @@ export function DirectConversation({
             (acc[r.emoji] ??= []).push(r.profile_id);
             return acc;
           }, {});
+          const translateButton = m.content && (
+            <button
+              type="button"
+              onClick={() => toggleTranslate(m)}
+              disabled={translatingIds.has(m.id)}
+              className="fk-msg-actions btn-icon opacity-0 group-hover:opacity-100 transition-opacity flex-none"
+              style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
+              aria-label="Dịch tin nhắn"
+              title="Dịch Anh ⇄ Việt"
+            >
+              {translatingIds.has(m.id) ? "…" : "🌐"}
+            </button>
+          );
           const reactionButton = (
             <span className="relative inline-flex flex-none">
               <button
@@ -756,7 +807,25 @@ export function DirectConversation({
                         </span>
                       ),
                     )}
+                    {shownTranslationIds.has(m.id) && (
+                      <div
+                        className="mt-1.5 pt-1.5 text-[15px]"
+                        style={{
+                          borderTop: `1px solid ${mine ? "rgba(255,255,255,.3)" : "var(--color-neutral-200)"}`,
+                          opacity: 0.9,
+                        }}
+                      >
+                        <span
+                          className="text-[10px] font-bold block mb-0.5"
+                          style={{ opacity: 0.7, letterSpacing: "0.03em" }}
+                        >
+                          🌐 ĐÃ DỊCH
+                        </span>
+                        {translations[m.id] || "(không có nội dung)"}
+                      </div>
+                    )}
                   </div>
+                  {translateButton}
                   {reactionButton}
                 </div>
               )}

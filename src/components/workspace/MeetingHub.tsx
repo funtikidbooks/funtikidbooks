@@ -36,6 +36,7 @@ import {
   togglePinMessage,
   updateChannel,
 } from "@/lib/actions/meetings";
+import { translateMessage } from "@/lib/actions/translate";
 import type {
   MeetingChannelPublic,
   MeetingChannelRead,
@@ -959,6 +960,11 @@ export function MeetingHub({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<MeetingMessage | null>(null);
+  // Per-message translate-on-demand — cached by message id so toggling a
+  // translation back on doesn't re-hit the (free, unofficial) endpoint.
+  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
+  const [shownTranslationIds, setShownTranslationIds] = useState<Set<string>>(new Set());
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MeetingSearchResult[]>([]);
@@ -1708,6 +1714,39 @@ export function MeetingHub({
       setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
       setPinnedMessages((prev) => (pin ? prev.filter((m) => m.id !== message.id) : [message, ...prev]));
       alert(err instanceof Error ? err.message : "Không thể ghim tin nhắn");
+    }
+  }
+
+  // Free unofficial Google endpoint (see translate.ts) rather than dumping
+  // the whole room through a translator — staff were copy-pasting a
+  // client's English paste-in into Google Translate by hand, one message
+  // at a time, only when they actually needed it.
+  async function toggleTranslate(message: MeetingMessage) {
+    if (shownTranslationIds.has(message.id)) {
+      setShownTranslationIds((prev) => {
+        const next = new Set(prev);
+        next.delete(message.id);
+        return next;
+      });
+      return;
+    }
+    if (translations[message.id] !== undefined) {
+      setShownTranslationIds((prev) => new Set(prev).add(message.id));
+      return;
+    }
+    setTranslatingIds((prev) => new Set(prev).add(message.id));
+    try {
+      const { translated } = await translateMessage(message.content);
+      setTranslations((prev) => ({ ...prev, [message.id]: translated }));
+      setShownTranslationIds((prev) => new Set(prev).add(message.id));
+    } catch {
+      alert("Không thể dịch lúc này, thử lại sau.");
+    } finally {
+      setTranslatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(message.id);
+        return next;
+      });
     }
   }
 
@@ -2699,6 +2738,19 @@ export function MeetingHub({
                     >
                       ↩
                     </button>
+                    {m.content && (
+                      <button
+                        type="button"
+                        onClick={() => toggleTranslate(m)}
+                        disabled={translatingIds.has(m.id)}
+                        className="btn-icon"
+                        style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
+                        aria-label="Dịch tin nhắn"
+                        title="Dịch Anh ⇄ Việt"
+                      >
+                        {translatingIds.has(m.id) ? "…" : "🌐"}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() =>
@@ -2858,6 +2910,23 @@ export function MeetingHub({
                             }}
                           >
                             <span className="fk-message-text">{renderContent(m.content, namesPattern, mine)}</span>
+                            {shownTranslationIds.has(m.id) && (
+                              <div
+                                className="mt-1.5 pt-1.5 text-[15px]"
+                                style={{
+                                  borderTop: `1px solid ${mine ? "rgba(255,255,255,.3)" : "var(--color-neutral-200)"}`,
+                                  opacity: 0.9,
+                                }}
+                              >
+                                <span
+                                  className="text-[10px] font-bold block mb-0.5"
+                                  style={{ opacity: 0.7, letterSpacing: "0.03em" }}
+                                >
+                                  🌐 ĐÃ DỊCH
+                                </span>
+                                {translations[m.id] || "(không có nội dung)"}
+                              </div>
+                            )}
                           </div>
                           <span className="fk-msg-actions relative inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-none">
                             {actionButtons}
