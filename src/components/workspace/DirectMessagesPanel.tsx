@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useChatManager } from "@/components/workspace/ChatManager";
+import { useChatManager, useLiveProfiles } from "@/components/workspace/ChatManager";
 import { DirectConversation } from "@/components/workspace/DirectConversation";
 import { VideoCallModal } from "@/components/workspace/VideoCallModal";
 import { searchDirectMessages } from "@/lib/actions/messages";
@@ -43,7 +43,7 @@ function highlightMatch(content: string, query: string) {
 // a back arrow — same pattern as Messenger/Telegram's own mobile apps.
 export function DirectMessagesPanel({
   currentUser,
-  profiles,
+  profiles: profilesProp,
   onOpenRoomList,
   initialPeerId,
   label,
@@ -55,9 +55,18 @@ export function DirectMessagesPanel({
   label: string;
 }) {
   const { unreadCounts, recentSenderOrder, clearDmUnread } = useChatManager();
+  // Patched with any live profile edits (name/avatar) a colleague has made
+  // since this page loaded — see useLiveProfiles.
+  const profiles = useLiveProfiles(profilesProp);
   const onlineIds = usePresence(currentUser.id);
-  const [selectedPeer, setSelectedPeer] = useState<Profile | null>(() =>
-    initialPeerId ? (profiles.find((p) => p.id === initialPeerId) ?? null) : null,
+  const [selectedPeerId, setSelectedPeerId] = useState<string | null>(initialPeerId ?? null);
+  // Derived rather than stored — selectedPeerId is the only thing that
+  // actually needs to survive across renders; looking the profile up fresh
+  // each time means a live name/avatar edit shows up here immediately too,
+  // instead of freezing whatever the peer looked like at selection time.
+  const selectedPeer = useMemo(
+    () => (selectedPeerId ? (profiles.find((p) => p.id === selectedPeerId) ?? null) : null),
+    [selectedPeerId, profiles],
   );
 
   // Deep-linked in from a push notification click — clear that peer's
@@ -136,7 +145,7 @@ export function DirectMessagesPanel({
     setSearchQuery("");
     setSearchResults([]);
     setScrollToMessageId(result.id);
-    setSelectedPeer(peer);
+    setSelectedPeerId(peer.id);
     clearDmUnread(peer.id);
   }
 
@@ -174,7 +183,7 @@ export function DirectMessagesPanel({
             <div className="flex-none flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
               <button
                 type="button"
-                onClick={() => setSelectedPeer(null)}
+                onClick={() => setSelectedPeerId(null)}
                 className="btn-icon sm:hidden flex-none"
                 style={{ width: 28, height: 28, padding: 0 }}
                 aria-label="Quay lại danh sách"
@@ -344,7 +353,7 @@ export function DirectMessagesPanel({
                 key={p.id}
                 type="button"
                 onClick={() => {
-                  setSelectedPeer(p);
+                  setSelectedPeerId(p.id);
                   clearDmUnread(p.id);
                 }}
                 className="ws-nav-link flex items-center gap-2.5 px-2 py-1.5 rounded-[8px] text-left"

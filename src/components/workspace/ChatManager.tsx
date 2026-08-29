@@ -21,6 +21,11 @@ type ChatManagerValue = {
   // Sender ids in "most recently messaged me" order, for the Messenger-style
   // dropdown to bubble a conversation to the top the moment a DM arrives.
   recentSenderOrder: string[];
+  // Rows patched by the profiles-realtime subscription below, keyed by id —
+  // profiles is otherwise a static array fetched once server-side and handed
+  // down as a prop, so a colleague changing their name/avatar mid-session
+  // would sit stale everywhere it's shown until a reload. See useLiveProfiles.
+  profileOverrides: Record<string, Profile>;
 };
 
 const ChatManagerContext = createContext<ChatManagerValue | null>(null);
@@ -38,6 +43,7 @@ export function ChatManagerProvider({
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>(initialUnreadCounts);
   const [meetingUnreadCounts, setMeetingUnreadCounts] = useState<Record<string, number>>({});
   const [recentSenderOrder, setRecentSenderOrder] = useState<string[]>([]);
+  const [profileOverrides, setProfileOverrides] = useState<Record<string, Profile>>({});
   // Mirrors openChats without forcing the realtime effect below to
   // re-subscribe every time a chat window opens or closes.
   const openChatIdsRef = useRef<Set<string>>(new Set());
@@ -176,6 +182,24 @@ export function ChatManagerProvider({
     };
   }, [currentUserId, resync]);
 
+  // Global — everyone's profile card, message sender labels, and DM roster
+  // read from this, so it's one subscription here rather than duplicated in
+  // every component that takes a `profiles` prop.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("profiles-live")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (payload) => {
+        const row = payload.new as Profile;
+        setProfileOverrides((prev) => ({ ...prev, [row.id]: row }));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const totalUnreadCount = useMemo(() => {
     const dmTotal = Object.values(unreadCounts).reduce((sum, n) => sum + n, 0);
     const meetingTotal = Object.values(meetingUnreadCounts).reduce((sum, n) => sum + n, 0);
@@ -194,6 +218,7 @@ export function ChatManagerProvider({
         setActiveMeetingChannel,
         totalUnreadCount,
         recentSenderOrder,
+        profileOverrides,
       }}
     >
       {children}
@@ -205,4 +230,24 @@ export function useChatManager() {
   const ctx = useContext(ChatManagerContext);
   if (!ctx) throw new Error("useChatManager must be used within ChatManagerProvider");
   return ctx;
+}
+
+// Patches a server-fetched `profiles` array with any live updates a
+// colleague has made since — a display name or avatar change shows up
+// immediately everywhere instead of only after a reload. Returns the same
+// array reference when nothing's changed, so it's safe to feed straight
+// into a component's existing profiles-derived useMemo calls.
+export function useLiveProfiles(baseProfiles: Profile[]): Profile[] {
+  const { profileOverrides } = useChatManager();
+  return useMemo(() => {
+    if (Object.keys(profileOverrides).length === 0) return baseProfiles;
+    let changed = false;
+    const next = baseProfiles.map((p) => {
+      const override = profileOverrides[p.id];
+      if (!override) return p;
+      changed = true;
+      return override;
+    });
+    return changed ? next : baseProfiles;
+  }, [baseProfiles, profileOverrides]);
 }

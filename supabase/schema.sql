@@ -52,6 +52,20 @@ create policy "a director can update any profile"
   to authenticated
   using (exists (select 1 from public.profiles p where p.id = auth.uid() and p.access_role = 'director'));
 
+-- Without this, a colleague changing their display name or avatar sat
+-- stale in every message sender label, the DM roster, and every open chat
+-- header until a reload — profiles is otherwise fetched once server-side
+-- and handed down as a static prop.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'profiles'
+  ) then
+    alter publication supabase_realtime add table public.profiles;
+  end if;
+end $$;
+
 -- The very first person to sign up on a fresh project has no one to grant
 -- them the director role, so promote them manually once via the SQL Editor:
 --   update public.profiles set access_role = 'director' where email = 'you@example.com';
@@ -1322,6 +1336,19 @@ create policy "creator or director can delete channels"
   on public.meeting_channels for delete
   to authenticated
   using (created_by = auth.uid() or public.current_access_role() = 'director');
+
+-- Without this, a room rename or password change from one tab/teammate
+-- left every other already-open tab showing the stale name/lock icon until
+-- a reload.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'meeting_channels'
+  ) then
+    alter publication supabase_realtime add table public.meeting_channels;
+  end if;
+end $$;
 
 -- A policy on meeting_channel_members can't check membership by querying
 -- meeting_channel_members inline — Postgres re-applies the same policy to

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
-import { useChatManager } from "@/components/workspace/ChatManager";
+import { useChatManager, useLiveProfiles } from "@/components/workspace/ChatManager";
 import { DirectMessagesPanel } from "@/components/workspace/DirectMessagesPanel";
 import { VideoCallModal } from "@/components/workspace/VideoCallModal";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
@@ -821,7 +821,7 @@ function RoomInfoDropdown({
 
 export function MeetingHub({
   currentUser,
-  profiles,
+  profiles: profilesProp,
   initialChannels,
   initialDmTabLabel,
 }: {
@@ -831,6 +831,9 @@ export function MeetingHub({
   initialDmTabLabel: string;
 }) {
   const { setActiveMeetingChannel, unreadCounts: dmUnreadCounts, meetingUnreadCounts } = useChatManager();
+  // Patched with any live profile edits (name/avatar) a colleague has made
+  // since this page loaded — see useLiveProfiles.
+  const profiles = useLiveProfiles(profilesProp);
   const [channels, setChannels] = useState(initialChannels);
   const [dmTabLabel, setDmTabLabelState] = useState(initialDmTabLabel);
   const [showLabelsEditor, setShowLabelsEditor] = useState(false);
@@ -885,17 +888,41 @@ export function MeetingHub({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "meeting_channel_members", filter: `profile_id=eq.${currentUser.id}` },
-        () => {
+        (payload) => {
+          const wasRemoved = payload.eventType === "DELETE";
+          const removedChannelId = wasRemoved ? (payload.old as { channel_id?: string }).channel_id : null;
           listChannels()
-            .then((fresh) => setChannels(fresh))
+            .then((fresh) => {
+              setChannels(fresh);
+              // Someone removed me (or I left from another device) while I
+              // was actively looking at that exact room — nudge me back to
+              // "Chung" instead of leaving the composer/message list mounted
+              // on a room I'm no longer a member of.
+              if (wasRemoved && removedChannelId && removedChannelId === activeIdRef.current) {
+                selectChannel(fresh.find((c) => c.is_general)?.id ?? null);
+              }
+            })
             .catch(() => {});
         },
       )
+      // A rename or password change from another tab/teammate — can't filter
+      // this to "channels I'm a member of" at the subscription level (realtime
+      // filters are plain column equality, not a membership subquery), so it
+      // takes every room's UPDATE and just no-ops for ids not in `channels`.
+      // Renames are rare enough that this is cheap.
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "meeting_channels" }, (payload) => {
+        const row = payload.new as { id: string; name: string; icon: string; password_hash: string | null };
+        refreshChannel(row.id, { name: row.name, icon: row.icon, has_password: !!row.password_hash });
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
+    // selectChannel is a plain (non-memoized) function redeclared every
+    // render — including it would tear down and resubscribe this socket on
+    // every render instead of just once per user.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser.id]);
 
   const [messages, setMessages] = useState<MeetingMessage[]>([]);
@@ -1106,6 +1133,32 @@ export function MeetingHub({
       cancelled = true;
     };
   }, [activeRoomIdForMembers]);
+
+  // Someone else joining/being added to or leaving/being removed from this
+  // exact room while its roster is on screen — a plain refetch rather than
+  // patching in place since a membership row alone doesn't carry the joined
+  // profile's name/avatar the roster needs to render.
+  useEffect(() => {
+    if (!activeRoomIdForMembers) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`channel-roster-${activeRoomIdForMembers}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "meeting_channel_members", filter: `channel_id=eq.${activeRoomIdForMembers}` },
+        () => {
+          listChannelMembers(activeRoomIdForMembers)
+            .then((members) => setRoomMembers(members))
+            .catch(() => {});
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeRoomIdForMembers]);
+
   const displayedRoomMembers = activeRoomIdForMembers ? roomMembers : [];
 
   const namesPattern = useMemo(() => {
@@ -1360,6 +1413,26 @@ export function MeetingHub({
         (payload) => {
           const old = payload.old as { id: string };
           setMessages((prev) => prev.filter((m) => m.id !== old.id));
+        },
+      )
+      // Recall ("Thu hồi") and pin/unpin are both plain UPDATEs on this row
+      // — without this, only the person who recalled/pinned a message ever
+      // saw it change; everyone else's screen stayed on the stale version
+      // until they reloaded or switched rooms.
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "meeting_messages", filter: `channel_id=eq.${activeId}` },
+        (payload) => {
+          const row = payload.new as MeetingMessage;
+          setMessages((prev) => prev.map((m) => (m.id === row.id ? row : m)));
+          setPinnedMessages((prev) => {
+            if (row.pinned_at) {
+              return prev.some((p) => p.id === row.id)
+                ? prev.map((p) => (p.id === row.id ? row : p))
+                : [row, ...prev];
+            }
+            return prev.filter((p) => p.id !== row.id);
+          });
         },
       )
       .on(
