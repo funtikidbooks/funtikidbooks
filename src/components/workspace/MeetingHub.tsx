@@ -959,6 +959,11 @@ export function MeetingHub({
   const [showRoomListMobile, setShowRoomListMobile] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
+  // Reply/translate/forward/pin/recall collapse behind a single "⋯" so the
+  // hover/touch action row reads as two icons (react, more) instead of a
+  // long strip of five or six — the translate button tipped it over into
+  // genuinely cluttered.
+  const [moreMenuFor, setMoreMenuFor] = useState<string | null>(null);
   const [replyingTo, setReplyingTo] = useState<MeetingMessage | null>(null);
   // Per-message translate-on-demand — cached by message id so toggling a
   // translation back on doesn't re-hit the (free, unofficial) endpoint.
@@ -1237,16 +1242,17 @@ export function MeetingHub({
   }, [reactions]);
 
   useEffect(() => {
-    if (!showEmojiPicker && !reactionPickerFor) return;
+    if (!showEmojiPicker && !reactionPickerFor && !moreMenuFor) return;
     function handleClickOutside(e: MouseEvent) {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
         setShowEmojiPicker(false);
         setReactionPickerFor(null);
+        setMoreMenuFor(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showEmojiPicker, reactionPickerFor]);
+  }, [showEmojiPicker, reactionPickerFor, moreMenuFor]);
 
   // Reconciles a server-confirmed row against the optimistic placeholder
   // that's standing in for it. Matches by tempId when the caller knows it
@@ -2729,59 +2735,8 @@ export function MeetingHub({
                     <button
                       type="button"
                       onClick={() => {
-                        setReplyingTo(m);
-                        textInputRef.current?.focus();
-                      }}
-                      className="btn-icon"
-                      style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
-                      aria-label="Trả lời tin nhắn"
-                    >
-                      ↩
-                    </button>
-                    {m.content && (
-                      <button
-                        type="button"
-                        onClick={() => toggleTranslate(m)}
-                        disabled={translatingIds.has(m.id)}
-                        className="btn-icon"
-                        style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
-                        aria-label="Dịch tin nhắn"
-                        title="Dịch Anh ⇄ Việt"
-                      >
-                        {translatingIds.has(m.id) ? "…" : "🌐"}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForwarding({
-                          content: m.content,
-                          attachment: m.attachment_url
-                            ? { url: m.attachment_url, filename: m.attachment_filename, mime: m.attachment_mime, size: m.attachment_size }
-                            : null,
-                        })
-                      }
-                      className="btn-icon"
-                      style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
-                      aria-label="Chuyển tiếp tin nhắn"
-                      title="Chuyển tiếp"
-                    >
-                      ➡️
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => togglePin(m)}
-                      className="btn-icon"
-                      style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
-                      aria-label={m.pinned_at ? "Bỏ ghim tin nhắn" : "Ghim tin nhắn"}
-                      title={m.pinned_at ? "Bỏ ghim" : "Ghim"}
-                    >
-                      📌
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
                         setShowEmojiPicker(false);
+                        setMoreMenuFor(null);
                         setReactionPickerFor(reactionPickerFor === m.id ? null : m.id);
                       }}
                       className="btn-icon"
@@ -2790,17 +2745,88 @@ export function MeetingHub({
                     >
                       😊
                     </button>
-                    {mine && !m.is_recalled && (
-                      <button
-                        type="button"
-                        onClick={() => handleRecallMessage(m.id)}
-                        className="btn-icon"
-                        style={{ width: 20, height: 20, padding: 0, fontSize: 10 }}
-                        aria-label="Thu hồi tin nhắn"
-                        title="Thu hồi tin nhắn"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReactionPickerFor(null);
+                        setMoreMenuFor(moreMenuFor === m.id ? null : m.id);
+                      }}
+                      className="btn-icon"
+                      style={{ width: 20, height: 20, padding: 0, fontSize: 13 }}
+                      aria-label="Thêm tuỳ chọn"
+                      title="Thêm"
+                    >
+                      ⋯
+                    </button>
+                    {moreMenuFor === m.id && (
+                      <div
+                        ref={popoverRef}
+                        className="card elev-lg flex flex-col p-1"
+                        style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, marginBottom: 6, zIndex: 10, minWidth: 150 }}
                       >
-                        ✕
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReplyingTo(m);
+                            setMoreMenuFor(null);
+                            textInputRef.current?.focus();
+                          }}
+                          className="ws-nav-link flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] text-[13px] font-semibold text-left"
+                        >
+                          ↩ Trả lời
+                        </button>
+                        {m.content && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMoreMenuFor(null);
+                              toggleTranslate(m);
+                            }}
+                            disabled={translatingIds.has(m.id)}
+                            className="ws-nav-link flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] text-[13px] font-semibold text-left"
+                          >
+                            🌐 {translatingIds.has(m.id) ? "Đang dịch…" : "Dịch Anh ⇄ Việt"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMoreMenuFor(null);
+                            setForwarding({
+                              content: m.content,
+                              attachment: m.attachment_url
+                                ? { url: m.attachment_url, filename: m.attachment_filename, mime: m.attachment_mime, size: m.attachment_size }
+                                : null,
+                            });
+                          }}
+                          className="ws-nav-link flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] text-[13px] font-semibold text-left"
+                        >
+                          ➡️ Chuyển tiếp
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMoreMenuFor(null);
+                            togglePin(m);
+                          }}
+                          className="ws-nav-link flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] text-[13px] font-semibold text-left"
+                        >
+                          📌 {m.pinned_at ? "Bỏ ghim" : "Ghim"}
+                        </button>
+                        {mine && !m.is_recalled && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMoreMenuFor(null);
+                              handleRecallMessage(m.id);
+                            }}
+                            className="ws-nav-link flex items-center gap-2 px-2.5 py-1.5 rounded-[8px] text-[13px] font-semibold text-left"
+                            style={{ color: "var(--status-red, #c22)" }}
+                          >
+                            ✕ Thu hồi
+                          </button>
+                        )}
+                      </div>
                     )}
                     {reactionPickerFor === m.id && (
                       <div
