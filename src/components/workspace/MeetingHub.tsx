@@ -871,6 +871,33 @@ export function MeetingHub({
     // landed on — not meant to react to later in-app room switches.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Someone else adding this user to a room (an invite) or this user joining
+  // a public room from a different device/tab both write a
+  // meeting_channel_members row for them — without watching that, the new
+  // room only ever showed up after a full page reload, since `channels`
+  // above otherwise only ever updates in response to an action taken from
+  // *this* tab (see handleCreated/handleJoined/handleLeave etc.).
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`channel-memberships-${currentUser.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "meeting_channel_members", filter: `profile_id=eq.${currentUser.id}` },
+        () => {
+          listChannels()
+            .then((fresh) => setChannels(fresh))
+            .catch(() => {});
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser.id]);
+
   const [messages, setMessages] = useState<MeetingMessage[]>([]);
   const [reactions, setReactions] = useState<MeetingReaction[]>([]);
   const [reads, setReads] = useState<MeetingChannelRead[]>([]);

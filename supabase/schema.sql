@@ -1398,6 +1398,21 @@ create policy "staff or room owner can remove memberships"
     )
   );
 
+-- Without this, being invited to a room (someone else inserting a
+-- membership row for you) or joining one from a different device never
+-- shows up on this table's other open sessions until they reload — the
+-- client's realtime subscription only ever receives Postgres changes for
+-- tables actually added to this publication.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'meeting_channel_members'
+  ) then
+    alter publication supabase_realtime add table public.meeting_channel_members;
+  end if;
+end $$;
+
 drop policy if exists "channel members can read messages" on public.meeting_messages;
 create policy "channel members can read messages"
   on public.meeting_messages for select
