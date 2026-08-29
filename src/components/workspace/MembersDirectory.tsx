@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
+import { createClient } from "@/lib/supabase/client";
 import { usePresence } from "@/lib/usePresence";
 import { updateJoinedAt } from "@/lib/actions/admin";
 import { thumbnailUrl } from "@/lib/imageTransform";
@@ -58,6 +59,36 @@ export function MembersDirectory({
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const onlineIds = usePresence(currentUserId);
+
+  // A colleague's name/avatar/job-title edit, a brand-new staff account, or
+  // a removed one now shows up here immediately — this is exactly the kind
+  // of screen two directors/admins might have open at once.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("members-directory-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "profiles" }, (payload) => {
+        const row = payload.new as Profile;
+        setItems((prev) =>
+          prev.some((p) => p.id === row.id)
+            ? prev
+            : [...prev, row].sort((a, b) => a.display_name.localeCompare(b.display_name, "vi")),
+        );
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, (payload) => {
+        const row = payload.new as Profile;
+        setItems((prev) => prev.map((p) => (p.id === row.id ? row : p)));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "profiles" }, (payload) => {
+        const old = payload.old as { id: string };
+        setItems((prev) => prev.filter((p) => p.id !== old.id));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // Filter tabs are generated straight from whatever chức danh (job title)
   // values are actually assigned to staff — no separate curated category.

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { createClient } from "@/lib/supabase/client";
 import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from "@/lib/actions/calendar";
 import { EVENT_CATEGORIES, categoryOf, holidayOn } from "@/lib/constants/calendar";
 import type { CalendarEvent, EventCategory } from "@/lib/types";
@@ -105,6 +106,32 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
     setEvents((prev) => [...prev, ev]);
     setCreateDate(null);
   }
+
+  // The company calendar is exactly the kind of shared view several people
+  // glance at (or add a meeting to) at once — an event someone else just
+  // created/edited/deleted shows up immediately instead of needing a reload.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("calendar-events-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "calendar_events" }, (payload) => {
+        const row = payload.new as CalendarEvent;
+        setEvents((prev) => (prev.some((e) => e.id === row.id) ? prev : [...prev, row]));
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "calendar_events" }, (payload) => {
+        const row = payload.new as CalendarEvent;
+        setEvents((prev) => prev.map((e) => (e.id === row.id ? row : e)));
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "calendar_events" }, (payload) => {
+        const old = payload.old as { id: string };
+        setEvents((prev) => prev.filter((e) => e.id !== old.id));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   function handleUpdated(ev: CalendarEvent) {
     setEvents((prev) => prev.map((x) => (x.id === ev.id ? ev : x)));

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -12,7 +12,8 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import type { Board, BoardColumn, BoardLabel, Profile, TaskWithAssignee } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
+import type { Board, BoardColumn, BoardLabel, Profile, Task, TaskWithAssignee } from "@/lib/types";
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
 import { AddTaskDialog } from "./AddTaskDialog";
@@ -77,6 +78,17 @@ export function WorkspaceBoard({
   );
 
   const allTasks = useMemo(() => Object.values(tasksByColumn).flat(), [tasksByColumn]);
+  // Read from inside the realtime subscription below, which only subscribes
+  // once per board — a plain closure over allTasks/profiles would keep
+  // seeing whatever those were at mount, not their current values.
+  const allTasksRef = useRef(allTasks);
+  useEffect(() => {
+    allTasksRef.current = allTasks;
+  }, [allTasks]);
+  const profilesRef = useRef(profiles);
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
   const doneColumn = columns.find((c) => isDoneColumnTitle(c.title));
   const doneCount = doneColumn ? (tasksByColumn[doneColumn.id]?.length ?? 0) : 0;
   const activeTask = activeTaskId ? allTasks.find((t) => t.id === activeTaskId) : null;
@@ -233,11 +245,18 @@ export function WorkspaceBoard({
     });
   }
 
-  function handleColumnDeleted(columnId: string) {
+  // Split from handleColumnDeleted so the realtime subscription below can
+  // reuse just the local cleanup when a teammate deletes a column, without
+  // also re-issuing the delete action that already happened on their end.
+  function removeColumnLocally(columnId: string) {
     setColumns((prev) => prev.filter((c) => c.id !== columnId));
     setTasksByColumn((prev) =>
       Object.fromEntries(Object.entries(prev).filter(([id]) => id !== columnId)),
     );
+  }
+
+  function handleColumnDeleted(columnId: string) {
+    removeColumnLocally(columnId);
     startTransition(async () => {
       try {
         await deleteColumn(columnId);
@@ -246,6 +265,105 @@ export function WorkspaceBoard({
       }
     });
   }
+
+  // A card someone else added/moved/edited/deleted, a column they added/
+  // renamed/deleted, or a label they added/recolored/deleted — this is the
+  // one screen the whole team has open side by side all day, so none of
+  // that should ever need a reload to show up. A raw `tasks` row (from
+  // realtime) is missing the joined assignee profile and checklist/comment/
+  // attachment counts a TaskWithAssignee needs; the assignee is resolved
+  // from the `profiles` prop already on hand (same trick AddTaskDialog uses
+  // reconciling its own optimistic create), and the count fields are just
+  // left undefined — they render as 0 until the card is actually opened,
+  // which already re-fetches full detail.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`board-${board.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "tasks", filter: `board_id=eq.${board.id}` },
+        (payload) => {
+          const row = payload.new as Task;
+          if (allTasksRef.current.some((t) => t.id === row.id)) return; // already added optimistically in this tab
+          const assignee = profilesRef.current.find((p) => p.id === row.assignee_id) ?? null;
+          handleTaskCreated(row.column_id, { ...row, assignee, assignees: assignee ? [assignee] : [] });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "tasks", filter: `board_id=eq.${board.id}` },
+        (payload) => {
+          const row = payload.new as Task;
+          const existing = allTasksRef.current.find((t) => t.id === row.id);
+          const assignee =
+            existing && existing.assignee_id === row.assignee_id
+              ? existing.assignee
+              : (profilesRef.current.find((p) => p.id === row.assignee_id) ?? null);
+          handleTaskUpdated({ ...(existing ?? {}), ...row, assignee, assignees: assignee ? [assignee] : [] } as TaskWithAssignee);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "tasks" },
+        (payload) => {
+          const old = payload.old as { id: string };
+          handleTaskDeleted(old.id);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "board_columns", filter: `board_id=eq.${board.id}` },
+        (payload) => {
+          const row = payload.new as BoardColumn;
+          setColumns((prev) =>
+            prev.some((c) => c.id === row.id) ? prev : [...prev, row].sort((a, b) => a.position - b.position),
+          );
+          setTasksByColumn((prev) => (row.id in prev ? prev : { ...prev, [row.id]: [] }));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "board_columns", filter: `board_id=eq.${board.id}` },
+        (payload) => {
+          const row = payload.new as BoardColumn;
+          setColumns((prev) =>
+            prev.map((c) => (c.id === row.id ? row : c)).sort((a, b) => a.position - b.position),
+          );
+        },
+      )
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "board_columns" }, (payload) => {
+        const old = payload.old as { id: string };
+        removeColumnLocally(old.id);
+      })
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "board_labels", filter: `board_id=eq.${board.id}` },
+        (payload) => {
+          const row = payload.new as BoardLabel;
+          setBoardLabels((prev) =>
+            prev.some((l) => l.id === row.id) ? prev : [...prev, row].sort((a, b) => a.position - b.position),
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "board_labels", filter: `board_id=eq.${board.id}` },
+        (payload) => {
+          const row = payload.new as BoardLabel;
+          setBoardLabels((prev) => prev.map((l) => (l.id === row.id ? row : l)));
+        },
+      )
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "board_labels" }, (payload) => {
+        const old = payload.old as { id: string };
+        setBoardLabels((prev) => prev.filter((l) => l.id !== old.id));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [board.id]);
 
   async function handleCreateLabel(name: string, color: string) {
     const tempId = `temp-${crypto.randomUUID()}`;

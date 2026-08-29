@@ -355,6 +355,25 @@ create policy "staff can read tasks" on public.tasks for select to authenticated
 drop policy if exists "staff can write tasks" on public.tasks;
 create policy "staff can write tasks" on public.tasks for all to authenticated using (true) with check (true);
 
+-- Bảng công việc is the one screen the whole team has open side by side all
+-- day — without these, a card someone else added/moved/edited, or a column
+-- they added/renamed, only ever showed up after a reload.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'tasks'
+  ) then
+    alter publication supabase_realtime add table public.tasks;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'board_columns'
+  ) then
+    alter publication supabase_realtime add table public.board_columns;
+  end if;
+end $$;
+
 -- keep updated_at current on every task edit
 create or replace function public.set_updated_at()
 returns trigger
@@ -1164,6 +1183,18 @@ create trigger calendar_events_set_updated_at
   before update on public.calendar_events
   for each row execute procedure public.set_updated_at();
 
+-- Without this, an event someone else added/edited/deleted on the shared
+-- company calendar only showed up for other viewers after a reload.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'calendar_events'
+  ) then
+    alter publication supabase_realtime add table public.calendar_events;
+  end if;
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- visitor_conversations / visitor_messages: the "chat with us" widget on the
 -- public site — any anonymous visitor can start one, only director/admin
@@ -1732,6 +1763,16 @@ create policy "staff can write board labels"
   to authenticated
   using (true)
   with check (true);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'board_labels'
+  ) then
+    alter publication supabase_realtime add table public.board_labels;
+  end if;
+end $$;
 
 -- Seed the real board with the same labels already in use on the studio's
 -- Trello board, so the migrated cards have something to pick from right
