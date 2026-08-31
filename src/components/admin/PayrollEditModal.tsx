@@ -5,9 +5,9 @@ import Link from "next/link";
 import { Modal } from "@/components/ui/Modal";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { getMonthAttendance } from "@/lib/actions/attendance";
-import { getStaffSalary, upsertPayroll, upsertStaffSalary } from "@/lib/actions/payroll";
+import { getStaffSalary, listPayrollFeedback, upsertPayroll, upsertStaffSalary } from "@/lib/actions/payroll";
 import { MONTH_LABELS, summarizeAttendance } from "@/lib/constants/attendance";
-import type { PayrollItem, PayrollRecord, PayrollStatus, Profile } from "@/lib/types";
+import type { PayrollFeedback, PayrollItem, PayrollRecord, PayrollStatus, Profile } from "@/lib/types";
 
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
@@ -52,6 +52,19 @@ export function PayrollEditModal({
   const [standardWorkDays, setStandardWorkDays] = useState<number | "">(24);
   const [savingSalary, setSavingSalary] = useState(false);
   const [autoFilledWorkDays, setAutoFilledWorkDays] = useState(false);
+
+  const [feedback, setFeedback] = useState<PayrollFeedback[]>([]);
+
+  useEffect(() => {
+    if (!record) return;
+    let cancelled = false;
+    listPayrollFeedback(record.id)
+      .then((items) => !cancelled && setFeedback(items))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [record]);
 
   useEffect(() => {
     let cancelled = false;
@@ -188,6 +201,22 @@ export function PayrollEditModal({
         </div>
 
         <div className="flex flex-col gap-5 px-6 py-6 max-h-[70vh] overflow-y-auto">
+          {feedback.length > 0 && (
+            <div className="card p-3 flex flex-col gap-1.5" style={{ background: "rgba(192,82,79,0.08)", border: "1px solid rgba(192,82,79,0.3)" }}>
+              <span className="text-xs font-bold" style={{ color: "var(--status-red)" }}>
+                PHẢN HỒI TỪ {profile.display_name.toUpperCase()}
+              </span>
+              {feedback.map((f) => (
+                <div key={f.id} className="text-sm">
+                  <p className="whitespace-pre-wrap">{f.message}</p>
+                  <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                    {new Date(f.created_at).toLocaleString("vi-VN")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="card p-3 flex flex-col gap-2" style={{ background: "var(--color-accent-100)" }}>
             <span className="text-xs font-bold" style={{ color: "var(--color-accent-700)" }}>
               LƯƠNG CỐ ĐỊNH / THÁNG

@@ -824,8 +824,11 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- payroll_records: monthly salary sheet, director-only end to end — staff
--- never get a read policy here at all, unlike attendance. Line items
+-- payroll_records: monthly salary sheet, director/PM-write end to end.
+-- Staff CAN read their own row (added after the initial table creation, so
+-- they can see what they're being paid from the workspace's own Chấm công
+-- page) but can't write any of it — see payroll_feedback below for how they
+-- flag a correction instead. Line items
 -- (allowances, bonuses, deductions) are stored as jsonb the same way
 -- invoice items are, since they're always edited as a whole with the
 -- record. The director's UI suggests deduction line items from that same
@@ -864,10 +867,46 @@ create policy "director or pm can manage payroll"
   using (public.can_manage_hr())
   with check (public.can_manage_hr());
 
+drop policy if exists "staff can read own payroll" on public.payroll_records;
+create policy "staff can read own payroll"
+  on public.payroll_records for select
+  to authenticated
+  using (profile_id = auth.uid());
+
 drop trigger if exists payroll_records_set_updated_at on public.payroll_records;
 create trigger payroll_records_set_updated_at
   before update on public.payroll_records
   for each row execute procedure public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- payroll_feedback: a lightweight, append-only log an employee can leave on
+-- their own payslip — "this doesn't look right" — without being able to
+-- touch the payroll_records row itself (no update/delete policy for staff
+-- at all here, matching the "flag it, don't edit it" intent). Director/PM
+-- see every message; staff only ever see their own.
+-- ---------------------------------------------------------------------------
+create table if not exists public.payroll_feedback (
+  id uuid primary key default gen_random_uuid(),
+  payroll_record_id uuid not null references public.payroll_records (id) on delete cascade,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.payroll_feedback enable row level security;
+
+drop policy if exists "staff can add and read own payroll feedback" on public.payroll_feedback;
+create policy "staff can add and read own payroll feedback"
+  on public.payroll_feedback for all
+  to authenticated
+  using (profile_id = auth.uid())
+  with check (profile_id = auth.uid());
+
+drop policy if exists "director or pm can read payroll feedback" on public.payroll_feedback;
+create policy "director or pm can read payroll feedback"
+  on public.payroll_feedback for select
+  to authenticated
+  using (public.can_manage_hr());
 
 -- ---------------------------------------------------------------------------
 -- staff_salary: each employee's fixed monthly salary + the number of work

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { listMyMonthAttendance, listOffDates } from "@/lib/actions/attendance";
+import { MyPayrollPanel } from "@/components/workspace/MyPayrollPanel";
 import {
   MONTH_LABELS,
   WEEKDAYS_SHORT,
@@ -163,6 +164,8 @@ export function MyAttendance({
           <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>Nghỉ phép</span>
         </div>
       </div>
+
+      <MyPayrollPanel monthStart={monthStart} />
 
       <div className="flex items-center gap-3">
         <button type="button" onClick={() => goToMonth(addMonths(monthStart, -1))} className="btn-icon" aria-label="Tháng trước">

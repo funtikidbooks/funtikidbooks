@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
-import type { PayrollItem, PayrollRecord, PayrollStatus, StaffSalary } from "@/lib/types";
+import type { PayrollFeedback, PayrollItem, PayrollRecord, PayrollStatus, StaffSalary } from "@/lib/types";
 
 // Director, or any staff whose chức danh is exactly "Project Manager" —
 // mirrors the can_manage_hr() RLS helper in supabase/schema.sql.
@@ -17,6 +17,18 @@ async function requireHrManager() {
   if (profile?.access_role !== "director" && profile?.role !== "Project Manager") {
     throw new Error("Bạn không có quyền này.");
   }
+  return { supabase, user };
+}
+
+// Any logged-in staff member, reading only their own data — RLS on
+// payroll_records/payroll_feedback (profile_id = auth.uid()) is the real
+// enforcement here, this just gets a client + the caller's id.
+async function requireUser() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Bạn cần đăng nhập.");
   return { supabase, user };
 }
 
@@ -95,4 +107,58 @@ export async function upsertStaffSalary(
 
   if (error || !data) throw new Error("Không thể lưu lương cố định");
   return data as StaffSalary;
+}
+
+// Director/PM view of every feedback message left on one payslip — shown
+// in the payroll edit modal so a flagged mistake doesn't go unnoticed.
+export async function listPayrollFeedback(payrollRecordId: string): Promise<PayrollFeedback[]> {
+  const { supabase } = await requireHrManager();
+  const { data } = await supabase
+    .from("payroll_feedback")
+    .select("*")
+    .eq("payroll_record_id", payrollRecordId)
+    .order("created_at", { ascending: true });
+  return (data ?? []) as PayrollFeedback[];
+}
+
+// The caller's own payslip for the month — this is what backs the
+// collapsible "Bảng lương của tôi" panel on the workspace Chấm công page.
+// RLS's own "staff can read own payroll" policy is the real gate; the
+// .eq("profile_id", user.id) here just narrows the query to match it.
+export async function getMyPayroll(monthStartInput?: string): Promise<PayrollRecord | null> {
+  const { supabase, user } = await requireUser();
+  const monthStart = firstOfMonth(monthStartInput ?? vnToday());
+  const { data } = await supabase
+    .from("payroll_records")
+    .select("*")
+    .eq("profile_id", user.id)
+    .eq("month", monthStart)
+    .maybeSingle();
+  return (data as PayrollRecord) ?? null;
+}
+
+export async function listMyPayrollFeedback(payrollRecordId: string): Promise<PayrollFeedback[]> {
+  const { supabase, user } = await requireUser();
+  const { data } = await supabase
+    .from("payroll_feedback")
+    .select("*")
+    .eq("payroll_record_id", payrollRecordId)
+    .eq("profile_id", user.id)
+    .order("created_at", { ascending: true });
+  return (data ?? []) as PayrollFeedback[];
+}
+
+export async function addMyPayrollFeedback(payrollRecordId: string, message: string): Promise<PayrollFeedback> {
+  const { supabase, user } = await requireUser();
+  const trimmed = message.trim();
+  if (!trimmed) throw new Error("Cần nhập nội dung phản hồi.");
+
+  const { data, error } = await supabase
+    .from("payroll_feedback")
+    .insert({ payroll_record_id: payrollRecordId, profile_id: user.id, message: trimmed })
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error("Không thể gửi phản hồi.");
+  return data as PayrollFeedback;
 }
