@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -65,6 +65,25 @@ function TypingDots({ label }: { label: string }) {
 
 function formatTime(date: string) {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(date));
+}
+
+function isSameCalendarDay(a: string, b: string) {
+  const da = new Date(a);
+  const db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+}
+
+// Same Zalo-style date divider as the room chat (MeetingHub) — kept as its
+// own local copy rather than a shared import, same reasoning as formatTime
+// above.
+function formatDateDivider(date: string) {
+  const d = new Date(date);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (isSameCalendarDay(date, today.toISOString())) return "Hôm nay";
+  if (isSameCalendarDay(date, yesterday.toISOString())) return "Hôm qua";
+  return new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 }
 
 function isImage(mime: string | null) {
@@ -682,8 +701,10 @@ export function DirectConversation({
           // timestamp, instead of every single message getting its own gap.
           const prev = index > 0 ? messages[index - 1] : null;
           const next = index < messages.length - 1 ? messages[index + 1] : null;
+          const isNewDay = !prev || !isSameCalendarDay(m.created_at, prev.created_at);
           const isGroupStart =
             !prev ||
+            isNewDay ||
             prev.sender_id !== m.sender_id ||
             new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() > 5 * 60 * 1000;
           const isGroupEnd =
@@ -757,9 +778,19 @@ export function DirectConversation({
             </span>
           );
           return (
-            <div
+            <Fragment key={m.id}>
+              {isNewDay && (
+                <div className="flex items-center justify-center my-3">
+                  <span
+                    className="text-[11px] font-semibold px-3 py-1 rounded-full"
+                    style={{ background: "var(--color-surface)", color: "var(--color-neutral-500)" }}
+                  >
+                    {formatDateDivider(m.created_at)}
+                  </span>
+                </div>
+              )}
+              <div
               id={`dm-msg-${m.id}`}
-              key={m.id}
               // items-end/items-start only aligns THIS wrapper's own children
               // — inside the outer flex-col message list (align-items:
               // stretch by default), the wrapper itself still anchors to the
@@ -951,6 +982,7 @@ export function DirectConversation({
                 </span>
               )}
             </div>
+            </Fragment>
           );
         })}
         {peerTyping && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
@@ -64,6 +64,25 @@ const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀", "🙏"];
 
 function formatTime(date: string) {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(date));
+}
+
+function isSameCalendarDay(a: string, b: string) {
+  const da = new Date(a);
+  const db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+}
+
+// Zalo-style date divider between messages that land on different days —
+// "Hôm nay"/"Hôm qua" for the two most recent, a full weekday + date
+// otherwise so scrolling back through older history still reads clearly.
+function formatDateDivider(date: string) {
+  const d = new Date(date);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (isSameCalendarDay(date, today.toISOString())) return "Hôm nay";
+  if (isSameCalendarDay(date, yesterday.toISOString())) return "Hôm qua";
+  return new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 }
 
 function isImage(mime: string | null) {
@@ -2707,8 +2726,10 @@ export function MeetingHub({
                 // exactly the "too much dead space" staff were pointing out.
                 const prev = index > 0 ? messages[index - 1] : null;
                 const next = index < messages.length - 1 ? messages[index + 1] : null;
+                const isNewDay = !prev || !isSameCalendarDay(m.created_at, prev.created_at);
                 const isGroupStart =
                   !prev ||
+                  isNewDay ||
                   prev.sender_id !== m.sender_id ||
                   new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() > 5 * 60 * 1000;
                 // Same idea in reverse — only the last message of a run shows
@@ -2892,8 +2913,18 @@ export function MeetingHub({
                 );
 
                 return (
-                  <div
-                    key={m.id}
+                  <Fragment key={m.id}>
+                    {isNewDay && (
+                      <div className="flex items-center justify-center my-3">
+                        <span
+                          className="text-[11px] font-semibold px-3 py-1 rounded-full"
+                          style={{ background: "var(--color-surface)", color: "var(--color-neutral-500)" }}
+                        >
+                          {formatDateDivider(m.created_at)}
+                        </span>
+                      </div>
+                    )}
+                    <div
                     id={`meeting-msg-${m.id}`}
                     className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}
                     style={{ marginTop: isGroupStart ? 12 : 2, opacity: isPending ? 0.6 : 1 }}
@@ -3103,6 +3134,7 @@ export function MeetingHub({
                       )}
                     </div>
                   </div>
+                  </Fragment>
                 );
               })}
             </div>
