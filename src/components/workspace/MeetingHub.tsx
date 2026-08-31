@@ -2758,74 +2758,101 @@ export function MeetingHub({
                     >
                       ⋯
                     </button>
-                    {moreMenuFor === m.id && (
-                      <Modal onClose={() => setMoreMenuFor(null)} maxWidth={300}>
-                        <div className="flex flex-col p-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReplyingTo(m);
-                              setMoreMenuFor(null);
-                              textInputRef.current?.focus();
-                            }}
-                            className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
-                          >
-                            ↩ Trả lời
-                          </button>
-                          {m.content && (
+                    {moreMenuFor === m.id &&
+                      (() => {
+                        const menuItems = (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplyingTo(m);
+                                setMoreMenuFor(null);
+                                textInputRef.current?.focus();
+                              }}
+                              className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
+                            >
+                              ↩ Trả lời
+                            </button>
+                            {m.content && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMoreMenuFor(null);
+                                  toggleTranslate(m);
+                                }}
+                                disabled={translatingIds.has(m.id)}
+                                className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
+                              >
+                                🌐 {translatingIds.has(m.id) ? "Đang dịch…" : "Dịch Anh ⇄ Việt"}
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
                                 setMoreMenuFor(null);
-                                toggleTranslate(m);
+                                setForwarding({
+                                  content: m.content,
+                                  attachment: m.attachment_url
+                                    ? { url: m.attachment_url, filename: m.attachment_filename, mime: m.attachment_mime, size: m.attachment_size }
+                                    : null,
+                                });
                               }}
-                              disabled={translatingIds.has(m.id)}
                               className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
                             >
-                              🌐 {translatingIds.has(m.id) ? "Đang dịch…" : "Dịch Anh ⇄ Việt"}
+                              ➡️ Chuyển tiếp
                             </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMoreMenuFor(null);
-                              setForwarding({
-                                content: m.content,
-                                attachment: m.attachment_url
-                                  ? { url: m.attachment_url, filename: m.attachment_filename, mime: m.attachment_mime, size: m.attachment_size }
-                                  : null,
-                              });
-                            }}
-                            className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
-                          >
-                            ➡️ Chuyển tiếp
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMoreMenuFor(null);
-                              togglePin(m);
-                            }}
-                            className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
-                          >
-                            📌 {m.pinned_at ? "Bỏ ghim" : "Ghim"}
-                          </button>
-                          {mine && !m.is_recalled && (
                             <button
                               type="button"
                               onClick={() => {
                                 setMoreMenuFor(null);
-                                handleRecallMessage(m.id);
+                                togglePin(m);
                               }}
                               className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
-                              style={{ color: "var(--status-red, #c22)" }}
                             >
-                              ✕ Thu hồi
+                              📌 {m.pinned_at ? "Bỏ ghim" : "Ghim"}
                             </button>
-                          )}
-                        </div>
-                      </Modal>
-                    )}
+                            {mine && !m.is_recalled && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMoreMenuFor(null);
+                                  handleRecallMessage(m.id);
+                                }}
+                                className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
+                                style={{ color: "var(--status-red, #c22)" }}
+                              >
+                                ✕ Thu hồi
+                              </button>
+                            )}
+                          </>
+                        );
+
+                        // Phone keeps the centered sheet (built to dodge the
+                        // cut-off/clipping a viewport-edge-anchored popover
+                        // got into on small screens) — iPad/desktop have
+                        // room to spare, so there sếp Phúc wants the older
+                        // dropdown-from-the-⋯-button behavior back.
+                        return isMobile ? (
+                          <Modal onClose={() => setMoreMenuFor(null)} maxWidth={300}>
+                            <div className="flex flex-col p-1.5">{menuItems}</div>
+                          </Modal>
+                        ) : (
+                          <div
+                            ref={popoverRef}
+                            className="card elev-lg flex flex-col p-1.5"
+                            style={{
+                              position: "absolute",
+                              bottom: "100%",
+                              [mine ? "right" : "left"]: 0,
+                              marginBottom: 6,
+                              zIndex: 10,
+                              minWidth: 190,
+                            }}
+                          >
+                            {menuItems}
+                          </div>
+                        );
+                      })()}
                     {reactionPickerFor === m.id && (
                       <div
                         ref={popoverRef}
