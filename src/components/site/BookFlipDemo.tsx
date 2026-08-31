@@ -41,7 +41,7 @@ function buildLeaves(pages: string[], backCover: string | null): Leaf[] {
   return leaves;
 }
 
-const PAGE_WIDTH = "min(78vw, 340px)";
+const PAGE_WIDTH = "min(78vw, 680px)";
 const OPEN_PAGE_WIDTH = "min(39vw, 340px)";
 // Matches the reference book's own proportions — a taller portrait page,
 // not a square one.

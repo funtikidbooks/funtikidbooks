@@ -55,21 +55,6 @@ const bookPages = [
 
 const bookBackCover = `${BOOK_DEMO_BASE}/book-demo/momo-dodo-back-cover-a73caed4-2a7b-4a91-9bcf-c7717adb57fb.jpg`;
 
-// Two other real Funti Kidbooks covers, dimmed and desaturated behind the
-// interactive demo (not clickable) purely to suggest "a shelf of books"
-// around it, echoing the studio's portfolio-tile mockups elsewhere on site.
-const sideCovers = [
-  {
-    src: "https://ueixkrrdwptymmawwred.supabase.co/storage/v1/object/public/site-content/projects/7489c88b-ce6d-4755-86a8-dd79e3acf8c4.jpg",
-    transform: "translateX(-72%) rotate(-8deg) scale(0.85)",
-  },
-  {
-    src: "https://ueixkrrdwptymmawwred.supabase.co/storage/v1/object/public/site-content/projects/18ebf42a-309b-4697-a610-dc0fe9b9f338.jpg",
-    transform: "translateX(72%) rotate(8deg) scale(0.85)",
-  },
-];
-const BOOK_COVER_ASPECT_RATIO = "668 / 854";
-
 export default async function ServicesPage() {
   const [locale, editorRole, pricing] = await Promise.all([
     getLocale(),
@@ -104,30 +89,7 @@ export default async function ServicesPage() {
               {t.services.previewSubtitle}
             </p>
             <div className="relative w-full flex items-center justify-center">
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden>
-                {sideCovers.map((cover) => (
-                  <div
-                    key={cover.src}
-                    className="absolute overflow-hidden rounded-xl"
-                    style={{
-                      width: "min(50vw, 260px)",
-                      aspectRatio: BOOK_COVER_ASPECT_RATIO,
-                      transform: cover.transform,
-                      boxShadow: "0 20px 40px -16px rgba(0,0,0,0.35)",
-                    }}
-                  >
-                    <img
-                      src={cover.src}
-                      alt=""
-                      className="w-full h-full object-cover"
-                      style={{ filter: "brightness(0.85) grayscale(1)" }}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="relative">
-                <BookFlipDemo pages={bookPages} alt={t.services.previewAlt} backCover={bookBackCover} />
-              </div>
+              <BookFlipDemo pages={bookPages} alt={t.services.previewAlt} backCover={bookBackCover} />
             </div>
           </Reveal>
         )}
