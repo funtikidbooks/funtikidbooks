@@ -94,13 +94,15 @@ export function PayrollEditModal({
     };
   }, [profile.id]);
 
-  // Lương/ngày = lương tháng ÷ số ngày công chuẩn, làm tròn đến nghìn đồng
-  // gần nhất cho gọn số.
+  // Lương/ngày = lương tháng ÷ số ngày công chuẩn, làm tròn đến đồng gần
+  // nhất — VNĐ không có đơn vị lẻ hơn đồng, nên đây là mức chính xác nhất
+  // có thể, không làm tròn thô đến nghìn đồng như trước (làm lệch tổng
+  // lương tính ra tới vài trăm đồng mỗi ngày công, nhân lên cả tháng).
   const dailyRate = useMemo(() => {
     const salary = Number(monthlySalary) || 0;
     const days = Number(standardWorkDays) || 0;
     if (!salary || !days) return 0;
-    return Math.round(salary / days / 1000) * 1000;
+    return Math.round(salary / days);
   }, [monthlySalary, standardWorkDays]);
 
   // Prefills "Số ngày đi làm" from the attendance count once it's loaded —
