@@ -11,6 +11,7 @@ import type {
   PayrollItem,
   PayrollRecord,
   PayrollStatus,
+  StaffBankInfo,
   StaffSalary,
 } from "@/lib/types";
 
@@ -252,6 +253,15 @@ export async function getMyStaffSalary(): Promise<StaffSalary | null> {
   const { supabase, user } = await requireUser();
   const { data } = await supabase.from("staff_salary").select("*").eq("profile_id", user.id).maybeSingle();
   return (data as StaffSalary) ?? null;
+}
+
+// The caller's own bank account on file — lets someone double-check the
+// director has the right one saved, right on their own payslip panel.
+// RLS's own "staff can read own bank info" policy is the real gate here.
+export async function getMyBankInfo(): Promise<StaffBankInfo | null> {
+  const { supabase, user } = await requireUser();
+  const { data } = await supabase.from("staff_bank_info").select("*").eq("profile_id", user.id).maybeSingle();
+  return (data as StaffBankInfo) ?? null;
 }
 
 export async function getMyPayrollConfirmation(payrollRecordId: string): Promise<PayrollConfirmation | null> {

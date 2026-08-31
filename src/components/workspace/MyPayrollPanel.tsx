@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import {
   addMyPayrollFeedback,
   confirmMyPayroll,
+  getMyBankInfo,
   getMyPayroll,
   getMyPayrollConfirmation,
   getMyStaffSalary,
   listMyPayrollFeedback,
 } from "@/lib/actions/payroll";
-import type { PayrollConfirmation, PayrollFeedback, PayrollRecord, StaffSalary } from "@/lib/types";
+import { bankColor, formatAccountNumber } from "@/lib/bankDisplay";
+import type { PayrollConfirmation, PayrollFeedback, PayrollRecord, StaffBankInfo, StaffSalary } from "@/lib/types";
 
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
@@ -23,6 +25,7 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
   const [loading, setLoading] = useState(false);
   const [record, setRecord] = useState<PayrollRecord | null>(null);
   const [salary, setSalary] = useState<StaffSalary | null>(null);
+  const [bankInfo, setBankInfo] = useState<StaffBankInfo | null>(null);
   const [confirmation, setConfirmation] = useState<PayrollConfirmation | null>(null);
   const [feedback, setFeedback] = useState<PayrollFeedback[]>([]);
   const [message, setMessage] = useState("");
@@ -39,10 +42,11 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
       setLoading(true);
       setError(null);
       try {
-        const [rec, mySalary] = await Promise.all([getMyPayroll(monthStart), getMyStaffSalary()]);
+        const [rec, mySalary, myBankInfo] = await Promise.all([getMyPayroll(monthStart), getMyStaffSalary(), getMyBankInfo()]);
         if (cancelled) return;
         setRecord(rec);
         setSalary(mySalary);
+        setBankInfo(myBankInfo);
         if (rec) {
           const [feedbackList, myConfirmation] = await Promise.all([
             listMyPayrollFeedback(rec.id),
@@ -114,6 +118,16 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
 
       {open && (
         <div className="flex flex-col gap-4 px-4 pb-4" style={{ borderTop: "1px solid var(--color-neutral-100)" }}>
+          {bankInfo && (bankInfo.bank_name || bankInfo.account_number) && (
+            <div className="rounded-[10px] p-3 flex flex-col gap-1 mt-3" style={{ background: bankColor(bankInfo.bank_name) }}>
+              <span className="text-[11px] font-bold text-white/90">{bankInfo.bank_name || "Ngân hàng"}</span>
+              <span className="text-sm font-bold text-white font-mono tracking-wide">
+                {bankInfo.account_number ? formatAccountNumber(bankInfo.account_number) : "—"}
+              </span>
+              {bankInfo.account_holder && <span className="text-[11px] text-white/80">{bankInfo.account_holder}</span>}
+            </div>
+          )}
+
           {loading ? (
             <p className="text-xs pt-3" style={{ color: "var(--color-neutral-500)" }}>
               Đang tải…

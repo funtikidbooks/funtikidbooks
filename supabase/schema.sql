@@ -1100,6 +1100,15 @@ create policy "director can manage staff bank info"
   using (public.current_access_role() = 'director')
   with check (public.current_access_role() = 'director');
 
+-- Seeing your own account number back isn't a privacy leak — lets the
+-- workspace Chấm công page show it on your own payroll panel, so you can
+-- double-check the director has the right one on file.
+drop policy if exists "staff can read own bank info" on public.staff_bank_info;
+create policy "staff can read own bank info"
+  on public.staff_bank_info for select
+  to authenticated
+  using (profile_id = auth.uid());
+
 drop trigger if exists staff_bank_info_set_updated_at on public.staff_bank_info;
 create trigger staff_bank_info_set_updated_at
   before update on public.staff_bank_info
