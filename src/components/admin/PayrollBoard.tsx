@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { listPayrollConfirmations, listPayrollForMonth, listPendingPayrollFeedback } from "@/lib/actions/payroll";
+import { listPayrollConfirmations, listPayrollForMonth, listPendingPayrollFeedback, sendPayrollEmailsForMonth } from "@/lib/actions/payroll";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { PayrollEditModal } from "@/components/admin/PayrollEditModal";
 import { MONTH_LABELS, addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
@@ -33,6 +33,25 @@ export function PayrollBoard({
   const [pendingFeedbackIds, setPendingFeedbackIds] = useState<Set<string>>(() => new Set(initialPendingFeedbackIds));
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
+  const [sendingAllEmails, setSendingAllEmails] = useState(false);
+
+  async function handleSendAllEmails() {
+    if (sendingAllEmails) return;
+    if (records.length === 0) {
+      alert("Tháng này chưa có bảng lương nào để gửi.");
+      return;
+    }
+    if (!confirm(`Gửi email phiếu lương ${monthLabel} cho ${records.length} nhân viên đã có bảng lương?`)) return;
+    setSendingAllEmails(true);
+    try {
+      const { sent, failed } = await sendPayrollEmailsForMonth(monthStart);
+      alert(failed > 0 ? `Đã gửi ${sent} email, ${failed} email gửi lỗi.` : `Đã gửi ${sent} email thành công.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Không thể gửi email.");
+    } finally {
+      setSendingAllEmails(false);
+    }
+  }
 
   const byProfile = useMemo(() => new Map(records.map((r) => [r.profile_id, r])), [records]);
   const monthStartRef = useRef(monthStart);
@@ -177,6 +196,9 @@ export function PayrollBoard({
             Tháng này
           </button>
         )}
+        <button type="button" onClick={handleSendAllEmails} className="btn btn-secondary btn-sm ml-auto" disabled={sendingAllEmails}>
+          {sendingAllEmails ? "Đang gửi…" : "📧 Gửi email phiếu lương cho tất cả"}
+        </button>
       </div>
 
       {staff.length === 0 ? (

@@ -4,6 +4,7 @@ import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import { sendPushToUser } from "@/lib/push";
+import { sendPayslipEmail } from "@/lib/mail";
 import type {
   PayrollConfirmation,
   PayrollFeedback,
@@ -104,6 +105,70 @@ export async function upsertPayroll(input: {
 export async function deletePayroll(id: string) {
   const { supabase } = await requireHrManager();
   await supabase.from("payroll_records").delete().eq("id", id);
+}
+
+// One payslip, emailed to the employee's own login address — mirrors
+// PayrollPrintView.tsx's numbers exactly (same base_salary/items/status),
+// so the email and the printable PDF for the same record never disagree.
+export async function sendPayrollEmail(payrollRecordId: string): Promise<void> {
+  const { supabase } = await requireHrManager();
+  const { data: record } = await supabase.from("payroll_records").select("*").eq("id", payrollRecordId).maybeSingle();
+  if (!record) throw new Error("Không tìm thấy bảng lương.");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("email, display_name")
+    .eq("id", record.profile_id)
+    .maybeSingle();
+  if (!profile?.email) throw new Error("Nhân viên chưa có email.");
+
+  await sendPayslipEmail({
+    to: profile.email,
+    displayName: profile.display_name,
+    month: record.month,
+    workDays: record.work_days,
+    baseSalary: record.base_salary,
+    items: record.items as PayrollItem[],
+    status: record.status as "draft" | "paid",
+    note: record.note,
+  });
+}
+
+// Bulk version for "send this month's payslips to everyone" — best-effort
+// per record so one bad email address doesn't block the rest of the team;
+// the caller gets a sent/failed count back to show the director.
+export async function sendPayrollEmailsForMonth(monthStartInput?: string): Promise<{ sent: number; failed: number }> {
+  const { supabase } = await requireHrManager();
+  const monthStart = firstOfMonth(monthStartInput ?? vnToday());
+  const { data: records } = await supabase.from("payroll_records").select("*").eq("month", monthStart);
+
+  let sent = 0;
+  let failed = 0;
+  for (const record of records ?? []) {
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("email, display_name")
+        .eq("id", record.profile_id)
+        .maybeSingle();
+      if (!profile?.email) throw new Error("no email");
+
+      await sendPayslipEmail({
+        to: profile.email,
+        displayName: profile.display_name,
+        month: record.month,
+        workDays: record.work_days,
+        baseSalary: record.base_salary,
+        items: record.items as PayrollItem[],
+        status: record.status as "draft" | "paid",
+        note: record.note,
+      });
+      sent++;
+    } catch {
+      failed++;
+    }
+  }
+  return { sent, failed };
 }
 
 export async function getStaffSalary(profileId: string): Promise<StaffSalary | null> {

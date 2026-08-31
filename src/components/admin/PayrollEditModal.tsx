@@ -7,7 +7,14 @@ import { createClient } from "@/lib/supabase/client";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { getMonthAttendance } from "@/lib/actions/attendance";
 import { getStaffBankInfo } from "@/lib/actions/admin";
-import { getStaffSalary, listPayrollFeedback, updatePayrollFeedbackStatus, upsertPayroll, upsertStaffSalary } from "@/lib/actions/payroll";
+import {
+  getStaffSalary,
+  listPayrollFeedback,
+  sendPayrollEmail,
+  updatePayrollFeedbackStatus,
+  upsertPayroll,
+  upsertStaffSalary,
+} from "@/lib/actions/payroll";
 import { MONTH_LABELS, summarizeAttendance } from "@/lib/constants/attendance";
 import { bankColor, formatAccountNumber } from "@/lib/bankDisplay";
 import type { PayrollFeedback, PayrollFeedbackStatus, PayrollItem, PayrollRecord, PayrollStatus, Profile, StaffBankInfo } from "@/lib/types";
@@ -60,6 +67,23 @@ export function PayrollEditModal({
   const [resolvingFeedbackId, setResolvingFeedbackId] = useState<string | null>(null);
 
   const [bankInfo, setBankInfo] = useState<StaffBankInfo | null>(null);
+
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+
+  async function handleSendEmail() {
+    if (!record || sendingEmail) return;
+    setSendingEmail(true);
+    setError(null);
+    try {
+      await sendPayrollEmail(record.id);
+      setEmailSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể gửi email.");
+    } finally {
+      setSendingEmail(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -509,9 +533,14 @@ export function PayrollEditModal({
 
         <div className="flex items-center justify-between gap-3 px-6 py-4" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
           {record ? (
-            <Link href={`/quan-tri/bang-luong/${record.id}`} target="_blank" className="btn btn-ghost btn-sm">
-              🖨 In / Tải PDF
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href={`/quan-tri/bang-luong/${record.id}`} target="_blank" className="btn btn-ghost btn-sm">
+                🖨 In / Tải PDF
+              </Link>
+              <button type="button" onClick={handleSendEmail} className="btn btn-ghost btn-sm" disabled={sendingEmail}>
+                {sendingEmail ? "Đang gửi…" : emailSent ? "✓ Đã gửi email" : "📧 Gửi email"}
+              </button>
+            </div>
           ) : (
             <span className="text-xs" style={{ color: "var(--color-neutral-400)" }}>
               Lưu lần đầu để có thể in phiếu lương
