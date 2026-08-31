@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { listPayrollConfirmations, listPayrollForMonth } from "@/lib/actions/payroll";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
@@ -32,6 +32,36 @@ export function PayrollBoard({
   const [editing, setEditing] = useState<Profile | null>(null);
 
   const byProfile = useMemo(() => new Map(records.map((r) => [r.profile_id, r])), [records]);
+  const monthStartRef = useRef(monthStart);
+  useEffect(() => {
+    monthStartRef.current = monthStart;
+  }, [monthStart]);
+
+  // Attendance edits recompute an existing payroll row's base_salary
+  // server-side (see syncPayrollForAttendanceChange) — this is what makes
+  // that show up on the board immediately instead of only after the next
+  // goToMonth refetch. Reads monthStart via a ref rather than closing over
+  // it directly since this effect only subscribes once, on mount.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("payroll-records-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "payroll_records" }, (payload) => {
+        const isDelete = payload.eventType === "DELETE";
+        const row = (isDelete ? payload.old : payload.new) as PayrollRecord;
+        if (row.month !== monthStartRef.current) return;
+        setRecords((prev) => {
+          if (isDelete) return prev.filter((r) => r.id !== row.id);
+          const idx = prev.findIndex((r) => r.id === row.id);
+          return idx === -1 ? [...prev, row] : prev.map((r, i) => (i === idx ? row : r));
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // A confirmation landing for a payslip that isn't this month's doesn't
   // hurt anything — nothing currently rendered ever looks it up — so this

@@ -881,6 +881,19 @@ create trigger payroll_records_set_updated_at
   before update on public.payroll_records
   for each row execute procedure public.set_updated_at();
 
+-- The payroll board needs to reflect an attendance-triggered base_salary
+-- recompute (see syncPayrollForAttendanceChange in lib/actions/attendance.ts)
+-- live, not just changes made directly through the payroll modal.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'payroll_records'
+  ) then
+    alter publication supabase_realtime add table public.payroll_records;
+  end if;
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- payroll_feedback: a lightweight, append-only log an employee can leave on
 -- their own payslip — "this doesn't look right" — without being able to

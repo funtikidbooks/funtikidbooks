@@ -7,6 +7,7 @@ import {
   isBeforeCheckInWindow,
   lastDayOfMonth,
   mondayOf,
+  summarizeAttendance,
   toVnDateString,
   vnToday,
   weekdayIndex,
@@ -151,6 +152,52 @@ export async function getMonthAttendance(profileId: string, monthStartInput?: st
   return (data ?? []) as AttendanceEntry[];
 }
 
+// Keeps an already-saved payroll_records row in sync with attendance —
+// director/PM only touch attendance here, and if this employee already has
+// a payslip for that month, its base pay (rate × ngày công) and work_days
+// get recomputed against the fresh attendance count immediately, live on
+// the payroll board, rather than staying frozen at whatever was true the
+// last time someone opened and saved the payroll modal. A director's own
+// manual "Số ngày đi làm" override in that modal still wins until the next
+// attendance edit — this only recomputes the number payroll actually uses.
+// No-ops silently if no payroll row or no rate is set yet — nothing to
+// keep in sync in that case.
+async function syncPayrollForAttendanceChange(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  profileId: string,
+  workDate: string,
+) {
+  const month = firstOfMonth(workDate);
+
+  const { data: record } = await supabase
+    .from("payroll_records")
+    .select("id")
+    .eq("profile_id", profileId)
+    .eq("month", month)
+    .maybeSingle();
+  if (!record) return;
+
+  const [{ data: salary }, { data: entries }] = await Promise.all([
+    supabase.from("staff_salary").select("monthly_salary, standard_work_days").eq("profile_id", profileId).maybeSingle(),
+    supabase
+      .from("attendance")
+      .select("work_date, status, check_in_at")
+      .eq("profile_id", profileId)
+      .gte("work_date", month)
+      .lte("work_date", lastDayOfMonth(month)),
+  ]);
+  if (!salary || !salary.standard_work_days) return;
+
+  const stats = summarizeAttendance((entries ?? []) as { work_date: string; status: AttendanceEntry["status"]; check_in_at: string | null }[]);
+  const dailyRate = Math.round(salary.monthly_salary / salary.standard_work_days);
+  const newBase = dailyRate * stats.present;
+
+  await supabase.from("payroll_records").update({ base_salary: newBase, work_days: stats.present }).eq("id", record.id);
+  // Same rule as a director's own edit in the payroll modal — the employee
+  // confirmed different numbers, so that confirmation no longer applies.
+  await supabase.from("payroll_confirmations").delete().eq("payroll_record_id", record.id);
+}
+
 export async function upsertAttendance(input: {
   profileId: string;
   workDate: string;
@@ -176,6 +223,13 @@ export async function upsertAttendance(input: {
   );
 
   if (error) throw new Error("Không thể cập nhật chấm công");
+
+  // Best-effort — the attendance save above already succeeded either way.
+  try {
+    await syncPayrollForAttendanceChange(supabase, input.profileId, input.workDate);
+  } catch {
+    // ignore
+  }
 }
 
 // Clears a cell back to "no record" — e.g. after entering a status by
@@ -191,4 +245,10 @@ export async function deleteAttendance(profileId: string, workDate: string) {
     .eq("work_date", workDate);
 
   if (error) throw new Error("Không thể xoá bản ghi chấm công");
+
+  try {
+    await syncPayrollForAttendanceChange(supabase, profileId, workDate);
+  } catch {
+    // ignore — see comment in upsertAttendance
+  }
 }
