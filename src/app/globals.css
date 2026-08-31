@@ -166,6 +166,12 @@
 html,
 body {
   height: 100%;
+  /* Blocks the native elastic rubber-band bounce. On an iPhone home-screen
+     app in particular, that bounce is driven by the OS's own WKWebView
+     scroll view, not anything CSS sizing controls — no amount of dvh or
+     overflow:hidden on our own elements stops it, since it happens a layer
+     below the DOM. This is the property that actually does. */
+  overscroll-behavior: none;
 }
 
 body {
