@@ -945,6 +945,20 @@ create policy "director or pm can resolve payroll feedback"
   using (public.can_manage_hr())
   with check (public.can_manage_hr());
 
+-- Drives the live red-dot on the payroll board/sidebar (PayrollBoard.tsx,
+-- AdminSidebar.tsx) and the director's live feedback list in
+-- PayrollEditModal — without this, postgres_changes never fires for this
+-- table no matter what the RLS policies above allow.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'payroll_feedback'
+  ) then
+    alter publication supabase_realtime add table public.payroll_feedback;
+  end if;
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- payroll_confirmations: "I reviewed this payslip and it's correct" — kept
 -- as its own table, one row per payroll_record, rather than a column on
@@ -1062,6 +1076,34 @@ create trigger finance_entries_set_updated_at
   for each row execute procedure public.set_updated_at();
 
 create index if not exists finance_entries_month_idx on public.finance_entries (entry_month);
+
+-- ---------------------------------------------------------------------------
+-- staff_bank_info: bank account details the director keeps on file for each
+-- employee so salary can actually be transferred — director-only end to
+-- end, same reasoning as finance_entries (this is money-movement data, not
+-- something a coworker browsing "Thành viên" should ever see).
+-- ---------------------------------------------------------------------------
+create table if not exists public.staff_bank_info (
+  profile_id uuid primary key references public.profiles (id) on delete cascade,
+  bank_name text,
+  account_number text,
+  account_holder text,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.staff_bank_info enable row level security;
+
+drop policy if exists "director can manage staff bank info" on public.staff_bank_info;
+create policy "director can manage staff bank info"
+  on public.staff_bank_info for all
+  to authenticated
+  using (public.current_access_role() = 'director')
+  with check (public.current_access_role() = 'director');
+
+drop trigger if exists staff_bank_info_set_updated_at on public.staff_bank_info;
+create trigger staff_bank_info_set_updated_at
+  before update on public.staff_bank_info
+  for each row execute procedure public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
 -- site_settings: small key/value store for editable page decoration, e.g.

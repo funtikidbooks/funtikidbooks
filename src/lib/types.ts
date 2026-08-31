@@ -283,6 +283,14 @@ export type StaffSalary = {
   updated_at: string;
 };
 
+export type StaffBankInfo = {
+  profile_id: string;
+  bank_name: string | null;
+  account_number: string | null;
+  account_holder: string | null;
+  updated_at: string;
+};
+
 export type PayrollFeedbackStatus = "pending" | "approved" | "rejected";
 
 export type PayrollFeedback = {
@@ -738,6 +746,12 @@ export type Database = {
         Row: StaffSalary;
         Insert: Partial<StaffSalary> & { profile_id: string };
         Update: Partial<StaffSalary>;
+        Relationships: [];
+      };
+      staff_bank_info: {
+        Row: StaffBankInfo;
+        Insert: Partial<StaffBankInfo> & { profile_id: string };
+        Update: Partial<StaffBankInfo>;
         Relationships: [];
       };
       finance_entries: {

@@ -12,3 +12,16 @@ create policy "director or pm can resolve payroll feedback"
   to authenticated
   using (public.can_manage_hr())
   with check (public.can_manage_hr());
+
+-- Without this, the live red-dot/feedback-list updates never fire — the
+-- RLS policies above only control who CAN read/write, not whether Realtime
+-- broadcasts changes at all.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'payroll_feedback'
+  ) then
+    alter publication supabase_realtime add table public.payroll_feedback;
+  end if;
+end $$;

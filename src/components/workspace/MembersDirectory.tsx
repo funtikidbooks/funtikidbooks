@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 import { usePresence } from "@/lib/usePresence";
 import { updateJoinedAt } from "@/lib/actions/admin";
 import { thumbnailUrl } from "@/lib/imageTransform";
-import type { Profile } from "@/lib/types";
+import { StaffBankInfoModal } from "@/components/workspace/StaffBankInfoModal";
+import type { Profile, StaffBankInfo } from "@/lib/types";
 
 const CreateAccountDialog = dynamic(
   () => import("@/components/admin/CreateAccountDialog").then((m) => m.CreateAccountDialog),
@@ -14,6 +15,31 @@ const CreateAccountDialog = dynamic(
 );
 
 const ALL = "Tất cả";
+
+// Approximate brand colors for the banks that come up most — purely
+// cosmetic, falls back to the app's own accent color for anything else.
+const BANK_COLORS: Record<string, string> = {
+  vietcombank: "#00693c",
+  techcombank: "#1a1a1a",
+  "mb bank": "#1c2f6e",
+  mb: "#1c2f6e",
+  acb: "#0033a0",
+  bidv: "#0b3d91",
+  vietinbank: "#0a4595",
+  vpbank: "#00a651",
+  tpbank: "#5a2d81",
+  sacombank: "#00338d",
+  agribank: "#8a1538",
+};
+
+function bankColor(bankName: string | null) {
+  if (!bankName) return "var(--color-accent-600)";
+  return BANK_COLORS[bankName.trim().toLowerCase()] ?? "var(--color-accent-600)";
+}
+
+function formatAccountNumber(n: string) {
+  return n.replace(/(.{4})/g, "$1 ").trim();
+}
 
 // The join date directors care about (and can edit) — falls back to
 // created_at (login account creation) when nobody's set it explicitly.
@@ -48,10 +74,12 @@ export function MembersDirectory({
   profiles,
   currentUserId,
   canManage,
+  initialBankInfo,
 }: {
   profiles: Profile[];
   currentUserId: string;
   canManage: boolean;
+  initialBankInfo: StaffBankInfo[];
 }) {
   const [items, setItems] = useState(profiles);
   const [active, setActive] = useState(ALL);
@@ -59,6 +87,10 @@ export function MembersDirectory({
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
   const onlineIds = usePresence(currentUserId);
+  const [bankInfo, setBankInfo] = useState<Map<string, StaffBankInfo>>(
+    () => new Map(initialBankInfo.map((b) => [b.profile_id, b])),
+  );
+  const [editingBank, setEditingBank] = useState<Profile | null>(null);
 
   // A colleague's name/avatar/job-title edit, a brand-new staff account, or
   // a removed one now shows up here immediately — this is exactly the kind
@@ -243,10 +275,47 @@ export function MembersDirectory({
                 </span>
                 <span>⏱ Thời gian làm việc: {formatTenure(joinDateOf(p))}</span>
               </div>
+
+              {canManage &&
+                (() => {
+                  const b = bankInfo.get(p.id);
+                  return b && (b.bank_name || b.account_number) ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditingBank(p)}
+                      className="rounded-[10px] p-3 flex flex-col gap-1 text-left"
+                      style={{ background: bankColor(b.bank_name) }}
+                    >
+                      <span className="text-[11px] font-bold text-white/90">{b.bank_name || "Ngân hàng"}</span>
+                      <span className="text-sm font-bold text-white font-mono tracking-wide">
+                        {b.account_number ? formatAccountNumber(b.account_number) : "—"}
+                      </span>
+                      <span className="text-[11px] text-white/80 truncate">{b.account_holder}</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEditingBank(p)}
+                      className="btn btn-ghost btn-sm"
+                      style={{ border: "1px dashed var(--color-neutral-300)" }}
+                    >
+                      + Thêm tài khoản ngân hàng
+                    </button>
+                  );
+                })()}
             </div>
           );
         })}
       </div>
+
+      {editingBank && (
+        <StaffBankInfoModal
+          profile={editingBank}
+          info={bankInfo.get(editingBank.id)}
+          onClose={() => setEditingBank(null)}
+          onSaved={(info) => setBankInfo((prev) => new Map(prev).set(info.profile_id, info))}
+        />
+      )}
 
       {showCreate && (
         <CreateAccountDialog

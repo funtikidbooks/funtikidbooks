@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendStaffWelcomeEmail } from "@/lib/mail";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
-import type { AccessRole, NewsPost, Profile, Project, Review } from "@/lib/types";
+import type { AccessRole, NewsPost, Profile, Project, Review, StaffBankInfo } from "@/lib/types";
 
 async function requireDirector() {
   const supabase = await createClient();
@@ -511,6 +511,40 @@ export async function updateJoinedAt(profileId: string, joinedAt: string) {
     .update({ joined_at: date || null })
     .eq("id", profileId);
   revalidatePath("/workspace/thanh-vien");
+}
+
+// Bank details for actually paying salary — kept in its own table with its
+// own director-only RLS (see staff_bank_info in supabase/schema.sql), never
+// selected alongside the plain `profiles.*` fetch every staff member's
+// browser gets on the Thành viên page.
+export async function listStaffBankInfo(): Promise<StaffBankInfo[]> {
+  const { supabase } = await requireDirector();
+  const { data } = await supabase.from("staff_bank_info").select("*");
+  return (data ?? []) as StaffBankInfo[];
+}
+
+export async function upsertStaffBankInfo(
+  profileId: string,
+  input: { bankName: string; accountNumber: string; accountHolder: string },
+): Promise<StaffBankInfo> {
+  const { supabase } = await requireDirector();
+  const { data, error } = await supabase
+    .from("staff_bank_info")
+    .upsert(
+      {
+        profile_id: profileId,
+        bank_name: input.bankName.trim() || null,
+        account_number: input.accountNumber.trim() || null,
+        account_holder: input.accountHolder.trim() || null,
+      },
+      { onConflict: "profile_id" },
+    )
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error("Không thể lưu thông tin ngân hàng.");
+  revalidatePath("/workspace/thanh-vien");
+  return data as StaffBankInfo;
 }
 
 // Deletes the Supabase Auth user outright (not just the profile row) — the
