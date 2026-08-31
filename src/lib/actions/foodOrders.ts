@@ -81,6 +81,18 @@ export async function setFoodOrderRoundStatus(roundId: string, status: "open" | 
   return data as FoodOrderRound;
 }
 
+// Lets someone redo today's round from scratch — most useful right after
+// starting one without picking a shop (there's no way to attach a menu to
+// an existing round after the fact). RLS restricts the actual delete to the
+// round's own creator or the director; .select() after delete is how the
+// caller tells an RLS-blocked no-op (0 rows) apart from a real success,
+// rather than optimistically clearing local state either way.
+export async function deleteFoodOrderRound(roundId: string): Promise<void> {
+  const { supabase } = await requireUser();
+  const { data } = await supabase.from("food_order_rounds").delete().eq("id", roundId).select("id");
+  if (!data || data.length === 0) throw new Error("Chỉ người tạo đợt này hoặc Giám đốc mới xoá được.");
+}
+
 export async function listFoodOrderItems(roundId: string): Promise<FoodOrderItem[]> {
   const { supabase } = await requireUser();
   const { data } = await supabase

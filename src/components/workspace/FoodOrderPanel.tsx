@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
+  deleteFoodOrderRound,
   deleteMyFoodOrderItem,
   getTodayFoodOrderRound,
   listFoodOrderItems,
@@ -304,6 +305,20 @@ export function FoodOrderPanel({
     }
   }
 
+  async function handleDeleteRound() {
+    if (!round) return;
+    if (!confirm("Xoá đợt đặt đồ ăn hôm nay và làm lại từ đầu?")) return;
+    try {
+      await deleteFoodOrderRound(round.id);
+      setRound(null);
+      setItems([]);
+      setShopMenu([]);
+      setSelectedShopId("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    }
+  }
+
   const total = items.reduce((sum, it) => sum + (it.price ?? 0), 0);
   const hasPrices = items.some((it) => it.price !== null);
   const dateLabel = round
@@ -456,6 +471,17 @@ export function FoodOrderPanel({
               </div>
             </div>
             <div className="flex items-center gap-2 flex-none">
+              {round.created_by === currentUserId && (
+                <button
+                  type="button"
+                  onClick={handleDeleteRound}
+                  className="text-xs"
+                  style={{ color: "var(--color-neutral-400)" }}
+                  title="Xoá đợt, bắt đầu lại"
+                >
+                  Xoá đợt, làm lại
+                </button>
+              )}
               <button type="button" onClick={toggleStatus} className="btn btn-ghost btn-sm">
                 {round.status === "open" ? "Chốt đơn" : "Mở lại"}
               </button>
