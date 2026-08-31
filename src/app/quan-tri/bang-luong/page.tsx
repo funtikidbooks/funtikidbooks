@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { listPayrollConfirmations, listPayrollForMonth } from "@/lib/actions/payroll";
+import { listPayrollConfirmations, listPayrollForMonth, listPendingPayrollFeedback } from "@/lib/actions/payroll";
 import { PayrollBoard } from "@/components/admin/PayrollBoard";
 import type { Profile } from "@/lib/types";
 
@@ -36,12 +36,17 @@ export default async function AdminPayrollPage() {
   }
 
   const [records, { data: profiles }] = await Promise.all([listPayrollForMonth(), profilesQuery]);
-  const confirmations = await listPayrollConfirmations(records.map((r) => r.id));
+  const recordIds = records.map((r) => r.id);
+  const [confirmations, pendingFeedback] = await Promise.all([
+    listPayrollConfirmations(recordIds),
+    listPendingPayrollFeedback(recordIds),
+  ]);
 
   return (
     <PayrollBoard
       initialRecords={records}
       initialConfirmedIds={confirmations.map((c) => c.payroll_record_id)}
+      initialPendingFeedbackIds={pendingFeedback.map((f) => f.payroll_record_id)}
       staff={(profiles ?? []) as Profile[]}
     />
   );

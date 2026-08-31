@@ -3,7 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { signOut } from "@/lib/actions/auth";
+import { createClient } from "@/lib/supabase/client";
 import { resetThemeOnSignOut } from "@/lib/useTheme";
 import type { AccessRole } from "@/lib/types";
 
@@ -31,14 +33,48 @@ const DIRECTOR_ONLY_NAV = [{ href: "/quan-tri/tai-chinh", label: "Tài chính", 
 
 export function AdminSidebar({
   user,
+  initialPendingPayrollFeedbackIds,
 }: {
   user: { displayName: string; email: string; accessRole: AccessRole; jobTitle: string | null };
+  initialPendingPayrollFeedbackIds: string[];
 }) {
   const pathname = usePathname();
   const isDirector = user.accessRole === "director";
   const isProjectManager = user.jobTitle === "Project Manager";
 
-  function NavLink({ item }: { item: { href: string; label: string; icon: string } }) {
+  const [pendingFeedbackIds, setPendingFeedbackIds] = useState<Set<string>>(
+    () => new Set(initialPendingPayrollFeedbackIds),
+  );
+
+  // Same all-months realtime subscription as PayrollBoard's own copy of
+  // this (they're separate components, so a separate Set + channel) — this
+  // one only cares whether the set is non-empty, to light up the nav dot
+  // even before the director opens the Bảng lương page itself.
+  useEffect(() => {
+    if (!isDirector && !isProjectManager) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel("sidebar-payroll-feedback-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "payroll_feedback" }, (payload) => {
+        const isDelete = payload.eventType === "DELETE";
+        const row = (isDelete ? payload.old : payload.new) as { id: string; status: string };
+        setPendingFeedbackIds((prev) => {
+          const next = new Set(prev);
+          if (isDelete || row.status !== "pending") next.delete(row.id);
+          else next.add(row.id);
+          return next;
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isDirector, isProjectManager]);
+
+  const hasPendingPayrollFeedback = pendingFeedbackIds.size > 0;
+
+  function NavLink({ item, showDot }: { item: { href: string; label: string; icon: string }; showDot?: boolean }) {
     const active = pathname.startsWith(item.href);
     return (
       <Link
@@ -51,6 +87,13 @@ export function AdminSidebar({
       >
         <span aria-hidden>{item.icon}</span>
         {item.label}
+        {showDot && (
+          <span
+            title="Có thắc mắc lương chưa xử lý"
+            className="rounded-full flex-none"
+            style={{ width: 8, height: 8, background: "var(--status-red)" }}
+          />
+        )}
       </Link>
     );
   }
@@ -104,7 +147,11 @@ export function AdminSidebar({
               📊 Bảng công việc
             </Link>
             {HR_NAV.map((item) => (
-              <NavLink key={item.href} item={item} />
+              <NavLink
+                key={item.href}
+                item={item}
+                showDot={item.href === "/quan-tri/bang-luong" && hasPendingPayrollFeedback}
+              />
             ))}
             {isDirector && DIRECTOR_ONLY_NAV.map((item) => <NavLink key={item.href} item={item} />)}
           </>

@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { listPayrollConfirmations, listPayrollForMonth } from "@/lib/actions/payroll";
+import { listPayrollConfirmations, listPayrollForMonth, listPendingPayrollFeedback } from "@/lib/actions/payroll";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { PayrollEditModal } from "@/components/admin/PayrollEditModal";
 import { MONTH_LABELS, addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
-import type { PayrollConfirmation, PayrollRecord, Profile } from "@/lib/types";
+import type { PayrollConfirmation, PayrollFeedback, PayrollRecord, Profile } from "@/lib/types";
 
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
@@ -19,15 +19,18 @@ function netTotal(r: PayrollRecord) {
 export function PayrollBoard({
   initialRecords,
   initialConfirmedIds,
+  initialPendingFeedbackIds,
   staff,
 }: {
   initialRecords: PayrollRecord[];
   initialConfirmedIds: string[];
+  initialPendingFeedbackIds: string[];
   staff: Profile[];
 }) {
   const [monthStart, setMonthStart] = useState(() => firstOfMonth(vnToday()));
   const [records, setRecords] = useState(initialRecords);
   const [confirmedIds, setConfirmedIds] = useState<Set<string>>(() => new Set(initialConfirmedIds));
+  const [pendingFeedbackIds, setPendingFeedbackIds] = useState<Set<string>>(() => new Set(initialPendingFeedbackIds));
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
 
@@ -88,14 +91,43 @@ export function PayrollBoard({
     };
   }, []);
 
+  // Same broad-subscribe-no-month-filter reasoning as the confirmations
+  // channel above — a pending id from another month sitting unused in the
+  // set is harmless since only this month's byProfile lookup ever reads it.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("payroll-feedback-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "payroll_feedback" }, (payload) => {
+        const isDelete = payload.eventType === "DELETE";
+        const row = (isDelete ? payload.old : payload.new) as PayrollFeedback;
+        setPendingFeedbackIds((prev) => {
+          const next = new Set(prev);
+          if (isDelete || row.status !== "pending") next.delete(row.payroll_record_id);
+          else next.add(row.payroll_record_id);
+          return next;
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   async function goToMonth(newStart: string) {
     setMonthStart(newStart);
     setLoading(true);
     try {
       const monthRecords = await listPayrollForMonth(newStart);
       setRecords(monthRecords);
-      const confirmations = await listPayrollConfirmations(monthRecords.map((r) => r.id));
+      const recordIds = monthRecords.map((r) => r.id);
+      const [confirmations, pendingFeedback] = await Promise.all([
+        listPayrollConfirmations(recordIds),
+        listPendingPayrollFeedback(recordIds),
+      ]);
       setConfirmedIds(new Set(confirmations.map((c) => c.payroll_record_id)));
+      setPendingFeedbackIds(new Set(pendingFeedback.map((f) => f.payroll_record_id)));
     } catch {
       setRecords([]);
     } finally {
@@ -158,13 +190,21 @@ export function PayrollBoard({
         >
           {staff.map((p) => {
             const record = byProfile.get(p.id);
+            const hasPendingFeedback = !!record && pendingFeedbackIds.has(record.id);
             return (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => setEditing(p)}
-                className="card elev-sm fk-staff-card flex flex-col items-center gap-2 p-4 text-center"
+                className="card elev-sm fk-staff-card flex flex-col items-center gap-2 p-4 text-center relative"
               >
+                {hasPendingFeedback && (
+                  <span
+                    title="Có thắc mắc lương chưa xử lý"
+                    className="absolute rounded-full"
+                    style={{ top: 10, right: 10, width: 10, height: 10, background: "var(--status-red)" }}
+                  />
+                )}
                 <AttendanceAvatar profile={p} size={44} />
                 <div className="flex flex-col gap-0.5">
                   <span className="font-semibold text-sm truncate max-w-[160px] flex items-center justify-center gap-1">

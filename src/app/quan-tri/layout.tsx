@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { listPendingPayrollFeedbackIds } from "@/lib/actions/payroll";
 
 export default async function AdminLayout({
   children,
@@ -31,6 +32,9 @@ export default async function AdminLayout({
     redirect("/workspace");
   }
 
+  const isDirector = profile.access_role === "director";
+  const initialPendingPayrollFeedbackIds = isDirector || isProjectManager ? await listPendingPayrollFeedbackIds() : [];
+
   return (
     <div className="flex min-h-screen" style={{ background: "var(--color-bg)" }}>
       <AdminSidebar
@@ -40,6 +44,7 @@ export default async function AdminLayout({
           accessRole: profile.access_role,
           jobTitle: profile.role,
         }}
+        initialPendingPayrollFeedbackIds={initialPendingPayrollFeedbackIds}
       />
       <div className="flex-1 flex flex-col min-w-0">{children}</div>
     </div>

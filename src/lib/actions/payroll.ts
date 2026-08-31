@@ -222,6 +222,30 @@ export async function updatePayrollFeedbackStatus(feedbackId: string, status: Pa
   return data as PayrollFeedback;
 }
 
+// Board-level view of which of this month's records have an unresolved
+// (pending) feedback message — drives the red dot on each staff card.
+export async function listPendingPayrollFeedback(payrollRecordIds: string[]): Promise<PayrollFeedback[]> {
+  const { supabase } = await requireHrManager();
+  if (payrollRecordIds.length === 0) return [];
+  const { data } = await supabase
+    .from("payroll_feedback")
+    .select("*")
+    .in("payroll_record_id", payrollRecordIds)
+    .eq("status", "pending");
+  return (data ?? []) as PayrollFeedback[];
+}
+
+// Sidebar-level ids across every month — drives the red dot on the
+// "Bảng lương" nav item itself, so a pending complaint is visible even
+// before the director opens the board. Returns ids (not just a count) so
+// the client can track them in a Set and stay exactly in sync via realtime
+// INSERT/UPDATE/DELETE events instead of drifting from ambiguous deltas.
+export async function listPendingPayrollFeedbackIds(): Promise<string[]> {
+  const { supabase } = await requireHrManager();
+  const { data } = await supabase.from("payroll_feedback").select("id").eq("status", "pending");
+  return (data ?? []).map((r) => r.id as string);
+}
+
 // The caller's own fixed-salary settings — backs "Lương cứng" / "mỗi ngày
 // công" on the payslip panel, alongside the already-computed base_salary.
 export async function getMyStaffSalary(): Promise<StaffSalary | null> {
