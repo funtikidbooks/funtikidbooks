@@ -283,11 +283,14 @@ export type StaffSalary = {
   updated_at: string;
 };
 
+export type PayrollFeedbackStatus = "pending" | "approved" | "rejected";
+
 export type PayrollFeedback = {
   id: string;
   payroll_record_id: string;
   profile_id: string;
   message: string;
+  status: PayrollFeedbackStatus;
   created_at: string;
 };
 

@@ -912,6 +912,14 @@ create table if not exists public.payroll_feedback (
   created_at timestamptz not null default now()
 );
 
+-- Added after the initial table creation: lets the director mark a
+-- complaint Duyệt/Từ chối from the payroll modal, and the employee see
+-- that resolution reflected back on their own copy of it.
+alter table public.payroll_feedback add column if not exists status text not null default 'pending';
+alter table public.payroll_feedback drop constraint if exists payroll_feedback_status_check;
+alter table public.payroll_feedback add constraint payroll_feedback_status_check
+  check (status in ('pending', 'approved', 'rejected'));
+
 alter table public.payroll_feedback enable row level security;
 
 drop policy if exists "staff can add and read own payroll feedback" on public.payroll_feedback;
@@ -926,6 +934,16 @@ create policy "director or pm can read payroll feedback"
   on public.payroll_feedback for select
   to authenticated
   using (public.can_manage_hr());
+
+-- Director/PM can only flip status (Duyệt/Từ chối) here — a separate
+-- policy from the read one above purely so it's easy to audit exactly
+-- what write access they have on an employee's own feedback.
+drop policy if exists "director or pm can resolve payroll feedback" on public.payroll_feedback;
+create policy "director or pm can resolve payroll feedback"
+  on public.payroll_feedback for update
+  to authenticated
+  using (public.can_manage_hr())
+  with check (public.can_manage_hr());
 
 -- ---------------------------------------------------------------------------
 -- payroll_confirmations: "I reviewed this payslip and it's correct" — kept

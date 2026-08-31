@@ -1,8 +1,18 @@
 "use server";
 
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
-import type { PayrollConfirmation, PayrollFeedback, PayrollItem, PayrollRecord, PayrollStatus, StaffSalary } from "@/lib/types";
+import { sendPushToUser } from "@/lib/push";
+import type {
+  PayrollConfirmation,
+  PayrollFeedback,
+  PayrollFeedbackStatus,
+  PayrollItem,
+  PayrollRecord,
+  PayrollStatus,
+  StaffSalary,
+} from "@/lib/types";
 
 // Director, or any staff whose chức danh is exactly "Project Manager" —
 // mirrors the can_manage_hr() RLS helper in supabase/schema.sql.
@@ -171,6 +181,44 @@ export async function addMyPayrollFeedback(payrollRecordId: string, message: str
     .single();
 
   if (error || !data) throw new Error("Không thể gửi phản hồi.");
+
+  // Scheduled with after() rather than fired-and-forgotten inline — on
+  // Vercel's serverless runtime, a plain un-awaited promise can get cut off
+  // the moment the response is sent (see the identical note in
+  // sendDirectMessage in lib/actions/messages.ts).
+  after(async () => {
+    const [{ data: sender }, { data: directors }] = await Promise.all([
+      supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+      supabase.from("profiles").select("id").eq("access_role", "director"),
+    ]);
+    await Promise.all(
+      (directors ?? []).map((d) =>
+        sendPushToUser(d.id, {
+          title: `${sender?.display_name ?? "Nhân viên"} phản hồi bảng lương`,
+          body: trimmed,
+          senderId: user.id,
+          url: "/quan-tri/bang-luong",
+          tag: `funti-payroll-feedback-${payrollRecordId}`,
+        }).catch(() => {}),
+      ),
+    );
+  });
+
+  return data as PayrollFeedback;
+}
+
+// Director/PM Duyệt/Từ chối on one feedback message — the message and
+// author stay exactly as the employee wrote them, only status changes.
+export async function updatePayrollFeedbackStatus(feedbackId: string, status: PayrollFeedbackStatus): Promise<PayrollFeedback> {
+  const { supabase } = await requireHrManager();
+  const { data, error } = await supabase
+    .from("payroll_feedback")
+    .update({ status })
+    .eq("id", feedbackId)
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error("Không thể cập nhật phản hồi.");
   return data as PayrollFeedback;
 }
 
