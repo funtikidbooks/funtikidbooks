@@ -150,12 +150,16 @@ export function isSameMonth(dateStr: string, monthStart: string): boolean {
 export type AttendanceSummary = { present: number; late: number; absent: number; leave: number };
 
 // Shared by the attendance month-detail view and the payroll form (which
-// suggests deductions from these same counts). "off" (a director-marked
-// day off — a Saturday the whole team had off, say) is deliberately not
+// suggests deductions from these same counts, and whose "Số ngày đi làm"
+// autofill reads straight off `present`). "off" (a director-marked day
+// off — a Saturday the whole team had off, say) is deliberately not
 // tallied into any bucket here, the same as a day with no entry at all —
-// it shouldn't inflate "Vắng" or count as a worked day either.
+// it shouldn't inflate "Vắng" or count as a worked day either. "paid_leave"
+// (a statutory/company holiday) is the opposite: it folds into `present`
+// on purpose, since a paid holiday still counts as a full ngày công for
+// payroll even though nobody actually clocked in.
 export function summarizeAttendance(
-  entries: { work_date: string; status: "present" | "absent" | "leave" | "off"; check_in_at: string | null }[],
+  entries: { work_date: string; status: "present" | "absent" | "leave" | "off" | "paid_leave"; check_in_at: string | null }[],
 ): AttendanceSummary {
   let present = 0;
   let late = 0;
@@ -165,6 +169,7 @@ export function summarizeAttendance(
     if (e.status === "off") continue;
     if (e.status === "absent") absent++;
     else if (e.status === "leave") leave++;
+    else if (e.status === "paid_leave") present++;
     else if (e.status === "present" && e.check_in_at) {
       present++;
       if (isLateCheckIn(e.check_in_at)) late++;

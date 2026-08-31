@@ -133,6 +133,12 @@ export function AttendanceBoard({
                   Ngày nghỉ
                 </span>
               );
+            } else if (entry?.status === "paid_leave") {
+              statusNode = (
+                <span className="text-xs font-bold" style={{ color: "var(--status-blue)" }}>
+                  Nghỉ có lương
+                </span>
+              );
             } else if (entry?.status === "leave") {
               statusNode = (
                 <span className="text-xs font-bold" style={{ color: "var(--color-neutral-500)" }}>

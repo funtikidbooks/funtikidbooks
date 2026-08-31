@@ -769,7 +769,7 @@ create table if not exists public.attendance (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references public.profiles (id) on delete cascade,
   work_date date not null,
-  status text not null default 'present' check (status in ('present', 'absent', 'leave', 'off')),
+  status text not null default 'present' check (status in ('present', 'absent', 'leave', 'off', 'paid_leave')),
   note text,
   created_at timestamptz not null default now(),
   unique (profile_id, work_date)
@@ -783,9 +783,12 @@ alter table public.attendance add column if not exists check_in_at timestamptz;
 -- ad-hoc non-working day (e.g. a Saturday the whole team had off) without
 -- it counting as an unplanned absence — distinct from a weekend/holiday
 -- with no entry at all, which already renders "Ngày nghỉ" automatically.
+-- 'paid_leave' (added later) is for statutory/company holidays — unlike
+-- 'off', it DOES count as a full work day for payroll (summarizeAttendance
+-- folds it into "present"), since a paid holiday is still paid.
 alter table public.attendance drop constraint if exists attendance_status_check;
 alter table public.attendance add constraint attendance_status_check
-  check (status in ('present', 'absent', 'leave', 'off'));
+  check (status in ('present', 'absent', 'leave', 'off', 'paid_leave'));
 
 alter table public.attendance enable row level security;
 
