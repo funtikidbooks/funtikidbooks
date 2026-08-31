@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { getMonthAttendance, listOffDates } from "@/lib/actions/attendance";
-import { getStaffBankInfo } from "@/lib/actions/admin";
 import { AttendanceAvatar, AttendanceEditCellModal } from "@/components/admin/AttendanceEditCellModal";
 import {
   MONTH_LABELS,
@@ -18,8 +17,7 @@ import {
   summarizeAttendance,
   vnToday,
 } from "@/lib/constants/attendance";
-import { bankColor, formatAccountNumber } from "@/lib/bankDisplay";
-import type { AttendanceEntry, Profile, StaffBankInfo } from "@/lib/types";
+import type { AttendanceEntry, Profile } from "@/lib/types";
 
 export function AttendanceMonthDetail({
   profile,
@@ -40,22 +38,6 @@ export function AttendanceMonthDetail({
   const offDateSet = useMemo(() => new Set(offDates), [offDates]);
   const [loading, setLoading] = useState(false);
   const [editingDate, setEditingDate] = useState<string | null>(null);
-  const [bankInfo, setBankInfo] = useState<StaffBankInfo | null>(null);
-
-  // Best-effort: a Project Manager viewing this same modal (can_manage_hr()
-  // lets them into /quan-tri/cham-cong) doesn't have access to bank info —
-  // requireDirector() throws, the catch just leaves the card unshown for them.
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const info = await getStaffBankInfo(profile.id).catch(() => null);
-      if (!cancelled) setBankInfo(info);
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [profile.id]);
 
   const today = vnToday();
   const byDate = useMemo(() => new Map(entries.map((e) => [e.work_date, e])), [entries]);
@@ -102,16 +84,6 @@ export function AttendanceMonthDetail({
           </div>
 
           <div className="flex flex-col gap-4 px-6 py-5">
-            {bankInfo && (bankInfo.bank_name || bankInfo.account_number) && (
-              <div className="rounded-[10px] p-3 flex flex-col gap-1" style={{ background: bankColor(bankInfo.bank_name) }}>
-                <span className="text-[11px] font-bold text-white/90">{bankInfo.bank_name || "Ngân hàng"}</span>
-                <span className="text-sm font-bold text-white font-mono tracking-wide">
-                  {bankInfo.account_number ? formatAccountNumber(bankInfo.account_number) : "—"}
-                </span>
-                {bankInfo.account_holder && <span className="text-[11px] text-white/80">{bankInfo.account_holder}</span>}
-              </div>
-            )}
-
             <div className="grid grid-cols-4 gap-3">
               <div className="card p-3 flex flex-col items-center gap-0.5" style={{ background: "var(--color-surface)" }}>
                 <span className="text-xl font-bold" style={{ color: "var(--status-green)" }}>{stats.present}</span>

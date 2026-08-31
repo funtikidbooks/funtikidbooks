@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getMonthAttendance, listOffDates } from "@/lib/actions/attendance";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { AttendanceMonthDetail } from "@/components/admin/AttendanceMonthDetail";
+import { bankColor, formatAccountNumber } from "@/lib/bankDisplay";
 import {
   WORK_HOURS_LABEL,
   firstOfMonth,
@@ -14,17 +15,20 @@ import {
   isMonToFri,
   vnToday,
 } from "@/lib/constants/attendance";
-import type { AttendanceEntry, Profile } from "@/lib/types";
+import type { AttendanceEntry, Profile, StaffBankInfo } from "@/lib/types";
 
 export function AttendanceBoard({
   initialEntries,
   initialOffDates,
   staff,
+  initialBankInfo,
 }: {
   initialEntries: AttendanceEntry[];
   initialOffDates: string[];
   staff: Profile[];
+  initialBankInfo: StaffBankInfo[];
 }) {
+  const bankInfoByProfile = useMemo(() => new Map(initialBankInfo.map((b) => [b.profile_id, b])), [initialBankInfo]);
   const offDateSet = useMemo(() => new Set(initialOffDates), [initialOffDates]);
   // Rows the realtime subscription below has seen since mount, keyed by id
   // (null = deleted) — merged over initialEntries at render time rather than
@@ -181,28 +185,39 @@ export function AttendanceBoard({
               );
             }
 
+            const bank = bankInfoByProfile.get(p.id);
+
             return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => openDetail(p)}
-                className="card elev-sm fk-staff-card flex flex-col items-center gap-2 p-4 text-center"
-              >
-                <AttendanceAvatar profile={p} size={44} />
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-semibold text-sm truncate max-w-[160px]">{p.display_name}</span>
-                  <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
-                    {p.role || (p.access_role === "admin" ? "Admin" : "Nhân viên")}
-                  </span>
-                </div>
-                {detailLoading === p.id ? (
-                  <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-                    Đang tải…
-                  </span>
-                ) : (
-                  statusNode
+              <div key={p.id} className="card elev-sm fk-staff-card flex flex-col items-center gap-2 p-4 text-center">
+                <button type="button" onClick={() => openDetail(p)} className="flex flex-col items-center gap-2 w-full">
+                  <AttendanceAvatar profile={p} size={44} />
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-semibold text-sm truncate max-w-[160px]">{p.display_name}</span>
+                    <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                      {p.role || (p.access_role === "admin" ? "Admin" : "Nhân viên")}
+                    </span>
+                  </div>
+                  {detailLoading === p.id ? (
+                    <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+                      Đang tải…
+                    </span>
+                  ) : (
+                    statusNode
+                  )}
+                </button>
+                {bank && (bank.bank_name || bank.account_number) && (
+                  <div
+                    className="w-full rounded-[10px] p-2.5 flex flex-col gap-0.5"
+                    style={{ background: bankColor(bank.bank_name) }}
+                  >
+                    <span className="text-[10px] font-bold text-white/90">{bank.bank_name || "Ngân hàng"}</span>
+                    <span className="text-[13px] font-bold text-white font-mono tracking-wide">
+                      {bank.account_number ? formatAccountNumber(bank.account_number) : "—"}
+                    </span>
+                    {bank.account_holder && <span className="text-[10px] text-white/80 truncate">{bank.account_holder}</span>}
+                  </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>

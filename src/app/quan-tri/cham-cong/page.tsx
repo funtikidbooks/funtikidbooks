@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listAllAttendance, listOffDates } from "@/lib/actions/attendance";
+import { listStaffBankInfo } from "@/lib/actions/admin";
 import { AttendanceBoard } from "@/components/admin/AttendanceBoard";
 import type { Profile } from "@/lib/types";
 
@@ -18,7 +19,8 @@ export default async function AdminAttendancePage() {
     .eq("id", user!.id)
     .maybeSingle();
 
-  if (profile?.access_role !== "director" && profile?.role !== "Project Manager") {
+  const isDirector = profile?.access_role === "director";
+  if (!isDirector && profile?.role !== "Project Manager") {
     redirect("/quan-tri");
   }
 
@@ -31,6 +33,16 @@ export default async function AdminAttendancePage() {
       .neq("access_role", "director")
       .order("display_name", { ascending: true }),
   ]);
+  // Director-only, same as everywhere else bank info shows up — a PM
+  // reaching this page via can_manage_hr() never sees it here either.
+  const bankInfo = isDirector ? await listStaffBankInfo() : [];
 
-  return <AttendanceBoard initialEntries={entries} initialOffDates={offDates} staff={(profiles ?? []) as Profile[]} />;
+  return (
+    <AttendanceBoard
+      initialEntries={entries}
+      initialOffDates={offDates}
+      staff={(profiles ?? []) as Profile[]}
+      initialBankInfo={bankInfo}
+    />
+  );
 }
