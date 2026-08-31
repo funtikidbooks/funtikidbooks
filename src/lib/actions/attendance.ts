@@ -177,3 +177,18 @@ export async function upsertAttendance(input: {
 
   if (error) throw new Error("Không thể cập nhật chấm công");
 }
+
+// Clears a cell back to "no record" — e.g. after entering a status by
+// mistake — so it reverts to whatever the calendar shows automatically
+// for that day (auto check-in still runs for today/future dates, "Ngày
+// nghỉ" for a Sunday, etc.) instead of being stuck on the wrong entry.
+export async function deleteAttendance(profileId: string, workDate: string) {
+  const { supabase } = await requireHrManager();
+  const { error } = await supabase
+    .from("attendance")
+    .delete()
+    .eq("profile_id", profileId)
+    .eq("work_date", workDate);
+
+  if (error) throw new Error("Không thể xoá bản ghi chấm công");
+}

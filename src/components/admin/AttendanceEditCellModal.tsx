@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { upsertAttendance } from "@/lib/actions/attendance";
+import { deleteAttendance, upsertAttendance } from "@/lib/actions/attendance";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { formatCheckInTime, formatDayLabel } from "@/lib/constants/attendance";
 import type { AttendanceEntry, Profile } from "@/lib/types";
@@ -29,18 +29,36 @@ export function AttendanceEditCellModal({
   entry,
   onClose,
   onSaved,
+  onDeleted,
 }: {
   profile: Profile;
   date: string;
   entry: AttendanceEntry | undefined;
   onClose: () => void;
   onSaved: (entry: AttendanceEntry) => void;
+  onDeleted?: (workDate: string) => void;
 }) {
   const [status, setStatus] = useState<"present" | "absent" | "leave" | "off" | "paid_leave">(entry?.status ?? "present");
   const [checkInTime, setCheckInTime] = useState(entry?.check_in_at ? formatCheckInTime(entry.check_in_at) : "");
   const [note, setNote] = useState(entry?.note ?? "");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    if (!confirm("Xoá bản ghi chấm công ngày này?")) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteAttendance(profile.id, date);
+      onDeleted?.(date);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -137,13 +155,22 @@ export function AttendanceEditCellModal({
           </p>
         )}
 
-        <div className="flex items-center justify-end gap-3">
-          <button type="button" onClick={onClose} className="btn btn-ghost" disabled={saving}>
-            Huỷ
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? "Đang lưu…" : "Lưu"}
-          </button>
+        <div className="flex items-center justify-between gap-3">
+          {entry ? (
+            <button type="button" onClick={handleDelete} className="btn btn-danger btn-sm" disabled={saving || deleting}>
+              {deleting ? "Đang xoá…" : "🗑 Xoá"}
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={onClose} className="btn btn-ghost" disabled={saving || deleting}>
+              Huỷ
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving || deleting}>
+              {saving ? "Đang lưu…" : "Lưu"}
+            </button>
+          </div>
         </div>
       </form>
     </Modal>

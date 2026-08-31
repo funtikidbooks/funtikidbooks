@@ -192,6 +192,9 @@ export function AttendanceMonthDetail({
               return prev.map((e, i) => (i === idx ? entry : e));
             });
           }}
+          onDeleted={(workDate) => {
+            setEntries((prev) => prev.filter((e) => e.work_date !== workDate));
+          }}
         />
       )}
     </>
