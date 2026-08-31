@@ -2085,9 +2085,46 @@ create policy "staff can manage food shop menu items"
   using (true)
   with check (true);
 
--- Which shop's menu this round is built from — null keeps the original
--- free-typed flow available for a quán that isn't in the library yet.
+-- Superseded by food_order_round_shops below (a round can pull from several
+-- quán at once — someone wants cơm from one place and trà sữa from
+-- another) — left in place, unused, rather than a DROP COLUMN migration for
+-- a column nothing ever wrote real data into.
 alter table public.food_order_rounds add column if not exists shop_id uuid references public.food_shops (id) on delete set null;
+
+-- Which shops' menus this round pulls checklist items from — a round can
+-- have zero (pure free-typed), one, or several active at once, and staff
+-- can add another quán to an already-open round mid-day.
+create table if not exists public.food_order_round_shops (
+  round_id uuid not null references public.food_order_rounds (id) on delete cascade,
+  shop_id uuid not null references public.food_shops (id) on delete cascade,
+  added_at timestamptz not null default now(),
+  primary key (round_id, shop_id)
+);
+
+alter table public.food_order_round_shops enable row level security;
+
+drop policy if exists "staff can read food order round shops" on public.food_order_round_shops;
+create policy "staff can read food order round shops"
+  on public.food_order_round_shops for select
+  to authenticated
+  using (true);
+
+drop policy if exists "staff can manage food order round shops" on public.food_order_round_shops;
+create policy "staff can manage food order round shops"
+  on public.food_order_round_shops for all
+  to authenticated
+  using (true)
+  with check (true);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'food_order_round_shops'
+  ) then
+    alter publication supabase_realtime add table public.food_order_round_shops;
+  end if;
+end $$;
 
 -- Seed "Phở 193 - Nguyễn Phúc Nguyên" once, read off its real ShopeeFood
 -- menu by hand (see supabase/migrations/food_shop_library.sql for how to

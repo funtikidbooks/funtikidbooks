@@ -149,12 +149,20 @@ export type FoodOrderRound = {
   deadline_at: string | null;
   shopee_link: string | null;
   status: FoodOrderRoundStatus;
-  // Which food_shops row (if any) this round's menu checklist is built
-  // from — null means the original free-typed flow, for a quán not in the
-  // library yet.
+  // Superseded by food_order_round_shops (a round can pull from several
+  // quán at once) — kept in the type for the raw DB row shape, but the app
+  // no longer reads or writes it.
   shop_id: string | null;
   created_by: string | null;
   created_at: string;
+};
+
+// Which food_shops a round pulls checklist items from — zero, one, or
+// several at once.
+export type FoodOrderRoundShop = {
+  round_id: string;
+  shop_id: string;
+  added_at: string;
 };
 
 // One per (round, person) — each staff member's own order within that day's
@@ -724,6 +732,12 @@ export type Database = {
         Row: FoodShopMenuItem;
         Insert: Partial<FoodShopMenuItem> & { shop_id: string; name: string };
         Update: Partial<FoodShopMenuItem>;
+        Relationships: [];
+      };
+      food_order_round_shops: {
+        Row: FoodOrderRoundShop;
+        Insert: { round_id: string; shop_id: string };
+        Update: Partial<FoodOrderRoundShop>;
         Relationships: [];
       };
       meeting_channel_reads: {

@@ -29,7 +29,7 @@ export async function getTodayFoodOrderRound(channelId: string): Promise<FoodOrd
 
 export async function startFoodOrderRound(
   channelId: string,
-  input: { title: string; deadlineAt?: string | null; shopId?: string | null },
+  input: { title: string; deadlineAt?: string | null; shopIds?: string[] },
 ): Promise<FoodOrderRound> {
   const { supabase, user } = await requireUser();
   const { data, error } = await supabase
@@ -39,7 +39,6 @@ export async function startFoodOrderRound(
       order_date: vnToday(),
       title: input.title.trim() || "Đặt đồ ăn",
       deadline_at: input.deadlineAt || null,
-      shop_id: input.shopId || null,
       created_by: user.id,
     })
     .select("*")
@@ -53,8 +52,33 @@ export async function startFoodOrderRound(
     if (existing) return existing;
     throw new Error("Không thể bắt đầu đợt đặt đồ ăn.");
   }
+
+  if (input.shopIds && input.shopIds.length > 0) {
+    await supabase.from("food_order_round_shops").insert(input.shopIds.map((shopId) => ({ round_id: data.id, shop_id: shopId })));
+  }
+
   revalidatePath("/workspace/hop");
   return data as FoodOrderRound;
+}
+
+// Quán currently active in a round — zero, one, or several. Anyone can add
+// another quán to an already-open round (a colleague wanting bubble tea
+// from a different shop than whoever started the round picked).
+export async function listRoundShopIds(roundId: string): Promise<string[]> {
+  const { supabase } = await requireUser();
+  const { data } = await supabase.from("food_order_round_shops").select("shop_id").eq("round_id", roundId);
+  return (data ?? []).map((r) => r.shop_id as string);
+}
+
+export async function addShopToRound(roundId: string, shopId: string): Promise<void> {
+  const { supabase } = await requireUser();
+  const { error } = await supabase.from("food_order_round_shops").upsert({ round_id: roundId, shop_id: shopId });
+  if (error) throw new Error("Không thể thêm quán vào đợt này.");
+}
+
+export async function removeShopFromRound(roundId: string, shopId: string): Promise<void> {
+  const { supabase } = await requireUser();
+  await supabase.from("food_order_round_shops").delete().eq("round_id", roundId).eq("shop_id", shopId);
 }
 
 export async function updateFoodOrderRoundLink(roundId: string, shopeeLink: string): Promise<FoodOrderRound> {

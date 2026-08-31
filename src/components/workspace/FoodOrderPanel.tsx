@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
+  addShopToRound,
   deleteFoodOrderRound,
   deleteMyFoodOrderItem,
   getTodayFoodOrderRound,
   listFoodOrderItems,
+  listRoundShopIds,
   setFoodOrderRoundStatus,
   startFoodOrderRound,
   updateFoodOrderRoundLink,
@@ -45,9 +47,9 @@ type NewShopItemDraft = { name: string; note: string; price: string };
 // "quán này hết món rồi" back-and-forth that a structured order list can't
 // capture.
 //
-// A round can optionally point at a saved food_shops entry (its menu read
-// off a real ShopeeFood page once, by hand) — when it does, "my order"
-// becomes a checklist against that menu instead of free-typing.
+// A round can pull its checklist from several saved food_shops at once —
+// someone wants cơm from one quán and trà sữa from another in the same
+// order — added when starting the round or any time after while it's open.
 export function FoodOrderPanel({
   channelId,
   currentUserId,
@@ -63,15 +65,21 @@ export function FoodOrderPanel({
   const [error, setError] = useState<string | null>(null);
 
   const [shops, setShops] = useState<FoodShop[]>([]);
-  const [selectedShopId, setSelectedShopId] = useState("");
+  const [roundShopIds, setRoundShopIds] = useState<Set<string>>(new Set());
+  const [shopMenus, setShopMenus] = useState<Map<string, FoodShopMenuItem[]>>(new Map());
+
+  const [selectedShopIds, setSelectedShopIds] = useState<Set<string>>(new Set());
   const [starting, setStarting] = useState(false);
+
+  const [addExistingShopId, setAddExistingShopId] = useState("");
+  const [addingExistingShop, setAddingExistingShop] = useState(false);
+
   const [showAddShop, setShowAddShop] = useState(false);
   const [newShopName, setNewShopName] = useState("");
   const [newShopLink, setNewShopLink] = useState("");
   const [newShopItems, setNewShopItems] = useState<NewShopItemDraft[]>([{ name: "", note: "", price: "" }]);
   const [addingShop, setAddingShop] = useState(false);
 
-  const [shopMenu, setShopMenu] = useState<FoodShopMenuItem[]>([]);
   const [editingMine, setEditingMine] = useState(false);
   const [checkedItemIds, setCheckedItemIds] = useState<Set<string>>(new Set());
   const [extraText, setExtraText] = useState("");
@@ -84,6 +92,11 @@ export function FoodOrderPanel({
   const [editingLink, setEditingLink] = useState(false);
   const [savingLink, setSavingLink] = useState(false);
 
+  async function loadShopMenus(shopIds: string[]) {
+    const entries = await Promise.all(shopIds.map(async (id) => [id, await getFoodShopMenu(id)] as const));
+    return new Map(entries);
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -95,17 +108,15 @@ export function FoodOrderPanel({
         setRound(r);
         setShops(shopList);
         if (r) {
-          const [list, menu] = await Promise.all([
-            listFoodOrderItems(r.id),
-            r.shop_id ? getFoodShopMenu(r.shop_id) : Promise.resolve([]),
-          ]);
-          if (!cancelled) {
-            setItems(list);
-            setShopMenu(menu);
-          }
+          const [list, shopIds] = await Promise.all([listFoodOrderItems(r.id), listRoundShopIds(r.id)]);
+          if (cancelled) return;
+          setItems(list);
+          setRoundShopIds(new Set(shopIds));
+          setShopMenus(await loadShopMenus(shopIds));
         } else {
           setItems([]);
-          setShopMenu([]);
+          setRoundShopIds(new Set());
+          setShopMenus(new Map());
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Không thể tải đợt đặt đồ ăn.");
@@ -120,7 +131,8 @@ export function FoodOrderPanel({
   }, [channelId]);
 
   // Live for everyone looking at this room at once — the whole point of a
-  // group order is seeing new items land without reloading.
+  // group order is seeing new items (and newly-added quán) land without
+  // reloading.
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -144,13 +156,29 @@ export function FoodOrderPanel({
           return idx === -1 ? [...prev, row] : prev.map((it, i) => (i === idx ? row : it));
         });
       })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "food_order_round_shops" }, (payload) => {
+        const row = payload.new as { round_id: string; shop_id: string };
+        if (row.round_id !== round?.id) return;
+        setRoundShopIds((prev) => new Set(prev).add(row.shop_id));
+        getFoodShopMenu(row.shop_id)
+          .then((menu) => setShopMenus((prev) => new Map(prev).set(row.shop_id, menu)))
+          .catch(() => {});
+      })
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "food_order_round_shops" }, (payload) => {
+        const row = payload.old as { round_id: string; shop_id: string };
+        setRoundShopIds((prev) => {
+          const next = new Set(prev);
+          next.delete(row.shop_id);
+          return next;
+        });
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-    // round.id intentionally excluded — resubscribing on every round change
-    // would drop messages in the gap; the handlers above re-check the
+    // round.id intentionally excluded from deps — resubscribing on every
+    // round change would drop events in the gap; handlers re-check the
     // current round via functional state updates instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId]);
@@ -159,13 +187,41 @@ export function FoodOrderPanel({
     setStarting(true);
     setError(null);
     try {
-      const r = await startFoodOrderRound(channelId, { title: "Đặt đồ ăn", shopId: selectedShopId || null });
+      const shopIds = Array.from(selectedShopIds);
+      const r = await startFoodOrderRound(channelId, { title: "Đặt đồ ăn", shopIds });
       setRound(r);
-      setShopMenu(r.shop_id ? await getFoodShopMenu(r.shop_id) : []);
+      setRoundShopIds(new Set(shopIds));
+      setShopMenus(await loadShopMenus(shopIds));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setStarting(false);
+    }
+  }
+
+  function toggleSelectedShop(id: string) {
+    setSelectedShopIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleAddExistingShopToRound() {
+    if (!round || !addExistingShopId || addingExistingShop) return;
+    setAddingExistingShop(true);
+    setError(null);
+    try {
+      await addShopToRound(round.id, addExistingShopId);
+      const menu = await getFoodShopMenu(addExistingShopId);
+      setRoundShopIds((prev) => new Set(prev).add(addExistingShopId));
+      setShopMenus((prev) => new Map(prev).set(addExistingShopId, menu));
+      setAddExistingShopId("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setAddingExistingShop(false);
     }
   }
 
@@ -181,6 +237,8 @@ export function FoodOrderPanel({
     setNewShopItems((prev) => (prev.length === 1 ? prev : prev.filter((_, idx) => idx !== i)));
   }
 
+  const newShopHasItem = newShopItems.some((it) => it.name.trim());
+
   async function submitNewShop(e: React.FormEvent) {
     e.preventDefault();
     if (addingShop) return;
@@ -195,7 +253,14 @@ export function FoodOrderPanel({
           .map((it) => ({ name: it.name, note: it.note, price: it.price === "" ? null : Number(it.price) })),
       });
       setShops((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name, "vi")));
-      setSelectedShopId(created.id);
+      if (round) {
+        await addShopToRound(round.id, created.id);
+        const menu = await getFoodShopMenu(created.id);
+        setRoundShopIds((prev) => new Set(prev).add(created.id));
+        setShopMenus((prev) => new Map(prev).set(created.id, menu));
+      } else {
+        setSelectedShopIds((prev) => new Set(prev).add(created.id));
+      }
       setShowAddShop(false);
       setNewShopName("");
       setNewShopLink("");
@@ -208,15 +273,16 @@ export function FoodOrderPanel({
   }
 
   const myItem = items.find((it) => it.profile_id === currentUserId);
+  const allActiveMenuItems = Array.from(roundShopIds).flatMap((id) => shopMenus.get(id) ?? []);
 
   // Reconstructs which menu checkboxes were selected from a previously
   // saved item_text ("Phở tái, Chén Trứng") — reliable since submitMyItem
   // below always joins names with ", " in the first place.
   function openMyItemForm() {
-    if (round?.shop_id) {
+    if (allActiveMenuItems.length > 0) {
       const parts = (myItem?.item_text ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-      const menuNames = new Set(shopMenu.map((m) => m.name));
-      setCheckedItemIds(new Set(shopMenu.filter((m) => parts.includes(m.name)).map((m) => m.id)));
+      const menuNames = new Set(allActiveMenuItems.map((m) => m.name));
+      setCheckedItemIds(new Set(allActiveMenuItems.filter((m) => parts.includes(m.name)).map((m) => m.id)));
       setExtraText(parts.filter((p) => !menuNames.has(p)).join(", "));
     } else {
       setFreeItemText(myItem?.item_text ?? "");
@@ -241,8 +307,8 @@ export function FoodOrderPanel({
 
     let itemText: string;
     let price: number | null;
-    if (round.shop_id) {
-      const chosen = shopMenu.filter((m) => checkedItemIds.has(m.id));
+    if (allActiveMenuItems.length > 0) {
+      const chosen = allActiveMenuItems.filter((m) => checkedItemIds.has(m.id));
       const names = [...chosen.map((m) => m.name), ...(extraText.trim() ? [extraText.trim()] : [])];
       itemText = names.join(", ");
       price = chosen.reduce((sum, m) => sum + (m.price ?? 0), 0);
@@ -312,8 +378,9 @@ export function FoodOrderPanel({
       await deleteFoodOrderRound(round.id);
       setRound(null);
       setItems([]);
-      setShopMenu([]);
-      setSelectedShopId("");
+      setRoundShopIds(new Set());
+      setShopMenus(new Map());
+      setSelectedShopIds(new Set());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     }
@@ -326,7 +393,10 @@ export function FoodOrderPanel({
         new Date(`${round.order_date}T00:00:00`),
       )
     : "";
-  const shopName = round?.shop_id ? shops.find((s) => s.id === round.shop_id)?.name : null;
+  const activeShopNames = Array.from(roundShopIds)
+    .map((id) => shops.find((s) => s.id === id)?.name)
+    .filter((n): n is string => !!n);
+  const shopsNotInRound = shops.filter((s) => !roundShopIds.has(s.id));
 
   if (loading) {
     return (
@@ -346,30 +416,189 @@ export function FoodOrderPanel({
           <div>
             <div className="text-sm font-bold">🍱 Chưa có ai bắt đầu đặt đồ ăn hôm nay</div>
             <div className="text-xs mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
-              Chọn một quán đã lưu sẵn menu, hoặc bắt đầu không cần chọn quán.
+              Chọn một hoặc nhiều quán đã lưu sẵn menu (VD: cơm ở quán A, trà sữa ở quán B), hoặc bắt đầu không cần chọn quán.
             </div>
           </div>
 
           {!showAddShop && (
+            <div className="flex flex-col gap-2">
+              {shops.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  {shops.map((s) => (
+                    <label key={s.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input type="checkbox" checked={selectedShopIds.has(s.id)} onChange={() => toggleSelectedShop(s.id)} />
+                      <span>{s.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button type="button" onClick={handleStart} className="btn btn-primary btn-sm flex-none" disabled={starting}>
+                  {starting
+                    ? "Đang bắt đầu…"
+                    : selectedShopIds.size > 0
+                      ? `Bắt đầu đặt đồ ăn (${selectedShopIds.size} quán)`
+                      : "Bắt đầu không cần chọn quán"}
+                </button>
+                <button type="button" onClick={() => setShowAddShop(true)} className="btn btn-ghost btn-sm flex-none">
+                  + Thêm quán mới
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showAddShop && (
+            <form onSubmit={submitNewShop} className="flex flex-col gap-2 pt-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  className="input"
+                  style={{ padding: "6px 8px", fontSize: 13 }}
+                  placeholder="Tên quán"
+                  value={newShopName}
+                  onChange={(e) => setNewShopName(e.target.value)}
+                  autoFocus
+                />
+                <input
+                  className="input"
+                  style={{ padding: "6px 8px", fontSize: 13 }}
+                  placeholder="Link ShopeeFood (không bắt buộc)"
+                  value={newShopLink}
+                  onChange={(e) => setNewShopLink(e.target.value)}
+                />
+              </div>
+              <span className="text-[11px] font-bold tracking-[0.06em]" style={{ color: "var(--color-neutral-500)" }}>
+                MENU
+              </span>
+              <div className="flex flex-col gap-1.5">
+                {newShopItems.map((it, i) => (
+                  <div key={i} className="grid gap-1.5 items-center" style={{ gridTemplateColumns: "1fr 1fr 100px 28px" }}>
+                    <input
+                      className="input"
+                      style={{ padding: "5px 8px", fontSize: 12 }}
+                      placeholder="Tên món"
+                      value={it.name}
+                      onChange={(e) => updateNewShopItemRow(i, { name: e.target.value })}
+                    />
+                    <input
+                      className="input"
+                      style={{ padding: "5px 8px", fontSize: 12 }}
+                      placeholder="Ghi chú"
+                      value={it.note}
+                      onChange={(e) => updateNewShopItemRow(i, { note: e.target.value })}
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      className="input"
+                      style={{ padding: "5px 8px", fontSize: 12 }}
+                      placeholder="Giá"
+                      value={it.price}
+                      onChange={(e) => updateNewShopItemRow(i, { price: e.target.value })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeNewShopItemRow(i)}
+                      className="btn-icon"
+                      style={{ width: 26, height: 26, padding: 0, fontSize: 12 }}
+                      aria-label="Xoá món"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={addNewShopItemRow} className="btn btn-ghost btn-sm w-fit">
+                + Thêm món
+              </button>
+              <div className="flex items-center gap-2 justify-end">
+                <button type="button" onClick={() => setShowAddShop(false)} className="btn btn-ghost btn-sm" disabled={addingShop}>
+                  Huỷ
+                </button>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={addingShop || !newShopName.trim() || !newShopHasItem}>
+                  {addingShop ? "Đang lưu…" : "Lưu quán"}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold">🍱 {round.title}</span>
+                <span
+                  className="tag"
+                  style={{
+                    background: round.status === "open" ? "var(--color-accent-100)" : "var(--color-neutral-200)",
+                    color: round.status === "open" ? "var(--color-accent-700)" : "var(--color-neutral-600)",
+                  }}
+                >
+                  {round.status === "open" ? "Đang mở" : "Đã chốt"}
+                </span>
+              </div>
+              <div className="text-xs mt-0.5 capitalize" style={{ color: "var(--color-neutral-500)" }}>
+                {dateLabel}
+                {activeShopNames.length > 0 && ` · ${activeShopNames.join(", ")}`} · {items.length} người đã đặt
+                {hasPrices && ` · Tổng ${formatVnd(total)}`}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-none">
+              {round.created_by === currentUserId && (
+                <button
+                  type="button"
+                  onClick={handleDeleteRound}
+                  className="text-xs"
+                  style={{ color: "var(--color-neutral-400)" }}
+                  title="Xoá đợt, bắt đầu lại"
+                >
+                  Xoá đợt, làm lại
+                </button>
+              )}
+              <button type="button" onClick={toggleStatus} className="btn btn-ghost btn-sm">
+                {round.status === "open" ? "Chốt đơn" : "Mở lại"}
+              </button>
+              {myItem ? (
+                <button type="button" onClick={openMyItemForm} className="btn btn-secondary btn-sm">
+                  Sửa đơn của tôi
+                </button>
+              ) : (
+                round.status === "open" && (
+                  <button type="button" onClick={openMyItemForm} className="btn btn-primary btn-sm">
+                    + Thêm đơn của tôi
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+
+          {round.status === "open" && shopsNotInRound.length > 0 && (
             <div className="flex items-center gap-2 flex-wrap">
               <select
-                className="input flex-1"
-                style={{ padding: "6px 8px", fontSize: 13, minWidth: 180 }}
-                value={selectedShopId}
-                onChange={(e) => setSelectedShopId(e.target.value)}
+                className="input"
+                style={{ padding: "5px 8px", fontSize: 12, maxWidth: 220 }}
+                value={addExistingShopId}
+                onChange={(e) => setAddExistingShopId(e.target.value)}
               >
-                <option value="">— Không chọn quán (tự gõ món) —</option>
-                {shops.map((s) => (
+                <option value="">+ Thêm quán khác vào đợt này…</option>
+                {shopsNotInRound.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
                 ))}
               </select>
-              <button type="button" onClick={handleStart} className="btn btn-primary btn-sm flex-none" disabled={starting}>
-                {starting ? "Đang bắt đầu…" : "Bắt đầu đặt đồ ăn"}
-              </button>
-              <button type="button" onClick={() => setShowAddShop(true)} className="btn btn-ghost btn-sm flex-none">
-                + Thêm quán mới
+              {addExistingShopId && (
+                <button
+                  type="button"
+                  onClick={handleAddExistingShopToRound}
+                  className="btn btn-ghost btn-sm"
+                  disabled={addingExistingShop}
+                >
+                  {addingExistingShop ? "…" : "Thêm"}
+                </button>
+              )}
+              <button type="button" onClick={() => setShowAddShop((v) => !v)} className="text-xs font-semibold" style={{ color: "var(--color-neutral-500)" }}>
+                hoặc + Thêm quán mới
               </button>
             </div>
           )}
@@ -441,63 +670,12 @@ export function FoodOrderPanel({
                 <button type="button" onClick={() => setShowAddShop(false)} className="btn btn-ghost btn-sm" disabled={addingShop}>
                   Huỷ
                 </button>
-                <button type="submit" className="btn btn-primary btn-sm" disabled={addingShop || !newShopName.trim()}>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={addingShop || !newShopName.trim() || !newShopHasItem}>
                   {addingShop ? "Đang lưu…" : "Lưu quán"}
                 </button>
               </div>
             </form>
           )}
-        </div>
-      ) : (
-        <>
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold">🍱 {round.title}</span>
-                <span
-                  className="tag"
-                  style={{
-                    background: round.status === "open" ? "var(--color-accent-100)" : "var(--color-neutral-200)",
-                    color: round.status === "open" ? "var(--color-accent-700)" : "var(--color-neutral-600)",
-                  }}
-                >
-                  {round.status === "open" ? "Đang mở" : "Đã chốt"}
-                </span>
-              </div>
-              <div className="text-xs mt-0.5 capitalize" style={{ color: "var(--color-neutral-500)" }}>
-                {dateLabel}
-                {shopName && ` · ${shopName}`} · {items.length} người đã đặt
-                {hasPrices && ` · Tổng ${formatVnd(total)}`}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 flex-none">
-              {round.created_by === currentUserId && (
-                <button
-                  type="button"
-                  onClick={handleDeleteRound}
-                  className="text-xs"
-                  style={{ color: "var(--color-neutral-400)" }}
-                  title="Xoá đợt, bắt đầu lại"
-                >
-                  Xoá đợt, làm lại
-                </button>
-              )}
-              <button type="button" onClick={toggleStatus} className="btn btn-ghost btn-sm">
-                {round.status === "open" ? "Chốt đơn" : "Mở lại"}
-              </button>
-              {myItem ? (
-                <button type="button" onClick={openMyItemForm} className="btn btn-secondary btn-sm">
-                  Sửa đơn của tôi
-                </button>
-              ) : (
-                round.status === "open" && (
-                  <button type="button" onClick={openMyItemForm} className="btn btn-primary btn-sm">
-                    + Thêm đơn của tôi
-                  </button>
-                )
-              )}
-            </div>
-          </div>
 
           {round.shopee_link ? (
             <a
@@ -574,24 +752,36 @@ export function FoodOrderPanel({
 
           {editingMine && (
             <form onSubmit={submitMyItem} className="flex flex-col gap-2 pt-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
-              {round.shop_id ? (
+              {allActiveMenuItems.length > 0 ? (
                 <>
-                  <div className="flex flex-col gap-1 max-h-[160px] overflow-y-auto pr-1">
-                    {shopMenu.map((m) => (
-                      <label key={m.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input type="checkbox" checked={checkedItemIds.has(m.id)} onChange={() => toggleChecked(m.id)} />
-                        <span className="flex-1">
-                          {m.name}
-                          {m.note && (
-                            <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-                              {" "}
-                              ({m.note})
-                            </span>
-                          )}
-                        </span>
-                        {m.price !== null && <span className="text-xs font-semibold flex-none">{formatVnd(m.price)}</span>}
-                      </label>
-                    ))}
+                  <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1">
+                    {Array.from(roundShopIds).map((shopId) => {
+                      const menu = shopMenus.get(shopId) ?? [];
+                      if (menu.length === 0) return null;
+                      const shopLabel = shops.find((s) => s.id === shopId)?.name ?? "Quán";
+                      return (
+                        <div key={shopId} className="flex flex-col gap-1">
+                          <span className="text-[11px] font-bold tracking-[0.04em]" style={{ color: "var(--color-neutral-500)" }}>
+                            {shopLabel.toUpperCase()}
+                          </span>
+                          {menu.map((m) => (
+                            <label key={m.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input type="checkbox" checked={checkedItemIds.has(m.id)} onChange={() => toggleChecked(m.id)} />
+                              <span className="flex-1">
+                                {m.name}
+                                {m.note && (
+                                  <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+                                    {" "}
+                                    ({m.note})
+                                  </span>
+                                )}
+                              </span>
+                              {m.price !== null && <span className="text-xs font-semibold flex-none">{formatVnd(m.price)}</span>}
+                            </label>
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <input
