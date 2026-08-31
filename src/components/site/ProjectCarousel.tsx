@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useDict } from "@/components/site/LocaleProvider";
-import { ProjectLightbox } from "@/components/site/ProjectLightbox";
 import { categoryLabel } from "@/lib/dictionary";
 import { pickLocalized } from "@/lib/i18n";
 import type { Project } from "@/lib/types";
@@ -28,26 +27,18 @@ export function ProjectCarousel({ projects }: { projects: Project[] }) {
   const isRealData = projects.length > 0;
   const source = isRealData ? projects.slice(0, 8) : FALLBACK_PROJECTS;
   const [active, setActive] = useState(0);
-  const [openId, setOpenId] = useState<string | null>(null);
   const count = source.length;
 
   function go(delta: number) {
-    setActive((i) => {
-      const next = (i + delta + count) % count;
-      // Keep the open lightbox (if any) in sync with the carousel position.
-      if (isRealData && openId) setOpenId((source[next] as Project).id);
-      return next;
-    });
+    setActive((i) => (i + delta + count) % count);
   }
 
-  // Auto-advance every 5-6s — paused while the lightbox is open.
+  // Auto-advance every 5-6s.
   useEffect(() => {
-    if (count <= 1 || openId) return;
+    if (count <= 1) return;
     const id = setInterval(() => setActive((i) => (i + 1) % count), ROTATE_MS);
     return () => clearInterval(id);
-  }, [count, openId]);
-
-  const openProject = isRealData ? (source as Project[]).find((p) => p.id === openId) ?? null : null;
+  }, [count]);
 
   return (
     <div className="flex flex-col items-center gap-5">
@@ -106,20 +97,12 @@ export function ProjectCarousel({ projects }: { projects: Project[] }) {
             transition: "transform .45s cubic-bezier(.22,1,.36,1), opacity .35s ease",
           };
 
-          // Real projects open their case study right here; the placeholder
-          // set (no content to show yet) just links out to /du-an.
-          return isRealData ? (
-            <button
-              key={`${p.title}-${i}`}
-              type="button"
-              onClick={() => setOpenId((p as Project).id)}
-              className="absolute card overflow-hidden text-left"
-              style={style}
-            >
-              {card}
-            </button>
-          ) : (
-            <Link key={`${p.title}-${i}`} href="/du-an" className="absolute card overflow-hidden" style={style}>
+          // Real projects link straight to their case study on /du-an
+          // (opened there, not in a small popup on the homepage); the
+          // placeholder set (no content to show yet) just links to /du-an.
+          const href = isRealData ? `/du-an?p=${(p as Project).id}` : "/du-an";
+          return (
+            <Link key={`${p.title}-${i}`} href={href} className="absolute card overflow-hidden" style={style}>
               {card}
             </Link>
           );
@@ -139,17 +122,6 @@ export function ProjectCarousel({ projects }: { projects: Project[] }) {
       <Link href="/du-an" className="fk-navlink text-sm font-bold">
         {t.home.seeAllProjects}
       </Link>
-
-      {openProject && (
-        <ProjectLightbox
-          project={openProject}
-          canEdit={false}
-          onClose={() => setOpenId(null)}
-          onPrev={() => go(-1)}
-          onNext={() => go(1)}
-          onEdit={() => {}}
-        />
-      )}
     </div>
   );
 }

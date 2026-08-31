@@ -15,11 +15,13 @@ export const metadata: Metadata = {
   twitter: { title: "Dự án · Funti Kidbooks Studio", description: PAGE_DESCRIPTION },
 };
 
-export default async function ProjectsPage() {
-  const [editorRole, locale] = await Promise.all([getContentEditorRole(), getLocale()]);
+export default async function ProjectsPage({ searchParams }: PageProps<"/du-an">) {
+  const [editorRole, locale, params] = await Promise.all([getContentEditorRole(), getLocale(), searchParams]);
   const canEdit = editorRole !== null;
   const projects = await getProjects(canEdit);
   const t = dictionary[locale].projects;
+  const pParam = params?.p;
+  const initialOpenId = Array.isArray(pParam) ? pParam[0] : pParam;
 
   const TAGS = [
     { icon: "🎨", label: t.tagline1 },
@@ -65,7 +67,7 @@ export default async function ProjectsPage() {
       </section>
 
       <section className="px-6 lg:px-10 pb-16">
-        <ProjectsGrid projects={projects} canEdit={canEdit} />
+        <ProjectsGrid projects={projects} canEdit={canEdit} initialOpenId={initialOpenId} />
       </section>
     </>
   );

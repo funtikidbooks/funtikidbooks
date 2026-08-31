@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useDict } from "@/components/site/LocaleProvider";
 import { ProjectLightbox } from "@/components/site/ProjectLightbox";
 import { Reveal } from "@/components/site/Reveal";
@@ -63,15 +64,36 @@ const FALLBACK_PROJECTS: Pick<Project, "id" | "title" | "title_en" | "tag" | "co
   { id: "fallback-8", title: "Sách toán vui mỗi ngày", title_en: null, tag: "Sách giáo dục", cover_image_url: "/placeholders/projects/sach-toan-vui.jpg" },
 ];
 
-export function ProjectsGrid({ projects, canEdit = false }: { projects: Project[]; canEdit?: boolean }) {
+export function ProjectsGrid({
+  projects,
+  canEdit = false,
+  initialOpenId,
+}: {
+  projects: Project[];
+  canEdit?: boolean;
+  initialOpenId?: string;
+}) {
   const { locale, t } = useDict();
+  const router = useRouter();
+  const pathname = usePathname();
   const [items, setItems] = useState(projects);
   const isRealData = items.length > 0;
   const source = isRealData ? items : FALLBACK_PROJECTS;
 
   const [active, setActive] = useState(ALL);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(initialOpenId ?? null);
   const [editing, setEditing] = useState<Project | "new" | null>(null);
+
+  // Deep-linked from elsewhere (e.g. the homepage carousel) with ?p=<id> —
+  // open straight to that project, then drop the param so a refresh or the
+  // back button doesn't keep reopening it.
+  useEffect(() => {
+    if (!initialOpenId) return;
+    if (isRealData) void trackProjectView(initialOpenId);
+    router.replace(pathname, { scroll: false });
+    // Only ever meant to fire once, for the id the page loaded with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const likedRaw = useSyncExternalStore(subscribeLikedProjects, getLikedProjectsSnapshot, getLikedProjectsServerSnapshot);
   const likedIds = useMemo(() => {
