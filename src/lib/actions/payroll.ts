@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
-import type { PayrollFeedback, PayrollItem, PayrollRecord, PayrollStatus, StaffSalary } from "@/lib/types";
+import type { PayrollConfirmation, PayrollFeedback, PayrollItem, PayrollRecord, PayrollStatus, StaffSalary } from "@/lib/types";
 
 // Director, or any staff whose chức danh is exactly "Project Manager" —
 // mirrors the can_manage_hr() RLS helper in supabase/schema.sql.
@@ -76,6 +76,17 @@ export async function upsertPayroll(input: {
     .single();
 
   if (error || !data) throw new Error("Không thể lưu bảng lương");
+
+  // Any director edit invalidates a prior "I checked this and it's right"
+  // from the employee — they confirmed different numbers. Best-effort: the
+  // save itself already succeeded, so a failure here just leaves a stale
+  // confirmation rather than losing the director's edit.
+  try {
+    await supabase.from("payroll_confirmations").delete().eq("payroll_record_id", data.id);
+  } catch {
+    // ignore — see comment above
+  }
+
   return data as PayrollRecord;
 }
 
@@ -161,4 +172,45 @@ export async function addMyPayrollFeedback(payrollRecordId: string, message: str
 
   if (error || !data) throw new Error("Không thể gửi phản hồi.");
   return data as PayrollFeedback;
+}
+
+// The caller's own fixed-salary settings — backs "Lương cứng" / "mỗi ngày
+// công" on the payslip panel, alongside the already-computed base_salary.
+export async function getMyStaffSalary(): Promise<StaffSalary | null> {
+  const { supabase, user } = await requireUser();
+  const { data } = await supabase.from("staff_salary").select("*").eq("profile_id", user.id).maybeSingle();
+  return (data as StaffSalary) ?? null;
+}
+
+export async function getMyPayrollConfirmation(payrollRecordId: string): Promise<PayrollConfirmation | null> {
+  const { supabase, user } = await requireUser();
+  const { data } = await supabase
+    .from("payroll_confirmations")
+    .select("*")
+    .eq("payroll_record_id", payrollRecordId)
+    .eq("profile_id", user.id)
+    .maybeSingle();
+  return (data as PayrollConfirmation) ?? null;
+}
+
+export async function confirmMyPayroll(payrollRecordId: string): Promise<PayrollConfirmation> {
+  const { supabase, user } = await requireUser();
+  const { data, error } = await supabase
+    .from("payroll_confirmations")
+    .upsert({ payroll_record_id: payrollRecordId, profile_id: user.id }, { onConflict: "payroll_record_id" })
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error("Không thể xác nhận.");
+  return data as PayrollConfirmation;
+}
+
+// Director/PM board view — which of this month's already-loaded records
+// have a confirmation, keyed by payroll_record_id for an O(1) lookup while
+// rendering the staff grid.
+export async function listPayrollConfirmations(payrollRecordIds: string[]): Promise<PayrollConfirmation[]> {
+  const { supabase } = await requireHrManager();
+  if (payrollRecordIds.length === 0) return [];
+  const { data } = await supabase.from("payroll_confirmations").select("*").in("payroll_record_id", payrollRecordIds);
+  return (data ?? []) as PayrollConfirmation[];
 }

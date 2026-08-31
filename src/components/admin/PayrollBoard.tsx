@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { listPayrollForMonth } from "@/lib/actions/payroll";
+import { useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { listPayrollConfirmations, listPayrollForMonth } from "@/lib/actions/payroll";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { PayrollEditModal } from "@/components/admin/PayrollEditModal";
 import { MONTH_LABELS, addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
-import type { PayrollRecord, Profile } from "@/lib/types";
+import type { PayrollConfirmation, PayrollRecord, Profile } from "@/lib/types";
 
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
@@ -15,19 +16,56 @@ function netTotal(r: PayrollRecord) {
   return r.base_salary + r.items.reduce((sum, it) => sum + it.amount, 0);
 }
 
-export function PayrollBoard({ initialRecords, staff }: { initialRecords: PayrollRecord[]; staff: Profile[] }) {
+export function PayrollBoard({
+  initialRecords,
+  initialConfirmedIds,
+  staff,
+}: {
+  initialRecords: PayrollRecord[];
+  initialConfirmedIds: string[];
+  staff: Profile[];
+}) {
   const [monthStart, setMonthStart] = useState(() => firstOfMonth(vnToday()));
   const [records, setRecords] = useState(initialRecords);
+  const [confirmedIds, setConfirmedIds] = useState<Set<string>>(() => new Set(initialConfirmedIds));
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<Profile | null>(null);
 
   const byProfile = useMemo(() => new Map(records.map((r) => [r.profile_id, r])), [records]);
 
+  // A confirmation landing for a payslip that isn't this month's doesn't
+  // hurt anything — nothing currently rendered ever looks it up — so this
+  // subscribes broadly rather than trying to filter by the current month
+  // server-side (postgres_changes filters can't express "id in this list").
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("payroll-confirmations-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "payroll_confirmations" }, (payload) => {
+        const isDelete = payload.eventType === "DELETE";
+        const row = (isDelete ? payload.old : payload.new) as PayrollConfirmation;
+        setConfirmedIds((prev) => {
+          const next = new Set(prev);
+          if (isDelete) next.delete(row.payroll_record_id);
+          else next.add(row.payroll_record_id);
+          return next;
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   async function goToMonth(newStart: string) {
     setMonthStart(newStart);
     setLoading(true);
     try {
-      setRecords(await listPayrollForMonth(newStart));
+      const monthRecords = await listPayrollForMonth(newStart);
+      setRecords(monthRecords);
+      const confirmations = await listPayrollConfirmations(monthRecords.map((r) => r.id));
+      setConfirmedIds(new Set(confirmations.map((c) => c.payroll_record_id)));
     } catch {
       setRecords([]);
     } finally {
@@ -40,6 +78,15 @@ export function PayrollBoard({ initialRecords, staff }: { initialRecords: Payrol
       const idx = prev.findIndex((r) => r.profile_id === record.profile_id);
       if (idx === -1) return [...prev, record];
       return prev.map((r, i) => (i === idx ? record : r));
+    });
+    // The save just cleared this record's confirmation server-side (any
+    // director edit invalidates a prior sign-off) — drop it locally too
+    // instead of waiting for the realtime DELETE to round-trip back.
+    setConfirmedIds((prev) => {
+      if (!prev.has(record.id)) return prev;
+      const next = new Set(prev);
+      next.delete(record.id);
+      return next;
     });
   }
 
@@ -90,7 +137,14 @@ export function PayrollBoard({ initialRecords, staff }: { initialRecords: Payrol
               >
                 <AttendanceAvatar profile={p} size={44} />
                 <div className="flex flex-col gap-0.5">
-                  <span className="font-semibold text-sm truncate max-w-[160px]">{p.display_name}</span>
+                  <span className="font-semibold text-sm truncate max-w-[160px] flex items-center justify-center gap-1">
+                    {p.display_name}
+                    {record && confirmedIds.has(record.id) && (
+                      <span title="Nhân viên đã xác nhận bảng lương" style={{ color: "var(--status-green)" }}>
+                        ✓
+                      </span>
+                    )}
+                  </span>
                   <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
                     {p.role || "Nhân viên"}
                   </span>

@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { addMyPayrollFeedback, getMyPayroll, listMyPayrollFeedback } from "@/lib/actions/payroll";
-import type { PayrollFeedback, PayrollRecord } from "@/lib/types";
+import {
+  addMyPayrollFeedback,
+  confirmMyPayroll,
+  getMyPayroll,
+  getMyPayrollConfirmation,
+  getMyStaffSalary,
+  listMyPayrollFeedback,
+} from "@/lib/actions/payroll";
+import type { PayrollConfirmation, PayrollFeedback, PayrollRecord, StaffSalary } from "@/lib/types";
 
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
@@ -15,9 +22,12 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [record, setRecord] = useState<PayrollRecord | null>(null);
+  const [salary, setSalary] = useState<StaffSalary | null>(null);
+  const [confirmation, setConfirmation] = useState<PayrollConfirmation | null>(null);
   const [feedback, setFeedback] = useState<PayrollFeedback[]>([]);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Loads (and reloads on month nav) only while the panel is actually
@@ -29,10 +39,22 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
       setLoading(true);
       setError(null);
       try {
-        const rec = await getMyPayroll(monthStart);
+        const [rec, mySalary] = await Promise.all([getMyPayroll(monthStart), getMyStaffSalary()]);
         if (cancelled) return;
         setRecord(rec);
-        setFeedback(rec ? await listMyPayrollFeedback(rec.id) : []);
+        setSalary(mySalary);
+        if (rec) {
+          const [feedbackList, myConfirmation] = await Promise.all([
+            listMyPayrollFeedback(rec.id),
+            getMyPayrollConfirmation(rec.id),
+          ]);
+          if (cancelled) return;
+          setFeedback(feedbackList);
+          setConfirmation(myConfirmation);
+        } else {
+          setFeedback([]);
+          setConfirmation(null);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Không thể tải bảng lương");
       } finally {
@@ -58,6 +80,19 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleConfirm() {
+    if (!record || confirming) return;
+    setConfirming(true);
+    setError(null);
+    try {
+      setConfirmation(await confirmMyPayroll(record.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -89,7 +124,21 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
             </p>
           ) : (
             <>
-              <div className="flex flex-col gap-1 pt-3 text-sm">
+              {salary && (
+                <div className="flex gap-4 pt-3 text-xs" style={{ color: "var(--color-neutral-500)" }}>
+                  <span>
+                    Lương cứng: <strong style={{ color: "var(--color-text)" }}>{formatVnd(salary.monthly_salary)}</strong>
+                  </span>
+                  <span>
+                    Mỗi ngày công:{" "}
+                    <strong style={{ color: "var(--color-text)" }}>
+                      {formatVnd(salary.standard_work_days > 0 ? salary.monthly_salary / salary.standard_work_days : 0)}
+                    </strong>
+                  </span>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1 text-sm" style={{ paddingTop: salary ? 0 : 12 }}>
                 <div className="flex justify-between gap-3">
                   <span style={{ color: "var(--color-neutral-500)" }}>
                     Lương theo ngày công{record.work_days !== null && ` (${record.work_days} ngày)`}
@@ -113,6 +162,16 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
                   {record.status === "paid" ? "Đã trả" : "Nháp — số liệu có thể còn điều chỉnh"}
                 </span>
               </div>
+
+              {confirmation ? (
+                <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: "var(--status-green)" }}>
+                  ✓ Đã xác nhận lúc {new Date(confirmation.confirmed_at).toLocaleString("vi-VN")}
+                </div>
+              ) : (
+                <button type="button" onClick={handleConfirm} className="btn btn-secondary btn-sm w-fit" disabled={confirming}>
+                  {confirming ? "Đang xác nhận…" : "✓ Xác nhận số liệu đã đúng"}
+                </button>
+              )}
 
               <div className="flex flex-col gap-2">
                 <span className="text-[11px] font-bold tracking-[0.06em]" style={{ color: "var(--color-neutral-500)" }}>

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { listPayrollForMonth } from "@/lib/actions/payroll";
+import { listPayrollConfirmations, listPayrollForMonth } from "@/lib/actions/payroll";
 import { PayrollBoard } from "@/components/admin/PayrollBoard";
 import type { Profile } from "@/lib/types";
 
@@ -30,6 +30,13 @@ export default async function AdminPayrollPage() {
       .neq("access_role", "director")
       .order("display_name", { ascending: true }),
   ]);
+  const confirmations = await listPayrollConfirmations(records.map((r) => r.id));
 
-  return <PayrollBoard initialRecords={records} staff={(profiles ?? []) as Profile[]} />;
+  return (
+    <PayrollBoard
+      initialRecords={records}
+      initialConfirmedIds={confirmations.map((c) => c.payroll_record_id)}
+      staff={(profiles ?? []) as Profile[]}
+    />
+  );
 }

@@ -291,6 +291,12 @@ export type PayrollFeedback = {
   created_at: string;
 };
 
+export type PayrollConfirmation = {
+  payroll_record_id: string;
+  profile_id: string;
+  confirmed_at: string;
+};
+
 export type FinanceEntryType = "revenue" | "fixed_cost" | "variable_cost";
 
 export type FinanceEntry = {
@@ -717,6 +723,12 @@ export type Database = {
         Row: PayrollFeedback;
         Insert: Partial<PayrollFeedback> & { payroll_record_id: string; profile_id: string; message: string };
         Update: Partial<PayrollFeedback>;
+        Relationships: [];
+      };
+      payroll_confirmations: {
+        Row: PayrollConfirmation;
+        Insert: Partial<PayrollConfirmation> & { payroll_record_id: string; profile_id: string };
+        Update: Partial<PayrollConfirmation>;
         Relationships: [];
       };
       staff_salary: {

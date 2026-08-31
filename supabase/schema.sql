@@ -909,12 +909,57 @@ create policy "director or pm can read payroll feedback"
   using (public.can_manage_hr());
 
 -- ---------------------------------------------------------------------------
+-- payroll_confirmations: "I reviewed this payslip and it's correct" — kept
+-- as its own table, one row per payroll_record, rather than a column on
+-- payroll_records itself, specifically so staff can be granted write access
+-- to confirm without ever getting an UPDATE policy on payroll_records (this
+-- table is the ONLY thing they can touch; the numbers stay director/PM-only
+-- end to end). The director's own save (upsertPayroll) deletes this row for
+-- the record it's editing, so a stale confirmation can never silently
+-- linger against numbers the employee never actually saw.
+-- ---------------------------------------------------------------------------
+create table if not exists public.payroll_confirmations (
+  payroll_record_id uuid primary key references public.payroll_records (id) on delete cascade,
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  confirmed_at timestamptz not null default now()
+);
+
+alter table public.payroll_confirmations enable row level security;
+
+drop policy if exists "staff can confirm own payroll" on public.payroll_confirmations;
+create policy "staff can confirm own payroll"
+  on public.payroll_confirmations for all
+  to authenticated
+  using (profile_id = auth.uid())
+  with check (profile_id = auth.uid());
+
+drop policy if exists "director or pm can manage payroll confirmations" on public.payroll_confirmations;
+create policy "director or pm can manage payroll confirmations"
+  on public.payroll_confirmations for all
+  to authenticated
+  using (public.can_manage_hr())
+  with check (public.can_manage_hr());
+
+-- Director's payroll board needs to see a confirmation land the instant the
+-- employee taps it, not after their next page refresh.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'payroll_confirmations'
+  ) then
+    alter publication supabase_realtime add table public.payroll_confirmations;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------------
 -- staff_salary: each employee's fixed monthly salary + the number of work
 -- days the director considers "a full month" for them (default 24 — the
 -- office runs Mon–Fri plus roughly 2 Saturdays a month). monthly_salary /
 -- standard_work_days gives the daily rate the payroll screen suggests for
--- absent-day deductions. Director-only, same as payroll_records — staff
--- never get a read policy here.
+-- absent-day deductions. Director/PM manage it; staff can read their own
+-- row (added after the initial table creation) so the payslip panel can
+-- show "Lương cứng" and "mỗi ngày công" alongside the computed total.
 -- ---------------------------------------------------------------------------
 create table if not exists public.staff_salary (
   profile_id uuid primary key references public.profiles (id) on delete cascade,
@@ -932,6 +977,12 @@ create policy "director or pm can manage staff salary"
   to authenticated
   using (public.can_manage_hr())
   with check (public.can_manage_hr());
+
+drop policy if exists "staff can read own staff salary" on public.staff_salary;
+create policy "staff can read own staff salary"
+  on public.staff_salary for select
+  to authenticated
+  using (profile_id = auth.uid());
 
 drop trigger if exists staff_salary_set_updated_at on public.staff_salary;
 create trigger staff_salary_set_updated_at
