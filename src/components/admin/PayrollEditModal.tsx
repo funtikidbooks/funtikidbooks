@@ -6,9 +6,11 @@ import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { getMonthAttendance } from "@/lib/actions/attendance";
+import { getStaffBankInfo } from "@/lib/actions/admin";
 import { getStaffSalary, listPayrollFeedback, updatePayrollFeedbackStatus, upsertPayroll, upsertStaffSalary } from "@/lib/actions/payroll";
 import { MONTH_LABELS, summarizeAttendance } from "@/lib/constants/attendance";
-import type { PayrollFeedback, PayrollFeedbackStatus, PayrollItem, PayrollRecord, PayrollStatus, Profile } from "@/lib/types";
+import { bankColor, formatAccountNumber } from "@/lib/bankDisplay";
+import type { PayrollFeedback, PayrollFeedbackStatus, PayrollItem, PayrollRecord, PayrollStatus, Profile, StaffBankInfo } from "@/lib/types";
 
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
@@ -56,6 +58,20 @@ export function PayrollEditModal({
 
   const [feedback, setFeedback] = useState<PayrollFeedback[]>([]);
   const [resolvingFeedbackId, setResolvingFeedbackId] = useState<string | null>(null);
+
+  const [bankInfo, setBankInfo] = useState<StaffBankInfo | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const info = await getStaffBankInfo(profile.id).catch(() => null);
+      if (!cancelled) setBankInfo(info);
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [profile.id]);
 
   useEffect(() => {
     if (!record) return;
@@ -394,6 +410,16 @@ export function PayrollEditModal({
               <strong className="text-base">{formatVnd(computedBase)}</strong>
             </span>
           </div>
+
+          {bankInfo && (bankInfo.bank_name || bankInfo.account_number) && (
+            <div className="rounded-[10px] p-3 flex flex-col gap-1" style={{ background: bankColor(bankInfo.bank_name) }}>
+              <span className="text-[11px] font-bold text-white/90">{bankInfo.bank_name || "Ngân hàng"}</span>
+              <span className="text-sm font-bold text-white font-mono tracking-wide">
+                {bankInfo.account_number ? formatAccountNumber(bankInfo.account_number) : "—"}
+              </span>
+              {bankInfo.account_holder && <span className="text-[11px] text-white/80">{bankInfo.account_holder}</span>}
+            </div>
+          )}
 
           <div className="field">
             <label>Phụ cấp / thưởng / khấu trừ</label>

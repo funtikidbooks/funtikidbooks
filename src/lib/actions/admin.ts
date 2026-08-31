@@ -523,6 +523,16 @@ export async function listStaffBankInfo(): Promise<StaffBankInfo[]> {
   return (data ?? []) as StaffBankInfo[];
 }
 
+// Single-profile lookup — backs the bank-card shown in PayrollEditModal so
+// the director can see where to actually send the money right next to the
+// amount, without fetching every staff member's bank info just to open one
+// person's payslip.
+export async function getStaffBankInfo(profileId: string): Promise<StaffBankInfo | null> {
+  const { supabase } = await requireDirector();
+  const { data } = await supabase.from("staff_bank_info").select("*").eq("profile_id", profileId).maybeSingle();
+  return (data as StaffBankInfo) ?? null;
+}
+
 export async function upsertStaffBankInfo(
   profileId: string,
   input: { bankName: string; accountNumber: string; accountHolder: string },

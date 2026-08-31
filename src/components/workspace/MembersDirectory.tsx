@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { usePresence } from "@/lib/usePresence";
 import { updateJoinedAt } from "@/lib/actions/admin";
 import { thumbnailUrl } from "@/lib/imageTransform";
+import { bankColor, formatAccountNumber } from "@/lib/bankDisplay";
 import { StaffBankInfoModal } from "@/components/workspace/StaffBankInfoModal";
 import type { Profile, StaffBankInfo } from "@/lib/types";
 
@@ -15,31 +16,6 @@ const CreateAccountDialog = dynamic(
 );
 
 const ALL = "Tất cả";
-
-// Approximate brand colors for the banks that come up most — purely
-// cosmetic, falls back to the app's own accent color for anything else.
-const BANK_COLORS: Record<string, string> = {
-  vietcombank: "#00693c",
-  techcombank: "#1a1a1a",
-  "mb bank": "#1c2f6e",
-  mb: "#1c2f6e",
-  acb: "#0033a0",
-  bidv: "#0b3d91",
-  vietinbank: "#0a4595",
-  vpbank: "#00a651",
-  tpbank: "#5a2d81",
-  sacombank: "#00338d",
-  agribank: "#8a1538",
-};
-
-function bankColor(bankName: string | null) {
-  if (!bankName) return "var(--color-accent-600)";
-  return BANK_COLORS[bankName.trim().toLowerCase()] ?? "var(--color-accent-600)";
-}
-
-function formatAccountNumber(n: string) {
-  return n.replace(/(.{4})/g, "$1 ").trim();
-}
 
 // The join date directors care about (and can edit) — falls back to
 // created_at (login account creation) when nobody's set it explicitly.
