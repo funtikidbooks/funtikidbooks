@@ -1101,7 +1101,13 @@ export function MeetingHub({
   // HỌP" below it — Chung can't have sub-rooms (see nestableRooms), so it
   // doesn't need the expand/children machinery the rooms below it do.
   const generalRoom = useMemo(() => topLevelJoinedRooms.find((c) => c.is_general) ?? null, [topLevelJoinedRooms]);
-  const customTopLevelRooms = useMemo(() => topLevelJoinedRooms.filter((c) => !c.is_general), [topLevelJoinedRooms]);
+  // Rendered in its own row under TRÒ CHUYỆN, right below "Riêng" — not
+  // mixed into the ordinary PHÒNG HỌP list below the divider.
+  const foodRoom = useMemo(() => topLevelJoinedRooms.find((c) => c.is_food_room) ?? null, [topLevelJoinedRooms]);
+  const customTopLevelRooms = useMemo(
+    () => topLevelJoinedRooms.filter((c) => !c.is_general && !c.is_food_room),
+    [topLevelJoinedRooms],
+  );
   const childRoomsByParent = useMemo(() => {
     const map = new Map<string, MeetingChannelPublic[]>();
     for (const c of joinedRooms) {
@@ -2031,6 +2037,35 @@ export function MeetingHub({
               )}
             </button>
           </div>
+          {foodRoom &&
+            (() => {
+              const roomUnread = meetingUnreadCounts[foodRoom.id] ?? 0;
+              return (
+                <div className="flex items-center gap-0.5">
+                  <span className="flex-none" style={{ width: 18 }} />
+                  <button
+                    type="button"
+                    onClick={() => selectChannel(foodRoom.id)}
+                    className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold flex-1 min-w-0"
+                    style={{
+                      background: activeId === foodRoom.id ? "var(--color-accent-100)" : undefined,
+                      color: activeId === foodRoom.id ? "var(--color-accent-700)" : "var(--color-text)",
+                    }}
+                  >
+                    <span aria-hidden>{foodRoom.icon}</span>
+                    <span className="flex-1 truncate">{foodRoom.name}</span>
+                    {roomUnread > 0 && (
+                      <span
+                        className="flex items-center justify-center rounded-full font-bold flex-none"
+                        style={{ minWidth: 16, height: 16, padding: "0 4px", fontSize: 9, background: "var(--status-red)", color: "#fff" }}
+                      >
+                        {roomUnread > 9 ? "9+" : roomUnread}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              );
+            })()}
         </div>
 
         <div className="flex-none" style={{ borderTop: "1px solid var(--color-neutral-200)" }} />
