@@ -37,15 +37,16 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
   const [channelsResult, membershipsResult] = await Promise.all([
     supabase
       .from("meeting_channels")
-      .select("id, name, icon, is_general, created_by, created_at, password_hash, parent_channel_id")
+      .select("id, name, icon, is_general, is_food_room, created_by, created_at, password_hash, parent_channel_id")
       .order("is_general", { ascending: false })
+      .order("is_food_room", { ascending: false })
       .order("created_at", { ascending: true }),
     supabase.from("meeting_channel_members").select("channel_id, seen_at").eq("profile_id", user.id),
   ]);
 
-  // parent_channel_id might not exist yet if supabase/schema.sql's sub-room
-  // migration hasn't been re-run in Supabase — fall back to the same query
-  // without it so the whole room list doesn't break in the meantime.
+  // parent_channel_id/is_food_room might not exist yet if supabase/schema.sql's
+  // migrations haven't been re-run in Supabase — fall back to the same query
+  // without them so the whole room list doesn't break in the meantime.
   let channels: Array<Record<string, unknown>> | null = channelsResult.data;
   if (channelsResult.error) {
     const fallback = await supabase
@@ -71,18 +72,20 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
 
   return (channels ?? []).map((c) => {
     const isGeneral = c.is_general as boolean;
-    const joined = isGeneral || seenAtByChannelId.has(c.id as string);
+    const isFoodRoom = (c.is_food_room as boolean | undefined) ?? false;
+    const joined = isGeneral || isFoodRoom || seenAtByChannelId.has(c.id as string);
     return {
       id: c.id as string,
       name: c.name as string,
       icon: c.icon as string,
       is_general: isGeneral,
+      is_food_room: isFoodRoom,
       created_by: c.created_by as string | null,
       created_at: c.created_at as string,
       parent_channel_id: (c.parent_channel_id as string | null | undefined) ?? null,
       has_password: !!c.password_hash,
       joined,
-      is_new: !isGeneral && joined && seenAtByChannelId.get(c.id as string) == null,
+      is_new: !isGeneral && !isFoodRoom && joined && seenAtByChannelId.get(c.id as string) == null,
     };
   });
 }
@@ -316,7 +319,7 @@ export async function searchMeetingMessages(query: string): Promise<MeetingSearc
 
   const [{ data: memberChannels }, { data: generalChannels }] = await Promise.all([
     supabase.from("meeting_channel_members").select("channel_id").eq("profile_id", user.id),
-    supabase.from("meeting_channels").select("id").eq("is_general", true),
+    supabase.from("meeting_channels").select("id").or("is_general.eq.true,is_food_room.eq.true"),
   ]);
   const channelIds = Array.from(
     new Set([
@@ -460,13 +463,13 @@ async function notifyChannelMembers(
   hasAttachment: boolean,
 ) {
   const [{ data: channel }, { data: sender }] = await Promise.all([
-    supabase.from("meeting_channels").select("name, is_general").eq("id", channelId).maybeSingle(),
+    supabase.from("meeting_channels").select("name, is_general, is_food_room").eq("id", channelId).maybeSingle(),
     supabase.from("profiles").select("display_name").eq("id", senderId).maybeSingle(),
   ]);
   if (!channel) return;
 
   let recipientIds: string[];
-  if (channel.is_general) {
+  if (channel.is_general || channel.is_food_room) {
     const { data: everyone } = await supabase.from("profiles").select("id");
     recipientIds = (everyone ?? []).map((p) => p.id as string);
   } else {
@@ -640,7 +643,7 @@ export async function getUnreadMeetingCounts(): Promise<Record<string, number>> 
 
   const [{ data: memberChannels }, { data: generalChannels }] = await Promise.all([
     supabase.from("meeting_channel_members").select("channel_id").eq("profile_id", user.id),
-    supabase.from("meeting_channels").select("id").eq("is_general", true),
+    supabase.from("meeting_channels").select("id").or("is_general.eq.true,is_food_room.eq.true"),
   ]);
   const channelIds = Array.from(
     new Set([

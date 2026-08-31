@@ -108,6 +108,10 @@ export type MeetingChannel = {
   name: string;
   icon: string;
   is_general: boolean;
+  // The seeded "Đặt đồ ăn" room — same "everyone, no need to join" access
+  // as is_general, kept as its own flag since a workspace only ever has one
+  // is_general room but this is a separate, independent concept.
+  is_food_room: boolean;
   password_hash: string | null;
   created_by: string | null;
   created_at: string;
@@ -130,6 +134,35 @@ export type MeetingChannelMember = {
   profile_id: string;
   joined_at: string;
   seen_at: string | null;
+};
+
+export type FoodOrderRoundStatus = "open" | "closed";
+
+// One per (channel, calendar day) — the "Đặt đồ ăn" room's group order for
+// that day. shopee_link is filled in once someone actually places the real
+// order on ShopeeFood.
+export type FoodOrderRound = {
+  id: string;
+  channel_id: string;
+  order_date: string;
+  title: string;
+  deadline_at: string | null;
+  shopee_link: string | null;
+  status: FoodOrderRoundStatus;
+  created_by: string | null;
+  created_at: string;
+};
+
+// One per (round, person) — each staff member's own order within that day's
+// round, editable only by them (or the director).
+export type FoodOrderItem = {
+  round_id: string;
+  profile_id: string;
+  item_text: string;
+  note: string | null;
+  price: number | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type MeetingReaction = {
@@ -642,6 +675,18 @@ export type Database = {
         Row: MeetingReaction;
         Insert: { message_id: string; profile_id: string; emoji: string };
         Update: Partial<MeetingReaction>;
+        Relationships: [];
+      };
+      food_order_rounds: {
+        Row: FoodOrderRound;
+        Insert: Partial<FoodOrderRound> & { channel_id: string; created_by: string };
+        Update: Partial<FoodOrderRound>;
+        Relationships: [];
+      };
+      food_order_items: {
+        Row: FoodOrderItem;
+        Insert: Partial<FoodOrderItem> & { round_id: string; profile_id: string; item_text: string };
+        Update: Partial<FoodOrderItem>;
         Relationships: [];
       };
       meeting_channel_reads: {

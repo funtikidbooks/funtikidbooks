@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
 import { useChatManager, useLiveProfiles } from "@/components/workspace/ChatManager";
 import { DirectMessagesPanel } from "@/components/workspace/DirectMessagesPanel";
+import { FoodOrderPanel } from "@/components/workspace/FoodOrderPanel";
 import { VideoCallModal } from "@/components/workspace/VideoCallModal";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import { ForwardMessageModal, type ForwardableAttachment } from "@/components/workspace/ForwardMessageModal";
@@ -1114,9 +1115,11 @@ export function MeetingHub({
   const dmTotalUnread = useMemo(() => Object.values(dmUnreadCounts).reduce((sum, n) => sum + n, 0), [dmUnreadCounts]);
   const browsableRooms = useMemo(() => channels.filter((c) => !c.joined), [channels]);
   const activeChannel = channels.find((c) => c.id === activeId) ?? null;
-  // Only custom rooms track explicit membership rows — "Chung" is open to
-  // every staff member implicitly, so there's no meaningful roster to show.
-  const activeRoomIdForMembers = activeChannel && !activeChannel.is_general ? activeChannel.id : null;
+  // Only custom rooms track explicit membership rows — "Chung" and "Đặt đồ
+  // ăn" are open to every staff member implicitly, so there's no meaningful
+  // roster to show for either.
+  const activeRoomIdForMembers =
+    activeChannel && !activeChannel.is_general && !activeChannel.is_food_room ? activeChannel.id : null;
   // Watches (without joining) whether anyone's currently on a call in this
   // room — the banner below is how a member other than the one who started
   // it finds out there's a call to join at all.
@@ -2234,7 +2237,7 @@ export function MeetingHub({
                   ➕
                 </button>
               )}
-              {!activeChannel.is_general && (
+              {!activeChannel.is_general && !activeChannel.is_food_room && (
                 <button
                   type="button"
                   onClick={() => {
@@ -2313,7 +2316,7 @@ export function MeetingHub({
               >
                 🔍
               </button>
-              {!activeChannel.is_general && (
+              {!activeChannel.is_general && !activeChannel.is_food_room && (
                 <>
                   <button type="button" onClick={() => handleLeave(activeChannel.id)} className="btn btn-ghost btn-sm">
                     Rời phòng
@@ -2351,6 +2354,10 @@ export function MeetingHub({
                   Tham gia
                 </button>
               </div>
+            )}
+
+            {activeChannel.is_food_room && (
+              <FoodOrderPanel channelId={activeChannel.id} currentUserId={currentUser.id} profileById={profileById} />
             )}
 
             {showSearch && (
