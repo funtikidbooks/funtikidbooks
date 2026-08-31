@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Modal } from "@/components/ui/Modal";
+import { createClient } from "@/lib/supabase/client";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { getMonthAttendance } from "@/lib/actions/attendance";
 import { getStaffSalary, listPayrollFeedback, upsertPayroll, upsertStaffSalary } from "@/lib/actions/payroll";
@@ -51,7 +52,7 @@ export function PayrollEditModal({
   const [monthlySalary, setMonthlySalary] = useState<number | "">("");
   const [standardWorkDays, setStandardWorkDays] = useState<number | "">(24);
   const [savingSalary, setSavingSalary] = useState(false);
-  const [autoFilledWorkDays, setAutoFilledWorkDays] = useState(false);
+  const [workDaysTouched, setWorkDaysTouched] = useState(false);
 
   const [feedback, setFeedback] = useState<PayrollFeedback[]>([]);
 
@@ -74,6 +75,30 @@ export function PayrollEditModal({
       .finally(() => !cancelled && setStatsLoading(false));
     return () => {
       cancelled = true;
+    };
+  }, [profile.id, month]);
+
+  // Keeps "CHẤM CÔNG THÁNG NÀY" (and, through it, "Số ngày đi làm" below)
+  // live while the modal is open — an auto check-in landing, or another
+  // admin session editing this same employee's attendance, shows up here
+  // immediately instead of only on the next time this modal is reopened.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`payroll-modal-attendance-${profile.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "attendance", filter: `profile_id=eq.${profile.id}` },
+        () => {
+          getMonthAttendance(profile.id, month)
+            .then((entries) => setStats(summarizeAttendance(entries)))
+            .catch(() => {});
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
   }, [profile.id, month]);
 
@@ -105,19 +130,18 @@ export function PayrollEditModal({
     return Math.round(salary / days);
   }, [monthlySalary, standardWorkDays]);
 
-  // Prefills "Số ngày đi làm" from the attendance count once it's loaded —
-  // only if the director hasn't already got a saved value (an existing
-  // record) or typed one in themselves. Deferred a frame rather than set
-  // synchronously here, so this stays a "reacting to an external system"
-  // update, not a render triggered straight from the effect body.
+  // "Số ngày đi làm" tracks the live attendance count — including after
+  // the modal is already open, so it stays right if attendance changes
+  // while it's up — right up until the director actually types a
+  // different value themselves in this session; that override then
+  // sticks. Deferred a frame rather than set synchronously here, so this
+  // stays a "reacting to an external system" update, not a render
+  // triggered straight from the effect body.
   useEffect(() => {
-    if (autoFilledWorkDays || statsLoading) return;
-    const frame = requestAnimationFrame(() => {
-      if (workDays === "") setWorkDays(stats.present);
-      setAutoFilledWorkDays(true);
-    });
+    if (workDaysTouched || statsLoading) return;
+    const frame = requestAnimationFrame(() => setWorkDays(stats.present));
     return () => cancelAnimationFrame(frame);
-  }, [autoFilledWorkDays, statsLoading, stats.present, workDays]);
+  }, [workDaysTouched, statsLoading, stats.present]);
 
   async function saveSalarySettings() {
     setSavingSalary(true);
@@ -315,7 +339,10 @@ export function PayrollEditModal({
                 className="input"
                 style={{ padding: "5px 8px", fontSize: 12 }}
                 value={workDays}
-                onChange={(e) => setWorkDays(e.target.value === "" ? "" : Number(e.target.value))}
+                onChange={(e) => {
+                  setWorkDaysTouched(true);
+                  setWorkDays(e.target.value === "" ? "" : Number(e.target.value));
+                }}
               />
             </div>
             <span className="text-sm" style={{ color: "var(--color-accent-2-800)" }}>
