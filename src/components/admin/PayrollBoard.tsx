@@ -146,7 +146,7 @@ export function PayrollBoard({
                     )}
                   </span>
                   <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
-                    {p.role || "Nhân viên"}
+                    {p.access_role === "director" ? "Giám đốc" : p.role || "Nhân viên"}
                   </span>
                 </div>
                 {record ? (

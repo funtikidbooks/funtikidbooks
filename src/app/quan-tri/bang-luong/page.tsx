@@ -18,18 +18,24 @@ export default async function AdminPayrollPage() {
     .eq("id", user!.id)
     .maybeSingle();
 
-  if (profile?.access_role !== "director" && profile?.role !== "Project Manager") {
+  const isDirector = profile?.access_role === "director";
+  if (!isDirector && profile?.role !== "Project Manager") {
     redirect("/quan-tri");
   }
 
-  const [records, { data: profiles }] = await Promise.all([
-    listPayrollForMonth(),
-    supabase
-      .from("profiles")
-      .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
-      .neq("access_role", "director")
-      .order("display_name", { ascending: true }),
-  ]);
+  // The director sees and manages their own payroll too, same card grid as
+  // everyone else — but a Project Manager (who also reaches this page via
+  // can_manage_hr()) never should, so the director-exclusion stays in
+  // place for anyone who isn't the director themselves.
+  let profilesQuery = supabase
+    .from("profiles")
+    .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
+    .order("display_name", { ascending: true });
+  if (!isDirector) {
+    profilesQuery = profilesQuery.neq("access_role", "director");
+  }
+
+  const [records, { data: profiles }] = await Promise.all([listPayrollForMonth(), profilesQuery]);
   const confirmations = await listPayrollConfirmations(records.map((r) => r.id));
 
   return (
