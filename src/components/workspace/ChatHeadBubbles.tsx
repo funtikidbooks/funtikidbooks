@@ -1,11 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import type { Profile } from "@/lib/types";
 
 const MAX_BUBBLES = 5;
+const BUBBLE_SIZE = 52;
+const EDGE_MARGIN = 8;
+// Below this, a touch/pointer move is just a tap wobble, not a drag —
+// mirrors the longPress/tap distinction MeetingHub.tsx uses for message
+// bubbles, so a normal click still opens the chat.
+const DRAG_THRESHOLD = 6;
 
 // Facebook Messenger's floating "chat head" bubbles — when a DM arrives
 // (and its window isn't already open), a round avatar with a red unread
@@ -33,6 +39,57 @@ export function ChatHeadBubbles({ profiles }: { profiles: Profile[] }) {
       .slice(0, MAX_BUBBLES);
   }, [unreadCounts, recentSenderOrder, openChats, profileById]);
 
+  // Horizontal drag position, as an offset from the right edge — applied
+  // directly to the DOM during the drag (bypassing React) for a smooth
+  // 60fps feel, then committed to state once on release so it survives
+  // whatever re-renders a new unread message or ChatManager update causes.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [rightPx, setRightPx] = useState(16);
+  const dragRef = useRef<{ startX: number; startRight: number; dragging: boolean } | null>(null);
+  const wasDraggingRef = useRef(false);
+
+  function clampRight(right: number) {
+    const width = typeof window !== "undefined" ? window.innerWidth : 0;
+    const maxRight = Math.max(EDGE_MARGIN, width - BUBBLE_SIZE - EDGE_MARGIN);
+    return Math.min(maxRight, Math.max(EDGE_MARGIN, right));
+  }
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    dragRef.current = { startX: e.clientX, startRight: rightPx, dragging: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const deltaX = e.clientX - drag.startX;
+    if (!drag.dragging && Math.abs(deltaX) < DRAG_THRESHOLD) return;
+    drag.dragging = true;
+    const nextRight = clampRight(drag.startRight - deltaX);
+    if (containerRef.current) containerRef.current.style.right = `${nextRight}px`;
+  }
+
+  function handlePointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (drag.dragging) {
+      const deltaX = e.clientX - drag.startX;
+      setRightPx(clampRight(drag.startRight - deltaX));
+    }
+    wasDraggingRef.current = drag.dragging;
+    dragRef.current = null;
+  }
+
+  // An iPad rotation (or any viewport shrink) can otherwise leave the
+  // bubble stranded off-screen if it was dragged near the old right edge.
+  useEffect(() => {
+    function handleResize() {
+      setRightPx((prev) => clampRight(prev));
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   if (bubbles.length === 0) return null;
 
   // ChatDock's open chat windows anchor to this exact same bottom-right
@@ -47,15 +104,30 @@ export function ChatHeadBubbles({ profiles }: { profiles: Profile[] }) {
 
   return (
     <div
-      className={`fixed z-40 flex flex-col-reverse items-end gap-2 right-4 ${
+      ref={containerRef}
+      className={`fixed z-40 flex flex-col-reverse items-end gap-2 touch-none select-none ${
         anyChatOpen ? "bottom-[456px] md:bottom-[404px]" : "bottom-[76px] md:bottom-4"
       }`}
+      style={{ right: rightPx, cursor: "grab" }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
       {bubbles.map((p) => (
         <button
           key={p.id}
           type="button"
-          onClick={() => openChat(p)}
+          onClick={() => {
+            // A drag that just ended fires a click right after pointerup —
+            // swallow exactly that one so dragging the bubble doesn't also
+            // pop the chat window open.
+            if (wasDraggingRef.current) {
+              wasDraggingRef.current = false;
+              return;
+            }
+            openChat(p);
+          }}
           className="relative elev-lg rounded-full flex-none"
           style={{ width: 52, height: 52 }}
           aria-label={`Trả lời ${p.display_name}`}
@@ -72,7 +144,7 @@ export function ChatHeadBubbles({ profiles }: { profiles: Profile[] }) {
           >
             {p.avatar_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={thumbnailUrl(p.avatar_url, 104)} alt="" className="w-full h-full object-cover" />
+              <img src={thumbnailUrl(p.avatar_url, 104)} alt="" draggable={false} className="w-full h-full object-cover" />
             ) : (
               p.display_name.charAt(0).toUpperCase()
             )}
