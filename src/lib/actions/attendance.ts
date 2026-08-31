@@ -7,6 +7,7 @@ import {
   isBeforeCheckInWindow,
   lastDayOfMonth,
   mondayOf,
+  toVnDateString,
   vnToday,
   weekdayIndex,
 } from "@/lib/constants/attendance";
@@ -32,6 +33,20 @@ async function requireHrManager() {
   return { supabase, user };
 }
 
+// Whether `date` (a VN calendar day, "YYYY-MM-DD") has a company-wide day
+// off marked on the shared calendar (workspace/lich, category "off") — a
+// director declaring a holiday there should actually stop check-ins, not
+// just show a note on the calendar page.
+async function isCalendarOffDay(supabase: Awaited<ReturnType<typeof createClient>>, date: string): Promise<boolean> {
+  const { data } = await supabase
+    .from("calendar_events")
+    .select("start_at")
+    .eq("category", "off")
+    .gte("start_at", addDays(date, -1))
+    .lte("start_at", addDays(date, 1));
+  return (data ?? []).some((row) => toVnDateString(row.start_at) === date);
+}
+
 export async function checkInIfNeeded() {
   const { supabase, user } = await requireUser();
   const today = vnToday();
@@ -40,6 +55,10 @@ export async function checkInIfNeeded() {
   // Sunday is always off — no auto check-in. Saturday varies (sometimes a
   // work day) so it isn't excluded here.
   if (weekdayIndex(today) === 6) return;
+
+  // A director-declared holiday on the shared calendar also skips check-in,
+  // regardless of which weekday it falls on.
+  if (await isCalendarOffDay(supabase, today)) return;
 
   // Too early to count as actually "at work" (e.g. someone browsing at 3am
   // or 8am) — don't record anything yet. This function re-runs on every
@@ -80,6 +99,25 @@ export async function listMyMonthAttendance(monthStartInput?: string): Promise<A
     .order("work_date", { ascending: true });
 
   return (data ?? []) as AttendanceEntry[];
+}
+
+// VN calendar dates within `monthStartInput`'s month that carry a
+// company-wide "off" event on the shared calendar — used to render those
+// days as "Ngày nghỉ" instead of "Chưa vào làm" across the attendance views.
+export async function listOffDates(monthStartInput?: string): Promise<string[]> {
+  const { supabase } = await requireUser();
+  const monthStart = firstOfMonth(monthStartInput ?? vnToday());
+  const monthEnd = lastDayOfMonth(monthStart);
+
+  const { data } = await supabase
+    .from("calendar_events")
+    .select("start_at")
+    .eq("category", "off")
+    .gte("start_at", addDays(monthStart, -1))
+    .lte("start_at", addDays(monthEnd, 1));
+
+  const dates = (data ?? []).map((row) => toVnDateString(row.start_at));
+  return Array.from(new Set(dates)).filter((d) => d >= monthStart && d <= monthEnd);
 }
 
 export async function listAllAttendance(weekStartInput?: string): Promise<AttendanceEntry[]> {

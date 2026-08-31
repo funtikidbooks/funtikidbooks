@@ -29,6 +29,14 @@ export function vnToday(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
 }
 
+// A calendar event's own work_date, independent of whatever UTC offset it
+// happened to be stored at — an all-day event created for a VN calendar day
+// is saved as that day's local midnight, which lands on the *previous* UTC
+// calendar date, so a naive `.slice(0, 10)` on start_at is off by a day.
+export function toVnDateString(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
+}
+
 // Monday-start week containing `dateStr` (YYYY-MM-DD), returned as the
 // Monday's date string.
 export function mondayOf(dateStr: string): string {

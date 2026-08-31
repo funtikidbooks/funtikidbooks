@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { getMonthAttendance } from "@/lib/actions/attendance";
+import { getMonthAttendance, listOffDates } from "@/lib/actions/attendance";
 import { AttendanceAvatar, AttendanceEditCellModal } from "@/components/admin/AttendanceEditCellModal";
 import {
   MONTH_LABELS,
@@ -22,16 +22,20 @@ import type { AttendanceEntry, Profile } from "@/lib/types";
 export function AttendanceMonthDetail({
   profile,
   initialEntries,
+  initialOffDates,
   initialMonthStart,
   onClose,
 }: {
   profile: Profile;
   initialEntries: AttendanceEntry[];
+  initialOffDates: string[];
   initialMonthStart: string;
   onClose: () => void;
 }) {
   const [monthStart, setMonthStart] = useState(initialMonthStart);
   const [entries, setEntries] = useState(initialEntries);
+  const [offDates, setOffDates] = useState(initialOffDates);
+  const offDateSet = useMemo(() => new Set(offDates), [offDates]);
   const [loading, setLoading] = useState(false);
   const [editingDate, setEditingDate] = useState<string | null>(null);
 
@@ -44,9 +48,15 @@ export function AttendanceMonthDetail({
     setMonthStart(newStart);
     setLoading(true);
     try {
-      setEntries(await getMonthAttendance(profile.id, newStart));
+      const [monthEntries, monthOffDates] = await Promise.all([
+        getMonthAttendance(profile.id, newStart),
+        listOffDates(newStart),
+      ]);
+      setEntries(monthEntries);
+      setOffDates(monthOffDates);
     } catch {
       setEntries([]);
+      setOffDates([]);
     } finally {
       setLoading(false);
     }
@@ -122,7 +132,7 @@ export function AttendanceMonthDetail({
                   const entry = byDate.get(date);
                   const isToday = date === today;
                   const isFuture = date > today;
-                  const weekday = isMonToFri(date);
+                  const weekday = isMonToFri(date) && !offDateSet.has(date);
 
                   let badge: React.ReactNode = null;
                   if (entry?.status === "leave") {

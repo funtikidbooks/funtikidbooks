@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { getMonthAttendance } from "@/lib/actions/attendance";
+import { getMonthAttendance, listOffDates } from "@/lib/actions/attendance";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { AttendanceMonthDetail } from "@/components/admin/AttendanceMonthDetail";
 import {
@@ -18,11 +18,14 @@ import type { AttendanceEntry, Profile } from "@/lib/types";
 
 export function AttendanceBoard({
   initialEntries,
+  initialOffDates,
   staff,
 }: {
   initialEntries: AttendanceEntry[];
+  initialOffDates: string[];
   staff: Profile[];
 }) {
+  const offDateSet = useMemo(() => new Set(initialOffDates), [initialOffDates]);
   // Rows the realtime subscription below has seen since mount, keyed by id
   // (null = deleted) — merged over initialEntries at render time rather than
   // mirrored into its own useState, so a router.refresh() bringing fresher
@@ -37,7 +40,7 @@ export function AttendanceBoard({
     }
     return Array.from(byId.values());
   }, [initialEntries, liveOverlay]);
-  const [detail, setDetail] = useState<{ profile: Profile; entries: AttendanceEntry[] } | null>(null);
+  const [detail, setDetail] = useState<{ profile: Profile; entries: AttendanceEntry[]; offDates: string[] } | null>(null);
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
   const router = useRouter();
 
@@ -92,16 +95,19 @@ export function AttendanceBoard({
   async function openDetail(profile: Profile) {
     setDetailLoading(profile.id);
     try {
-      const monthEntries = await getMonthAttendance(profile.id, firstOfMonth(vnToday()));
-      setDetail({ profile, entries: monthEntries });
+      const [monthEntries, monthOffDates] = await Promise.all([
+        getMonthAttendance(profile.id, firstOfMonth(vnToday())),
+        listOffDates(firstOfMonth(vnToday())),
+      ]);
+      setDetail({ profile, entries: monthEntries, offDates: monthOffDates });
     } catch {
-      setDetail({ profile, entries: [] });
+      setDetail({ profile, entries: [], offDates: [] });
     } finally {
       setDetailLoading(null);
     }
   }
 
-  const weekday = isMonToFri(today);
+  const weekday = isMonToFri(today) && !offDateSet.has(today);
 
   return (
     <div className="flex-1 flex flex-col p-6 gap-5 overflow-y-auto">
@@ -188,6 +194,7 @@ export function AttendanceBoard({
         <AttendanceMonthDetail
           profile={detail.profile}
           initialEntries={detail.entries}
+          initialOffDates={detail.offDates}
           initialMonthStart={firstOfMonth(vnToday())}
           onClose={() => setDetail(null)}
         />

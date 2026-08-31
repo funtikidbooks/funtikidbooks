@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { listMyMonthAttendance } from "@/lib/actions/attendance";
+import { listMyMonthAttendance, listOffDates } from "@/lib/actions/attendance";
 import { MyAttendance } from "@/components/workspace/MyAttendance";
 import { createClient } from "@/lib/supabase/server";
 
@@ -10,6 +10,6 @@ export default async function MyAttendancePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const entries = await listMyMonthAttendance();
-  return <MyAttendance initialEntries={entries} currentUserId={user!.id} />;
+  const [entries, offDates] = await Promise.all([listMyMonthAttendance(), listOffDates()]);
+  return <MyAttendance initialEntries={entries} initialOffDates={offDates} currentUserId={user!.id} />;
 }

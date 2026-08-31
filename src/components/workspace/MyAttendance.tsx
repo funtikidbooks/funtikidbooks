@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { listMyMonthAttendance } from "@/lib/actions/attendance";
+import { listMyMonthAttendance, listOffDates } from "@/lib/actions/attendance";
 import {
   MONTH_LABELS,
   WEEKDAYS_SHORT,
@@ -22,12 +22,16 @@ import type { AttendanceEntry } from "@/lib/types";
 
 export function MyAttendance({
   initialEntries,
+  initialOffDates,
   currentUserId,
 }: {
   initialEntries: AttendanceEntry[];
+  initialOffDates: string[];
   currentUserId: string;
 }) {
   const [monthStart, setMonthStart] = useState(() => firstOfMonth(vnToday()));
+  const [offDates, setOffDates] = useState(initialOffDates);
+  const offDateSet = useMemo(() => new Set(offDates), [offDates]);
   // Rows the realtime subscription below has seen since mount for the
   // current month, keyed by id (null = deleted) — merged over initialEntries
   // at render time rather than mirrored into its own useState, so a
@@ -112,13 +116,17 @@ export function MyAttendance({
     setMonthStart(newStart);
     if (newStart === firstOfMonth(vnToday())) {
       setOtherMonthEntries(null);
+      setOffDates(initialOffDates);
       return;
     }
     setLoading(true);
     try {
-      setOtherMonthEntries(await listMyMonthAttendance(newStart));
+      const [monthEntries, monthOffDates] = await Promise.all([listMyMonthAttendance(newStart), listOffDates(newStart)]);
+      setOtherMonthEntries(monthEntries);
+      setOffDates(monthOffDates);
     } catch {
       setOtherMonthEntries([]);
+      setOffDates([]);
     } finally {
       setLoading(false);
     }
@@ -185,7 +193,7 @@ export function MyAttendance({
             const entry = byDate.get(date);
             const isToday = date === today;
             const isFuture = date > today;
-            const weekday = isMonToFri(date);
+            const weekday = isMonToFri(date) && !offDateSet.has(date);
 
             let badge: React.ReactNode = null;
             if (entry?.status === "leave") {

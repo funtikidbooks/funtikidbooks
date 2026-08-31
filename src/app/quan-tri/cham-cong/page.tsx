@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { listAllAttendance } from "@/lib/actions/attendance";
+import { listAllAttendance, listOffDates } from "@/lib/actions/attendance";
 import { AttendanceBoard } from "@/components/admin/AttendanceBoard";
 import type { Profile } from "@/lib/types";
 
@@ -22,8 +22,9 @@ export default async function AdminAttendancePage() {
     redirect("/quan-tri");
   }
 
-  const [entries, { data: profiles }] = await Promise.all([
+  const [entries, offDates, { data: profiles }] = await Promise.all([
     listAllAttendance(),
+    listOffDates(),
     supabase
       .from("profiles")
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
@@ -31,5 +32,5 @@ export default async function AdminAttendancePage() {
       .order("display_name", { ascending: true }),
   ]);
 
-  return <AttendanceBoard initialEntries={entries} staff={(profiles ?? []) as Profile[]} />;
+  return <AttendanceBoard initialEntries={entries} initialOffDates={offDates} staff={(profiles ?? []) as Profile[]} />;
 }
