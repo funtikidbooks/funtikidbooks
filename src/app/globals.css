@@ -172,6 +172,30 @@ body {
      overflow:hidden on our own elements stops it, since it happens a layer
      below the DOM. This is the property that actually does. */
   overscroll-behavior: none;
+  /* The default gray/blue flash on tap reads as "a website", not an app —
+     every native-feeling control below gets its own deliberate :active
+     state instead, so removing this doesn't leave taps feeling dead. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A same-feel fallback press state for any button/link that doesn't already
+   define its own :active effect. :where() carries zero specificity, so any
+   existing rule (e.g. .btn:active's scale-down) still wins outright — this
+   only fills the gap for controls that currently have no tap feedback at
+   all now that the browser's own tap-highlight flash is gone above. */
+:where(button, a, [role="button"]):active:not(:disabled) {
+  opacity: 0.6;
+}
+
+/* Long-press-to-select-text and the "Copy" callout it triggers belong to
+   web pages, not app chrome — buttons, links and nav items shouldn't ever
+   show them. Message/content text deliberately keeps normal selection. */
+button,
+a,
+[role="button"] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 body {
@@ -604,6 +628,17 @@ select.input {
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   width: 100%;
+}
+/* iOS auto-zooms the whole page in on focus for any text input under
+   16px — jarring and the single biggest "this is a website" tell in a
+   chat app, since it fires every time someone taps the composer. Desktop
+   keeps the tighter 14px; only mobile viewports need the bump. */
+@media (max-width: 767px) {
+  .input,
+  textarea.input,
+  select.input {
+    font-size: 16px;
+  }
 }
 .input:focus,
 textarea.input:focus,

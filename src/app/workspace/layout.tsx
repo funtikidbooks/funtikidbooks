@@ -1,3 +1,4 @@
+import type { Viewport } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +16,18 @@ import { IosInstallHint, PushSetup } from "@/components/workspace/PushSetup";
 import { getUnreadCounts } from "@/lib/actions/messages";
 import { checkInIfNeeded } from "@/lib/actions/attendance";
 import type { Profile } from "@/lib/types";
+
+// The workspace is an internal tool used mostly through the installed
+// iPhone app — it should feel like one. viewportFit "cover" lets content
+// draw under the notch/home-indicator area so env(safe-area-inset-*) has
+// real values to report (MobileNav's fixed bar relies on this); disabling
+// pinch-zoom stops accidental double-tap zoom, which no native app allows.
+export const viewport: Viewport = {
+  themeColor: "#e8674a",
+  viewportFit: "cover",
+  maximumScale: 1,
+  userScalable: false,
+};
 
 export default async function WorkspaceLayout({
   children,

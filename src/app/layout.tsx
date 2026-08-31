@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
@@ -74,6 +74,15 @@ export const metadata: Metadata = {
   verification: {
     google: "OkwGTpZsOoCyp-W2Mo0Qj3XSIWq5qsOAdTs2GdxOPhs",
   },
+};
+
+// Tints the browser/OS chrome (address bar, app switcher card) with the
+// brand color. Zoom stays enabled here — this is the public site, and
+// disabling it would hurt anyone who needs to pinch-zoom to read comfortably.
+// The workspace layout overrides this with app-like, zoom-disabled settings
+// of its own; this is just the shared default everything else inherits.
+export const viewport: Viewport = {
+  themeColor: "#e8674a",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

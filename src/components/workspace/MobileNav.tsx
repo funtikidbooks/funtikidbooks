@@ -142,7 +142,7 @@ export function MobileNav({ isDirector }: { isDirector: boolean }) {
         >
           <div
             className="w-full flex flex-col gap-1 p-3"
-            style={{ background: "var(--color-panel)", borderRadius: "16px 16px 0 0", paddingBottom: 20 }}
+            style={{ background: "var(--color-panel)", borderRadius: "16px 16px 0 0", paddingBottom: "calc(20px + env(safe-area-inset-bottom))" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-2 pb-2">
