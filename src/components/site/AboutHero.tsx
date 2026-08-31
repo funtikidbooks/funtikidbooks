@@ -32,7 +32,7 @@ export function AboutHero({
   }
 
   return (
-    <section className="max-w-[1280px] mx-auto px-5 pt-12 pb-14">
+    <section className="site-container pt-12 pb-14">
       <div className="flex flex-col items-center text-center xl:flex-row xl:items-start xl:text-left gap-12">
         <div className="flex-1 flex flex-col items-center text-center xl:items-start xl:text-left gap-4 max-w-[560px]">
           <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>

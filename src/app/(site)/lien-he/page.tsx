@@ -43,7 +43,7 @@ export default async function ContactPage() {
   return (
     <>
       <PageHero kicker={t.contact.kicker} title={t.contact.title} body={t.contact.body} emoji="✉️" hideImage />
-      <section className="max-w-[1280px] mx-auto px-5 pb-16 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
+      <section className="site-container pb-16 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
         <Reveal>
           <ContactForm />
         </Reveal>
@@ -87,7 +87,7 @@ export default async function ContactPage() {
         </Reveal>
       </section>
 
-      <section className="max-w-[1280px] mx-auto px-5 pb-16">
+      <section className="site-container pb-16">
         <Reveal className="relative rounded-[var(--radius-lg)] overflow-hidden elev-sm" style={{ height: 360 }}>
           <iframe
             title="Bản đồ đường đến Funti Kidbooks Studio"

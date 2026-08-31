@@ -178,6 +178,25 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+/* The one shared content column for the public marketing site — header,
+   footer and every page section should all size off this SAME class
+   instead of each hand-rolling its own max-w-[...] + px-[...] combo. A few
+   sections had drifted to their own width/padding (a 1800px section, an
+   unbounded px-6/px-10 page, a fixed mx-5 margin with no cap) and the
+   header had no width cap at all — each one shifts where content starts
+   left/right just for that section, which is what reads as the page's
+   margins not being "fixed" while scrolling. Every section pinned to this
+   one class can never drift out of alignment with the others again. */
+.site-container {
+  max-width: 1280px;
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+
 /* A same-feel fallback press state for any button/link that doesn't already
    define its own :active effect. :where() carries zero specificity, so any
    existing rule (e.g. .btn:active's scale-down) still wins outright — this

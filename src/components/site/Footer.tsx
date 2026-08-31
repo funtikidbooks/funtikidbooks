@@ -39,7 +39,7 @@ export function Footer({ locale }: { locale: Locale }) {
   // token (those flip meaning between themes and would wash the text out).
   return (
     <footer style={{ background: "#201e1d", color: "#eeeeec" }}>
-      <div className="max-w-[1280px] mx-auto px-5 py-14 grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1fr_1fr]">
+      <div className="site-container py-14 grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1fr_1fr]">
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <Image
@@ -117,7 +117,7 @@ export function Footer({ locale }: { locale: Locale }) {
         </div>
       </div>
       <div
-        className="max-w-[1280px] mx-auto px-5 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs border-t"
+        className="site-container py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs border-t"
         style={{ borderColor: "#3a3934", color: "#a3a29a" }}
       >
         <span>

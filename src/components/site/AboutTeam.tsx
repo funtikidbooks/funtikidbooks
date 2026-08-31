@@ -87,7 +87,7 @@ export function AboutTeam({ members, canEdit }: { members: TeamMember[]; canEdit
 
   return (
     <section className="py-16" style={{ background: "var(--color-surface)" }}>
-      <div className="max-w-[1200px] mx-auto px-5">
+      <div className="site-container">
         <Reveal className="flex flex-col items-center text-center gap-2 mb-8">
           <h2 className="text-3xl">{t.about.teamTitle}</h2>
         </Reveal>

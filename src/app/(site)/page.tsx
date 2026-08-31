@@ -83,7 +83,7 @@ export default async function HomePage() {
       </Reveal>
 
       {/* Services */}
-      <section className="max-w-[1800px] mx-auto px-10 pt-6 pb-20">
+      <section className="site-container pt-6 pb-20">
         <Reveal className="relative flex flex-col items-center text-center gap-2 mb-12">
           <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
             {t.home.servicesKicker}
@@ -123,7 +123,7 @@ export default async function HomePage() {
 
       {/* Featured projects */}
       <section className="py-16" style={{ background: "var(--color-surface)" }}>
-        <div className="max-w-[1280px] mx-auto px-5">
+        <div className="site-container">
           <Reveal className="flex flex-col items-center text-center gap-2 mb-10">
             <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-700)" }}>
               {t.home.projectsKicker}
@@ -137,7 +137,7 @@ export default async function HomePage() {
       </section>
 
       {/* About + stats */}
-      <section className="max-w-[1280px] mx-auto px-5 py-16 flex flex-col lg:flex-row gap-11 items-center">
+      <section className="site-container py-16 flex flex-col lg:flex-row gap-11 items-center">
         <Reveal className="flex-1 w-full">
           <div className="relative rounded-[var(--radius-lg)] overflow-hidden" style={{ minHeight: 320 }}>
             <Image src="/brand/funti-team.jpg" alt="Funti Kidbooks Studio team" fill className="object-cover" />
@@ -171,7 +171,7 @@ export default async function HomePage() {
 
       {/* Partners */}
       <section className="pb-16">
-        <Reveal className="max-w-[1280px] mx-auto px-5 flex flex-col items-center text-center gap-2 mb-8">
+        <Reveal className="site-container flex flex-col items-center text-center gap-2 mb-8">
           <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-700)" }}>
             {t.home.partnersKicker}
           </div>
@@ -184,7 +184,7 @@ export default async function HomePage() {
           </p>
         </Reveal>
         <PartnersMarquee />
-        <div className="max-w-[1280px] mx-auto px-5">
+        <div className="site-container">
           <Reveal
             delay={120}
             y={16}

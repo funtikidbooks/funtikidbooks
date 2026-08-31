@@ -73,7 +73,7 @@ export function Header({
         transition: "transform 0.25s ease",
       }}
     >
-      <div className="w-full flex items-center justify-between gap-4 px-5 py-3">
+      <div className="site-container flex items-center justify-between gap-4 py-3">
         <Link href="/" className="flex items-center gap-2 flex-none">
           <Image
             src="/brand/funti-logo.jpg"

@@ -40,7 +40,7 @@ export function FaqSection({ title, items }: { title: string; items: FaqEntry[] 
   const columns = [items.slice(0, mid), items.slice(mid)];
 
   return (
-    <section className="max-w-[1280px] mx-auto px-5 py-14">
+    <section className="site-container py-14">
       <h2 className="text-3xl text-center mb-10">{title}</h2>
       <div className="grid gap-x-12 md:grid-cols-2">
         {columns.map((col, ci) => (

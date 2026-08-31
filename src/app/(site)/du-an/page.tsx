@@ -31,7 +31,7 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/du-an">
 
   return (
     <>
-      <section className="px-6 lg:px-10 pt-10 pb-8">
+      <section className="site-container pt-10 pb-8">
         <div className="flex flex-col sm:flex-row sm:items-center gap-5">
           <Image
             src="/brand/funti-logo.jpg"
@@ -66,7 +66,7 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/du-an">
         </div>
       </section>
 
-      <section className="px-6 lg:px-10 pb-16">
+      <section className="site-container pb-16">
         <ProjectsGrid projects={projects} canEdit={canEdit} initialOpenId={initialOpenId} />
       </section>
     </>

@@ -78,7 +78,7 @@ export default async function ServicesPage() {
         hideImage
       />
 
-      <section className="max-w-[1280px] mx-auto px-5 py-12">
+      <section className="site-container py-12">
         {bookPages.length >= 2 && (
           <Reveal className="flex flex-col items-center text-center gap-2">
             <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
@@ -103,14 +103,14 @@ export default async function ServicesPage() {
         <FaqSection title={t.services.faqTitle} items={t.services.faq} />
       </Reveal>
 
-      <section className="max-w-[1280px] mx-auto px-5 py-14">
+      <section className="site-container py-14">
         <Reveal>
           <ReviewsSection reviews={reviews} canEdit={canEdit} />
         </Reveal>
       </section>
 
       <section className="py-14" style={{ background: "var(--color-surface)" }}>
-        <div className="max-w-[1280px] mx-auto px-5">
+        <div className="site-container">
           <Reveal>
             <h2 className="text-3xl text-center mb-10">{t.services.whyTitle}</h2>
           </Reveal>
@@ -130,7 +130,7 @@ export default async function ServicesPage() {
         </div>
       </section>
 
-      <Reveal className="max-w-[1280px] mx-auto px-5 py-14 flex flex-col items-center text-center gap-4">
+      <Reveal className="site-container py-14 flex flex-col items-center text-center gap-4">
         <h2 className="text-3xl">{t.services.processTitle}</h2>
         <p className="max-w-[520px]" style={{ color: "var(--color-neutral-700)" }}>
           {t.services.processBody}

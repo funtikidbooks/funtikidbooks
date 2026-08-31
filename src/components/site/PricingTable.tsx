@@ -28,7 +28,7 @@ export function PricingTable({ table, canEdit }: { table: PricingTableData; canE
   const { locale, t } = useDict();
 
   return (
-    <section className="max-w-[1280px] mx-auto px-5 py-14">
+    <section className="site-container py-14">
       <div className="flex flex-col items-center text-center gap-2 mb-10">
         <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
           {t.pricing.kicker}

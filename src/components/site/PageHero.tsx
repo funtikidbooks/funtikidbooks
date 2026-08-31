@@ -51,7 +51,7 @@ export function PageHero({
       className={
         hideImage
           ? "max-w-[760px] mx-auto flex flex-col gap-4 items-center text-center px-5 pt-12 pb-8"
-          : "max-w-[1280px] mx-auto flex flex-col lg:flex-row gap-11 items-center px-5 pt-12 pb-8"
+          : "site-container flex flex-col lg:flex-row gap-11 items-center pt-12 pb-8"
       }
     >
       <div className={hideImage ? "flex flex-col gap-4 items-center" : "flex-1 flex flex-col gap-4 max-w-[560px]"}>

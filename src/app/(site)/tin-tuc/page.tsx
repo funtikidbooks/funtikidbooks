@@ -36,7 +36,7 @@ export default async function NewsPage() {
         canEditImage={canEdit}
         revalidatePaths={["/tin-tuc"]}
       />
-      <section className="max-w-[1280px] mx-auto px-5 pb-16">
+      <section className="site-container pb-16">
         <NewsGrid initialPosts={posts} canEdit={canEdit} />
       </section>
     </>
