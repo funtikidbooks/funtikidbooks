@@ -14,6 +14,12 @@ import type { Profile } from "@/lib/types";
 const NAV = [
   { href: "/workspace", label: "Bảng công việc", icon: "📊", enabled: true },
   { href: "/workspace/hop", label: "Trò chuyện & họp", icon: "💬", enabled: true },
+];
+
+// Split into its own "NỘI BỘ" group below a divider, per sếp Phúc —
+// everything after Trò chuyện & họp is more "internal tooling" than the
+// core workspace/chat pair above it.
+const INTERNAL_NAV = [
   { href: "/workspace/kho-font", label: "Kho font & brush", icon: "🔤", enabled: true },
   { href: "/workspace/tinh-kho-sach", label: "Tính khổ sách", icon: "📐", enabled: true },
   { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️", enabled: true },
@@ -37,6 +43,44 @@ export function Sidebar({
   const myAvatarUrl = profiles.find((p) => p.id === currentUserId)?.avatar_url ?? null;
   const showsIphoneAppNav = useShowsIphoneAppNav();
   const visibleNav = showsIphoneAppNav ? NAV.filter((item) => STANDALONE_ALLOWED_HREFS.has(item.href)) : NAV;
+  const visibleInternalNav = showsIphoneAppNav
+    ? INTERNAL_NAV.filter((item) => STANDALONE_ALLOWED_HREFS.has(item.href))
+    : INTERNAL_NAV;
+
+  function NavLink(item: (typeof NAV)[number]) {
+    const active = item.enabled && pathname === item.href;
+    return (
+      <Link
+        key={item.label}
+        href={item.href}
+        aria-disabled={!item.enabled}
+        title={item.enabled ? undefined : "Sắp ra mắt"}
+        className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
+        style={{
+          background: active ? "var(--color-accent-100)" : undefined,
+          color: active
+            ? "var(--color-accent-700)"
+            : item.enabled
+              ? "var(--color-text)"
+              : "var(--color-neutral-400)",
+          pointerEvents: item.enabled ? "auto" : "none",
+          fontWeight: active ? 700 : 600,
+        }}
+      >
+        <span aria-hidden>{item.icon}</span>
+        <span className="flex-1 truncate">{item.label}</span>
+        {item.href === "/workspace/hop" && totalUnreadCount > 0 && (
+          <span
+            className="flex items-center justify-center rounded-full font-bold flex-none"
+            style={{ minWidth: 17, height: 17, padding: "0 4px", fontSize: 10, background: "var(--status-red)", color: "#fff" }}
+          >
+            {totalUnreadCount > 9 ? "9+" : totalUnreadCount}
+          </span>
+        )}
+        {!item.enabled && <span className="ml-auto text-[9px] tag tag-neutral">SẮP RA MẮT</span>}
+      </Link>
+    );
+  }
 
   return (
     <aside
@@ -61,42 +105,20 @@ export function Sidebar({
         >
           KHÔNG GIAN LÀM VIỆC
         </div>
-        {visibleNav.map((item) => {
-          const active = item.enabled && pathname === item.href;
-          return (
-            <Link
-              key={item.label}
-              href={item.href}
-              aria-disabled={!item.enabled}
-              title={item.enabled ? undefined : "Sắp ra mắt"}
-              className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
-              style={{
-                background: active ? "var(--color-accent-100)" : undefined,
-                color: active
-                  ? "var(--color-accent-700)"
-                  : item.enabled
-                    ? "var(--color-text)"
-                    : "var(--color-neutral-400)",
-                pointerEvents: item.enabled ? "auto" : "none",
-                fontWeight: active ? 700 : 600,
-              }}
+        {visibleNav.map((item) => NavLink(item))}
+
+        {visibleInternalNav.length > 0 && (
+          <>
+            <div className="mt-2 mb-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }} />
+            <div
+              className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1"
+              style={{ color: "var(--color-neutral-500)" }}
             >
-              <span aria-hidden>{item.icon}</span>
-              <span className="flex-1 truncate">{item.label}</span>
-              {item.href === "/workspace/hop" && totalUnreadCount > 0 && (
-                <span
-                  className="flex items-center justify-center rounded-full font-bold flex-none"
-                  style={{ minWidth: 17, height: 17, padding: "0 4px", fontSize: 10, background: "var(--status-red)", color: "#fff" }}
-                >
-                  {totalUnreadCount > 9 ? "9+" : totalUnreadCount}
-                </span>
-              )}
-              {!item.enabled && (
-                <span className="ml-auto text-[9px] tag tag-neutral">SẮP RA MẮT</span>
-              )}
-            </Link>
-          );
-        })}
+              NỘI BỘ
+            </div>
+            {visibleInternalNav.map((item) => NavLink(item))}
+          </>
+        )}
       </div>
 
       <div className="mt-auto flex flex-col gap-3">
