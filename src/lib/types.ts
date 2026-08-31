@@ -280,6 +280,20 @@ export type StaffSalary = {
   updated_at: string;
 };
 
+export type FinanceEntryType = "revenue" | "fixed_cost" | "variable_cost";
+
+export type FinanceEntry = {
+  id: string;
+  entry_month: string; // always the 1st of the month, e.g. "2026-08-01"
+  type: FinanceEntryType;
+  category: string;
+  amount: number;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PageType = "single" | "double";
 
 export type InvoiceItem = {
@@ -692,6 +706,12 @@ export type Database = {
         Row: StaffSalary;
         Insert: Partial<StaffSalary> & { profile_id: string };
         Update: Partial<StaffSalary>;
+        Relationships: [];
+      };
+      finance_entries: {
+        Row: FinanceEntry;
+        Insert: Partial<FinanceEntry> & { entry_month: string; type: FinanceEntryType; category: string };
+        Update: Partial<FinanceEntry>;
         Relationships: [];
       };
       site_settings: {

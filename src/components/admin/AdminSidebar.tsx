@@ -25,6 +25,10 @@ const HR_NAV = [
   { href: "/quan-tri/hoa-don", label: "Tạo hoá đơn điện tử", icon: "🧾" },
 ];
 
+// Whole-business P&L — more sensitive than payroll (that's one employee at
+// a time), so unlike HR_NAV this is director-only, not shared with PM.
+const DIRECTOR_ONLY_NAV = [{ href: "/quan-tri/tai-chinh", label: "Tài chính", icon: "📈" }];
+
 export function AdminSidebar({
   user,
 }: {
@@ -102,6 +106,7 @@ export function AdminSidebar({
             {HR_NAV.map((item) => (
               <NavLink key={item.href} item={item} />
             ))}
+            {isDirector && DIRECTOR_ONLY_NAV.map((item) => <NavLink key={item.href} item={item} />)}
           </>
         )}
       </div>

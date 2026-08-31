@@ -885,6 +885,43 @@ create trigger staff_salary_set_updated_at
   for each row execute procedure public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- finance_entries: the director's monthly business P&L ledger — revenue,
+-- fixed costs (rent, subscriptions, ...) and variable costs (materials,
+-- freelancers, ...), entered freely by category, one row per line item.
+-- Employee salary is deliberately NOT entered here — the Tài chính page
+-- pulls it live from payroll_records for the same month instead, so it can
+-- never double-enter or drift out of sync with the real payroll sheet.
+-- Director-only end to end, same as payroll_records.
+-- ---------------------------------------------------------------------------
+create table if not exists public.finance_entries (
+  id uuid primary key default gen_random_uuid(),
+  entry_month date not null,
+  type text not null check (type in ('revenue', 'fixed_cost', 'variable_cost')),
+  category text not null,
+  amount numeric not null default 0 check (amount >= 0),
+  note text,
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.finance_entries enable row level security;
+
+drop policy if exists "director can manage finance entries" on public.finance_entries;
+create policy "director can manage finance entries"
+  on public.finance_entries for all
+  to authenticated
+  using (public.current_access_role() = 'director')
+  with check (public.current_access_role() = 'director');
+
+drop trigger if exists finance_entries_set_updated_at on public.finance_entries;
+create trigger finance_entries_set_updated_at
+  before update on public.finance_entries
+  for each row execute procedure public.set_updated_at();
+
+create index if not exists finance_entries_month_idx on public.finance_entries (entry_month);
+
+-- ---------------------------------------------------------------------------
 -- site_settings: small key/value store for editable page decoration, e.g.
 -- header/hero illustrations, editable by director/admin from the live page.
 -- ---------------------------------------------------------------------------
