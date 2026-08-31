@@ -847,6 +847,13 @@ create table if not exists public.payroll_records (
   unique (profile_id, month)
 );
 
+-- Added after the initial table creation: base_salary is now derived as
+-- (lương/ngày công chuẩn) × work_days rather than typed by hand, and the
+-- payslip print view needs the actual day count on record to show its
+-- math, not just the resulting total. Nullable — older records saved
+-- before this existed just don't show a day count on their payslip.
+alter table public.payroll_records add column if not exists work_days numeric;
+
 alter table public.payroll_records enable row level security;
 
 drop policy if exists "director can manage payroll" on public.payroll_records;

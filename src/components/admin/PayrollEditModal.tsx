@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Modal } from "@/components/ui/Modal";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { getMonthAttendance } from "@/lib/actions/attendance";
@@ -35,7 +36,7 @@ export function PayrollEditModal({
   onClose: () => void;
   onSaved: (record: PayrollRecord) => void;
 }) {
-  const [baseSalary, setBaseSalary] = useState<number | "">(record?.base_salary ?? "");
+  const [workDays, setWorkDays] = useState<number | "">(record?.work_days ?? "");
   const [items, setItems] = useState<ItemDraft[]>(record ? itemsToDraft(record.items) : []);
   const [status, setStatus] = useState<PayrollStatus>(record?.status ?? "draft");
   const [note, setNote] = useState(record?.note ?? "");
@@ -44,14 +45,13 @@ export function PayrollEditModal({
 
   const [statsLoading, setStatsLoading] = useState(true);
   const [stats, setStats] = useState({ present: 0, late: 0, absent: 0, leave: 0 });
-  const [absentRate, setAbsentRate] = useState<number | "">("");
   const [lateRate, setLateRate] = useState<number | "">("");
 
   const [salaryLoading, setSalaryLoading] = useState(true);
   const [monthlySalary, setMonthlySalary] = useState<number | "">("");
   const [standardWorkDays, setStandardWorkDays] = useState<number | "">(24);
   const [savingSalary, setSavingSalary] = useState(false);
-  const [autoFilledAbsentRate, setAutoFilledAbsentRate] = useState(false);
+  const [autoFilledWorkDays, setAutoFilledWorkDays] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,22 +90,19 @@ export function PayrollEditModal({
     return Math.round(salary / days / 1000) * 1000;
   }, [monthlySalary, standardWorkDays]);
 
-  // Once both the attendance count and the daily rate are known, quietly
-  // prefill the deduction-rate field a director would otherwise have to
-  // compute by hand — they can still overwrite it before applying. Deferred
-  // a frame rather than set synchronously here, so this stays a "reacting
-  // to an external system" update, not a render triggered straight from
-  // the effect body.
+  // Prefills "Số ngày đi làm" from the attendance count once it's loaded —
+  // only if the director hasn't already got a saved value (an existing
+  // record) or typed one in themselves. Deferred a frame rather than set
+  // synchronously here, so this stays a "reacting to an external system"
+  // update, not a render triggered straight from the effect body.
   useEffect(() => {
-    if (autoFilledAbsentRate || statsLoading || salaryLoading) return;
+    if (autoFilledWorkDays || statsLoading) return;
     const frame = requestAnimationFrame(() => {
-      if (stats.absent > 0 && dailyRate > 0 && absentRate === "") {
-        setAbsentRate(dailyRate);
-      }
-      setAutoFilledAbsentRate(true);
+      if (workDays === "") setWorkDays(stats.present);
+      setAutoFilledWorkDays(true);
     });
     return () => cancelAnimationFrame(frame);
-  }, [autoFilledAbsentRate, statsLoading, salaryLoading, stats.absent, dailyRate, absentRate]);
+  }, [autoFilledWorkDays, statsLoading, stats.present, workDays]);
 
   async function saveSalarySettings() {
     setSavingSalary(true);
@@ -118,30 +115,26 @@ export function PayrollEditModal({
     }
   }
 
+  // Base pay is derived, not typed — lương/ngày × số ngày đi làm — so it
+  // can never silently drift from what the director actually entered for
+  // rate and days.
+  const computedBase = useMemo(() => dailyRate * (Number(workDays) || 0), [dailyRate, workDays]);
+
   const total = useMemo(() => {
-    const base = Number(baseSalary) || 0;
     const itemsTotal = items.reduce((sum, it) => {
       const amt = Number(it.amount) || 0;
       return sum + (it.kind === "subtract" ? -amt : amt);
     }, 0);
-    return base + itemsTotal;
-  }, [baseSalary, items]);
+    return computedBase + itemsTotal;
+  }, [computedBase, items]);
 
   function updateItem(i: number, patch: Partial<ItemDraft>) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   }
 
-  function applyAttendanceDeductions() {
-    const additions: ItemDraft[] = [];
-    if (stats.absent > 0 && Number(absentRate) > 0) {
-      additions.push({ label: `Vắng ${stats.absent} ngày`, kind: "subtract", amount: Number(absentRate) * stats.absent });
-    }
-    if (stats.late > 0 && Number(lateRate) > 0) {
-      additions.push({ label: `Đi trễ ${stats.late} lần`, kind: "subtract", amount: Number(lateRate) * stats.late });
-    }
-    if (additions.length === 0) return;
-    setItems((prev) => [...prev, ...additions]);
-    setAbsentRate("");
+  function applyLateDeduction() {
+    if (stats.late === 0 || Number(lateRate) <= 0) return;
+    setItems((prev) => [...prev, { label: `Đi trễ ${stats.late} lần`, kind: "subtract", amount: Number(lateRate) * stats.late }]);
     setLateRate("");
   }
 
@@ -160,7 +153,8 @@ export function PayrollEditModal({
       const saved = await upsertPayroll({
         profileId: profile.id,
         month,
-        baseSalary: Number(baseSalary) || 0,
+        baseSalary: computedBase,
+        workDays: workDays === "" ? null : Number(workDays),
         items: cleanItems,
         status,
         note,
@@ -224,14 +218,6 @@ export function PayrollEditModal({
               <button type="button" onClick={saveSalarySettings} className="btn btn-secondary btn-sm" disabled={savingSalary || salaryLoading}>
                 {savingSalary ? "Đang lưu…" : "Lưu"}
               </button>
-              <button
-                type="button"
-                onClick={() => setBaseSalary(Number(monthlySalary) || 0)}
-                className="btn btn-ghost btn-sm"
-                disabled={!monthlySalary}
-              >
-                Dùng làm lương cơ bản
-              </button>
             </div>
             {dailyRate > 0 && (
               <span className="text-xs" style={{ color: "var(--color-accent-700)" }}>
@@ -264,36 +250,21 @@ export function PayrollEditModal({
                     Nghỉ phép: <strong>{stats.leave}</strong>
                   </span>
                 </div>
-                {(stats.absent > 0 || stats.late > 0) && (
+                {stats.late > 0 && (
                   <div className="flex flex-wrap items-end gap-2 mt-1">
-                    {stats.absent > 0 && (
-                      <div className="field" style={{ maxWidth: 160 }}>
-                        <label className="text-[11px]">Trừ / ngày vắng</label>
-                        <input
-                          type="number"
-                          min={0}
-                          className="input"
-                          style={{ padding: "5px 8px", fontSize: 12 }}
-                          value={absentRate}
-                          onChange={(e) => setAbsentRate(e.target.value === "" ? "" : Number(e.target.value))}
-                        />
-                      </div>
-                    )}
-                    {stats.late > 0 && (
-                      <div className="field" style={{ maxWidth: 160 }}>
-                        <label className="text-[11px]">Trừ / lần trễ</label>
-                        <input
-                          type="number"
-                          min={0}
-                          className="input"
-                          style={{ padding: "5px 8px", fontSize: 12 }}
-                          value={lateRate}
-                          onChange={(e) => setLateRate(e.target.value === "" ? "" : Number(e.target.value))}
-                        />
-                      </div>
-                    )}
-                    <button type="button" onClick={applyAttendanceDeductions} className="btn btn-secondary btn-sm">
-                      + Áp dụng khấu trừ
+                    <div className="field" style={{ maxWidth: 160 }}>
+                      <label className="text-[11px]">Trừ / lần trễ</label>
+                      <input
+                        type="number"
+                        min={0}
+                        className="input"
+                        style={{ padding: "5px 8px", fontSize: 12 }}
+                        value={lateRate}
+                        onChange={(e) => setLateRate(e.target.value === "" ? "" : Number(e.target.value))}
+                      />
+                    </div>
+                    <button type="button" onClick={applyLateDeduction} className="btn btn-secondary btn-sm">
+                      + Thêm khấu trừ đi trễ
                     </button>
                   </div>
                 )}
@@ -301,16 +272,25 @@ export function PayrollEditModal({
             )}
           </div>
 
-          <div className="field">
-            <label htmlFor="pr-base">Lương cơ bản</label>
-            <input
-              id="pr-base"
-              type="number"
-              min={0}
-              className="input"
-              value={baseSalary}
-              onChange={(e) => setBaseSalary(e.target.value === "" ? "" : Number(e.target.value))}
-            />
+          <div className="card p-3 flex flex-col gap-2" style={{ background: "var(--color-accent-2-100)" }}>
+            <span className="text-xs font-bold" style={{ color: "var(--color-accent-2-800)" }}>
+              LƯƠNG THEO NGÀY CÔNG
+            </span>
+            <div className="field" style={{ maxWidth: 170 }}>
+              <label className="text-[11px]">Số ngày đi làm trong tháng</label>
+              <input
+                type="number"
+                min={0}
+                className="input"
+                style={{ padding: "5px 8px", fontSize: 12 }}
+                value={workDays}
+                onChange={(e) => setWorkDays(e.target.value === "" ? "" : Number(e.target.value))}
+              />
+            </div>
+            <span className="text-sm" style={{ color: "var(--color-accent-2-800)" }}>
+              {formatVnd(dailyRate)} × {Number(workDays) || 0} ngày ={" "}
+              <strong className="text-base">{formatVnd(computedBase)}</strong>
+            </span>
           </div>
 
           <div className="field">
@@ -399,13 +379,24 @@ export function PayrollEditModal({
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-6 py-4" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
-          <button type="button" onClick={onClose} className="btn btn-ghost" disabled={saving}>
-            Huỷ
-          </button>
-          <button type="submit" className="btn btn-primary" disabled={saving}>
-            {saving ? "Đang lưu…" : "Lưu"}
-          </button>
+        <div className="flex items-center justify-between gap-3 px-6 py-4" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+          {record ? (
+            <Link href={`/quan-tri/bang-luong/${record.id}`} target="_blank" className="btn btn-ghost btn-sm">
+              🖨 In / Tải PDF
+            </Link>
+          ) : (
+            <span className="text-xs" style={{ color: "var(--color-neutral-400)" }}>
+              Lưu lần đầu để có thể in phiếu lương
+            </span>
+          )}
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={onClose} className="btn btn-ghost" disabled={saving}>
+              Huỷ
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? "Đang lưu…" : "Lưu"}
+            </button>
+          </div>
         </div>
       </form>
     </Modal>

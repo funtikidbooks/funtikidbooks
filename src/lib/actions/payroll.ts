@@ -27,10 +27,17 @@ export async function listPayrollForMonth(monthStartInput?: string): Promise<Pay
   return (data ?? []) as PayrollRecord[];
 }
 
+export async function getPayrollById(id: string): Promise<PayrollRecord | null> {
+  const { supabase } = await requireHrManager();
+  const { data } = await supabase.from("payroll_records").select("*").eq("id", id).maybeSingle();
+  return (data as PayrollRecord) ?? null;
+}
+
 export async function upsertPayroll(input: {
   profileId: string;
   month: string;
   baseSalary: number;
+  workDays: number | null;
   items: PayrollItem[];
   status: PayrollStatus;
   note?: string;
@@ -45,6 +52,7 @@ export async function upsertPayroll(input: {
         profile_id: input.profileId,
         month,
         base_salary: input.baseSalary,
+        work_days: input.workDays,
         items: input.items,
         status: input.status,
         note: input.note?.trim() || null,

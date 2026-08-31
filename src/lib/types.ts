@@ -265,6 +265,9 @@ export type PayrollRecord = {
   profile_id: string;
   month: string; // always the 1st of the month, e.g. "2026-08-01"
   base_salary: number;
+  // Actual days worked that base_salary was computed from (rate/standard
+  // days × work_days) — null on records saved before this field existed.
+  work_days: number | null;
   items: PayrollItem[];
   note: string | null;
   status: PayrollStatus;
