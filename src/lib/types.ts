@@ -149,6 +149,10 @@ export type FoodOrderRound = {
   deadline_at: string | null;
   shopee_link: string | null;
   status: FoodOrderRoundStatus;
+  // Which food_shops row (if any) this round's menu checklist is built
+  // from — null means the original free-typed flow, for a quán not in the
+  // library yet.
+  shop_id: string | null;
   created_by: string | null;
   created_at: string;
 };
@@ -163,6 +167,27 @@ export type FoodOrderItem = {
   price: number | null;
   created_at: string;
   updated_at: string;
+};
+
+// A quán ăn with its menu already on file — added once (by hand, or by
+// reading a real ShopeeFood menu) so starting a round can just point at it
+// instead of everyone free-typing what they want.
+export type FoodShop = {
+  id: string;
+  name: string;
+  shopee_link: string | null;
+  added_by: string | null;
+  created_at: string;
+};
+
+export type FoodShopMenuItem = {
+  id: string;
+  shop_id: string;
+  name: string;
+  note: string | null;
+  price: number | null;
+  sort_order: number;
+  created_at: string;
 };
 
 export type MeetingReaction = {
@@ -687,6 +712,18 @@ export type Database = {
         Row: FoodOrderItem;
         Insert: Partial<FoodOrderItem> & { round_id: string; profile_id: string; item_text: string };
         Update: Partial<FoodOrderItem>;
+        Relationships: [];
+      };
+      food_shops: {
+        Row: FoodShop;
+        Insert: Partial<FoodShop> & { name: string; added_by: string };
+        Update: Partial<FoodShop>;
+        Relationships: [];
+      };
+      food_shop_menu_items: {
+        Row: FoodShopMenuItem;
+        Insert: Partial<FoodShopMenuItem> & { shop_id: string; name: string };
+        Update: Partial<FoodShopMenuItem>;
         Relationships: [];
       };
       meeting_channel_reads: {

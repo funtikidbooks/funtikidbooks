@@ -11,8 +11,9 @@ import {
   updateFoodOrderRoundLink,
   upsertMyFoodOrderItem,
 } from "@/lib/actions/foodOrders";
+import { addFoodShop, getFoodShopMenu, listFoodShops } from "@/lib/actions/foodShops";
 import { thumbnailUrl } from "@/lib/imageTransform";
-import type { FoodOrderItem, FoodOrderRound, Profile } from "@/lib/types";
+import type { FoodOrderItem, FoodOrderRound, FoodShop, FoodShopMenuItem, Profile } from "@/lib/types";
 
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
@@ -34,12 +35,18 @@ function Avatar({ profile }: { profile: Profile | undefined }) {
   );
 }
 
+type NewShopItemDraft = { name: string; note: string; price: string };
+
 // The "Đặt đồ ăn" room's group-order tool, pinned above the regular chat —
 // one round per calendar day: everyone adds their own item, whoever places
 // the real ShopeeFood order pastes the link back for the rest to see. The
 // message thread right below still works exactly like any other room, for
 // "quán này hết món rồi" back-and-forth that a structured order list can't
 // capture.
+//
+// A round can optionally point at a saved food_shops entry (its menu read
+// off a real ShopeeFood page once, by hand) — when it does, "my order"
+// becomes a checklist against that menu instead of free-typing.
 export function FoodOrderPanel({
   channelId,
   currentUserId,
@@ -54,11 +61,22 @@ export function FoodOrderPanel({
   const [items, setItems] = useState<FoodOrderItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const [shops, setShops] = useState<FoodShop[]>([]);
+  const [selectedShopId, setSelectedShopId] = useState("");
   const [starting, setStarting] = useState(false);
+  const [showAddShop, setShowAddShop] = useState(false);
+  const [newShopName, setNewShopName] = useState("");
+  const [newShopLink, setNewShopLink] = useState("");
+  const [newShopItems, setNewShopItems] = useState<NewShopItemDraft[]>([{ name: "", note: "", price: "" }]);
+  const [addingShop, setAddingShop] = useState(false);
+
+  const [shopMenu, setShopMenu] = useState<FoodShopMenuItem[]>([]);
   const [editingMine, setEditingMine] = useState(false);
-  const [itemText, setItemText] = useState("");
+  const [checkedItemIds, setCheckedItemIds] = useState<Set<string>>(new Set());
+  const [extraText, setExtraText] = useState("");
+  const [freeItemText, setFreeItemText] = useState("");
   const [note, setNote] = useState("");
-  const [price, setPrice] = useState<number | "">("");
+  const [freePrice, setFreePrice] = useState<number | "">("");
   const [saving, setSaving] = useState(false);
 
   const [linkDraft, setLinkDraft] = useState("");
@@ -71,14 +89,22 @@ export function FoodOrderPanel({
       setLoading(true);
       setError(null);
       try {
-        const r = await getTodayFoodOrderRound(channelId);
+        const [r, shopList] = await Promise.all([getTodayFoodOrderRound(channelId), listFoodShops()]);
         if (cancelled) return;
         setRound(r);
+        setShops(shopList);
         if (r) {
-          const list = await listFoodOrderItems(r.id);
-          if (!cancelled) setItems(list);
+          const [list, menu] = await Promise.all([
+            listFoodOrderItems(r.id),
+            r.shop_id ? getFoodShopMenu(r.shop_id) : Promise.resolve([]),
+          ]);
+          if (!cancelled) {
+            setItems(list);
+            setShopMenu(menu);
+          }
         } else {
           setItems([]);
+          setShopMenu([]);
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Không thể tải đợt đặt đồ ăn.");
@@ -132,8 +158,9 @@ export function FoodOrderPanel({
     setStarting(true);
     setError(null);
     try {
-      const r = await startFoodOrderRound(channelId, { title: "Đặt đồ ăn" });
+      const r = await startFoodOrderRound(channelId, { title: "Đặt đồ ăn", shopId: selectedShopId || null });
       setRound(r);
+      setShopMenu(r.shop_id ? await getFoodShopMenu(r.shop_id) : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
@@ -141,22 +168,96 @@ export function FoodOrderPanel({
     }
   }
 
+  function addNewShopItemRow() {
+    setNewShopItems((prev) => [...prev, { name: "", note: "", price: "" }]);
+  }
+
+  function updateNewShopItemRow(i: number, patch: Partial<NewShopItemDraft>) {
+    setNewShopItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  }
+
+  function removeNewShopItemRow(i: number) {
+    setNewShopItems((prev) => (prev.length === 1 ? prev : prev.filter((_, idx) => idx !== i)));
+  }
+
+  async function submitNewShop(e: React.FormEvent) {
+    e.preventDefault();
+    if (addingShop) return;
+    setAddingShop(true);
+    setError(null);
+    try {
+      const created = await addFoodShop({
+        name: newShopName,
+        shopeeLink: newShopLink,
+        items: newShopItems
+          .filter((it) => it.name.trim())
+          .map((it) => ({ name: it.name, note: it.note, price: it.price === "" ? null : Number(it.price) })),
+      });
+      setShops((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name, "vi")));
+      setSelectedShopId(created.id);
+      setShowAddShop(false);
+      setNewShopName("");
+      setNewShopLink("");
+      setNewShopItems([{ name: "", note: "", price: "" }]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setAddingShop(false);
+    }
+  }
+
   const myItem = items.find((it) => it.profile_id === currentUserId);
 
+  // Reconstructs which menu checkboxes were selected from a previously
+  // saved item_text ("Phở tái, Chén Trứng") — reliable since submitMyItem
+  // below always joins names with ", " in the first place.
   function openMyItemForm() {
-    setItemText(myItem?.item_text ?? "");
+    if (round?.shop_id) {
+      const parts = (myItem?.item_text ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      const menuNames = new Set(shopMenu.map((m) => m.name));
+      setCheckedItemIds(new Set(shopMenu.filter((m) => parts.includes(m.name)).map((m) => m.id)));
+      setExtraText(parts.filter((p) => !menuNames.has(p)).join(", "));
+    } else {
+      setFreeItemText(myItem?.item_text ?? "");
+      setFreePrice(myItem?.price ?? "");
+    }
     setNote(myItem?.note ?? "");
-    setPrice(myItem?.price ?? "");
     setEditingMine(true);
+  }
+
+  function toggleChecked(id: string) {
+    setCheckedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   async function submitMyItem(e: React.FormEvent) {
     e.preventDefault();
     if (!round || saving) return;
+
+    let itemText: string;
+    let price: number | null;
+    if (round.shop_id) {
+      const chosen = shopMenu.filter((m) => checkedItemIds.has(m.id));
+      const names = [...chosen.map((m) => m.name), ...(extraText.trim() ? [extraText.trim()] : [])];
+      itemText = names.join(", ");
+      price = chosen.reduce((sum, m) => sum + (m.price ?? 0), 0);
+    } else {
+      itemText = freeItemText;
+      price = freePrice === "" ? null : Number(freePrice);
+    }
+    if (!itemText.trim()) {
+      setError("Cần chọn hoặc nhập ít nhất 1 món.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
-      const saved = await upsertMyFoodOrderItem(round.id, { itemText, note, price: price === "" ? null : Number(price) });
+      const saved = await upsertMyFoodOrderItem(round.id, { itemText, note, price });
       setItems((prev) => {
         const idx = prev.findIndex((it) => it.profile_id === saved.profile_id);
         return idx === -1 ? [...prev, saved] : prev.map((it, i) => (i === idx ? saved : it));
@@ -210,6 +311,7 @@ export function FoodOrderPanel({
         new Date(`${round.order_date}T00:00:00`),
       )
     : "";
+  const shopName = round?.shop_id ? shops.find((s) => s.id === round.shop_id)?.name : null;
 
   if (loading) {
     return (
@@ -225,16 +327,111 @@ export function FoodOrderPanel({
       style={{ background: "var(--color-surface)", border: "1px solid var(--color-neutral-200)" }}
     >
       {!round ? (
-        <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex flex-col gap-3">
           <div>
             <div className="text-sm font-bold">🍱 Chưa có ai bắt đầu đặt đồ ăn hôm nay</div>
             <div className="text-xs mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
-              Bắt đầu một đợt để mọi người thêm món của mình vào nhé.
+              Chọn một quán đã lưu sẵn menu, hoặc bắt đầu không cần chọn quán.
             </div>
           </div>
-          <button type="button" onClick={handleStart} className="btn btn-primary btn-sm flex-none" disabled={starting}>
-            {starting ? "Đang bắt đầu…" : "Bắt đầu đặt đồ ăn hôm nay"}
-          </button>
+
+          {!showAddShop && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                className="input flex-1"
+                style={{ padding: "6px 8px", fontSize: 13, minWidth: 180 }}
+                value={selectedShopId}
+                onChange={(e) => setSelectedShopId(e.target.value)}
+              >
+                <option value="">— Không chọn quán (tự gõ món) —</option>
+                {shops.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={handleStart} className="btn btn-primary btn-sm flex-none" disabled={starting}>
+                {starting ? "Đang bắt đầu…" : "Bắt đầu đặt đồ ăn"}
+              </button>
+              <button type="button" onClick={() => setShowAddShop(true)} className="btn btn-ghost btn-sm flex-none">
+                + Thêm quán mới
+              </button>
+            </div>
+          )}
+
+          {showAddShop && (
+            <form onSubmit={submitNewShop} className="flex flex-col gap-2 pt-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input
+                  className="input"
+                  style={{ padding: "6px 8px", fontSize: 13 }}
+                  placeholder="Tên quán"
+                  value={newShopName}
+                  onChange={(e) => setNewShopName(e.target.value)}
+                  autoFocus
+                />
+                <input
+                  className="input"
+                  style={{ padding: "6px 8px", fontSize: 13 }}
+                  placeholder="Link ShopeeFood (không bắt buộc)"
+                  value={newShopLink}
+                  onChange={(e) => setNewShopLink(e.target.value)}
+                />
+              </div>
+              <span className="text-[11px] font-bold tracking-[0.06em]" style={{ color: "var(--color-neutral-500)" }}>
+                MENU
+              </span>
+              <div className="flex flex-col gap-1.5">
+                {newShopItems.map((it, i) => (
+                  <div key={i} className="grid gap-1.5 items-center" style={{ gridTemplateColumns: "1fr 1fr 100px 28px" }}>
+                    <input
+                      className="input"
+                      style={{ padding: "5px 8px", fontSize: 12 }}
+                      placeholder="Tên món"
+                      value={it.name}
+                      onChange={(e) => updateNewShopItemRow(i, { name: e.target.value })}
+                    />
+                    <input
+                      className="input"
+                      style={{ padding: "5px 8px", fontSize: 12 }}
+                      placeholder="Ghi chú"
+                      value={it.note}
+                      onChange={(e) => updateNewShopItemRow(i, { note: e.target.value })}
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      className="input"
+                      style={{ padding: "5px 8px", fontSize: 12 }}
+                      placeholder="Giá"
+                      value={it.price}
+                      onChange={(e) => updateNewShopItemRow(i, { price: e.target.value })}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeNewShopItemRow(i)}
+                      className="btn-icon"
+                      style={{ width: 26, height: 26, padding: 0, fontSize: 12 }}
+                      aria-label="Xoá món"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={addNewShopItemRow} className="btn btn-ghost btn-sm w-fit">
+                + Thêm món
+              </button>
+              <div className="flex items-center gap-2 justify-end">
+                <button type="button" onClick={() => setShowAddShop(false)} className="btn btn-ghost btn-sm" disabled={addingShop}>
+                  Huỷ
+                </button>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={addingShop || !newShopName.trim()}>
+                  {addingShop ? "Đang lưu…" : "Lưu quán"}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       ) : (
         <>
@@ -253,7 +450,8 @@ export function FoodOrderPanel({
                 </span>
               </div>
               <div className="text-xs mt-0.5 capitalize" style={{ color: "var(--color-neutral-500)" }}>
-                {dateLabel} · {items.length} người đã đặt
+                {dateLabel}
+                {shopName && ` · ${shopName}`} · {items.length} người đã đặt
                 {hasPrices && ` · Tổng ${formatVnd(total)}`}
               </div>
             </div>
@@ -350,37 +548,75 @@ export function FoodOrderPanel({
 
           {editingMine && (
             <form onSubmit={submitMyItem} className="flex flex-col gap-2 pt-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
-              <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr 110px" }}>
-                <input
-                  className="input"
-                  style={{ padding: "5px 8px", fontSize: 12 }}
-                  placeholder="Món ăn / thức uống"
-                  value={itemText}
-                  onChange={(e) => setItemText(e.target.value)}
-                  autoFocus
-                />
-                <input
-                  className="input"
-                  style={{ padding: "5px 8px", fontSize: 12 }}
-                  placeholder="Ghi chú (VD: ít đường)"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                />
-                <input
-                  type="number"
-                  min={0}
-                  className="input"
-                  style={{ padding: "5px 8px", fontSize: 12 }}
-                  placeholder="Giá (không bắt buộc)"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value === "" ? "" : Number(e.target.value))}
-                />
-              </div>
+              {round.shop_id ? (
+                <>
+                  <div className="flex flex-col gap-1 max-h-[160px] overflow-y-auto pr-1">
+                    {shopMenu.map((m) => (
+                      <label key={m.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" checked={checkedItemIds.has(m.id)} onChange={() => toggleChecked(m.id)} />
+                        <span className="flex-1">
+                          {m.name}
+                          {m.note && (
+                            <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+                              {" "}
+                              ({m.note})
+                            </span>
+                          )}
+                        </span>
+                        {m.price !== null && <span className="text-xs font-semibold flex-none">{formatVnd(m.price)}</span>}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <input
+                      className="input"
+                      style={{ padding: "5px 8px", fontSize: 12 }}
+                      placeholder="Món khác ngoài menu (không bắt buộc)"
+                      value={extraText}
+                      onChange={(e) => setExtraText(e.target.value)}
+                    />
+                    <input
+                      className="input"
+                      style={{ padding: "5px 8px", fontSize: 12 }}
+                      placeholder="Ghi chú (VD: ít đường, không hành)"
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="grid gap-2" style={{ gridTemplateColumns: "1fr 1fr 110px" }}>
+                  <input
+                    className="input"
+                    style={{ padding: "5px 8px", fontSize: 12 }}
+                    placeholder="Món ăn / thức uống"
+                    value={freeItemText}
+                    onChange={(e) => setFreeItemText(e.target.value)}
+                    autoFocus
+                  />
+                  <input
+                    className="input"
+                    style={{ padding: "5px 8px", fontSize: 12 }}
+                    placeholder="Ghi chú (VD: ít đường)"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    className="input"
+                    style={{ padding: "5px 8px", fontSize: 12 }}
+                    placeholder="Giá (không bắt buộc)"
+                    value={freePrice}
+                    onChange={(e) => setFreePrice(e.target.value === "" ? "" : Number(e.target.value))}
+                  />
+                </div>
+              )}
               <div className="flex items-center gap-2 justify-end">
                 <button type="button" onClick={() => setEditingMine(false)} className="btn btn-ghost btn-sm" disabled={saving}>
                   Huỷ
                 </button>
-                <button type="submit" className="btn btn-primary btn-sm" disabled={saving || !itemText.trim()}>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
                   {saving ? "Đang lưu…" : "Lưu"}
                 </button>
               </div>

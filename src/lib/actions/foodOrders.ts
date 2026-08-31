@@ -29,7 +29,7 @@ export async function getTodayFoodOrderRound(channelId: string): Promise<FoodOrd
 
 export async function startFoodOrderRound(
   channelId: string,
-  input: { title: string; deadlineAt?: string | null },
+  input: { title: string; deadlineAt?: string | null; shopId?: string | null },
 ): Promise<FoodOrderRound> {
   const { supabase, user } = await requireUser();
   const { data, error } = await supabase
@@ -39,6 +39,7 @@ export async function startFoodOrderRound(
       order_date: vnToday(),
       title: input.title.trim() || "Đặt đồ ăn",
       deadline_at: input.deadlineAt || null,
+      shop_id: input.shopId || null,
       created_by: user.id,
     })
     .select("*")

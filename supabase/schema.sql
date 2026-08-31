@@ -2021,6 +2021,96 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- food_shops / food_shop_menu_items: a small reusable library of quán ăn
+-- with their menu already on file (name/note/price per item) — added once,
+-- either by hand or by pasting in what a real ShopeeFood menu shows,
+-- exactly so nobody has to retype the same quán's menu on every order
+-- round. Starting a round can then point at a shop_id, and everyone just
+-- ticks items instead of free-typing (see food_order_rounds.shop_id below).
+-- ---------------------------------------------------------------------------
+create table if not exists public.food_shops (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  shopee_link text,
+  added_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.food_shops enable row level security;
+
+drop policy if exists "staff can read food shops" on public.food_shops;
+create policy "staff can read food shops"
+  on public.food_shops for select
+  to authenticated
+  using (true);
+
+drop policy if exists "staff can add food shops" on public.food_shops;
+create policy "staff can add food shops"
+  on public.food_shops for insert
+  to authenticated
+  with check (added_by = auth.uid());
+
+drop policy if exists "creator or director can delete food shops" on public.food_shops;
+create policy "creator or director can delete food shops"
+  on public.food_shops for delete
+  to authenticated
+  using (added_by = auth.uid() or public.current_access_role() = 'director');
+
+create table if not exists public.food_shop_menu_items (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid not null references public.food_shops (id) on delete cascade,
+  name text not null,
+  note text,
+  price numeric,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists food_shop_menu_items_shop_idx on public.food_shop_menu_items (shop_id);
+
+alter table public.food_shop_menu_items enable row level security;
+
+drop policy if exists "staff can read food shop menu items" on public.food_shop_menu_items;
+create policy "staff can read food shop menu items"
+  on public.food_shop_menu_items for select
+  to authenticated
+  using (true);
+
+-- Reference data shared by the whole team, same "anyone can maintain it"
+-- reasoning as food_order_rounds' own update policy — not worth an
+-- ownership model for a menu item.
+drop policy if exists "staff can manage food shop menu items" on public.food_shop_menu_items;
+create policy "staff can manage food shop menu items"
+  on public.food_shop_menu_items for all
+  to authenticated
+  using (true)
+  with check (true);
+
+-- Which shop's menu this round is built from — null keeps the original
+-- free-typed flow available for a quán that isn't in the library yet.
+alter table public.food_order_rounds add column if not exists shop_id uuid references public.food_shops (id) on delete set null;
+
+-- Seed "Phở 193 - Nguyễn Phúc Nguyên" once, read off its real ShopeeFood
+-- menu by hand (see supabase/migrations/food_shop_library.sql for how to
+-- add more quán the same way).
+insert into public.food_shops (name, shopee_link)
+select 'Phở 193 - Nguyễn Phúc Nguyên', 'https://shopeefood.vn/ho-chi-minh/pho-193-nguyen-phuc-nguyen'
+where not exists (select 1 from public.food_shops where name = 'Phở 193 - Nguyễn Phúc Nguyên');
+
+insert into public.food_shop_menu_items (shop_id, name, note, price, sort_order)
+select s.id, v.name, v.note, v.price, v.sort_order
+from public.food_shops s
+join (values
+  ('Phở tái', 'Đã có tô nhựa', 40000, 1),
+  ('Phở thập cẩm', 'Đã có tô nhựa', 50000, 2),
+  ('Phở gân', 'Đã có tô nhựa', 40000, 3),
+  ('Phở nạm', 'Đã có tô muỗng nhựa', 40000, 4),
+  ('Phở bò viên', 'Đã có tô nhựa', 40000, 5),
+  ('Chén Trứng', '1 trứng là say đắm 2 trứng là đắm say', 10000, 6)
+) as v(name, note, price, sort_order) on true
+where s.name = 'Phở 193 - Nguyễn Phúc Nguyên'
+  and not exists (select 1 from public.food_shop_menu_items where shop_id = s.id);
+
+-- ---------------------------------------------------------------------------
 -- invoices: internal invoice/quote generator (quan-tri/hoa-don), director
 -- only. This is a document-generation tool, not a government-compliant
 -- e-invoice (Thông tư 78) — it doesn't file anything with the tax
