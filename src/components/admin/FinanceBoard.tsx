@@ -9,6 +9,7 @@ import {
   listFinanceEntriesForYear,
 } from "@/lib/actions/finance";
 import { FinanceEntryModal } from "@/components/admin/FinanceEntryModal";
+import { FinanceYearChart } from "@/components/admin/FinanceYearChart";
 import { MONTH_LABELS, addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import type { FinanceEntry, FinanceEntryType } from "@/lib/types";
 
@@ -328,6 +329,10 @@ export function FinanceBoard({
           <button type="button" onClick={() => goToYear(year + 1)} className="btn-icon" aria-label="Năm sau">
             →
           </button>
+        </div>
+
+        <div style={{ opacity: yearLoading ? 0.6 : 1 }}>
+          <FinanceYearChart rows={yearRows} />
         </div>
 
         <div className="card elev-sm overflow-x-auto" style={{ opacity: yearLoading ? 0.6 : 1 }}>
