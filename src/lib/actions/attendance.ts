@@ -154,7 +154,7 @@ export async function getMonthAttendance(profileId: string, monthStartInput?: st
 export async function upsertAttendance(input: {
   profileId: string;
   workDate: string;
-  status: "present" | "absent" | "leave";
+  status: "present" | "absent" | "leave" | "off";
   checkInTime?: string; // "HH:mm", combined with workDate in VN time
   note?: string;
 }) {

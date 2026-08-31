@@ -769,7 +769,7 @@ create table if not exists public.attendance (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references public.profiles (id) on delete cascade,
   work_date date not null,
-  status text not null default 'present' check (status in ('present', 'absent', 'leave')),
+  status text not null default 'present' check (status in ('present', 'absent', 'leave', 'off')),
   note text,
   created_at timestamptz not null default now(),
   unique (profile_id, work_date)
@@ -778,6 +778,14 @@ create table if not exists public.attendance (
 -- Added after the initial table creation to capture the actual clock-in
 -- time, not just a present/absent/leave flag.
 alter table public.attendance add column if not exists check_in_at timestamptz;
+
+-- Added after the initial table creation: 'off' lets the director mark an
+-- ad-hoc non-working day (e.g. a Saturday the whole team had off) without
+-- it counting as an unplanned absence — distinct from a weekend/holiday
+-- with no entry at all, which already renders "Ngày nghỉ" automatically.
+alter table public.attendance drop constraint if exists attendance_status_check;
+alter table public.attendance add constraint attendance_status_check
+  check (status in ('present', 'absent', 'leave', 'off'));
 
 alter table public.attendance enable row level security;
 

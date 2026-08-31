@@ -248,7 +248,7 @@ export type AttendanceEntry = {
   profile_id: string;
   work_date: string;
   check_in_at: string | null;
-  status: "present" | "absent" | "leave";
+  status: "present" | "absent" | "leave" | "off";
   note: string | null;
   created_at: string;
 };

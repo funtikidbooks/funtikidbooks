@@ -150,15 +150,19 @@ export function isSameMonth(dateStr: string, monthStart: string): boolean {
 export type AttendanceSummary = { present: number; late: number; absent: number; leave: number };
 
 // Shared by the attendance month-detail view and the payroll form (which
-// suggests deductions from these same counts).
+// suggests deductions from these same counts). "off" (a director-marked
+// day off — a Saturday the whole team had off, say) is deliberately not
+// tallied into any bucket here, the same as a day with no entry at all —
+// it shouldn't inflate "Vắng" or count as a worked day either.
 export function summarizeAttendance(
-  entries: { work_date: string; status: "present" | "absent" | "leave"; check_in_at: string | null }[],
+  entries: { work_date: string; status: "present" | "absent" | "leave" | "off"; check_in_at: string | null }[],
 ): AttendanceSummary {
   let present = 0;
   let late = 0;
   let absent = 0;
   let leave = 0;
   for (const e of entries) {
+    if (e.status === "off") continue;
     if (e.status === "absent") absent++;
     else if (e.status === "leave") leave++;
     else if (e.status === "present" && e.check_in_at) {

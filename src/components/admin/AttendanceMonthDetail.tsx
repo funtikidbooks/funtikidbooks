@@ -135,7 +135,9 @@ export function AttendanceMonthDetail({
                   const weekday = isMonToFri(date) && !offDateSet.has(date);
 
                   let badge: React.ReactNode = null;
-                  if (entry?.status === "leave") {
+                  if (entry?.status === "off") {
+                    badge = <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
+                  } else if (entry?.status === "leave") {
                     badge = <span style={{ color: "var(--color-neutral-500)" }}>Nghỉ</span>;
                   } else if (entry?.status === "absent") {
                     badge = <span style={{ color: "var(--status-red)" }}>Vắng</span>;

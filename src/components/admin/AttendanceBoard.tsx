@@ -127,7 +127,13 @@ export function AttendanceBoard({
           {staff.map((p) => {
             const entry = todayByProfile.get(p.id);
             let statusNode: React.ReactNode;
-            if (entry?.status === "leave") {
+            if (entry?.status === "off") {
+              statusNode = (
+                <span className="text-xs" style={{ color: "var(--color-neutral-400)" }}>
+                  Ngày nghỉ
+                </span>
+              );
+            } else if (entry?.status === "leave") {
               statusNode = (
                 <span className="text-xs font-bold" style={{ color: "var(--color-neutral-500)" }}>
                   Nghỉ phép

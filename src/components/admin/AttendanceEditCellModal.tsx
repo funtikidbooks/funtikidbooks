@@ -36,7 +36,7 @@ export function AttendanceEditCellModal({
   onClose: () => void;
   onSaved: (entry: AttendanceEntry) => void;
 }) {
-  const [status, setStatus] = useState<"present" | "absent" | "leave">(entry?.status ?? "present");
+  const [status, setStatus] = useState<"present" | "absent" | "leave" | "off">(entry?.status ?? "present");
   const [checkInTime, setCheckInTime] = useState(entry?.check_in_at ? formatCheckInTime(entry.check_in_at) : "");
   const [note, setNote] = useState(entry?.note ?? "");
   const [saving, setSaving] = useState(false);
@@ -93,6 +93,7 @@ export function AttendanceEditCellModal({
               { value: "present", label: "Có mặt" },
               { value: "absent", label: "Vắng" },
               { value: "leave", label: "Nghỉ phép" },
+              { value: "off", label: "Ngày nghỉ" },
             ] as const).map((opt) => (
               <button
                 key={opt.value}
