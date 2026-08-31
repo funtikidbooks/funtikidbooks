@@ -769,7 +769,7 @@ create table if not exists public.attendance (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references public.profiles (id) on delete cascade,
   work_date date not null,
-  status text not null default 'present' check (status in ('present', 'absent', 'leave', 'off', 'paid_leave')),
+  status text not null default 'present' check (status in ('present', 'absent', 'leave', 'off', 'paid_leave', 'half_day')),
   note text,
   created_at timestamptz not null default now(),
   unique (profile_id, work_date)
@@ -785,10 +785,13 @@ alter table public.attendance add column if not exists check_in_at timestamptz;
 -- with no entry at all, which already renders "Ngày nghỉ" automatically.
 -- 'paid_leave' (added later) is for statutory/company holidays — unlike
 -- 'off', it DOES count as a full work day for payroll (summarizeAttendance
--- folds it into "present"), since a paid holiday is still paid.
+-- folds it into "present"), since a paid holiday is still paid. 'half_day'
+-- (added later still) is a half công — summarizeAttendance adds 0.5 to
+-- "present" instead of 1, so it flows straight into "Số ngày đi làm" and
+-- payroll (lương/ngày × 0.5) without any separate handling.
 alter table public.attendance drop constraint if exists attendance_status_check;
 alter table public.attendance add constraint attendance_status_check
-  check (status in ('present', 'absent', 'leave', 'off', 'paid_leave'));
+  check (status in ('present', 'absent', 'leave', 'off', 'paid_leave', 'half_day'));
 
 alter table public.attendance enable row level security;
 

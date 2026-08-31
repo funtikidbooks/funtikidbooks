@@ -336,6 +336,7 @@ export function PayrollEditModal({
               <input
                 type="number"
                 min={0}
+                step={0.5}
                 className="input"
                 style={{ padding: "5px 8px", fontSize: 12 }}
                 value={workDays}

@@ -157,9 +157,12 @@ export type AttendanceSummary = { present: number; late: number; absent: number;
 // it shouldn't inflate "Vắng" or count as a worked day either. "paid_leave"
 // (a statutory/company holiday) is the opposite: it folds into `present`
 // on purpose, since a paid holiday still counts as a full ngày công for
-// payroll even though nobody actually clocked in.
+// payroll even though nobody actually clocked in. "half_day" adds only 0.5
+// to `present` — a half công, which flows straight into "Số ngày đi làm"
+// and payroll (lương/ngày × 0.5) without any separate handling anywhere
+// else.
 export function summarizeAttendance(
-  entries: { work_date: string; status: "present" | "absent" | "leave" | "off" | "paid_leave"; check_in_at: string | null }[],
+  entries: { work_date: string; status: "present" | "absent" | "leave" | "off" | "paid_leave" | "half_day"; check_in_at: string | null }[],
 ): AttendanceSummary {
   let present = 0;
   let late = 0;
@@ -170,6 +173,7 @@ export function summarizeAttendance(
     if (e.status === "absent") absent++;
     else if (e.status === "leave") leave++;
     else if (e.status === "paid_leave") present++;
+    else if (e.status === "half_day") present += 0.5;
     else if (e.status === "present" && e.check_in_at) {
       present++;
       if (isLateCheckIn(e.check_in_at)) late++;

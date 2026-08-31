@@ -201,7 +201,7 @@ async function syncPayrollForAttendanceChange(
 export async function upsertAttendance(input: {
   profileId: string;
   workDate: string;
-  status: "present" | "absent" | "leave" | "off" | "paid_leave";
+  status: "present" | "absent" | "leave" | "off" | "paid_leave" | "half_day";
   checkInTime?: string; // "HH:mm", combined with workDate in VN time
   note?: string;
 }) {

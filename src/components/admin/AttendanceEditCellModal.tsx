@@ -38,7 +38,7 @@ export function AttendanceEditCellModal({
   onSaved: (entry: AttendanceEntry) => void;
   onDeleted?: (workDate: string) => void;
 }) {
-  const [status, setStatus] = useState<"present" | "absent" | "leave" | "off" | "paid_leave">(entry?.status ?? "present");
+  const [status, setStatus] = useState<"present" | "absent" | "leave" | "off" | "paid_leave" | "half_day">(entry?.status ?? "present");
   const [checkInTime, setCheckInTime] = useState(entry?.check_in_at ? formatCheckInTime(entry.check_in_at) : "");
   const [note, setNote] = useState(entry?.note ?? "");
   const [saving, setSaving] = useState(false);
@@ -113,6 +113,7 @@ export function AttendanceEditCellModal({
               { value: "leave", label: "Nghỉ phép" },
               { value: "off", label: "Ngày nghỉ" },
               { value: "paid_leave", label: "Nghỉ có lương" },
+              { value: "half_day", label: "Nửa ngày công" },
             ] as const).map((opt) => (
               <button
                 key={opt.value}

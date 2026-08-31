@@ -139,6 +139,8 @@ export function AttendanceMonthDetail({
                     badge = <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
                   } else if (entry?.status === "paid_leave") {
                     badge = <span style={{ color: "var(--status-blue)" }}>Nghỉ lương</span>;
+                  } else if (entry?.status === "half_day") {
+                    badge = <span style={{ color: "var(--status-purple)" }}>Nửa công</span>;
                   } else if (entry?.status === "leave") {
                     badge = <span style={{ color: "var(--color-neutral-500)" }}>Nghỉ</span>;
                   } else if (entry?.status === "absent") {

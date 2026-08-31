@@ -139,6 +139,12 @@ export function AttendanceBoard({
                   Nghỉ có lương
                 </span>
               );
+            } else if (entry?.status === "half_day") {
+              statusNode = (
+                <span className="text-xs font-bold" style={{ color: "var(--status-purple)" }}>
+                  Nửa ngày công
+                </span>
+              );
             } else if (entry?.status === "leave") {
               statusNode = (
                 <span className="text-xs font-bold" style={{ color: "var(--color-neutral-500)" }}>
