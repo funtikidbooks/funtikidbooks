@@ -42,6 +42,7 @@ export function AdminSidebar({
   const pathname = usePathname();
   const isDirector = user.accessRole === "director";
   const isProjectManager = user.jobTitle === "Project Manager";
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const [pendingFeedbackIds, setPendingFeedbackIds] = useState<Set<string>>(
     () => new Set(initialPendingPayrollFeedbackIds),
@@ -75,11 +76,16 @@ export function AdminSidebar({
 
   const hasPendingPayrollFeedback = pendingFeedbackIds.size > 0;
 
+  // Closing here (not via a pathname-watching effect) mirrors how
+  // MobileNav's own "Thêm" sheet closes itself — every navigational
+  // element in the drawer just closes it directly on click. A no-op on
+  // the desktop <aside> instance since mobileOpen is already false there.
   function NavLink({ item, showDot }: { item: { href: string; label: string; icon: string }; showDot?: boolean }) {
     const active = pathname.startsWith(item.href);
     return (
       <Link
         href={item.href}
+        onClick={() => setMobileOpen(false)}
         className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold transition-colors"
         style={{
           background: active ? "var(--color-accent-100)" : "transparent",
@@ -99,91 +105,165 @@ export function AdminSidebar({
     );
   }
 
+  // Shared between the desktop <aside> and the mobile drawer, so the two
+  // never drift apart — same role gating, same items, same order.
+  const navSections = (
+    <div className="flex flex-col gap-1">
+      {(isDirector || user.accessRole === "admin") && (
+        <>
+          <div className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1" style={{ color: "var(--color-neutral-500)" }}>
+            QUẢN TRỊ NỘI DUNG
+          </div>
+          {NAV.map((item) => (
+            <NavLink key={item.href} item={item} />
+          ))}
+          <Link
+            href="/tin-tuc"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
+            style={{ color: "var(--color-text)" }}
+          >
+            <span aria-hidden>📰</span>
+            Tin tức (đăng bài trực tiếp trên trang)
+          </Link>
+        </>
+      )}
+
+      {(isDirector || isProjectManager) && (
+        <>
+          <div className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1 mt-3" style={{ color: "var(--color-neutral-500)" }}>
+            {isDirector ? "GIÁM ĐỐC" : "QUẢN LÝ"}
+          </div>
+          <Link
+            href="/workspace"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
+            style={{ color: "var(--color-text)" }}
+          >
+            📊 Bảng công việc
+          </Link>
+          {HR_NAV.map((item) => (
+            <NavLink
+              key={item.href}
+              item={item}
+              showDot={item.href === "/quan-tri/bang-luong" && hasPendingPayrollFeedback}
+            />
+          ))}
+          {isDirector && DIRECTOR_ONLY_NAV.map((item) => <NavLink key={item.href} item={item} />)}
+        </>
+      )}
+    </div>
+  );
+
+  const accountBlock = (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 px-2">
+        <div
+          className="flex items-center justify-center rounded-full text-xs font-bold flex-none"
+          style={{ width: 30, height: 30, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+        >
+          {user.displayName.charAt(0).toUpperCase()}
+        </div>
+        <div className="flex flex-col min-w-0">
+          <span className="text-xs font-bold truncate">{user.displayName}</span>
+          <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
+            {isDirector ? "Giám đốc" : user.accessRole === "admin" ? "Admin" : user.jobTitle || "Nhân viên"}
+          </span>
+        </div>
+      </div>
+      <form action={signOut} onSubmit={resetThemeOnSignOut}>
+        <button
+          type="submit"
+          className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold w-full text-left"
+          style={{ color: "var(--color-neutral-600)" }}
+        >
+          <span aria-hidden>↩</span> Đăng xuất
+        </button>
+      </form>
+    </div>
+  );
+
   return (
-    <aside
-      className="w-[240px] flex-none hidden md:flex flex-col gap-6 px-3.5 py-5"
-      style={{ background: "var(--color-bg)", borderRight: "1px solid var(--color-neutral-200)" }}
-    >
-      <Link href="/" className="flex items-center gap-2 px-1">
-        <Image
-          src="/brand/funti-logo.jpg"
-          alt="Funti Kidbooks Studio"
-          width={34}
-          height={34}
-          className="rounded-full object-cover flex-none"
-        />
-        <span className="font-heading font-bold text-sm">Funti Kidbooks</span>
-      </Link>
-
-      <div className="flex flex-col gap-1">
-        {(isDirector || user.accessRole === "admin") && (
-          <>
-            <div className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1" style={{ color: "var(--color-neutral-500)" }}>
-              QUẢN TRỊ NỘI DUNG
-            </div>
-            {NAV.map((item) => (
-              <NavLink key={item.href} item={item} />
-            ))}
-            <Link
-              href="/tin-tuc"
-              className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
-              style={{ color: "var(--color-text)" }}
-            >
-              <span aria-hidden>📰</span>
-              Tin tức (đăng bài trực tiếp trên trang)
-            </Link>
-          </>
-        )}
-
-        {(isDirector || isProjectManager) && (
-          <>
-            <div className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1 mt-3" style={{ color: "var(--color-neutral-500)" }}>
-              {isDirector ? "GIÁM ĐỐC" : "QUẢN LÝ"}
-            </div>
-            <Link
-              href="/workspace"
-              className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
-              style={{ color: "var(--color-text)" }}
-            >
-              📊 Bảng công việc
-            </Link>
-            {HR_NAV.map((item) => (
-              <NavLink
-                key={item.href}
-                item={item}
-                showDot={item.href === "/quan-tri/bang-luong" && hasPendingPayrollFeedback}
-              />
-            ))}
-            {isDirector && DIRECTOR_ONLY_NAV.map((item) => <NavLink key={item.href} item={item} />)}
-          </>
-        )}
+    <>
+      {/* Phone/tablet: the desktop <aside> below is display:none here, so
+          without this bar + drawer there was no way at all to reach any
+          quan-tri section besides whatever page was linked to directly. */}
+      <div
+        className="no-print md:hidden flex-none flex items-center justify-between px-4 py-3"
+        style={{ background: "var(--color-bg)", borderBottom: "1px solid var(--color-neutral-200)" }}
+      >
+        <Link href="/" className="flex items-center gap-2">
+          <Image
+            src="/brand/funti-logo.jpg"
+            alt="Funti Kidbooks Studio"
+            width={28}
+            height={28}
+            className="rounded-full object-cover flex-none"
+          />
+          <span className="font-heading font-bold text-sm">Funti Kidbooks</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          className="btn-icon"
+          style={{ width: 34, height: 34 }}
+          aria-label="Mở menu quản trị"
+        >
+          ☰
+        </button>
       </div>
 
-      <div className="mt-auto flex flex-col gap-3">
-        <div className="flex items-center gap-2 px-2">
+      {mobileOpen && (
+        <div
+          className="no-print md:hidden fixed inset-0 z-50 flex"
+          style={{ background: "rgba(0,0,0,0.4)" }}
+          onClick={() => setMobileOpen(false)}
+        >
           <div
-            className="flex items-center justify-center rounded-full text-xs font-bold flex-none"
-            style={{ width: 30, height: 30, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+            className="w-[280px] max-w-[85vw] h-full flex flex-col gap-6 px-3.5 py-5 overflow-y-auto"
+            style={{ background: "var(--color-bg)" }}
+            onClick={(e) => e.stopPropagation()}
           >
-            {user.displayName.charAt(0).toUpperCase()}
-          </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-xs font-bold truncate">{user.displayName}</span>
-            <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
-              {isDirector ? "Giám đốc" : user.accessRole === "admin" ? "Admin" : user.jobTitle || "Nhân viên"}
-            </span>
+            <div className="flex items-center justify-between px-1">
+              <Link href="/" className="flex items-center gap-2">
+                <Image
+                  src="/brand/funti-logo.jpg"
+                  alt="Funti Kidbooks Studio"
+                  width={34}
+                  height={34}
+                  className="rounded-full object-cover flex-none"
+                />
+                <span className="font-heading font-bold text-sm">Funti Kidbooks</span>
+              </Link>
+              <button type="button" onClick={() => setMobileOpen(false)} className="btn-icon" aria-label="Đóng">
+                ✕
+              </button>
+            </div>
+            {navSections}
+            <div className="mt-auto">{accountBlock}</div>
           </div>
         </div>
-        <form action={signOut} onSubmit={resetThemeOnSignOut}>
-          <button
-            type="submit"
-            className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold w-full text-left"
-            style={{ color: "var(--color-neutral-600)" }}
-          >
-            <span aria-hidden>↩</span> Đăng xuất
-          </button>
-        </form>
-      </div>
-    </aside>
+      )}
+
+      <aside
+        className="w-[240px] flex-none hidden md:flex flex-col gap-6 px-3.5 py-5"
+        style={{ background: "var(--color-bg)", borderRight: "1px solid var(--color-neutral-200)" }}
+      >
+        <Link href="/" className="flex items-center gap-2 px-1">
+          <Image
+            src="/brand/funti-logo.jpg"
+            alt="Funti Kidbooks Studio"
+            width={34}
+            height={34}
+            className="rounded-full object-cover flex-none"
+          />
+          <span className="font-heading font-bold text-sm">Funti Kidbooks</span>
+        </Link>
+
+        {navSections}
+
+        <div className="mt-auto">{accountBlock}</div>
+      </aside>
+    </>
   );
 }

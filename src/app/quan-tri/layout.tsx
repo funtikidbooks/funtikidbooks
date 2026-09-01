@@ -36,7 +36,7 @@ export default async function AdminLayout({
   const initialPendingPayrollFeedbackIds = isDirector || isProjectManager ? await listPendingPayrollFeedbackIds() : [];
 
   return (
-    <div className="flex min-h-screen" style={{ background: "var(--color-bg)" }}>
+    <div className="flex flex-col md:flex-row min-h-screen" style={{ background: "var(--color-bg)" }}>
       <AdminSidebar
         user={{
           displayName: profile.display_name,
