@@ -2312,3 +2312,92 @@ select * from (values
   ('Sách toán vui mỗi ngày', 'Sách giáo dục', '/placeholders/projects/sach-toan-vui.jpg', 8)
 ) as seed(title, tag, cover_image_url, position)
 where not exists (select 1 from public.projects);
+
+-- ---------------------------------------------------------------------------
+-- staff_documents: e-signature hợp đồng lao động / NDA / chứng từ khác —
+-- director (or PM, via can_manage_hr()) writes the content and sends it to
+-- one staff member, who signs it from their own "Hợp đồng" page. Printable
+-- via the same window.print() + .no-print convention as PayrollPrintView.
+--
+-- Signing intentionally does NOT go through a direct UPDATE RLS policy for
+-- staff — sign_staff_document() below (security definer) is the only path,
+-- so a signed document's content/type/recipient can never be edited from
+-- the client, only status/signature/signed_name/signed_at, and only once,
+-- while it's still 'pending' and belongs to the caller.
+-- ---------------------------------------------------------------------------
+create table if not exists public.staff_documents (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  type text not null check (type in ('labor_contract', 'nda', 'other')),
+  title text not null,
+  content text not null,
+  status text not null default 'pending' check (status in ('pending', 'signed', 'voided')),
+  signature_image_url text,
+  signed_name text,
+  signed_at timestamptz,
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists staff_documents_profile_id_idx on public.staff_documents (profile_id);
+
+alter table public.staff_documents enable row level security;
+
+drop policy if exists "hr can manage staff documents" on public.staff_documents;
+create policy "hr can manage staff documents"
+  on public.staff_documents for all
+  to authenticated
+  using (public.can_manage_hr())
+  with check (public.can_manage_hr());
+
+drop policy if exists "staff can view own documents" on public.staff_documents;
+create policy "staff can view own documents"
+  on public.staff_documents for select
+  to authenticated
+  using (profile_id = auth.uid());
+
+create or replace function public.sign_staff_document(
+  p_document_id uuid,
+  p_signature_image_url text,
+  p_signed_name text
+)
+returns public.staff_documents
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  result public.staff_documents;
+begin
+  update public.staff_documents
+  set status = 'signed',
+      signature_image_url = p_signature_image_url,
+      signed_name = p_signed_name,
+      signed_at = now(),
+      updated_at = now()
+  where id = p_document_id
+    and profile_id = auth.uid()
+    and status = 'pending'
+  returning * into result;
+
+  if result.id is null then
+    raise exception 'Không thể ký văn bản này.';
+  end if;
+
+  return result;
+end;
+$$;
+
+grant execute on function public.sign_staff_document(uuid, text, text) to authenticated;
+
+-- Drives the live "chưa ký" red-dot and lets the director's own list
+-- refresh without a manual reload once staff sign or a new one is created.
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'staff_documents'
+  ) then
+    alter publication supabase_realtime add table public.staff_documents;
+  end if;
+end $$;

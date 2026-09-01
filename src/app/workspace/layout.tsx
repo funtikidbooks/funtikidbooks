@@ -15,6 +15,7 @@ import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
 import { IosInstallHint, PushSetup } from "@/components/workspace/PushSetup";
 import { getUnreadCounts } from "@/lib/actions/messages";
 import { checkInIfNeeded } from "@/lib/actions/attendance";
+import { countMyPendingDocuments } from "@/lib/actions/documents";
 import type { Profile } from "@/lib/types";
 
 // The workspace is an internal tool used mostly through the installed
@@ -43,7 +44,7 @@ export default async function WorkspaceLayout({
     redirect("/dang-nhap?next=/workspace");
   }
 
-  const [{ data: profile }, { data: allProfiles }, unreadCounts] = await Promise.all([
+  const [{ data: profile }, { data: allProfiles }, unreadCounts, pendingDocumentCount] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, theme, created_at")
@@ -54,6 +55,7 @@ export default async function WorkspaceLayout({
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, theme, created_at")
       .order("display_name", { ascending: true }),
     getUnreadCounts().catch(() => ({})),
+    countMyPendingDocuments().catch(() => 0),
   ]);
 
   await checkInIfNeeded().catch(() => {});
@@ -103,9 +105,10 @@ export default async function WorkspaceLayout({
             }}
             currentUserId={user.id}
             profiles={(allProfiles ?? []) as Profile[]}
+            pendingDocumentCount={pendingDocumentCount}
           />
           <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex-none flex items-center justify-between gap-2 px-4 py-2" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+            <div className="no-print flex-none flex items-center justify-between gap-2 px-4 py-2" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
               <TeamOnlineBadge
                 currentUserId={user.id}
                 totalMembers={(allProfiles ?? []).length}

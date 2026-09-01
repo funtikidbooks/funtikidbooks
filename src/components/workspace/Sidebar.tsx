@@ -24,6 +24,7 @@ const INTERNAL_NAV = [
   { href: "/workspace/tinh-kho-sach", label: "Tính khổ sách", icon: "📐", enabled: true },
   { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️", enabled: true },
   { href: "/workspace/thanh-vien", label: "Thành viên", icon: "👥", enabled: true },
+  { href: "/workspace/hop-dong", label: "Hợp đồng", icon: "📄", enabled: true },
   { href: "/workspace/lich", label: "Lịch", icon: "📅", enabled: true },
   { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐", enabled: true },
   { href: "#", label: "Dự án", icon: "📁", enabled: false },
@@ -33,10 +34,12 @@ export function Sidebar({
   user,
   currentUserId,
   profiles,
+  pendingDocumentCount = 0,
 }: {
   user: { displayName: string; email: string; accessRole: "director" | "admin" | "staff" };
   currentUserId: string;
   profiles: Profile[];
+  pendingDocumentCount?: number;
 }) {
   const pathname = usePathname();
   const { totalUnreadCount } = useChatManager();
@@ -75,6 +78,14 @@ export function Sidebar({
             style={{ minWidth: 17, height: 17, padding: "0 4px", fontSize: 10, background: "var(--status-red)", color: "#fff" }}
           >
             {totalUnreadCount > 9 ? "9+" : totalUnreadCount}
+          </span>
+        )}
+        {item.href === "/workspace/hop-dong" && pendingDocumentCount > 0 && (
+          <span
+            className="flex items-center justify-center rounded-full font-bold flex-none"
+            style={{ minWidth: 17, height: 17, padding: "0 4px", fontSize: 10, background: "var(--status-red)", color: "#fff" }}
+          >
+            {pendingDocumentCount > 9 ? "9+" : pendingDocumentCount}
           </span>
         )}
         {!item.enabled && <span className="ml-auto text-[9px] tag tag-neutral">SẮP RA MẮT</span>}

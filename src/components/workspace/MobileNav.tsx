@@ -23,6 +23,7 @@ const MORE_NAV = [
   { href: "/workspace/kho-font", label: "Kho font & brush", icon: "🔤" },
   { href: "/workspace/tinh-kho-sach", label: "Tính khổ sách", icon: "📐" },
   { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️" },
+  { href: "/workspace/hop-dong", label: "Hợp đồng", icon: "📄" },
   { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐" },
 ];
 
@@ -89,10 +90,10 @@ export function MobileNav({ isDirector }: { isDirector: boolean }) {
     <>
       {/* Sits in normal flow purely to reserve the fixed bar's height so
           page content doesn't render underneath it. */}
-      <div className="md:hidden flex-none" style={{ height: navHeight }} aria-hidden />
+      <div className="md:hidden no-print flex-none" style={{ height: navHeight }} aria-hidden />
       <nav
         ref={navRef}
-        className="md:hidden fixed inset-x-0 bottom-0 z-40 flex items-stretch"
+        className="md:hidden no-print fixed inset-x-0 bottom-0 z-40 flex items-stretch"
         style={{
           background: "var(--color-panel)",
           borderTop: "1px solid var(--color-neutral-200)",

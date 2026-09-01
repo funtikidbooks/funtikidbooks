@@ -364,6 +364,28 @@ export type StaffBankInfo = {
   updated_at: string;
 };
 
+export type StaffDocumentType = "labor_contract" | "nda" | "other";
+export type StaffDocumentStatus = "pending" | "signed" | "voided";
+
+// An e-signature contract sent to one staff member — hợp đồng lao động,
+// NDA, or another chứng từ. Signing goes through the sign_staff_document()
+// RPC (see supabase/schema.sql) rather than a direct update, so once
+// status is "signed" the content/type/recipient can no longer change.
+export type StaffDocument = {
+  id: string;
+  profile_id: string;
+  type: StaffDocumentType;
+  title: string;
+  content: string;
+  status: StaffDocumentStatus;
+  signature_image_url: string | null;
+  signed_name: string | null;
+  signed_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PayrollFeedbackStatus = "pending" | "approved" | "rejected";
 
 export type PayrollFeedback = {
@@ -857,6 +879,12 @@ export type Database = {
         Update: Partial<StaffBankInfo>;
         Relationships: [];
       };
+      staff_documents: {
+        Row: StaffDocument;
+        Insert: Partial<StaffDocument> & { profile_id: string; type: StaffDocumentType; title: string; content: string };
+        Update: Partial<StaffDocument>;
+        Relationships: [];
+      };
       finance_entries: {
         Row: FinanceEntry;
         Insert: Partial<FinanceEntry> & { entry_month: string; type: FinanceEntryType; category: string };
@@ -927,6 +955,10 @@ export type Database = {
       set_project_like: {
         Args: { project_id: string; liked: boolean };
         Returns: number;
+      };
+      sign_staff_document: {
+        Args: { p_document_id: string; p_signature_image_url: string; p_signed_name: string };
+        Returns: StaffDocument;
       };
     };
   };
