@@ -5,6 +5,7 @@ import type { StaffDocument, StaffDocumentType } from "@/lib/types";
 
 const TYPE_LABELS: Record<StaffDocumentType, string> = {
   labor_contract: "Hợp đồng lao động",
+  probation_contract: "Hợp đồng thử việc",
   nda: "NDA bảo mật",
   other: "Chứng từ khác",
 };

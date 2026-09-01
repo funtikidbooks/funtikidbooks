@@ -364,7 +364,7 @@ export type StaffBankInfo = {
   updated_at: string;
 };
 
-export type StaffDocumentType = "labor_contract" | "nda" | "other";
+export type StaffDocumentType = "labor_contract" | "probation_contract" | "nda" | "other";
 export type StaffDocumentStatus = "draft" | "pending" | "signed" | "voided";
 
 // An e-signature contract sent to one staff member — hợp đồng lao động,

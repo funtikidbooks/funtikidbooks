@@ -2330,7 +2330,7 @@ where not exists (select 1 from public.projects);
 create table if not exists public.staff_documents (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references public.profiles (id) on delete cascade,
-  type text not null check (type in ('labor_contract', 'nda', 'other')),
+  type text not null check (type in ('labor_contract', 'probation_contract', 'nda', 'other')),
   title text not null,
   content text not null,
   status text not null default 'draft' check (status in ('draft', 'pending', 'signed', 'voided')),
@@ -2343,11 +2343,15 @@ create table if not exists public.staff_documents (
 );
 
 -- Added after the initial table creation — safe to re-run on an existing
--- project that already had the pre-draft version of this table.
+-- project that already had the pre-draft, pre-"thử việc" version of this
+-- table.
 alter table public.staff_documents alter column status set default 'draft';
 alter table public.staff_documents drop constraint if exists staff_documents_status_check;
 alter table public.staff_documents add constraint staff_documents_status_check
   check (status in ('draft', 'pending', 'signed', 'voided'));
+alter table public.staff_documents drop constraint if exists staff_documents_type_check;
+alter table public.staff_documents add constraint staff_documents_type_check
+  check (type in ('labor_contract', 'probation_contract', 'nda', 'other'));
 
 create index if not exists staff_documents_profile_id_idx on public.staff_documents (profile_id);
 

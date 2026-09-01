@@ -8,17 +8,19 @@ import type { Profile, StaffDocument, StaffDocumentType } from "@/lib/types";
 
 const TYPE_LABELS: Record<StaffDocumentType, string> = {
   labor_contract: "Hợp đồng lao động",
+  probation_contract: "Hợp đồng thử việc",
   nda: "NDA bảo mật",
   other: "Chứng từ khác",
 };
 
 const TYPE_TITLE_DEFAULTS: Record<StaffDocumentType, string> = {
   labor_contract: "Hợp đồng lao động",
+  probation_contract: "Hợp đồng thử việc",
   nda: "Thoả thuận bảo mật (NDA)",
   other: "Chứng từ",
 };
 
-const TYPE_OPTIONS: StaffDocumentType[] = ["labor_contract", "nda", "other"];
+const TYPE_OPTIONS: StaffDocumentType[] = ["labor_contract", "probation_contract", "nda", "other"];
 
 function statusTag(status: StaffDocument["status"]) {
   if (status === "signed") return { label: "Đã ký", className: "tag-accent-2" };

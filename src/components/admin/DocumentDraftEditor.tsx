@@ -8,11 +8,12 @@ import type { Profile, StaffDocument, StaffDocumentType } from "@/lib/types";
 
 const TYPE_LABELS: Record<StaffDocumentType, string> = {
   labor_contract: "Hợp đồng lao động",
+  probation_contract: "Hợp đồng thử việc",
   nda: "NDA bảo mật",
   other: "Chứng từ khác",
 };
 
-const TYPE_OPTIONS: StaffDocumentType[] = ["labor_contract", "nda", "other"];
+const TYPE_OPTIONS: StaffDocumentType[] = ["labor_contract", "probation_contract", "nda", "other"];
 
 // The compose-and-review screen for a still-draft document — "soạn thử
 // xem như nào, rồi mới gửi". Nothing here is visible to the recipient

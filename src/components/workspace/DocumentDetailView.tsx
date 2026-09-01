@@ -18,6 +18,7 @@ const COMPANY = {
 
 const TYPE_LABELS: Record<StaffDocumentType, string> = {
   labor_contract: "Hợp đồng lao động",
+  probation_contract: "Hợp đồng thử việc",
   nda: "Thoả thuận bảo mật (NDA)",
   other: "Chứng từ khác",
 };
