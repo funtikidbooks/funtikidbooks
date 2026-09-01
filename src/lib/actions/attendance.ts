@@ -12,6 +12,7 @@ import {
   vnToday,
   weekdayIndex,
 } from "@/lib/constants/attendance";
+import { holidayOn } from "@/lib/constants/calendar";
 import type { AttendanceEntry } from "@/lib/types";
 
 async function requireUser() {
@@ -61,12 +62,6 @@ export async function checkInIfNeeded() {
   // regardless of which weekday it falls on.
   if (await isCalendarOffDay(supabase, today)) return;
 
-  // Too early to count as actually "at work" (e.g. someone browsing at 3am
-  // or 8am) — don't record anything yet. This function re-runs on every
-  // page load, so it just tries again on whatever page they open next,
-  // recording the first one that lands at or after the check-in window.
-  if (isBeforeCheckInWindow(now.toISOString())) return;
-
   const { data: existing } = await supabase
     .from("attendance")
     .select("id")
@@ -75,6 +70,26 @@ export async function checkInIfNeeded() {
     .maybeSingle();
 
   if (existing) return;
+
+  // A fixed-date public holiday (Tết Dương lịch, Quốc khánh, ...) is a paid
+  // day off that still counts as a full ngày công for payroll — record it
+  // as such the moment anyone opens the app that day, instead of skipping
+  // it like an ordinary non-work day (summarizeAttendance folds
+  // "paid_leave" into `present`; a day with no entry at all counts as
+  // neither present nor absent).
+  if (holidayOn(new Date(`${today}T00:00:00`))) {
+    await supabase
+      .from("attendance")
+      .insert({ profile_id: user.id, work_date: today, check_in_at: null, status: "paid_leave" })
+      .then(() => {});
+    return;
+  }
+
+  // Too early to count as actually "at work" (e.g. someone browsing at 3am
+  // or 8am) — don't record anything yet. This function re-runs on every
+  // page load, so it just tries again on whatever page they open next,
+  // recording the first one that lands at or after the check-in window.
+  if (isBeforeCheckInWindow(now.toISOString())) return;
 
   // Best-effort: a duplicate insert from a race between two concurrent
   // requests just hits the (profile_id, work_date) unique constraint and
