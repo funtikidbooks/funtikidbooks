@@ -2315,9 +2315,11 @@ where not exists (select 1 from public.projects);
 
 -- ---------------------------------------------------------------------------
 -- staff_documents: e-signature hợp đồng lao động / NDA / chứng từ khác —
--- director (or PM, via can_manage_hr()) writes the content and sends it to
--- one staff member, who signs it from their own "Hợp đồng" page. Printable
--- via the same window.print() + .no-print convention as PayrollPrintView.
+-- director (or PM, via can_manage_hr()) composes it as a draft from
+-- /quan-tri/hop-dong first (soạn thử), then explicitly sends it, at which
+-- point it becomes visible on the recipient's own /workspace/hop-dong
+-- inbox. Printable via the same window.print() + .no-print convention as
+-- PayrollPrintView.
 --
 -- Signing intentionally does NOT go through a direct UPDATE RLS policy for
 -- staff — sign_staff_document() below (security definer) is the only path,
@@ -2331,7 +2333,7 @@ create table if not exists public.staff_documents (
   type text not null check (type in ('labor_contract', 'nda', 'other')),
   title text not null,
   content text not null,
-  status text not null default 'pending' check (status in ('pending', 'signed', 'voided')),
+  status text not null default 'draft' check (status in ('draft', 'pending', 'signed', 'voided')),
   signature_image_url text,
   signed_name text,
   signed_at timestamptz,
@@ -2339,6 +2341,13 @@ create table if not exists public.staff_documents (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Added after the initial table creation — safe to re-run on an existing
+-- project that already had the pre-draft version of this table.
+alter table public.staff_documents alter column status set default 'draft';
+alter table public.staff_documents drop constraint if exists staff_documents_status_check;
+alter table public.staff_documents add constraint staff_documents_status_check
+  check (status in ('draft', 'pending', 'signed', 'voided'));
 
 create index if not exists staff_documents_profile_id_idx on public.staff_documents (profile_id);
 
@@ -2351,11 +2360,14 @@ create policy "hr can manage staff documents"
   using (public.can_manage_hr())
   with check (public.can_manage_hr());
 
+-- Excludes 'draft' — a document only reaches the recipient's own inbox
+-- once HR explicitly sends it (draft -> pending), same reasoning as the
+-- "flag it, don't edit it" split on payroll_feedback above.
 drop policy if exists "staff can view own documents" on public.staff_documents;
-create policy "staff can view own documents"
+create policy "staff can view own sent documents"
   on public.staff_documents for select
   to authenticated
-  using (profile_id = auth.uid());
+  using (profile_id = auth.uid() and status <> 'draft');
 
 create or replace function public.sign_staff_document(
   p_document_id uuid,

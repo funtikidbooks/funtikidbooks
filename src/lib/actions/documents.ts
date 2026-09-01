@@ -36,11 +36,24 @@ async function requireUser() {
   return { supabase, user };
 }
 
-// Returns every document for the whole team (HR manager) or just the
-// caller's own (regular staff) — RLS already draws that line identically,
-// this just saves the caller from having to know which case it's in.
-export async function listStaffDocuments(): Promise<StaffDocument[]> {
-  const { supabase } = await requireUser();
+// The caller's own inbox — documents someone actually sent them. Drafts
+// never show up here even for the composer's own account; RLS enforces
+// this the same way for a direct API call, this mirrors it.
+export async function listMyStaffDocuments(): Promise<StaffDocument[]> {
+  const { supabase, user } = await requireUser();
+  const { data } = await supabase
+    .from("staff_documents")
+    .select("*")
+    .eq("profile_id", user.id)
+    .neq("status", "draft")
+    .order("created_at", { ascending: false });
+  return (data ?? []) as StaffDocument[];
+}
+
+// The full management list — every document, every status, every staff
+// member. Only reachable from /quan-tri/hop-dong.
+export async function listAllStaffDocuments(): Promise<StaffDocument[]> {
+  const { supabase } = await requireHrManager();
   const { data } = await supabase.from("staff_documents").select("*").order("created_at", { ascending: false });
   return (data ?? []) as StaffDocument[];
 }
@@ -51,7 +64,7 @@ export async function getStaffDocument(id: string): Promise<StaffDocument | null
   return (data as StaffDocument) ?? null;
 }
 
-export async function createStaffDocument(input: {
+export async function createDraftDocument(input: {
   profileId: string;
   type: StaffDocumentType;
   title: string;
@@ -59,9 +72,7 @@ export async function createStaffDocument(input: {
 }): Promise<StaffDocument> {
   const { supabase, user } = await requireHrManager();
   const title = input.title.trim();
-  const content = input.content.trim();
   if (!title) throw new Error("Cần nhập tiêu đề.");
-  if (!content) throw new Error("Cần nhập nội dung văn bản.");
 
   const { data, error } = await supabase
     .from("staff_documents")
@@ -69,32 +80,79 @@ export async function createStaffDocument(input: {
       profile_id: input.profileId,
       type: input.type,
       title,
-      content,
+      content: input.content,
+      status: "draft",
       created_by: user.id,
     })
     .select("*")
     .single();
-  if (error || !data) throw new Error("Không thể tạo văn bản.");
+  if (error || !data) throw new Error("Không thể tạo nháp.");
 
+  revalidatePath("/quan-tri/hop-dong");
+  return data as StaffDocument;
+}
+
+// Only ever touches a still-draft row — trying to "edit" an already-sent
+// document should fail loudly rather than silently rewrite something a
+// staff member may already be looking at.
+export async function updateDraftDocument(
+  id: string,
+  input: { profileId: string; type: StaffDocumentType; title: string; content: string },
+): Promise<StaffDocument> {
+  const { supabase } = await requireHrManager();
+  const title = input.title.trim();
+  if (!title) throw new Error("Cần nhập tiêu đề.");
+
+  const { data, error } = await supabase
+    .from("staff_documents")
+    .update({ profile_id: input.profileId, type: input.type, title, content: input.content, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("status", "draft")
+    .select("*")
+    .single();
+  if (error || !data) throw new Error("Không thể lưu nháp — có thể văn bản đã được gửi rồi.");
+
+  revalidatePath("/quan-tri/hop-dong");
+  revalidatePath(`/quan-tri/hop-dong/${id}`);
+  return data as StaffDocument;
+}
+
+// The one-way draft -> pending move — this is what actually puts it in the
+// recipient's inbox (see the RLS select policy on staff_documents).
+export async function sendDraftDocument(id: string): Promise<StaffDocument> {
+  const { supabase } = await requireHrManager();
+  const { data, error } = await supabase
+    .from("staff_documents")
+    .update({ status: "pending", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("status", "draft")
+    .select("*")
+    .single();
+  if (error || !data) throw new Error("Không thể gửi văn bản.");
+
+  revalidatePath("/quan-tri/hop-dong");
+  revalidatePath(`/quan-tri/hop-dong/${id}`);
   revalidatePath("/workspace/hop-dong");
   return data as StaffDocument;
 }
 
-// Marks a document cancelled without deleting it — used both for a signed
-// contract that's been superseded and a pending one nobody should sign
-// anymore. Deleting outright (below) stays limited to still-pending drafts
-// so a signed record can never just disappear.
+// Marks a document cancelled without deleting it — used for a signed
+// contract that's been superseded, or a sent-but-not-yet-signed one nobody
+// should sign anymore. Deleting outright (below) stays limited to
+// draft/pending so a signed record can never just disappear.
 export async function voidStaffDocument(id: string): Promise<void> {
   const { supabase } = await requireHrManager();
   const { error } = await supabase.from("staff_documents").update({ status: "voided" }).eq("id", id);
   if (error) throw new Error("Không thể huỷ văn bản.");
+  revalidatePath("/quan-tri/hop-dong");
   revalidatePath("/workspace/hop-dong");
 }
 
 export async function deleteStaffDocument(id: string): Promise<void> {
   const { supabase } = await requireHrManager();
-  const { error } = await supabase.from("staff_documents").delete().eq("id", id).eq("status", "pending");
+  const { error } = await supabase.from("staff_documents").delete().eq("id", id).in("status", ["draft", "pending"]);
   if (error) throw new Error("Không thể xoá văn bản.");
+  revalidatePath("/quan-tri/hop-dong");
   revalidatePath("/workspace/hop-dong");
 }
 
@@ -130,6 +188,7 @@ export async function signStaffDocument(documentId: string, signedName: string, 
 
   revalidatePath("/workspace/hop-dong");
   revalidatePath(`/workspace/hop-dong/${documentId}`);
+  revalidatePath("/quan-tri/hop-dong");
   return data as StaffDocument;
 }
 

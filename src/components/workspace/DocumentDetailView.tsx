@@ -31,11 +31,15 @@ export function DocumentDetailView({
   profile,
   currentUserId,
   canManage,
+  backHref = "/workspace/hop-dong",
+  backLabel = "Quay lại Hợp đồng",
 }: {
   document: StaffDocument;
   profile: Profile;
   currentUserId: string;
   canManage: boolean;
+  backHref?: string;
+  backLabel?: string;
 }) {
   const router = useRouter();
   const isMine = document.profile_id === currentUserId;
@@ -94,7 +98,7 @@ export function DocumentDetailView({
     setBusyAction("delete");
     try {
       await deleteStaffDocument(document.id);
-      router.push("/workspace/hop-dong");
+      router.push(backHref);
     } finally {
       setBusyAction(null);
     }
@@ -103,8 +107,8 @@ export function DocumentDetailView({
   return (
     <div className="flex-1 flex flex-col items-center py-8 px-4" style={{ background: "var(--color-surface)" }}>
       <div className="no-print flex items-center justify-between w-full max-w-[700px] mb-4">
-        <Link href="/workspace/hop-dong" className="text-sm font-bold" style={{ color: "var(--color-accent-600)" }}>
-          ← Quay lại Hợp đồng
+        <Link href={backHref} className="text-sm font-bold" style={{ color: "var(--color-accent-600)" }}>
+          ← {backLabel}
         </Link>
         <div className="flex items-center gap-2">
           {canManage && document.status !== "voided" && (

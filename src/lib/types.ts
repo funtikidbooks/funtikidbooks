@@ -365,7 +365,7 @@ export type StaffBankInfo = {
 };
 
 export type StaffDocumentType = "labor_contract" | "nda" | "other";
-export type StaffDocumentStatus = "pending" | "signed" | "voided";
+export type StaffDocumentStatus = "draft" | "pending" | "signed" | "voided";
 
 // An e-signature contract sent to one staff member — hợp đồng lao động,
 // NDA, or another chứng từ. Signing goes through the sign_staff_document()

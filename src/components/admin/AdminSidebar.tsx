@@ -24,6 +24,7 @@ const HR_NAV = [
   { href: "/quan-tri/nhan-su", label: "Nhân sự & phân quyền", icon: "🧑‍🤝‍🧑" },
   { href: "/quan-tri/cham-cong", label: "Chấm công", icon: "🕐" },
   { href: "/quan-tri/bang-luong", label: "Bảng lương", icon: "💰" },
+  { href: "/quan-tri/hop-dong", label: "Hợp đồng", icon: "📄" },
   { href: "/quan-tri/hoa-don", label: "Tạo hoá đơn điện tử", icon: "🧾" },
 ];
 

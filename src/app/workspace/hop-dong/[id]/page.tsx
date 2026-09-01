@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getStaffDocument } from "@/lib/actions/documents";
 import { DocumentDetailView } from "@/components/workspace/DocumentDetailView";
@@ -36,6 +36,13 @@ export default async function DocumentDetailPage({
   if (!staffProfile) notFound();
 
   const canManage = me?.access_role === "director" || me?.role === "Project Manager";
+
+  // Composing/sending a draft only happens from /quan-tri/hop-dong now —
+  // land an HR manager who follows an old draft link there instead of
+  // showing them the sign/print view for a document nobody's seen yet.
+  if (document.status === "draft" && canManage) {
+    redirect(`/quan-tri/hop-dong/${id}`);
+  }
 
   return (
     <DocumentDetailView
