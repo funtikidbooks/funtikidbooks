@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { updateDraftDocument, sendDraftDocument, deleteStaffDocument } from "@/lib/actions/documents";
+import { DocumentPrintCard } from "@/components/workspace/DocumentPrintCard";
 import type { Profile, StaffDocument, StaffDocumentType } from "@/lib/types";
 
 const TYPE_LABELS: Record<StaffDocumentType, string> = {
@@ -29,6 +30,7 @@ export function DocumentDraftEditor({ document, profiles }: { document: StaffDoc
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   const recipient = profiles.find((p) => p.id === profileId);
 
@@ -77,6 +79,31 @@ export function DocumentDraftEditor({ document, profiles }: { document: StaffDoc
   }
 
   const busy = saving || sending || deleting;
+
+  if (previewing) {
+    return (
+      <div className="flex-1 flex flex-col items-center py-8 px-4 overflow-y-auto" style={{ background: "var(--color-surface)" }}>
+        <div className="no-print flex items-center justify-between w-full max-w-[700px] mb-4">
+          <button type="button" onClick={() => setPreviewing(false)} className="text-sm font-bold" style={{ color: "var(--color-accent-600)" }}>
+            ← Quay lại chỉnh sửa
+          </button>
+          <button type="button" onClick={() => window.print()} className="btn btn-primary btn-sm">
+            🖨 In / Xuất PDF
+          </button>
+        </div>
+        <DocumentPrintCard
+          title={title}
+          type={type}
+          status="draft"
+          content={content}
+          createdAt={document.created_at}
+          recipientName={recipient?.display_name ?? "—"}
+          recipientRole={recipient?.role}
+          recipientEmail={recipient?.email}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-4 gap-4 max-w-[700px]">
@@ -144,6 +171,9 @@ export function DocumentDraftEditor({ document, profiles }: { document: StaffDoc
           </button>
           <button type="button" onClick={handleSaveDraft} disabled={busy} className="btn btn-ghost btn-sm">
             {saving ? "Đang lưu…" : "Lưu nháp"}
+          </button>
+          <button type="button" onClick={() => setPreviewing(true)} disabled={busy} className="btn btn-ghost btn-sm">
+            🖨 Xem trước & In
           </button>
           <button type="button" onClick={handleDelete} disabled={busy} className="btn btn-ghost btn-sm" style={{ color: "var(--status-red)" }}>
             {deleting ? "Đang xoá…" : "Xoá nháp"}
