@@ -1908,10 +1908,12 @@ where not exists (select 1 from public.meeting_channels where is_food_room);
 
 -- ---------------------------------------------------------------------------
 -- food_order_rounds / food_order_items: the "Đặt đồ ăn" room's group-order
--- tool — one round per calendar day, each person adds their own item to it,
--- and whoever actually places the ShopeeFood order pastes the link back for
--- everyone to see. Open to the same "everyone, no need to join" audience as
--- the room itself — RLS below never checks channel membership, matching
+-- tool — each person adds their own item to a round, and whoever actually
+-- places the ShopeeFood order pastes the link back for everyone to see.
+-- Several rounds can exist the same calendar day (lunch, then a separate
+-- afternoon trà sữa round) — no longer one-per-day, see the dropped unique
+-- constraint below. Open to the same "everyone, no need to join" audience
+-- as the room itself — RLS below never checks channel membership, matching
 -- that (this app only ever has one food room, so there's nothing to scope
 -- rows to beyond "any signed-in staff member").
 -- ---------------------------------------------------------------------------
@@ -1924,9 +1926,14 @@ create table if not exists public.food_order_rounds (
   shopee_link text,
   status text not null default 'open' check (status in ('open', 'closed')),
   created_by uuid references public.profiles (id) on delete set null,
-  created_at timestamptz not null default now(),
-  unique (channel_id, order_date)
+  created_at timestamptz not null default now()
 );
+
+-- Multiple separate rounds per day are allowed now (see comment above) —
+-- drops the original one-per-day constraint for anyone who already ran the
+-- earlier migration. Postgres's default name for an inline `unique (a, b)`
+-- table constraint.
+alter table public.food_order_rounds drop constraint if exists food_order_rounds_channel_id_order_date_key;
 
 alter table public.food_order_rounds enable row level security;
 

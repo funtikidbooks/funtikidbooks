@@ -14,17 +14,18 @@ async function requireUser() {
   return { supabase, user };
 }
 
-// Today's round for the food room, if anyone's started one yet — the panel
-// shows a "Bắt đầu đặt đồ ăn hôm nay" prompt instead when this is null.
-export async function getTodayFoodOrderRound(channelId: string): Promise<FoodOrderRound | null> {
+// Every round started today, oldest first — several can coexist (lunch,
+// then a separate afternoon trà sữa round), so the panel renders one card
+// per round instead of assuming there's only ever one.
+export async function listTodayFoodOrderRounds(channelId: string): Promise<FoodOrderRound[]> {
   const { supabase } = await requireUser();
   const { data } = await supabase
     .from("food_order_rounds")
     .select("*")
     .eq("channel_id", channelId)
     .eq("order_date", vnToday())
-    .maybeSingle();
-  return (data as FoodOrderRound) ?? null;
+    .order("created_at", { ascending: true });
+  return (data ?? []) as FoodOrderRound[];
 }
 
 export async function startFoodOrderRound(
@@ -43,15 +44,7 @@ export async function startFoodOrderRound(
     })
     .select("*")
     .single();
-
-  // Someone else's round for today may have landed a moment earlier — the
-  // unique (channel_id, order_date) constraint makes that a conflict, not a
-  // silent duplicate; just hand back the one that actually won.
-  if (error) {
-    const existing = await getTodayFoodOrderRound(channelId);
-    if (existing) return existing;
-    throw new Error("Không thể bắt đầu đợt đặt đồ ăn.");
-  }
+  if (error || !data) throw new Error("Không thể bắt đầu đợt đặt đồ ăn.");
 
   if (input.shopIds && input.shopIds.length > 0) {
     await supabase.from("food_order_round_shops").insert(input.shopIds.map((shopId) => ({ round_id: data.id, shop_id: shopId })));
