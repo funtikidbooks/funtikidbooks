@@ -8,6 +8,7 @@ import { updateJoinedAt } from "@/lib/actions/admin";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { bankColor, formatAccountNumber } from "@/lib/bankDisplay";
 import { StaffBankInfoModal } from "@/components/workspace/StaffBankInfoModal";
+import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import type { Profile, StaffBankInfo } from "@/lib/types";
 
 const CreateAccountDialog = dynamic(
@@ -67,6 +68,7 @@ export function MembersDirectory({
     () => new Map(initialBankInfo.map((b) => [b.profile_id, b])),
   );
   const [editingBank, setEditingBank] = useState<Profile | null>(null);
+  const [qrLightboxUrl, setQrLightboxUrl] = useState<string | null>(null);
 
   // A colleague's name/avatar/job-title edit, a brand-new staff account, or
   // a removed one now shows up here immediately — this is exactly the kind
@@ -270,13 +272,31 @@ export function MembersDirectory({
                         <span className="text-[11px] text-white/80 truncate">{b.account_holder}</span>
                       </div>
                       {b.qr_image_url && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={b.qr_image_url}
-                          alt="Mã QR chuyển khoản"
-                          className="rounded-[6px] object-cover flex-none"
-                          style={{ width: 44, height: 44, background: "#fff" }}
-                        />
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          title="Xem mã QR cỡ lớn"
+                          className="flex-none"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setQrLightboxUrl(b.qr_image_url ?? null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              setQrLightboxUrl(b.qr_image_url ?? null);
+                            }
+                          }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={b.qr_image_url}
+                            alt="Mã QR chuyển khoản"
+                            className="rounded-[6px] object-cover"
+                            style={{ width: 44, height: 44, background: "#fff" }}
+                          />
+                        </span>
                       )}
                     </button>
                   ) : (
@@ -301,6 +321,14 @@ export function MembersDirectory({
           info={bankInfo.get(editingBank.id)}
           onClose={() => setEditingBank(null)}
           onSaved={(info) => setBankInfo((prev) => new Map(prev).set(info.profile_id, info))}
+        />
+      )}
+
+      {qrLightboxUrl && (
+        <ImageLightbox
+          url={qrLightboxUrl}
+          filename="Mã QR chuyển khoản"
+          onClose={() => setQrLightboxUrl(null)}
         />
       )}
 
