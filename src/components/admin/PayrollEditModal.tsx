@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
+import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import { getMonthAttendance } from "@/lib/actions/attendance";
 import { getStaffBankInfo } from "@/lib/actions/admin";
 import {
@@ -67,6 +68,7 @@ export function PayrollEditModal({
   const [resolvingFeedbackId, setResolvingFeedbackId] = useState<string | null>(null);
 
   const [bankInfo, setBankInfo] = useState<StaffBankInfo | null>(null);
+  const [qrLightboxOpen, setQrLightboxOpen] = useState(false);
 
   const [sendingEmail, setSendingEmail] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
@@ -290,7 +292,12 @@ export function PayrollEditModal({
                 {bankInfo.account_holder && <span className="text-[11px] text-white/80">{bankInfo.account_holder}</span>}
               </div>
               {bankInfo.qr_image_url && (
-                <a href={bankInfo.qr_image_url} target="_blank" rel="noreferrer" className="flex-none" title="Xem mã QR cỡ lớn">
+                <button
+                  type="button"
+                  onClick={() => setQrLightboxOpen(true)}
+                  className="flex-none"
+                  title="Xem mã QR cỡ lớn"
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={bankInfo.qr_image_url}
@@ -298,9 +305,16 @@ export function PayrollEditModal({
                     className="rounded-[8px] object-cover"
                     style={{ width: 84, height: 84, background: "#fff" }}
                   />
-                </a>
+                </button>
               )}
             </div>
+          )}
+          {bankInfo?.qr_image_url && qrLightboxOpen && (
+            <ImageLightbox
+              url={bankInfo.qr_image_url}
+              filename="Mã QR chuyển khoản"
+              onClose={() => setQrLightboxOpen(false)}
+            />
           )}
 
           {feedback.length > 0 && (

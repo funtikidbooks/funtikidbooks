@@ -11,6 +11,7 @@ import {
   listMyPayrollFeedback,
 } from "@/lib/actions/payroll";
 import { bankColor, formatAccountNumber } from "@/lib/bankDisplay";
+import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import type { PayrollConfirmation, PayrollFeedback, PayrollRecord, StaffBankInfo, StaffSalary } from "@/lib/types";
 
 function formatVnd(n: number) {
@@ -26,6 +27,7 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
   const [record, setRecord] = useState<PayrollRecord | null>(null);
   const [salary, setSalary] = useState<StaffSalary | null>(null);
   const [bankInfo, setBankInfo] = useState<StaffBankInfo | null>(null);
+  const [qrLightboxOpen, setQrLightboxOpen] = useState(false);
   const [confirmation, setConfirmation] = useState<PayrollConfirmation | null>(null);
   const [feedback, setFeedback] = useState<PayrollFeedback[]>([]);
   const [message, setMessage] = useState("");
@@ -128,15 +130,29 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
                 {bankInfo.account_holder && <span className="text-[11px] text-white/80">{bankInfo.account_holder}</span>}
               </div>
               {bankInfo.qr_image_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={bankInfo.qr_image_url}
-                  alt="Mã QR chuyển khoản"
-                  className="rounded-[6px] object-cover flex-none"
-                  style={{ width: 44, height: 44, background: "#fff" }}
-                />
+                <button
+                  type="button"
+                  onClick={() => setQrLightboxOpen(true)}
+                  className="flex-none"
+                  title="Xem mã QR cỡ lớn"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={bankInfo.qr_image_url}
+                    alt="Mã QR chuyển khoản"
+                    className="rounded-[6px] object-cover"
+                    style={{ width: 44, height: 44, background: "#fff" }}
+                  />
+                </button>
               )}
             </div>
+          )}
+          {bankInfo?.qr_image_url && qrLightboxOpen && (
+            <ImageLightbox
+              url={bankInfo.qr_image_url}
+              filename="Mã QR chuyển khoản"
+              onClose={() => setQrLightboxOpen(false)}
+            />
           )}
 
           {loading ? (
