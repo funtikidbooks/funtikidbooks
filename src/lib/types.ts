@@ -184,6 +184,10 @@ export type FoodShop = {
   id: string;
   name: string;
   shopee_link: string | null;
+  // A screenshotted menu photo, for a quán added without typing the menu
+  // out by hand yet — non-null with zero food_shop_menu_items means "still
+  // waiting to be transcribed".
+  photo_url: string | null;
   added_by: string | null;
   created_at: string;
 };

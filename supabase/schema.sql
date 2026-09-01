@@ -2043,6 +2043,12 @@ create table if not exists public.food_shops (
   created_at timestamptz not null default now()
 );
 
+-- A screenshotted menu, for a quán someone doesn't want to type out by
+-- hand right away — the shop can exist with zero food_shop_menu_items
+-- until someone (director, or Claude in a session looking at the photo)
+-- fills the menu in later via replaceFoodShopItems.
+alter table public.food_shops add column if not exists photo_url text;
+
 alter table public.food_shops enable row level security;
 
 drop policy if exists "staff can read food shops" on public.food_shops;

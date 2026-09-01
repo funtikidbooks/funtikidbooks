@@ -14,7 +14,7 @@ import {
   updateFoodOrderRoundLink,
   upsertMyFoodOrderItem,
 } from "@/lib/actions/foodOrders";
-import { addFoodShop, getFoodShopMenu, listFoodShops } from "@/lib/actions/foodShops";
+import { addFoodShop, getFoodShopMenu, listFoodShops, replaceFoodShopItems, uploadFoodShopPhoto } from "@/lib/actions/foodShops";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import type { FoodOrderItem, FoodOrderRound, FoodShop, FoodShopMenuItem, Profile } from "@/lib/types";
 
@@ -50,6 +50,7 @@ function NewShopForm({
   const [name, setName] = useState("");
   const [link, setLink] = useState("");
   const [items, setItems] = useState<NewShopItemDraft[]>([{ name: "", note: "", price: "" }]);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasItem = items.some((it) => it.name.trim());
@@ -77,6 +78,12 @@ function NewShopForm({
           .filter((it) => it.name.trim())
           .map((it) => ({ name: it.name, note: it.note, price: it.price === "" ? null : Number(it.price) })),
       });
+      if (photoFile) {
+        const formData = new FormData();
+        formData.append("file", photoFile);
+        const photoUrl = await uploadFoodShopPhoto(created.id, formData).catch(() => null);
+        if (photoUrl) created.photo_url = photoUrl;
+      }
       onCreated(created);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
@@ -104,9 +111,25 @@ function NewShopForm({
           onChange={(e) => setLink(e.target.value)}
         />
       </div>
-      <span className="text-[11px] font-bold tracking-[0.06em]" style={{ color: "var(--color-neutral-500)" }}>
-        MENU
-      </span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold tracking-[0.06em]" style={{ color: "var(--color-neutral-500)" }}>
+          MENU
+        </span>
+        <label className="text-xs font-semibold cursor-pointer" style={{ color: "var(--color-accent-700)" }}>
+          📷 {photoFile ? photoFile.name : "Tải ảnh menu lên (nhập tay sau)"}
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => setPhotoFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+      </div>
+      {photoFile && (
+        <p className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+          Chưa cần gõ món ngay — đưa ảnh này cho Claude Code đọc và điền menu giúp sau.
+        </p>
+      )}
       <div className="flex flex-col gap-1.5">
         {items.map((it, i) => (
           <div key={i} className="grid gap-1.5 items-center" style={{ gridTemplateColumns: "1fr 1fr 100px 28px" }}>
@@ -157,8 +180,148 @@ function NewShopForm({
         <button type="button" onClick={onCancel} className="btn btn-ghost btn-sm" disabled={saving}>
           Huỷ
         </button>
-        <button type="submit" className="btn btn-primary btn-sm" disabled={saving || !name.trim() || !hasItem}>
+        <button type="submit" className="btn btn-primary btn-sm" disabled={saving || !name.trim() || (!hasItem && !photoFile)}>
           {saving ? "Đang lưu…" : "Lưu quán"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// Fill in (or correct) a quán's menu after the fact — used both to
+// transcribe a shop that started as just a photo, and to fix an existing
+// menu later (a price changed, a món got renamed).
+function EditShopMenuForm({
+  shop,
+  onCancel,
+  onSaved,
+}: {
+  shop: FoodShop;
+  onCancel: () => void;
+  onSaved: (items: FoodShopMenuItem[]) => void;
+}) {
+  const [items, setItems] = useState<NewShopItemDraft[]>([{ name: "", note: "", price: "" }]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getFoodShopMenu(shop.id)
+      .then((existing) => {
+        if (cancelled) return;
+        setItems(
+          existing.length > 0
+            ? existing.map((m) => ({ name: m.name, note: m.note ?? "", price: m.price === null ? "" : String(m.price) }))
+            : [{ name: "", note: "", price: "" }],
+        );
+      })
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [shop.id]);
+
+  function addRow() {
+    setItems((prev) => [...prev, { name: "", note: "", price: "" }]);
+  }
+  function updateRow(i: number, patch: Partial<NewShopItemDraft>) {
+    setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  }
+  function removeRow(i: number) {
+    setItems((prev) => (prev.length === 1 ? prev : prev.filter((_, idx) => idx !== i)));
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await replaceFoodShopItems(
+        shop.id,
+        items.map((it) => ({ name: it.name, note: it.note, price: it.price === "" ? null : Number(it.price) })),
+      );
+      onSaved(saved);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+        Đang tải menu…
+      </p>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-2 pt-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold tracking-[0.06em]" style={{ color: "var(--color-neutral-500)" }}>
+          MENU — {shop.name.toUpperCase()}
+        </span>
+        {shop.photo_url && (
+          <a href={shop.photo_url} target="_blank" rel="noreferrer" className="text-xs font-semibold" style={{ color: "var(--color-accent-700)" }}>
+            📷 Xem ảnh menu
+          </a>
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {items.map((it, i) => (
+          <div key={i} className="grid gap-1.5 items-center" style={{ gridTemplateColumns: "1fr 1fr 100px 28px" }}>
+            <input
+              className="input"
+              style={{ padding: "5px 8px", fontSize: 12 }}
+              placeholder="Tên món"
+              value={it.name}
+              onChange={(e) => updateRow(i, { name: e.target.value })}
+            />
+            <input
+              className="input"
+              style={{ padding: "5px 8px", fontSize: 12 }}
+              placeholder="Ghi chú"
+              value={it.note}
+              onChange={(e) => updateRow(i, { note: e.target.value })}
+            />
+            <input
+              type="number"
+              min={0}
+              className="input"
+              style={{ padding: "5px 8px", fontSize: 12 }}
+              placeholder="Giá"
+              value={it.price}
+              onChange={(e) => updateRow(i, { price: e.target.value })}
+            />
+            <button
+              type="button"
+              onClick={() => removeRow(i)}
+              className="btn-icon"
+              style={{ width: 26, height: 26, padding: 0, fontSize: 12 }}
+              aria-label="Xoá món"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={addRow} className="btn btn-ghost btn-sm w-fit">
+        + Thêm món
+      </button>
+      {error && (
+        <p className="text-xs font-semibold" style={{ color: "var(--status-red)" }}>
+          {error}
+        </p>
+      )}
+      <div className="flex items-center gap-2 justify-end">
+        <button type="button" onClick={onCancel} className="btn btn-ghost btn-sm" disabled={saving}>
+          Huỷ
+        </button>
+        <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+          {saving ? "Đang lưu…" : "Lưu menu"}
         </button>
       </div>
     </form>
@@ -699,6 +862,7 @@ export function FoodOrderPanel({
   const [selectedShopIds, setSelectedShopIds] = useState<Set<string>>(new Set());
   const [starting, setStarting] = useState(false);
   const [showAddShop, setShowAddShop] = useState(false);
+  const [editingShopId, setEditingShopId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -772,6 +936,8 @@ export function FoodOrderPanel({
     setShops((prev) => [...prev, shop].sort((a, b) => a.name.localeCompare(b.name, "vi")));
   }
 
+  const editingShop = shops.find((s) => s.id === editingShopId) ?? null;
+
   if (loading) {
     return (
       <div className="flex-none px-4 py-3 text-xs" style={{ color: "var(--color-neutral-500)" }}>
@@ -800,12 +966,35 @@ export function FoodOrderPanel({
             {shops.length > 0 && (
               <div className="flex flex-col gap-1">
                 {shops.map((s) => (
-                  <label key={s.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={selectedShopIds.has(s.id)} onChange={() => toggleSelectedShop(s.id)} />
-                    <span>{s.name}</span>
-                  </label>
+                  <div key={s.id} className="flex items-center gap-2 text-sm">
+                    <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
+                      <input type="checkbox" checked={selectedShopIds.has(s.id)} onChange={() => toggleSelectedShop(s.id)} />
+                      <span className="truncate">{s.name}</span>
+                    </label>
+                    {s.photo_url && (
+                      <a href={s.photo_url} target="_blank" rel="noreferrer" className="text-xs flex-none" title="Xem ảnh menu">
+                        📷
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setEditingShopId(s.id)}
+                      className="text-xs flex-none"
+                      style={{ color: "var(--color-neutral-400)" }}
+                      title="Sửa menu"
+                    >
+                      ✏️
+                    </button>
+                  </div>
                 ))}
               </div>
+            )}
+            {editingShop && (
+              <EditShopMenuForm
+                shop={editingShop}
+                onCancel={() => setEditingShopId(null)}
+                onSaved={() => setEditingShopId(null)}
+              />
             )}
             <div className="flex items-center gap-2 flex-wrap">
               <button type="button" onClick={handleStart} className="btn btn-primary btn-sm flex-none" disabled={starting}>
