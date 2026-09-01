@@ -281,12 +281,25 @@ export function PayrollEditModal({
 
         <div className="flex flex-col gap-5 px-6 py-6 max-h-[70vh] overflow-y-auto">
           {bankInfo && (bankInfo.bank_name || bankInfo.account_number) && (
-            <div className="rounded-[10px] p-3 flex flex-col gap-1" style={{ background: bankColor(bankInfo.bank_name) }}>
-              <span className="text-[11px] font-bold text-white/90">{bankInfo.bank_name || "Ngân hàng"}</span>
-              <span className="text-sm font-bold text-white font-mono tracking-wide">
-                {bankInfo.account_number ? formatAccountNumber(bankInfo.account_number) : "—"}
-              </span>
-              {bankInfo.account_holder && <span className="text-[11px] text-white/80">{bankInfo.account_holder}</span>}
+            <div className="rounded-[10px] p-3 flex items-center gap-3" style={{ background: bankColor(bankInfo.bank_name) }}>
+              <div className="flex-1 min-w-0 flex flex-col gap-1">
+                <span className="text-[11px] font-bold text-white/90">{bankInfo.bank_name || "Ngân hàng"}</span>
+                <span className="text-sm font-bold text-white font-mono tracking-wide">
+                  {bankInfo.account_number ? formatAccountNumber(bankInfo.account_number) : "—"}
+                </span>
+                {bankInfo.account_holder && <span className="text-[11px] text-white/80">{bankInfo.account_holder}</span>}
+              </div>
+              {bankInfo.qr_image_url && (
+                <a href={bankInfo.qr_image_url} target="_blank" rel="noreferrer" className="flex-none" title="Xem mã QR cỡ lớn">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={bankInfo.qr_image_url}
+                    alt="Mã QR chuyển khoản"
+                    className="rounded-[8px] object-cover"
+                    style={{ width: 84, height: 84, background: "#fff" }}
+                  />
+                </a>
+              )}
             </div>
           )}
 

@@ -259,14 +259,25 @@ export function MembersDirectory({
                     <button
                       type="button"
                       onClick={() => setEditingBank(p)}
-                      className="rounded-[10px] p-3 flex flex-col gap-1 text-left"
+                      className="rounded-[10px] p-3 flex items-center gap-2 text-left"
                       style={{ background: bankColor(b.bank_name) }}
                     >
-                      <span className="text-[11px] font-bold text-white/90">{b.bank_name || "Ngân hàng"}</span>
-                      <span className="text-sm font-bold text-white font-mono tracking-wide">
-                        {b.account_number ? formatAccountNumber(b.account_number) : "—"}
-                      </span>
-                      <span className="text-[11px] text-white/80 truncate">{b.account_holder}</span>
+                      <div className="flex-1 min-w-0 flex flex-col gap-1">
+                        <span className="text-[11px] font-bold text-white/90">{b.bank_name || "Ngân hàng"}</span>
+                        <span className="text-sm font-bold text-white font-mono tracking-wide">
+                          {b.account_number ? formatAccountNumber(b.account_number) : "—"}
+                        </span>
+                        <span className="text-[11px] text-white/80 truncate">{b.account_holder}</span>
+                      </div>
+                      {b.qr_image_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={b.qr_image_url}
+                          alt="Mã QR chuyển khoản"
+                          className="rounded-[6px] object-cover flex-none"
+                          style={{ width: 44, height: 44, background: "#fff" }}
+                        />
+                      )}
                     </button>
                   ) : (
                     <button

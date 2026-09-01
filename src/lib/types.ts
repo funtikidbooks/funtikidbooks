@@ -358,6 +358,9 @@ export type StaffBankInfo = {
   bank_name: string | null;
   account_number: string | null;
   account_holder: string | null;
+  // A saved VietQR transfer-code screenshot — lets paying be a literal scan
+  // instead of retyping the account number.
+  qr_image_url: string | null;
   updated_at: string;
 };
 

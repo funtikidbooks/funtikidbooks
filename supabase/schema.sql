@@ -1091,6 +1091,11 @@ create table if not exists public.staff_bank_info (
   updated_at timestamptz not null default now()
 );
 
+-- A saved VietQR transfer-code screenshot, so paying is a literal scan
+-- instead of retyping the account number — same director-only access as
+-- the rest of this table.
+alter table public.staff_bank_info add column if not exists qr_image_url text;
+
 alter table public.staff_bank_info enable row level security;
 
 drop policy if exists "director can manage staff bank info" on public.staff_bank_info;

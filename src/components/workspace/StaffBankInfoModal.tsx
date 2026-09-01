@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { upsertStaffBankInfo } from "@/lib/actions/admin";
+import { uploadStaffBankQr, upsertStaffBankInfo } from "@/lib/actions/admin";
 import type { Profile, StaffBankInfo } from "@/lib/types";
 
 const BANK_SUGGESTIONS = [
@@ -32,8 +32,28 @@ export function StaffBankInfoModal({
   const [bankName, setBankName] = useState(info?.bank_name ?? "");
   const [accountNumber, setAccountNumber] = useState(info?.account_number ?? "");
   const [accountHolder, setAccountHolder] = useState(info?.account_holder ?? "");
+  const [qrImageUrl, setQrImageUrl] = useState(info?.qr_image_url ?? null);
+  const [uploadingQr, setUploadingQr] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  async function handleQrFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadingQr(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const saved = await uploadStaffBankQr(profile.id, formData);
+      setQrImageUrl(saved.qr_image_url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
+    } finally {
+      setUploadingQr(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,7 +61,7 @@ export function StaffBankInfoModal({
     setError(null);
     try {
       const saved = await upsertStaffBankInfo(profile.id, { bankName, accountNumber, accountHolder });
-      onSaved(saved);
+      onSaved({ ...saved, qr_image_url: qrImageUrl });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
@@ -104,6 +124,25 @@ export function StaffBankInfoModal({
               value={accountHolder}
               onChange={(e) => setAccountHolder(e.target.value.toUpperCase())}
             />
+          </div>
+
+          <div className="field">
+            <label>Mã QR chuyển khoản</label>
+            <div className="flex items-center gap-3 mt-1">
+              {qrImageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={qrImageUrl}
+                  alt="Mã QR chuyển khoản"
+                  className="rounded-[8px] object-cover flex-none"
+                  style={{ width: 64, height: 64, border: "1px solid var(--color-neutral-200)" }}
+                />
+              )}
+              <label className="btn btn-ghost btn-sm w-fit cursor-pointer">
+                {uploadingQr ? "Đang tải…" : qrImageUrl ? "Đổi ảnh QR" : "Tải ảnh QR lên"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleQrFileChange} disabled={uploadingQr} />
+              </label>
+            </div>
           </div>
 
           {error && (

@@ -119,12 +119,23 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
       {open && (
         <div className="flex flex-col gap-4 px-4 pb-4" style={{ borderTop: "1px solid var(--color-neutral-100)" }}>
           {bankInfo && (bankInfo.bank_name || bankInfo.account_number) && (
-            <div className="rounded-[10px] p-3 flex flex-col gap-1 mt-3" style={{ background: bankColor(bankInfo.bank_name) }}>
-              <span className="text-[11px] font-bold text-white/90">{bankInfo.bank_name || "Ngân hàng"}</span>
-              <span className="text-sm font-bold text-white font-mono tracking-wide">
-                {bankInfo.account_number ? formatAccountNumber(bankInfo.account_number) : "—"}
-              </span>
-              {bankInfo.account_holder && <span className="text-[11px] text-white/80">{bankInfo.account_holder}</span>}
+            <div className="rounded-[10px] p-3 flex items-center gap-2 mt-3" style={{ background: bankColor(bankInfo.bank_name) }}>
+              <div className="flex-1 min-w-0 flex flex-col gap-1">
+                <span className="text-[11px] font-bold text-white/90">{bankInfo.bank_name || "Ngân hàng"}</span>
+                <span className="text-sm font-bold text-white font-mono tracking-wide">
+                  {bankInfo.account_number ? formatAccountNumber(bankInfo.account_number) : "—"}
+                </span>
+                {bankInfo.account_holder && <span className="text-[11px] text-white/80">{bankInfo.account_holder}</span>}
+              </div>
+              {bankInfo.qr_image_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={bankInfo.qr_image_url}
+                  alt="Mã QR chuyển khoản"
+                  className="rounded-[6px] object-cover flex-none"
+                  style={{ width: 44, height: 44, background: "#fff" }}
+                />
+              )}
             </div>
           )}
 

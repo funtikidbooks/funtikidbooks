@@ -557,6 +557,37 @@ export async function upsertStaffBankInfo(
   return data as StaffBankInfo;
 }
 
+const ALLOWED_QR_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+const MAX_QR_SIZE = 20 * 1024 * 1024;
+
+// A saved VietQR transfer-code screenshot — lets paying be a literal scan
+// instead of retyping the account number. Same storage bucket/pattern as
+// meeting message attachments and food shop menu photos.
+export async function uploadStaffBankQr(profileId: string, formData: FormData): Promise<StaffBankInfo> {
+  const { supabase } = await requireDirector();
+  const file = formData.get("file");
+  if (!(file instanceof File)) throw new Error("Thiếu ảnh mã QR.");
+  if (!ALLOWED_QR_TYPES.has(file.type)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF hoặc WEBP.");
+  if (file.size > MAX_QR_SIZE) throw new Error("Ảnh vượt quá 20MB.");
+
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+  const storagePath = `bank-qr/${profileId}/${randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage.from("task-attachments").upload(storagePath, file, { contentType: file.type });
+  if (uploadError) throw new Error("Không thể tải ảnh lên");
+
+  const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
+
+  const { data, error } = await supabase
+    .from("staff_bank_info")
+    .upsert({ profile_id: profileId, qr_image_url: publicUrlData.publicUrl }, { onConflict: "profile_id" })
+    .select("*")
+    .single();
+  if (error || !data) throw new Error("Không thể lưu mã QR.");
+  revalidatePath("/workspace/thanh-vien");
+  return data as StaffBankInfo;
+}
+
 // Deletes the Supabase Auth user outright (not just the profile row) — the
 // profiles table has `on delete cascade` from auth.users, so this removes
 // their login and profile together. Everything they authored elsewhere
