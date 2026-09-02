@@ -118,7 +118,7 @@ export default async function AboutPage() {
           <p className="text-base max-w-[560px]" style={{ color: "var(--color-neutral-700)" }}>
             {t.about.cultureBody}
           </p>
-          <Link href="/lien-he" className="btn btn-primary mt-1">
+          <Link href="/tuyen-dung" className="btn btn-primary mt-1">
             {t.about.cultureCta}
           </Link>
 
