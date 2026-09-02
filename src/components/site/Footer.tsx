@@ -92,7 +92,7 @@ export function Footer({ locale }: { locale: Locale }) {
           container (~180px at most viewport widths), nowhere near enough
           for 5 icon+label pairs to lay out in a line instead of wrapping
           one per row regardless of flex-direction. */}
-      <div className="site-container pb-8 flex flex-wrap gap-x-5 gap-y-2 border-t pt-6" style={{ borderColor: "#3a3934" }}>
+      <div className="site-container pb-8 flex flex-wrap justify-center gap-x-5 gap-y-2 border-t pt-6" style={{ borderColor: "#3a3934" }}>
         {[
           { label: "Facebook", icon: "f", href: "https://facebook.com/Funtikidbooks" },
           { label: "Instagram", icon: "◎", href: "https://instagram.com/funtikidbooks" },
