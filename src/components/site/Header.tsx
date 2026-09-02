@@ -94,7 +94,7 @@ export function Header({
           </span>
         </Link>
 
-        <nav className="hidden lg:flex items-center gap-1">
+        <nav className="hidden xl:flex items-center gap-1">
           {NAV_ITEMS.map((item) => {
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
@@ -109,7 +109,7 @@ export function Header({
           })}
         </nav>
 
-        <div className="hidden lg:flex items-center gap-3 flex-none">
+        <div className="hidden xl:flex items-center gap-3 flex-none">
           <SiteThemeToggle />
           <LanguageToggle />
           {isAuthenticated ? (
@@ -126,7 +126,7 @@ export function Header({
           </Link>
         </div>
 
-        <div className="flex items-center gap-2 lg:hidden">
+        <div className="flex items-center gap-2 xl:hidden">
           <SiteThemeToggle />
           <LanguageToggle />
           <button
@@ -141,7 +141,7 @@ export function Header({
       </div>
 
       {open && (
-        <div className="lg:hidden px-5 pb-4 flex flex-col gap-1 border-t" style={{ borderColor: "var(--color-neutral-200)" }}>
+        <div className="xl:hidden px-5 pb-4 flex flex-col gap-1 border-t" style={{ borderColor: "var(--color-neutral-200)" }}>
           {NAV_ITEMS.map((item) => (
             <Link
               key={item.href}
