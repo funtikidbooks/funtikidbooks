@@ -13,40 +13,8 @@ import { FinanceEntryModal } from "@/components/admin/FinanceEntryModal";
 import { FinanceYearChart } from "@/components/admin/FinanceYearChart";
 import { DebtEditModal } from "@/components/admin/DebtEditModal";
 import { MONTH_LABELS, addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
+import { TYPE_LABELS, TYPE_ORDER, computeFinanceSummary, formatVnd } from "@/lib/financeSummary";
 import type { FinanceEntry, FinanceEntryType, HomeLoanInstallment, PersonalDebt } from "@/lib/types";
-
-function formatVnd(n: number) {
-  return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
-}
-
-const TYPE_LABELS: Record<FinanceEntryType, string> = {
-  revenue: "Doanh thu",
-  fixed_cost: "Định phí",
-  variable_cost: "Biến phí",
-};
-
-const TYPE_ORDER: FinanceEntryType[] = ["revenue", "fixed_cost", "variable_cost"];
-
-function sumByType(entries: FinanceEntry[], type: FinanceEntryType) {
-  return entries.filter((e) => e.type === type).reduce((sum, e) => sum + e.amount, 0);
-}
-
-// Standard CVP (cost-volume-profit) math for a service business: gross
-// profit only nets out variable costs (the ones that scale with each
-// project), fixed costs and salary come out after that to reach net —
-// and the break-even revenue is however much top-line it takes for gross
-// profit to cover those fixed obligations exactly.
-function computeSummary(entries: FinanceEntry[], salaryTotal: number) {
-  const revenue = sumByType(entries, "revenue");
-  const variableCost = sumByType(entries, "variable_cost");
-  const fixedCost = sumByType(entries, "fixed_cost");
-  const grossProfit = revenue - variableCost;
-  const grossMarginRatio = revenue > 0 ? grossProfit / revenue : 0;
-  const totalCost = fixedCost + variableCost + salaryTotal;
-  const netProfit = revenue - totalCost;
-  const breakEvenRevenue = grossMarginRatio > 0 ? (fixedCost + salaryTotal) / grossMarginRatio : null;
-  return { revenue, variableCost, fixedCost, salaryTotal, grossProfit, grossMarginRatio, totalCost, netProfit, breakEvenRevenue };
-}
 
 function monthKey(year: number, monthIndex0: number) {
   return `${year}-${String(monthIndex0 + 1).padStart(2, "0")}-01`;
@@ -330,7 +298,7 @@ export function FinanceBoard({
     await deleteFinanceEntry(id).catch(() => {});
   }
 
-  const summary = useMemo(() => computeSummary(entries, salaryTotal), [entries, salaryTotal]);
+  const summary = useMemo(() => computeFinanceSummary(entries, salaryTotal), [entries, salaryTotal]);
 
   const yearRows = useMemo(
     () =>
@@ -338,7 +306,7 @@ export function FinanceBoard({
         const key = monthKey(year, i);
         const monthEntries = yearEntries.filter((e) => e.entry_month === key);
         const salary = yearSalaryTotals[key] ?? 0;
-        const s = computeSummary(monthEntries, salary);
+        const s = computeFinanceSummary(monthEntries, salary);
         return { key, monthIndex: i, ...s };
       }),
     [year, yearEntries, yearSalaryTotals],
