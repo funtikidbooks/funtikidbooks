@@ -95,10 +95,12 @@ export function Header({
           </span>
         </Link>
 
-        {/* >=1280px: full-size nav — this is the width it was actually
-            designed to fit at (verified empirically; 1024-1200px overflows
-            it with no wrap). */}
-        <nav className="hidden xl:flex items-center gap-1">
+        {/* >=1536px: full-size nav. Adding the 8th item (Tuyển dụng) pushed
+            this past what fit at 1280px (verified empirically — it now
+            overflows to ~1457px there), so the full tier moved out to
+            2xl and the compact tier below now covers the whole
+            1024-1535px range instead of stopping at 1279px. */}
+        <nav className="hidden 2xl:flex items-center gap-1">
           {NAV_ITEMS.map((item) => {
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
@@ -113,7 +115,7 @@ export function Header({
           })}
         </nav>
 
-        <div className="hidden xl:flex items-center gap-3 flex-none">
+        <div className="hidden 2xl:flex items-center gap-3 flex-none">
           <SiteThemeToggle />
           <LanguageToggle />
           {isAuthenticated ? (
@@ -130,15 +132,16 @@ export function Header({
           </Link>
         </div>
 
-        {/* 1024-1279px (iPad landscape and similar): the same horizontal
-            layout, just trimmed to actually fit — smaller nav links, no
-            forced button minWidth, and the separate "Liên hệ với chúng
-            tôi" CTA dropped since the nav's own "Liên hệ" link already
-            covers it (that pairing alone needed ~200px it doesn't have
-            here). Below this it falls back to the ☰ dropdown instead —
-            no amount of trimming fits 7 nav words + logo + toggles + an
-            action link into a phone or portrait-tablet width. */}
-        <nav className="hidden lg:flex xl:hidden items-center gap-0.5">
+        {/* 1024-1535px (iPad landscape up through common 13"-14" laptop
+            widths): the same horizontal layout, just trimmed to actually
+            fit — smaller nav links, no forced button minWidth, and the
+            separate "Liên hệ với chúng tôi" CTA dropped since the nav's
+            own "Liên hệ" link already covers it (that pairing alone
+            needed ~200px it doesn't have here). Below this it falls back
+            to the ☰ dropdown instead — no amount of trimming fits 8 nav
+            words + logo + toggles + an action link into a phone or
+            portrait-tablet width. */}
+        <nav className="hidden lg:flex 2xl:hidden items-center gap-0.5">
           {NAV_ITEMS.map((item) => {
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
@@ -153,7 +156,7 @@ export function Header({
           })}
         </nav>
 
-        <div className="hidden lg:flex xl:hidden items-center gap-2 flex-none">
+        <div className="hidden lg:flex 2xl:hidden items-center gap-2 flex-none">
           <SiteThemeToggle />
           <LanguageToggle />
           {isAuthenticated ? (
