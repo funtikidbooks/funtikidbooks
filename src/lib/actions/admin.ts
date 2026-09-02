@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendStaffWelcomeEmail } from "@/lib/mail";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
-import type { AccessRole, NewsPost, Profile, Project, Review, StaffBankInfo } from "@/lib/types";
+import type { AccessRole, EmploymentType, JobPosting, NewsPost, Profile, Project, Review, StaffBankInfo } from "@/lib/types";
 
 async function requireDirector() {
   const supabase = await createClient();
@@ -304,6 +304,118 @@ export async function deleteNewsPost(id: string) {
 export async function uploadContentImage(file: File) {
   const { supabase } = await requireContentEditor();
   return uploadSiteImage(supabase, "news-content", file);
+}
+
+// ---------------------------------------------------------------------------
+// Job postings (Tuyển dụng) — same shape and edit-in-place pattern as News.
+// ---------------------------------------------------------------------------
+
+async function uniqueJobPostingSlug(supabase: Awaited<ReturnType<typeof createClient>>, base: string) {
+  let slug = base;
+  let n = 2;
+  for (;;) {
+    const { data } = await supabase.from("job_postings").select("id").eq("slug", slug).maybeSingle();
+    if (!data) return slug;
+    slug = `${base}-${n++}`;
+  }
+}
+
+export async function createJobPosting(input: {
+  title: string;
+  titleEn?: string;
+  employmentType: EmploymentType;
+  location?: string;
+  salaryRange?: string;
+  deadline?: string;
+  excerpt?: string;
+  excerptEn?: string;
+  content?: string;
+  contentEn?: string;
+  cover?: File | null;
+}) {
+  const { supabase, user } = await requireContentEditor();
+  const title = input.title.trim();
+  if (!title) throw new Error("Thiếu tiêu đề tin tuyển dụng");
+
+  let coverUrl: string | null = null;
+  if (input.cover) coverUrl = await uploadSiteImage(supabase, "tuyen-dung", input.cover);
+
+  const slug = await uniqueJobPostingSlug(supabase, slugify(title));
+
+  const { data, error } = await supabase
+    .from("job_postings")
+    .insert({
+      title,
+      title_en: input.titleEn?.trim() || null,
+      slug,
+      employment_type: input.employmentType,
+      location: input.location?.trim() || null,
+      salary_range: input.salaryRange?.trim() || null,
+      deadline: input.deadline || null,
+      excerpt: input.excerpt?.trim() || null,
+      excerpt_en: input.excerptEn?.trim() || null,
+      content: input.content?.trim() || null,
+      content_en: input.contentEn?.trim() || null,
+      cover_image_url: coverUrl,
+      created_by: user.id,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error("Không thể tạo tin tuyển dụng");
+
+  revalidatePath("/tuyen-dung");
+  return data as JobPosting;
+}
+
+export async function updateJobPosting(
+  id: string,
+  input: {
+    title?: string;
+    titleEn?: string;
+    employmentType?: EmploymentType;
+    location?: string;
+    salaryRange?: string;
+    deadline?: string | null;
+    excerpt?: string;
+    excerptEn?: string;
+    content?: string;
+    contentEn?: string;
+    published?: boolean;
+    cover?: File | null;
+  },
+) {
+  const { supabase } = await requireContentEditor();
+  const patch: Partial<JobPosting> = {};
+  if (input.title !== undefined) patch.title = input.title.trim();
+  if (input.titleEn !== undefined) patch.title_en = input.titleEn?.trim() || null;
+  if (input.employmentType !== undefined) patch.employment_type = input.employmentType;
+  if (input.location !== undefined) patch.location = input.location?.trim() || null;
+  if (input.salaryRange !== undefined) patch.salary_range = input.salaryRange?.trim() || null;
+  if (input.deadline !== undefined) patch.deadline = input.deadline || null;
+  if (input.excerpt !== undefined) patch.excerpt = input.excerpt?.trim() || null;
+  if (input.excerptEn !== undefined) patch.excerpt_en = input.excerptEn?.trim() || null;
+  if (input.content !== undefined) patch.content = input.content?.trim() || null;
+  if (input.contentEn !== undefined) patch.content_en = input.contentEn?.trim() || null;
+  if (input.published !== undefined) patch.published = input.published;
+  if (input.cover) patch.cover_image_url = await uploadSiteImage(supabase, "tuyen-dung", input.cover);
+
+  const { data, error } = await supabase.from("job_postings").update(patch).eq("id", id).select("*").single();
+  if (error || !data) throw new Error("Không thể cập nhật tin tuyển dụng");
+
+  revalidatePath("/tuyen-dung");
+  return data as JobPosting;
+}
+
+export async function deleteJobPosting(id: string) {
+  const { supabase } = await requireContentEditor();
+  await supabase.from("job_postings").delete().eq("id", id);
+  revalidatePath("/tuyen-dung");
+}
+
+export async function uploadJobPostingContentImage(file: File) {
+  const { supabase } = await requireContentEditor();
+  return uploadSiteImage(supabase, "tuyen-dung-content", file);
 }
 
 // ---------------------------------------------------------------------------

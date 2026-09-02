@@ -129,6 +129,15 @@ export function AdminSidebar({
             <span aria-hidden>📰</span>
             Tin tức (đăng bài trực tiếp trên trang)
           </Link>
+          <Link
+            href="/tuyen-dung"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
+            style={{ color: "var(--color-text)" }}
+          >
+            <span aria-hidden>🌱</span>
+            Tuyển dụng (đăng tin trực tiếp trên trang)
+          </Link>
         </>
       )}
 

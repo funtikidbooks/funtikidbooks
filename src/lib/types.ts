@@ -300,6 +300,28 @@ export type NewsPost = {
   updated_at: string;
 };
 
+export type EmploymentType = "full_time" | "part_time" | "internship" | "freelance";
+
+export type JobPosting = {
+  id: string;
+  slug: string;
+  title: string;
+  title_en: string | null;
+  employment_type: EmploymentType;
+  location: string | null;
+  salary_range: string | null;
+  deadline: string | null;
+  excerpt: string | null;
+  excerpt_en: string | null;
+  content: string | null;
+  content_en: string | null;
+  cover_image_url: string | null;
+  published: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Review = {
   id: string;
   customer_name: string;
@@ -879,6 +901,12 @@ export type Database = {
         Row: NewsPost;
         Insert: Partial<NewsPost> & { title: string };
         Update: Partial<NewsPost>;
+        Relationships: [];
+      };
+      job_postings: {
+        Row: JobPosting;
+        Insert: Partial<JobPosting> & { title: string };
+        Update: Partial<JobPosting>;
         Relationships: [];
       };
       reviews: {

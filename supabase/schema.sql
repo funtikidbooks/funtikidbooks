@@ -722,6 +722,54 @@ create trigger news_posts_set_updated_at
   for each row execute procedure public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- job_postings: open positions shown on the public Tuyển dụng (careers)
+-- page, edited in place by director/admin — same shape and pattern as
+-- news_posts (slug, bilingual title/excerpt/content, published gate).
+-- ---------------------------------------------------------------------------
+create table if not exists public.job_postings (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  title text not null,
+  title_en text,
+  employment_type text not null default 'full_time'
+    check (employment_type in ('full_time', 'part_time', 'internship', 'freelance')),
+  location text,
+  salary_range text,
+  deadline date,
+  excerpt text,
+  excerpt_en text,
+  content text,
+  content_en text,
+  cover_image_url text,
+  published boolean not null default true,
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.job_postings enable row level security;
+
+drop policy if exists "anyone can read published job postings" on public.job_postings;
+create policy "anyone can read published job postings"
+  on public.job_postings for select
+  to anon, authenticated
+  using (published or public.current_access_role() in ('director', 'admin'));
+
+drop policy if exists "director and admin can write job postings" on public.job_postings;
+create policy "director and admin can write job postings"
+  on public.job_postings for all
+  to authenticated
+  using (public.current_access_role() in ('director', 'admin'))
+  with check (public.current_access_role() in ('director', 'admin'));
+
+drop trigger if exists job_postings_set_updated_at on public.job_postings;
+create trigger job_postings_set_updated_at
+  before update on public.job_postings
+  for each row execute procedure public.set_updated_at();
+
+create index if not exists job_postings_published_idx on public.job_postings (published, created_at desc);
+
+-- ---------------------------------------------------------------------------
 -- reviews: customer testimonials shown on the public site, editable by
 -- director/admin
 -- ---------------------------------------------------------------------------

@@ -59,6 +59,7 @@ export function Header({
     { href: "/du-an", label: t.nav.projects },
     { href: "/gioi-thieu", label: t.nav.about },
     { href: "/tin-tuc", label: t.nav.news },
+    { href: "/tuyen-dung", label: t.nav.careers },
     { href: "/lien-he", label: t.nav.contact },
   ];
 

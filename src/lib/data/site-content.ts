@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import type { AccessRole, NewsPost, Project, Review } from "@/lib/types";
+import type { AccessRole, JobPosting, NewsPost, Project, Review } from "@/lib/types";
 
 export async function getProjects(includeUnpublished = false): Promise<Project[]> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return [];
@@ -46,6 +46,32 @@ export async function getNewsPostBySlug(slug: string): Promise<NewsPost | null> 
     const supabase = await createClient();
     const { data } = await supabase.from("news_posts").select("*").eq("slug", slug).maybeSingle();
     return (data as NewsPost) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getJobPostings(includeUnpublished = false): Promise<JobPosting[]> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return [];
+  try {
+    const supabase = await createClient();
+    let query = supabase.from("job_postings").select("*").order("created_at", { ascending: false });
+    if (!includeUnpublished) query = query.eq("published", true);
+    const { data } = await query;
+    return (data ?? []) as JobPosting[];
+  } catch {
+    return [];
+  }
+}
+
+// RLS already restricts unpublished rows to director/admin sessions, so no
+// extra filter is needed here — a non-editor gets null for a draft slug.
+export async function getJobPostingBySlug(slug: string): Promise<JobPosting | null> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return null;
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase.from("job_postings").select("*").eq("slug", slug).maybeSingle();
+    return (data as JobPosting) ?? null;
   } catch {
     return null;
   }

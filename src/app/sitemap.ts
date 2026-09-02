@@ -1,9 +1,9 @@
 import type { MetadataRoute } from "next";
-import { getPublishedNewsPosts } from "@/lib/data/site-content";
+import { getJobPostings, getPublishedNewsPosts } from "@/lib/data/site-content";
 
 const SITE_URL = "https://funtikidbooks.com";
 
-const STATIC_PAGES = ["", "dich-vu", "du-an", "gioi-thieu", "lien-he", "quy-trinh", "tin-tuc"];
+const STATIC_PAGES = ["", "dich-vu", "du-an", "gioi-thieu", "lien-he", "quy-trinh", "tin-tuc", "tuyen-dung"];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = STATIC_PAGES.map((path) => ({
@@ -21,5 +21,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...staticEntries, ...newsEntries];
+  const jobPostings = await getJobPostings(false).catch(() => []);
+  const jobEntries: MetadataRoute.Sitemap = jobPostings.map((post) => ({
+    url: `${SITE_URL}/tuyen-dung/${post.slug}`,
+    lastModified: new Date(post.updated_at ?? post.created_at),
+    changeFrequency: "monthly",
+    priority: 0.6,
+  }));
+
+  return [...staticEntries, ...newsEntries, ...jobEntries];
 }

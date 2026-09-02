@@ -13,6 +13,7 @@ export function Footer({ locale }: { locale: Locale }) {
         { href: "/", label: t.nav.home },
         { href: "/gioi-thieu", label: t.nav.about },
         { href: "/tin-tuc", label: t.nav.news },
+        { href: "/tuyen-dung", label: t.nav.careers },
       ],
     },
     {
