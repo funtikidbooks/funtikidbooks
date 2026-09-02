@@ -1152,6 +1152,40 @@ create trigger home_loan_installments_set_updated_at
 create index if not exists home_loan_installments_period_idx on public.home_loan_installments (period_number);
 
 -- ---------------------------------------------------------------------------
+-- historical_salary_totals: a lump-sum monthly salary figure for periods
+-- before per-employee payroll_records existed. The real 2025/early-2026
+-- team mostly has no corresponding profile account today (staff turned
+-- over before this system's accounts were created), so payroll_records
+-- can't be reconstructed person by person — but the Tài chính/Báo cáo tài
+-- chính "Lương nhân viên" line still needs the real total for those months.
+-- getMonthlySalaryTotal/getYearlySalaryTotals add this on top of whatever
+-- payroll_records already covers for the same month; in practice the two
+-- never overlap. Director-only, same as finance_entries.
+-- ---------------------------------------------------------------------------
+create table if not exists public.historical_salary_totals (
+  month date primary key,
+  total_amount numeric not null default 0 check (total_amount >= 0),
+  note text,
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.historical_salary_totals enable row level security;
+
+drop policy if exists "director can manage historical salary totals" on public.historical_salary_totals;
+create policy "director can manage historical salary totals"
+  on public.historical_salary_totals for all
+  to authenticated
+  using (public.current_access_role() = 'director')
+  with check (public.current_access_role() = 'director');
+
+drop trigger if exists historical_salary_totals_set_updated_at on public.historical_salary_totals;
+create trigger historical_salary_totals_set_updated_at
+  before update on public.historical_salary_totals
+  for each row execute procedure public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
 -- staff_bank_info: bank account details the director keeps on file for each
 -- employee so salary can actually be transferred — director-only end to
 -- end, same reasoning as finance_entries (this is money-movement data, not

@@ -450,6 +450,17 @@ export type HomeLoanInstallment = {
   updated_at: string;
 };
 
+// A lump-sum staff salary total for a month before per-employee
+// payroll_records existed — see the table's own comment in schema.sql.
+export type HistoricalSalaryTotal = {
+  month: string;
+  total_amount: number;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PageType = "single" | "double";
 
 export type InvoiceItem = {
@@ -943,6 +954,12 @@ export type Database = {
           interest_rate_percent: number;
         };
         Update: Partial<HomeLoanInstallment>;
+        Relationships: [];
+      };
+      historical_salary_totals: {
+        Row: HistoricalSalaryTotal;
+        Insert: Partial<HistoricalSalaryTotal> & { month: string };
+        Update: Partial<HistoricalSalaryTotal>;
         Relationships: [];
       };
       site_settings: {

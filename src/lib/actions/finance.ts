@@ -82,29 +82,37 @@ export async function deleteFinanceEntry(id: string) {
 // Salary is never entered on this ledger — it's read straight off the real
 // payroll sheet for the same month, so the two can never drift apart.
 // Mirrors payroll.ts's listPayrollForMonth but under this page's own
-// director-only gate instead of can_manage_hr().
+// director-only gate instead of can_manage_hr(). Also folds in
+// historical_salary_totals — the lump-sum figure for months before
+// per-employee payroll_records existed (see that table's own comment).
 export async function getMonthlySalaryTotal(monthStartInput?: string): Promise<number> {
   const { supabase } = await requireDirector();
   const monthStart = firstOfMonth(monthStartInput ?? vnToday());
-  const { data } = await supabase.from("payroll_records").select("*").eq("month", monthStart);
+  const [{ data }, { data: historical }] = await Promise.all([
+    supabase.from("payroll_records").select("*").eq("month", monthStart),
+    supabase.from("historical_salary_totals").select("total_amount").eq("month", monthStart).maybeSingle(),
+  ]);
   const records = (data ?? []) as PayrollRecord[];
-  return records.reduce((sum, r) => sum + r.base_salary + r.items.reduce((s, item) => s + item.amount, 0), 0);
+  const payrollTotal = records.reduce((sum, r) => sum + r.base_salary + r.items.reduce((s, item) => s + item.amount, 0), 0);
+  return payrollTotal + Number(historical?.total_amount ?? 0);
 }
 
 // One salary total per month for the whole year — backs the yearly table
 // the same way listFinanceEntriesForYear does for the ledger entries.
 export async function getYearlySalaryTotals(year: number): Promise<Record<string, number>> {
   const { supabase } = await requireDirector();
-  const { data } = await supabase
-    .from("payroll_records")
-    .select("*")
-    .gte("month", `${year}-01-01`)
-    .lte("month", `${year}-12-01`);
+  const [{ data }, { data: historical }] = await Promise.all([
+    supabase.from("payroll_records").select("*").gte("month", `${year}-01-01`).lte("month", `${year}-12-01`),
+    supabase.from("historical_salary_totals").select("month, total_amount").gte("month", `${year}-01-01`).lte("month", `${year}-12-01`),
+  ]);
   const records = (data ?? []) as PayrollRecord[];
   const totals: Record<string, number> = {};
   for (const r of records) {
     const perRecord = r.base_salary + r.items.reduce((s, item) => s + item.amount, 0);
     totals[r.month] = (totals[r.month] ?? 0) + perRecord;
+  }
+  for (const h of (historical ?? []) as { month: string; total_amount: number }[]) {
+    totals[h.month] = (totals[h.month] ?? 0) + Number(h.total_amount);
   }
   return totals;
 }
