@@ -96,6 +96,7 @@ export function Footer({ locale }: { locale: Locale }) {
         {[
           { label: "Facebook", icon: "f", href: "https://facebook.com/Funtikidbooks" },
           { label: "Instagram", icon: "◎", href: "https://instagram.com/funtikidbooks" },
+          { label: "LinkedIn", icon: "in", href: "https://www.linkedin.com/in/studio-funtikidbooks-0219a3428/" },
           { label: "Behance", icon: "Be", href: "https://www.behance.net/funtikidbooks" },
           { label: "Upwork", icon: "Uw", href: "https://www.upwork.com/freelancers/yunachan" },
           { label: "Email", icon: "✉", href: "mailto:funtikidbooks.studio@gmail.com" },
