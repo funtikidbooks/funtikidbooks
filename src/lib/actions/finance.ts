@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
-import type { FinanceEntry, FinanceEntryType, PayrollRecord } from "@/lib/types";
+import type { FinanceEntry, FinanceEntryType, PayrollRecord, PersonalDebt } from "@/lib/types";
 
 // This ledger is deliberately more sensitive than payroll/attendance — it's
 // the whole business's P&L, not one employee's — so it's director-only,
@@ -107,4 +107,46 @@ export async function getYearlySalaryTotals(year: number): Promise<Record<string
     totals[r.month] = (totals[r.month] ?? 0) + perRecord;
   }
   return totals;
+}
+
+// The director's own personal debt tracking ("Nợ mẹ", "Nợ ngân hàng", ...)
+// — unrelated to the business P&L above, just kept on the same
+// director-only page.
+export async function listPersonalDebts(): Promise<PersonalDebt[]> {
+  const { supabase } = await requireDirector();
+  const { data } = await supabase.from("personal_debts").select("*").order("sort_order", { ascending: true });
+  return (data ?? []) as PersonalDebt[];
+}
+
+export async function upsertPersonalDebt(input: {
+  id?: string;
+  label: string;
+  totalAmount: number | null;
+  remainingAmount: number | null;
+  sortOrder?: number;
+}): Promise<PersonalDebt> {
+  const { supabase, user } = await requireDirector();
+  const label = input.label.trim();
+  if (!label) throw new Error("Cần nhập tên khoản nợ.");
+
+  const row = {
+    label,
+    total_amount: input.totalAmount,
+    remaining_amount: input.remainingAmount,
+    ...(input.sortOrder !== undefined ? { sort_order: input.sortOrder } : {}),
+    created_by: user.id,
+  };
+
+  const query = input.id
+    ? supabase.from("personal_debts").update(row).eq("id", input.id)
+    : supabase.from("personal_debts").insert(row);
+
+  const { data, error } = await query.select("*").single();
+  if (error || !data) throw new Error("Không thể lưu khoản nợ này.");
+  return data as PersonalDebt;
+}
+
+export async function deletePersonalDebt(id: string) {
+  const { supabase } = await requireDirector();
+  await supabase.from("personal_debts").delete().eq("id", id);
 }

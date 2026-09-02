@@ -10,8 +10,9 @@ import {
 } from "@/lib/actions/finance";
 import { FinanceEntryModal } from "@/components/admin/FinanceEntryModal";
 import { FinanceYearChart } from "@/components/admin/FinanceYearChart";
+import { DebtEditModal } from "@/components/admin/DebtEditModal";
 import { MONTH_LABELS, addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
-import type { FinanceEntry, FinanceEntryType } from "@/lib/types";
+import type { FinanceEntry, FinanceEntryType, PersonalDebt } from "@/lib/types";
 
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
@@ -50,6 +51,58 @@ function monthKey(year: number, monthIndex0: number) {
   return `${year}-${String(monthIndex0 + 1).padStart(2, "0")}-01`;
 }
 
+// A filling progress bar, like a game's energy/HP meter — "nhích lên" as
+// each payment brings remaining_amount down. Falls back to a plain "+
+// Nhập số liệu" prompt while total_amount is still null (a debt created
+// before its numbers were known), instead of a misleading 0%-full bar.
+function DebtCard({ debt, onEdit }: { debt: PersonalDebt; onEdit: () => void }) {
+  const hasData = debt.total_amount !== null && debt.total_amount > 0;
+  const total = debt.total_amount ?? 0;
+  const remaining = debt.remaining_amount ?? 0;
+  const paid = hasData ? Math.max(0, total - remaining) : 0;
+  const pct = hasData ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+
+  return (
+    <div className="card p-4 flex flex-col gap-3" style={{ background: "var(--color-surface)" }}>
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-bold">{debt.label}</span>
+        <button type="button" onClick={onEdit} className="btn-icon" style={{ width: 28, height: 28, padding: 0 }} aria-label="Sửa">
+          ✏️
+        </button>
+      </div>
+      {hasData ? (
+        <>
+          <div className="rounded-full overflow-hidden" style={{ height: 14, background: "var(--color-neutral-100)" }}>
+            <div
+              className="h-full rounded-full"
+              style={{ width: `${pct}%`, background: "var(--status-green)", transition: "width 0.4s ease" }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span style={{ color: "var(--color-neutral-500)" }}>Đã trả {formatVnd(paid)}</span>
+            <span className="font-bold" style={{ color: "var(--status-green)" }}>
+              {pct}%
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span style={{ color: "var(--color-neutral-500)" }}>Còn nợ</span>
+            <span className="font-bold" style={{ color: "var(--status-red)" }}>
+              {formatVnd(remaining)}
+            </span>
+          </div>
+          <div className="text-[11px]" style={{ color: "var(--color-neutral-400)" }}>
+            Tổng nợ: {formatVnd(total)}
+          </div>
+        </>
+      ) : (
+        <button type="button" onClick={onEdit} className="btn btn-ghost btn-sm w-fit">
+          + Nhập số liệu
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function FinanceBoard({
   initialMonth,
   initialEntries,
@@ -57,6 +110,7 @@ export function FinanceBoard({
   initialYear,
   initialYearEntries,
   initialYearSalaryTotals,
+  initialDebts,
 }: {
   initialMonth: string;
   initialEntries: FinanceEntry[];
@@ -64,12 +118,15 @@ export function FinanceBoard({
   initialYear: number;
   initialYearEntries: FinanceEntry[];
   initialYearSalaryTotals: Record<string, number>;
+  initialDebts: PersonalDebt[];
 }) {
   const [monthStart, setMonthStart] = useState(initialMonth);
   const [entries, setEntries] = useState(initialEntries);
   const [salaryTotal, setSalaryTotal] = useState(initialSalaryTotal);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState<{ entry?: FinanceEntry; type: FinanceEntryType } | null>(null);
+  const [debts, setDebts] = useState(initialDebts);
+  const [editingDebt, setEditingDebt] = useState<PersonalDebt | null>(null);
 
   const [year, setYear] = useState(initialYear);
   const [yearEntries, setYearEntries] = useState(initialYearEntries);
@@ -381,6 +438,17 @@ export function FinanceBoard({
         </div>
       </div>
 
+      {/* Nợ cá nhân — separate from the business P&L above, just kept on
+          the same director-only page. */}
+      <div className="flex flex-col gap-3 mt-4">
+        <span className="text-sm font-bold">Nợ cá nhân</span>
+        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
+          {debts.map((debt) => (
+            <DebtCard key={debt.id} debt={debt} onEdit={() => setEditingDebt(debt)} />
+          ))}
+        </div>
+      </div>
+
       {editing && (
         <FinanceEntryModal
           entryMonth={monthStart}
@@ -388,6 +456,14 @@ export function FinanceBoard({
           defaultType={editing.type}
           onClose={() => setEditing(null)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {editingDebt && (
+        <DebtEditModal
+          debt={editingDebt}
+          onClose={() => setEditingDebt(null)}
+          onSaved={(saved) => setDebts((prev) => prev.map((d) => (d.id === saved.id ? saved : d)))}
         />
       )}
     </div>

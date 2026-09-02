@@ -417,6 +417,21 @@ export type FinanceEntry = {
   updated_at: string;
 };
 
+// Director's personal debt tracking on the Tài chính page — "Nợ mẹ" and
+// "Nợ ngân hàng" today, but a plain list rather than a fixed pair so
+// another one can be added later without a schema change. total_amount
+// null means "not entered yet" (shown as an empty state, not a 0% bar).
+export type PersonalDebt = {
+  id: string;
+  label: string;
+  total_amount: number | null;
+  remaining_amount: number | null;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PageType = "single" | "double";
 
 export type InvoiceItem = {
@@ -889,6 +904,12 @@ export type Database = {
         Row: FinanceEntry;
         Insert: Partial<FinanceEntry> & { entry_month: string; type: FinanceEntryType; category: string };
         Update: Partial<FinanceEntry>;
+        Relationships: [];
+      };
+      personal_debts: {
+        Row: PersonalDebt;
+        Insert: Partial<PersonalDebt> & { label: string };
+        Update: Partial<PersonalDebt>;
         Relationships: [];
       };
       site_settings: {

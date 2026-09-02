@@ -1078,6 +1078,40 @@ create trigger finance_entries_set_updated_at
 create index if not exists finance_entries_month_idx on public.finance_entries (entry_month);
 
 -- ---------------------------------------------------------------------------
+-- personal_debts: the director's own personal debt tracking ("Nợ mẹ", "Nợ
+-- ngân hàng", ...) shown as a paid-off progress bar on the Tài chính page —
+-- entirely separate from finance_entries (the business P&L). A plain list
+-- rather than two fixed columns so another debt can be added later without
+-- a schema change. total_amount/remaining_amount both nullable: a debt can
+-- be created before its numbers are known ("chưa có số liệu, nhập sau").
+-- Director-only end to end, same as finance_entries.
+-- ---------------------------------------------------------------------------
+create table if not exists public.personal_debts (
+  id uuid primary key default gen_random_uuid(),
+  label text not null,
+  total_amount numeric check (total_amount >= 0),
+  remaining_amount numeric check (remaining_amount >= 0),
+  sort_order int not null default 0,
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.personal_debts enable row level security;
+
+drop policy if exists "director can manage personal debts" on public.personal_debts;
+create policy "director can manage personal debts"
+  on public.personal_debts for all
+  to authenticated
+  using (public.current_access_role() = 'director')
+  with check (public.current_access_role() = 'director');
+
+drop trigger if exists personal_debts_set_updated_at on public.personal_debts;
+create trigger personal_debts_set_updated_at
+  before update on public.personal_debts
+  for each row execute procedure public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
 -- staff_bank_info: bank account details the director keeps on file for each
 -- employee so salary can actually be transferred — director-only end to
 -- end, same reasoning as finance_entries (this is money-movement data, not
