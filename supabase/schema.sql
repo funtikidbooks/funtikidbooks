@@ -1112,6 +1112,46 @@ create trigger personal_debts_set_updated_at
   for each row execute procedure public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- home_loan_installments: the full 20-year amortization schedule for the
+-- director's own home loan (nợ mua nhà), one row per kỳ — imported once
+-- from his own spreadsheet (exact dates/amounts/rate already fixed by the
+-- bank contract, not something the app computes). is_paid is the one field
+-- meant to be edited here going forward, ticked off kỳ by kỳ as each
+-- payment actually happens — everything else is read-only reference data.
+-- Director-only, same as personal_debts/finance_entries.
+-- ---------------------------------------------------------------------------
+create table if not exists public.home_loan_installments (
+  id uuid primary key default gen_random_uuid(),
+  period_number int not null unique,
+  due_date date not null,
+  opening_balance numeric not null,
+  principal_payment numeric not null,
+  interest_days int,
+  interest_amount numeric not null,
+  total_payment numeric not null,
+  closing_balance numeric not null,
+  interest_rate_percent numeric not null,
+  is_paid boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.home_loan_installments enable row level security;
+
+drop policy if exists "director can manage home loan installments" on public.home_loan_installments;
+create policy "director can manage home loan installments"
+  on public.home_loan_installments for all
+  to authenticated
+  using (public.current_access_role() = 'director')
+  with check (public.current_access_role() = 'director');
+
+drop trigger if exists home_loan_installments_set_updated_at on public.home_loan_installments;
+create trigger home_loan_installments_set_updated_at
+  before update on public.home_loan_installments
+  for each row execute procedure public.set_updated_at();
+
+create index if not exists home_loan_installments_period_idx on public.home_loan_installments (period_number);
+
+-- ---------------------------------------------------------------------------
 -- staff_bank_info: bank account details the director keeps on file for each
 -- employee so salary can actually be transferred — director-only end to
 -- end, same reasoning as finance_entries (this is money-movement data, not

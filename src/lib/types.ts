@@ -432,6 +432,24 @@ export type PersonalDebt = {
   updated_at: string;
 };
 
+// One kỳ of the director's home-loan amortization schedule — imported once
+// from his own spreadsheet, exact dates/amounts fixed by the bank contract.
+// is_paid is the only field ever edited here afterward.
+export type HomeLoanInstallment = {
+  id: string;
+  period_number: number;
+  due_date: string;
+  opening_balance: number;
+  principal_payment: number;
+  interest_days: number | null;
+  interest_amount: number;
+  total_payment: number;
+  closing_balance: number;
+  interest_rate_percent: number;
+  is_paid: boolean;
+  updated_at: string;
+};
+
 export type PageType = "single" | "double";
 
 export type InvoiceItem = {
@@ -910,6 +928,21 @@ export type Database = {
         Row: PersonalDebt;
         Insert: Partial<PersonalDebt> & { label: string };
         Update: Partial<PersonalDebt>;
+        Relationships: [];
+      };
+      home_loan_installments: {
+        Row: HomeLoanInstallment;
+        Insert: Partial<HomeLoanInstallment> & {
+          period_number: number;
+          due_date: string;
+          opening_balance: number;
+          principal_payment: number;
+          interest_amount: number;
+          total_payment: number;
+          closing_balance: number;
+          interest_rate_percent: number;
+        };
+        Update: Partial<HomeLoanInstallment>;
         Relationships: [];
       };
       site_settings: {

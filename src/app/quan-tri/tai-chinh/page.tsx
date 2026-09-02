@@ -6,6 +6,7 @@ import {
   getYearlySalaryTotals,
   listFinanceEntries,
   listFinanceEntriesForYear,
+  listHomeLoanInstallments,
   listPersonalDebts,
 } from "@/lib/actions/finance";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
@@ -27,12 +28,13 @@ export default async function AdminFinancePage() {
   const monthStart = firstOfMonth(vnToday());
   const year = new Date(`${monthStart}T00:00:00`).getFullYear();
 
-  const [entries, salaryTotal, yearEntries, yearSalaryTotals, debts] = await Promise.all([
+  const [entries, salaryTotal, yearEntries, yearSalaryTotals, debts, homeLoanInstallments] = await Promise.all([
     listFinanceEntries(monthStart),
     getMonthlySalaryTotal(monthStart),
     listFinanceEntriesForYear(year),
     getYearlySalaryTotals(year),
     listPersonalDebts(),
+    listHomeLoanInstallments(),
   ]);
 
   return (
@@ -44,6 +46,7 @@ export default async function AdminFinancePage() {
       initialYearEntries={yearEntries}
       initialYearSalaryTotals={yearSalaryTotals}
       initialDebts={debts}
+      initialHomeLoanInstallments={homeLoanInstallments}
     />
   );
 }

@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
-import type { FinanceEntry, FinanceEntryType, PayrollRecord, PersonalDebt } from "@/lib/types";
+import type { FinanceEntry, FinanceEntryType, HomeLoanInstallment, PayrollRecord, PersonalDebt } from "@/lib/types";
 
 // This ledger is deliberately more sensitive than payroll/attendance — it's
 // the whole business's P&L, not one employee's — so it's director-only,
@@ -149,4 +149,25 @@ export async function upsertPersonalDebt(input: {
 export async function deletePersonalDebt(id: string) {
   const { supabase } = await requireDirector();
   await supabase.from("personal_debts").delete().eq("id", id);
+}
+
+// The director's home-loan repayment schedule — imported once (see
+// scratchpad seeding script, not this file — the 239 rows come straight
+// from his own amortization spreadsheet), then just ticked off kỳ by kỳ.
+export async function listHomeLoanInstallments(): Promise<HomeLoanInstallment[]> {
+  const { supabase } = await requireDirector();
+  const { data } = await supabase.from("home_loan_installments").select("*").order("period_number", { ascending: true });
+  return (data ?? []) as HomeLoanInstallment[];
+}
+
+export async function setHomeLoanInstallmentPaid(id: string, paid: boolean): Promise<HomeLoanInstallment> {
+  const { supabase } = await requireDirector();
+  const { data, error } = await supabase
+    .from("home_loan_installments")
+    .update({ is_paid: paid })
+    .eq("id", id)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error("Không thể cập nhật kỳ trả nợ.");
+  return data as HomeLoanInstallment;
 }

@@ -7,12 +7,13 @@ import {
   getYearlySalaryTotals,
   listFinanceEntries,
   listFinanceEntriesForYear,
+  setHomeLoanInstallmentPaid,
 } from "@/lib/actions/finance";
 import { FinanceEntryModal } from "@/components/admin/FinanceEntryModal";
 import { FinanceYearChart } from "@/components/admin/FinanceYearChart";
 import { DebtEditModal } from "@/components/admin/DebtEditModal";
 import { MONTH_LABELS, addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
-import type { FinanceEntry, FinanceEntryType, PersonalDebt } from "@/lib/types";
+import type { FinanceEntry, FinanceEntryType, HomeLoanInstallment, PersonalDebt } from "@/lib/types";
 
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
@@ -103,6 +104,134 @@ function DebtCard({ debt, onEdit }: { debt: PersonalDebt; onEdit: () => void }) 
   );
 }
 
+function formatDateVn(iso: string) {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("vi-VN");
+}
+
+// The full amortization schedule as an energy-bar summary (same idea as
+// DebtCard, computed from the schedule instead of two typed-in numbers) plus
+// a kỳ-by-kỳ table. Defaults to a window around the first unpaid kỳ rather
+// than the very start, since with ~240 rows "now" is what's actually useful
+// to see without expanding.
+function HomeLoanSection({
+  installments,
+  onToggle,
+}: {
+  installments: HomeLoanInstallment[];
+  onToggle: (id: string, paid: boolean) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (installments.length === 0) return null;
+
+  const total = installments.length;
+  const paidCount = installments.filter((i) => i.is_paid).length;
+  const loanAmount = installments[0]?.opening_balance ?? 0;
+  const lastPaid = [...installments].reverse().find((i) => i.is_paid);
+  const remaining = lastPaid ? lastPaid.closing_balance : loanAmount;
+  const paidAmount = Math.max(0, loanAmount - remaining);
+  const pct = loanAmount > 0 ? Math.min(100, Math.round((paidAmount / loanAmount) * 100)) : 0;
+  const nextDue = installments.find((i) => !i.is_paid);
+
+  const currentIdx = installments.findIndex((i) => !i.is_paid);
+  const windowStart = currentIdx === -1 ? Math.max(0, total - 6) : Math.max(0, currentIdx - 3);
+  const windowEnd = currentIdx === -1 ? total : Math.min(total, currentIdx + 5);
+  const visibleRows = expanded ? installments : installments.slice(windowStart, windowEnd);
+
+  return (
+    <div className="flex flex-col gap-3 mt-4">
+      <span className="text-sm font-bold">Nợ mua nhà</span>
+
+      <div className="card p-4 flex flex-col gap-3" style={{ background: "var(--color-surface)" }}>
+        <div className="rounded-full overflow-hidden" style={{ height: 16, background: "var(--color-neutral-100)" }}>
+          <div
+            className="h-full rounded-full"
+            style={{ width: `${pct}%`, background: "var(--status-green)", transition: "width 0.4s ease" }}
+          />
+        </div>
+        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+          <div>
+            <div className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+              Đã trả
+            </div>
+            <div className="text-sm font-bold" style={{ color: "var(--status-green)" }}>
+              {formatVnd(paidAmount)} ({pct}%)
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+              Còn nợ
+            </div>
+            <div className="text-sm font-bold" style={{ color: "var(--status-red)" }}>
+              {formatVnd(remaining)}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+              Kỳ đã trả
+            </div>
+            <div className="text-sm font-bold">
+              {paidCount}/{total}
+            </div>
+          </div>
+          {nextDue && (
+            <div>
+              <div className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                Kỳ tiếp theo
+              </div>
+              <div className="text-sm font-bold">
+                Kỳ {nextDue.period_number} · {formatDateVn(nextDue.due_date)}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="text-[11px]" style={{ color: "var(--color-neutral-400)" }}>
+          Tổng vay: {formatVnd(loanAmount)}
+        </div>
+      </div>
+
+      <div className="card elev-sm overflow-hidden flex flex-col">
+        <div className="overflow-auto" style={{ maxHeight: 420 }}>
+          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+                {["Kỳ", "Ngày", "Dư nợ đầu kỳ", "Trả gốc", "Lãi", "Tổng cộng", "Dư nợ cuối kỳ", "Đã trả"].map((h) => (
+                  <th
+                    key={h}
+                    className="text-left px-3 py-2 text-[11px] font-bold"
+                    style={{ color: "var(--color-neutral-500)", background: "var(--color-panel)", position: "sticky", top: 0 }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((row) => (
+                <tr key={row.id} style={{ borderBottom: "1px solid var(--color-neutral-100)", opacity: row.is_paid ? 0.55 : 1 }}>
+                  <td className="px-3 py-2 font-semibold">{row.period_number}</td>
+                  <td className="px-3 py-2">{formatDateVn(row.due_date)}</td>
+                  <td className="px-3 py-2">{formatVnd(row.opening_balance)}</td>
+                  <td className="px-3 py-2">{formatVnd(row.principal_payment)}</td>
+                  <td className="px-3 py-2">{formatVnd(row.interest_amount)}</td>
+                  <td className="px-3 py-2 font-bold">{formatVnd(row.total_payment)}</td>
+                  <td className="px-3 py-2">{formatVnd(row.closing_balance)}</td>
+                  <td className="px-3 py-2">
+                    <input type="checkbox" checked={row.is_paid} onChange={(e) => onToggle(row.id, e.target.checked)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <button type="button" onClick={() => setExpanded((v) => !v)} className="btn btn-ghost btn-sm w-full">
+          {expanded ? "Thu gọn" : `Xem toàn bộ ${total} kỳ`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function FinanceBoard({
   initialMonth,
   initialEntries,
@@ -111,6 +240,7 @@ export function FinanceBoard({
   initialYearEntries,
   initialYearSalaryTotals,
   initialDebts,
+  initialHomeLoanInstallments,
 }: {
   initialMonth: string;
   initialEntries: FinanceEntry[];
@@ -119,6 +249,7 @@ export function FinanceBoard({
   initialYearEntries: FinanceEntry[];
   initialYearSalaryTotals: Record<string, number>;
   initialDebts: PersonalDebt[];
+  initialHomeLoanInstallments: HomeLoanInstallment[];
 }) {
   const [monthStart, setMonthStart] = useState(initialMonth);
   const [entries, setEntries] = useState(initialEntries);
@@ -127,6 +258,18 @@ export function FinanceBoard({
   const [editing, setEditing] = useState<{ entry?: FinanceEntry; type: FinanceEntryType } | null>(null);
   const [debts, setDebts] = useState(initialDebts);
   const [editingDebt, setEditingDebt] = useState<PersonalDebt | null>(null);
+  const [homeLoanInstallments, setHomeLoanInstallments] = useState(initialHomeLoanInstallments);
+
+  async function handleToggleInstallment(id: string, paid: boolean) {
+    // Optimistic — a director unchecking a box expects it to flip
+    // immediately, not wait on a round-trip for a single boolean.
+    setHomeLoanInstallments((prev) => prev.map((i) => (i.id === id ? { ...i, is_paid: paid } : i)));
+    try {
+      await setHomeLoanInstallmentPaid(id, paid);
+    } catch {
+      setHomeLoanInstallments((prev) => prev.map((i) => (i.id === id ? { ...i, is_paid: !paid } : i)));
+    }
+  }
 
   const [year, setYear] = useState(initialYear);
   const [yearEntries, setYearEntries] = useState(initialYearEntries);
@@ -448,6 +591,8 @@ export function FinanceBoard({
           ))}
         </div>
       </div>
+
+      <HomeLoanSection installments={homeLoanInstallments} onToggle={handleToggleInstallment} />
 
       {editing && (
         <FinanceEntryModal
