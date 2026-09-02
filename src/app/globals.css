@@ -694,6 +694,13 @@ select.input:focus {
 .fk-navlink:hover::before {
   clip-path: inset(0 0 0 0);
 }
+/* The tablet-width header (1024-1279px) reuses .fk-navlink's hover/active
+   look but needs to fit 7 items + logo + toggles + one action link in
+   noticeably less width than the >=1280px bar was designed for. */
+.fk-navlink-compact {
+  font-size: 13px;
+  padding: 6px 8px;
+}
 .fk-navlink-active {
   color: var(--color-accent-700);
   font-weight: 700;

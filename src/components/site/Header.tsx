@@ -94,6 +94,9 @@ export function Header({
           </span>
         </Link>
 
+        {/* >=1280px: full-size nav — this is the width it was actually
+            designed to fit at (verified empirically; 1024-1200px overflows
+            it with no wrap). */}
         <nav className="hidden xl:flex items-center gap-1">
           {NAV_ITEMS.map((item) => {
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
@@ -126,7 +129,44 @@ export function Header({
           </Link>
         </div>
 
-        <div className="flex items-center gap-2 xl:hidden">
+        {/* 1024-1279px (iPad landscape and similar): the same horizontal
+            layout, just trimmed to actually fit — smaller nav links, no
+            forced button minWidth, and the separate "Liên hệ với chúng
+            tôi" CTA dropped since the nav's own "Liên hệ" link already
+            covers it (that pairing alone needed ~200px it doesn't have
+            here). Below this it falls back to the ☰ dropdown instead —
+            no amount of trimming fits 7 nav words + logo + toggles + an
+            action link into a phone or portrait-tablet width. */}
+        <nav className="hidden lg:flex xl:hidden items-center gap-0.5">
+          {NAV_ITEMS.map((item) => {
+            const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`fk-navlink fk-navlink-compact${active ? " fk-navlink-active" : ""}`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="hidden lg:flex xl:hidden items-center gap-2 flex-none">
+          <SiteThemeToggle />
+          <LanguageToggle />
+          {isAuthenticated ? (
+            <Link href={memberHref} className="btn btn-primary btn-sm text-center">
+              {t.nav.workspace}
+            </Link>
+          ) : (
+            <Link href="/dang-nhap" className="fk-navlink fk-navlink-compact text-center">
+              {t.nav.member}
+            </Link>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 lg:hidden">
           <SiteThemeToggle />
           <LanguageToggle />
           <button
@@ -141,7 +181,7 @@ export function Header({
       </div>
 
       {open && (
-        <div className="xl:hidden px-5 pb-4 flex flex-col gap-1 border-t" style={{ borderColor: "var(--color-neutral-200)" }}>
+        <div className="lg:hidden px-5 pb-4 flex flex-col gap-1 border-t" style={{ borderColor: "var(--color-neutral-200)" }}>
           {NAV_ITEMS.map((item) => (
             <Link
               key={item.href}
