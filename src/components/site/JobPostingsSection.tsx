@@ -3,11 +3,9 @@
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { EditableImage } from "./EditableImage";
 import { useDict } from "@/components/site/LocaleProvider";
 import { pickLocalized } from "@/lib/i18n";
 import { employmentTypeLabel, EMPLOYMENT_TYPES } from "@/lib/jobPostings";
-import { updateJobPosting } from "@/lib/actions/admin";
 import type { JobPosting } from "@/lib/types";
 
 // Code-split: the rich-text editor (TipTap) it pulls in is heavy and only
@@ -69,7 +67,7 @@ function JobRow({ post, canEdit, onEdit }: { post: JobPosting; canEdit: boolean;
 }
 
 export function JobPostingsSection({ initialPosts, canEdit }: { initialPosts: JobPosting[]; canEdit: boolean }) {
-  const { locale, t } = useDict();
+  const { t } = useDict();
   const [posts, setPosts] = useState(initialPosts);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<JobPosting | "new" | null>(null);
@@ -83,9 +81,6 @@ export function JobPostingsSection({ initialPosts, canEdit }: { initialPosts: Jo
     // newest-first order from the initial query).
     return [...matched].sort((a, b) => Number(a.closed) - Number(b.closed));
   }, [posts, query]);
-
-  const [featured, ...rest] = filtered;
-  const featuredEmp = featured ? EMPLOYMENT_TYPES.find((e) => e.value === featured.employment_type) : undefined;
 
   return (
     <>
@@ -118,59 +113,15 @@ export function JobPostingsSection({ initialPosts, canEdit }: { initialPosts: Jo
       ) : filtered.length === 0 ? (
         <p style={{ color: "var(--color-neutral-500)" }}>{t.careers.noResults}</p>
       ) : (
-        <div className="grid gap-8 lg:grid-cols-[1.7fr_1fr] items-start">
-          <div className="flex flex-col gap-3">
-            <h2 className="text-lg font-bold">{t.careers.recentTitle}</h2>
-            <div className="card elev-sm overflow-hidden flex flex-col divide-y" style={{ borderColor: "var(--color-neutral-200)" }}>
-              {filtered.map((post) => (
-                <div key={post.id} className="[&:not(:last-child)]:border-b" style={{ borderColor: "var(--color-neutral-200)" }}>
-                  <JobRow post={post} canEdit={canEdit} onEdit={() => setEditing(post)} />
-                </div>
-              ))}
-            </div>
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-bold">{t.careers.recentTitle}</h2>
+          <div className="card elev-sm overflow-hidden flex flex-col divide-y" style={{ borderColor: "var(--color-neutral-200)" }}>
+            {filtered.map((post) => (
+              <div key={post.id} className="[&:not(:last-child)]:border-b" style={{ borderColor: "var(--color-neutral-200)" }}>
+                <JobRow post={post} canEdit={canEdit} onEdit={() => setEditing(post)} />
+              </div>
+            ))}
           </div>
-
-          {featured && (
-            <div className="flex flex-col gap-3">
-              <h2 className="text-lg font-bold">{t.careers.featuredTitle}</h2>
-              <Link
-                href={`/tuyen-dung/${featured.slug}`}
-                className="card elev-sm overflow-hidden flex flex-col transition-transform hover:-translate-y-0.5"
-              >
-                <EditableImage
-                  src={featured.cover_image_url}
-                  alt={featured.title}
-                  emoji={featuredEmp?.icon ?? "💼"}
-                  canEdit={canEdit}
-                  onUpload={async (file) => {
-                    const updated = await updateJobPosting(featured.id, { cover: file });
-                    setPosts((prev) => prev.map((p) => (p.id === featured.id ? updated : p)));
-                    return updated.cover_image_url ?? "";
-                  }}
-                  className="w-full"
-                  style={{ height: 160, borderRadius: 0 }}
-                  resizeWidth={500}
-                />
-                <div className="p-4 flex flex-col gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="tag tag-accent-2 w-fit">{employmentTypeLabel(locale, featured.employment_type)}</span>
-                    {featured.closed && <span className="tag tag-neutral w-fit">{t.careers.closed}</span>}
-                  </div>
-                  <h3 className="text-sm font-bold">{pickLocalized(locale, featured.title, featured.title_en)}</h3>
-                  {featured.location && (
-                    <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-                      📍 {featured.location}
-                    </span>
-                  )}
-                </div>
-              </Link>
-              {rest.length === 0 && (
-                <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-                  {t.careers.featuredHint}
-                </p>
-              )}
-            </div>
-          )}
         </div>
       )}
 
