@@ -317,6 +317,7 @@ export type JobPosting = {
   content_en: string | null;
   cover_image_url: string | null;
   published: boolean;
+  closed: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;

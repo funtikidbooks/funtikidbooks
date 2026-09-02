@@ -331,6 +331,7 @@ export async function createJobPosting(input: {
   excerptEn?: string;
   content?: string;
   contentEn?: string;
+  closed?: boolean;
   cover?: File | null;
 }) {
   const { supabase, user } = await requireContentEditor();
@@ -356,6 +357,7 @@ export async function createJobPosting(input: {
       excerpt_en: input.excerptEn?.trim() || null,
       content: input.content?.trim() || null,
       content_en: input.contentEn?.trim() || null,
+      closed: input.closed ?? false,
       cover_image_url: coverUrl,
       created_by: user.id,
     })
@@ -382,6 +384,7 @@ export async function updateJobPosting(
     content?: string;
     contentEn?: string;
     published?: boolean;
+    closed?: boolean;
     cover?: File | null;
   },
 ) {
@@ -398,6 +401,7 @@ export async function updateJobPosting(
   if (input.content !== undefined) patch.content = input.content?.trim() || null;
   if (input.contentEn !== undefined) patch.content_en = input.contentEn?.trim() || null;
   if (input.published !== undefined) patch.published = input.published;
+  if (input.closed !== undefined) patch.closed = input.closed;
   if (input.cover) patch.cover_image_url = await uploadSiteImage(supabase, "tuyen-dung", input.cover);
 
   const { data, error } = await supabase.from("job_postings").update(patch).eq("id", id).select("*").single();

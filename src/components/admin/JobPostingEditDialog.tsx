@@ -30,6 +30,7 @@ export function JobPostingEditDialog({
   const [location, setLocation] = useState(post?.location ?? "");
   const [salaryRange, setSalaryRange] = useState(post?.salary_range ?? "");
   const [deadline, setDeadline] = useState(post?.deadline ?? "");
+  const [closed, setClosed] = useState(post?.closed ?? false);
   const [excerpt, setExcerpt] = useState(post?.excerpt ?? "");
   const [excerptEn, setExcerptEn] = useState(post?.excerpt_en ?? "");
   const [content, setContent] = useState(post?.content ?? "");
@@ -62,6 +63,7 @@ export function JobPostingEditDialog({
           content,
           contentEn,
           published,
+          closed,
           cover: coverFile,
         });
         onUpdated(post.id, updated);
@@ -77,6 +79,7 @@ export function JobPostingEditDialog({
           excerptEn,
           content,
           contentEn,
+          closed,
           cover: coverFile,
         });
         if (published !== created.published) {
@@ -200,6 +203,13 @@ export function JobPostingEditDialog({
                   <input id="j-deadline" type="date" className="input" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
                 </div>
               </div>
+            )}
+
+            {lang === "vi" && (
+              <label className="flex items-center gap-2 text-sm font-semibold w-fit cursor-pointer">
+                <input type="checkbox" checked={closed} onChange={(e) => setClosed(e.target.checked)} />
+                Đã đóng tuyển (vẫn hiển thị công khai, gắn nhãn &quot;Đã đóng&quot;, ngừng nhận ứng tuyển)
+              </label>
             )}
 
             <div className="field">

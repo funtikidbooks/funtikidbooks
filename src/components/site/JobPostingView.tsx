@@ -42,6 +42,7 @@ export function JobPostingView({ initialPost, canEdit }: { initialPost: JobPosti
         <span className="tag tag-accent-2 w-fit">
           {emp?.icon} {employmentTypeLabel(locale, post.employment_type)}
         </span>
+        {post.closed && <span className="tag tag-neutral w-fit">{t.careers.closed}</span>}
         {!post.published && <span className="tag tag-neutral w-fit">{t.careers.unpublished}</span>}
       </div>
 
@@ -88,12 +89,20 @@ export function JobPostingView({ initialPost, canEdit }: { initialPost: JobPosti
       {content && <div className="rich-content" dangerouslySetInnerHTML={{ __html: content }} />}
 
       <div className="mt-10 pt-8 flex flex-col items-start gap-3" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
-        <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
-          {t.careers.applyHint}
-        </p>
-        <a href={applyHref} className="btn btn-primary">
-          {t.careers.applyNow}
-        </a>
+        {post.closed ? (
+          <p className="text-sm font-semibold" style={{ color: "var(--color-neutral-500)" }}>
+            🔒 {t.careers.closedHint}
+          </p>
+        ) : (
+          <>
+            <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
+              {t.careers.applyHint}
+            </p>
+            <a href={applyHref} className="btn btn-primary">
+              {t.careers.applyNow}
+            </a>
+          </>
+        )}
       </div>
 
       {editing && (

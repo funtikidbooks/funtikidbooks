@@ -769,6 +769,12 @@ create trigger job_postings_set_updated_at
 
 create index if not exists job_postings_published_idx on public.job_postings (published, created_at desc);
 
+-- Added after the initial table creation — safe to re-run on an existing
+-- project. Distinct from `published` (draft vs. live): a closed posting
+-- still shows publicly (so visitors can see the role existed / was filled)
+-- but is flagged "Đã đóng" instead of accepting applications.
+alter table public.job_postings add column if not exists closed boolean not null default false;
+
 -- ---------------------------------------------------------------------------
 -- reviews: customer testimonials shown on the public site, editable by
 -- director/admin

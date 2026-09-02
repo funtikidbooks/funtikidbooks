@@ -27,7 +27,7 @@ function JobRow({ post, canEdit, onEdit }: { post: JobPosting; canEdit: boolean;
     <Link
       href={`/tuyen-dung/${post.slug}`}
       className="flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-[var(--color-surface)]"
-      style={{ opacity: post.published ? 1 : 0.6 }}
+      style={{ opacity: post.published && !post.closed ? 1 : 0.6 }}
     >
       <span
         aria-hidden
@@ -49,6 +49,7 @@ function JobRow({ post, canEdit, onEdit }: { post: JobPosting; canEdit: boolean;
         </div>
       </div>
       <span className="tag tag-accent-2 flex-none whitespace-nowrap">{employmentTypeLabel(locale, post.employment_type)}</span>
+      {post.closed && <span className="tag tag-neutral flex-none whitespace-nowrap">{t.careers.closed}</span>}
       {canEdit && (
         <button
           type="button"
@@ -75,8 +76,12 @@ export function JobPostingsSection({ initialPosts, canEdit }: { initialPosts: Jo
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return posts;
-    return posts.filter((p) => p.title.toLowerCase().includes(q) || (p.title_en?.toLowerCase().includes(q) ?? false));
+    const matched = q
+      ? posts.filter((p) => p.title.toLowerCase().includes(q) || (p.title_en?.toLowerCase().includes(q) ?? false))
+      : posts;
+    // Open positions surface first (stable sort keeps each group's own
+    // newest-first order from the initial query).
+    return [...matched].sort((a, b) => Number(a.closed) - Number(b.closed));
   }, [posts, query]);
 
   const [featured, ...rest] = filtered;
@@ -147,7 +152,10 @@ export function JobPostingsSection({ initialPosts, canEdit }: { initialPosts: Jo
                   resizeWidth={500}
                 />
                 <div className="p-4 flex flex-col gap-2">
-                  <span className="tag tag-accent-2 w-fit">{employmentTypeLabel(locale, featured.employment_type)}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="tag tag-accent-2 w-fit">{employmentTypeLabel(locale, featured.employment_type)}</span>
+                    {featured.closed && <span className="tag tag-neutral w-fit">{t.careers.closed}</span>}
+                  </div>
                   <h3 className="text-sm font-bold">{pickLocalized(locale, featured.title, featured.title_en)}</h3>
                   {featured.location && (
                     <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
