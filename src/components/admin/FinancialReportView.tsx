@@ -10,7 +10,7 @@ import {
 } from "@/lib/actions/finance";
 import { MONTH_LABELS, addMonths } from "@/lib/constants/attendance";
 import { TYPE_LABELS, computeFinanceSummary, costBreakdown, formatVnd } from "@/lib/financeSummary";
-import type { FinanceEntry, HomeLoanInstallment, PersonalDebt } from "@/lib/types";
+import type { FinanceEntry } from "@/lib/types";
 
 const COMPANY = {
   name: "Công ty TNHH Funti Kidbooks",
@@ -48,26 +48,18 @@ function ChangeBadge({ pct, goodWhenUp = true }: { pct: number | null; goodWhenU
   );
 }
 
-function formatDateVn(iso: string) {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("vi-VN");
-}
-
 export function FinancialReportView({
   initialMonth,
   initialEntries,
   initialSalaryTotal,
   initialPrevEntries,
   initialPrevSalaryTotal,
-  debts,
-  homeLoanInstallments,
 }: {
   initialMonth: string;
   initialEntries: FinanceEntry[];
   initialSalaryTotal: number;
   initialPrevEntries: FinanceEntry[];
   initialPrevSalaryTotal: number;
-  debts: PersonalDebt[];
-  homeLoanInstallments: HomeLoanInstallment[];
 }) {
   const [periodType, setPeriodType] = useState<PeriodType>("month");
   const [monthStart, setMonthStart] = useState(initialMonth);
@@ -138,11 +130,6 @@ export function FinancialReportView({
   const periodLabel = periodType === "month" ? `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}` : `Năm ${year}`;
   const prevPeriodLabel = periodType === "month" ? "Tháng trước" : "Năm trước";
   const today = new Date().toLocaleDateString("vi-VN");
-
-  const homeLoanPaid = homeLoanInstallments.filter((i) => i.is_paid);
-  const homeLoanTotal = homeLoanInstallments[0]?.opening_balance ?? 0;
-  const homeLoanRemaining = homeLoanPaid.length > 0 ? homeLoanPaid[homeLoanPaid.length - 1].closing_balance : homeLoanTotal;
-  const homeLoanNext = homeLoanInstallments.find((i) => !i.is_paid);
 
   const ROWS: { label: string; get: (s: typeof summary) => number; goodWhenUp: boolean; bold?: boolean; ratio?: (s: typeof summary) => number }[] = [
     { label: "Doanh thu", get: (s) => s.revenue, goodWhenUp: true },
@@ -323,58 +310,6 @@ export function FinancialReportView({
               </tbody>
             </table>
           )}
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-bold tracking-[0.08em]" style={{ color: "#6b6560" }}>
-            IV. TÌNH HÌNH CÔNG NỢ CÁ NHÂN
-          </h2>
-          <p className="text-xs" style={{ color: "#9a938a" }}>
-            Tại thời điểm lập báo cáo — không thuộc P&L kinh doanh ở trên.
-          </p>
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ borderBottom: "1.5px solid #141211" }}>
-                <th className="text-left py-2">Khoản nợ</th>
-                <th className="text-right py-2">Tổng nợ</th>
-                <th className="text-right py-2">Còn nợ</th>
-                <th className="text-right py-2">Đã trả</th>
-              </tr>
-            </thead>
-            <tbody>
-              {debts.map((debt) => {
-                const hasData = debt.total_amount !== null && debt.total_amount > 0;
-                const total = debt.total_amount ?? 0;
-                const remaining = debt.remaining_amount ?? 0;
-                const pct = hasData ? Math.round(((total - remaining) / total) * 100) : null;
-                return (
-                  <tr key={debt.id} style={{ borderBottom: "1px solid #e5e0d8" }}>
-                    <td className="py-2">{debt.label}</td>
-                    <td className="py-2 text-right">{hasData ? formatVnd(total) : "—"}</td>
-                    <td className="py-2 text-right">{hasData ? formatVnd(remaining) : "—"}</td>
-                    <td className="py-2 text-right">{pct === null ? "Chưa nhập số liệu" : `${pct}%`}</td>
-                  </tr>
-                );
-              })}
-              {homeLoanInstallments.length > 0 && (
-                <tr style={{ borderBottom: "1px solid #e5e0d8" }}>
-                  <td className="py-2">
-                    Nợ mua nhà
-                    {homeLoanNext && (
-                      <div className="text-xs" style={{ color: "#9a938a" }}>
-                        Kỳ tiếp theo: {homeLoanNext.period_number} · {formatDateVn(homeLoanNext.due_date)}
-                      </div>
-                    )}
-                  </td>
-                  <td className="py-2 text-right">{formatVnd(homeLoanTotal)}</td>
-                  <td className="py-2 text-right">{formatVnd(homeLoanRemaining)}</td>
-                  <td className="py-2 text-right">
-                    {homeLoanPaid.length}/{homeLoanInstallments.length} kỳ
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
         </section>
       </div>
     </div>

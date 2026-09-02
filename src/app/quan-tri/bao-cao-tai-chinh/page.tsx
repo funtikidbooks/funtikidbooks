@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import {
-  getMonthlySalaryTotal,
-  listFinanceEntries,
-  listHomeLoanInstallments,
-  listPersonalDebts,
-} from "@/lib/actions/finance";
+import { getMonthlySalaryTotal, listFinanceEntries } from "@/lib/actions/finance";
 import { addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import { FinancialReportView } from "@/components/admin/FinancialReportView";
 
@@ -26,13 +21,11 @@ export default async function AdminFinancialReportPage() {
   const monthStart = firstOfMonth(vnToday());
   const prevMonthStart = addMonths(monthStart, -1);
 
-  const [entries, salaryTotal, prevEntries, prevSalaryTotal, debts, homeLoanInstallments] = await Promise.all([
+  const [entries, salaryTotal, prevEntries, prevSalaryTotal] = await Promise.all([
     listFinanceEntries(monthStart),
     getMonthlySalaryTotal(monthStart),
     listFinanceEntries(prevMonthStart),
     getMonthlySalaryTotal(prevMonthStart),
-    listPersonalDebts(),
-    listHomeLoanInstallments(),
   ]);
 
   return (
@@ -42,8 +35,6 @@ export default async function AdminFinancialReportPage() {
       initialSalaryTotal={salaryTotal}
       initialPrevEntries={prevEntries}
       initialPrevSalaryTotal={prevSalaryTotal}
-      debts={debts}
-      homeLoanInstallments={homeLoanInstallments}
     />
   );
 }
