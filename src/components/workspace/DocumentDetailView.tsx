@@ -123,6 +123,15 @@ export function DocumentDetailView({
         signatureImageUrl={document.signature_image_url}
       />
 
+      {document.status === "signed" && document.signed_at && (
+        <div
+          className="no-print flex items-center gap-1.5 text-sm font-bold w-full max-w-[700px] mt-4"
+          style={{ color: "var(--status-green)" }}
+        >
+          ✓ Đã xác nhận lúc {new Date(document.signed_at).toLocaleString("vi-VN")}
+        </div>
+      )}
+
       {document.status === "voided" ? (
         <div className="no-print text-sm text-center py-4" style={{ color: "var(--status-red)" }}>
           Văn bản này đã bị huỷ.
