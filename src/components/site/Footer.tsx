@@ -54,36 +54,6 @@ export function Footer({ locale }: { locale: Locale }) {
           <p className="text-sm max-w-[320px]" style={{ color: "#c8c7c1" }}>
             {t.footer.tagline}
           </p>
-          <div className="flex flex-col gap-2.5 mt-1">
-            {[
-              { label: "Facebook", icon: "f", href: "https://facebook.com/Funtikidbooks" },
-              { label: "Instagram", icon: "◎", href: "https://instagram.com/funtikidbooks" },
-              { label: "Behance", icon: "Be", href: "https://www.behance.net/funtikidbooks" },
-              { label: "Upwork", icon: "Uw", href: "https://www.upwork.com/freelancers/yunachan" },
-              { label: "Email", icon: "✉", href: "mailto:funtikidbooks.studio@gmail.com" },
-            ].map((s) => {
-              const isMail = s.href.startsWith("mailto:");
-              return (
-                <a
-                  key={s.label}
-                  href={s.href}
-                  target={isMail ? undefined : "_blank"}
-                  rel={isMail ? undefined : "noreferrer"}
-                  className="flex items-center gap-2.5 text-sm font-semibold"
-                  style={{ color: "#c8c7c1" }}
-                >
-                  <span
-                    aria-hidden
-                    className="flex items-center justify-center rounded-full font-bold flex-none"
-                    style={{ width: 28, height: 28, border: "1.5px solid #57564f", color: "#ff9f6e", fontSize: s.icon.length > 1 ? 10 : 13 }}
-                  >
-                    {s.icon}
-                  </span>
-                  {s.label}
-                </a>
-              );
-            })}
-          </div>
         </div>
 
         {COLUMNS.map((col) => (
@@ -116,6 +86,43 @@ export function Footer({ locale }: { locale: Locale }) {
           </Link>
         </div>
       </div>
+
+      {/* Its own full-width row rather than living inside the logo/tagline
+          grid column above — that column is only ~1.3/5.3 of the
+          container (~180px at most viewport widths), nowhere near enough
+          for 5 icon+label pairs to lay out in a line instead of wrapping
+          one per row regardless of flex-direction. */}
+      <div className="site-container pb-8 flex flex-wrap gap-x-5 gap-y-2 border-t pt-6" style={{ borderColor: "#3a3934" }}>
+        {[
+          { label: "Facebook", icon: "f", href: "https://facebook.com/Funtikidbooks" },
+          { label: "Instagram", icon: "◎", href: "https://instagram.com/funtikidbooks" },
+          { label: "Behance", icon: "Be", href: "https://www.behance.net/funtikidbooks" },
+          { label: "Upwork", icon: "Uw", href: "https://www.upwork.com/freelancers/yunachan" },
+          { label: "Email", icon: "✉", href: "mailto:funtikidbooks.studio@gmail.com" },
+        ].map((s) => {
+          const isMail = s.href.startsWith("mailto:");
+          return (
+            <a
+              key={s.label}
+              href={s.href}
+              target={isMail ? undefined : "_blank"}
+              rel={isMail ? undefined : "noreferrer"}
+              className="flex items-center gap-2.5 text-sm font-semibold"
+              style={{ color: "#c8c7c1" }}
+            >
+              <span
+                aria-hidden
+                className="flex items-center justify-center rounded-full font-bold flex-none"
+                style={{ width: 28, height: 28, border: "1.5px solid #57564f", color: "#ff9f6e", fontSize: s.icon.length > 1 ? 10 : 13 }}
+              >
+                {s.icon}
+              </span>
+              {s.label}
+            </a>
+          );
+        })}
+      </div>
+
       <div
         className="site-container py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-xs border-t"
         style={{ borderColor: "#3a3934", color: "#a3a29a" }}
