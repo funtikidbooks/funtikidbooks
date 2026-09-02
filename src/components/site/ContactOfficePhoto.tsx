@@ -23,6 +23,7 @@ export function ContactOfficePhoto({ src, canEdit }: { src: string | null; canEd
       dropzoneHint="or browse files"
       className="w-full"
       style={{ height: 180 }}
+      resizeWidth={700}
     />
   );
 }

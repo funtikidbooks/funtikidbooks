@@ -3,7 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { isSupabaseStorageUrl } from "@/lib/imageTransform";
+import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 import type { Review } from "@/lib/types";
 
 const ReviewEditDialog = dynamic(() => import("@/components/admin/ReviewEditDialog").then((m) => m.ReviewEditDialog), {
@@ -53,7 +53,7 @@ export function ReviewsAdmin({ initialReviews }: { initialReviews: Review[] }) {
                 <div className="flex items-center gap-3">
                   {r.avatar_url ? (
                     <Image
-                      src={r.avatar_url}
+                      src={isSupabaseStorageUrl(r.avatar_url) ? (resizedUrl(r.avatar_url, 120) ?? r.avatar_url) : r.avatar_url}
                       alt={r.customer_name}
                       width={40}
                       height={40}

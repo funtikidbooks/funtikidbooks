@@ -25,8 +25,24 @@ export function thumbnailUrl(url: string | null | undefined, width: number, heig
 // image next/image hasn't already cached starts 404ing with
 // OPTIMIZED_IMAGE_REQUEST_PAYMENT_REQUIRED (a real incident, not a typo:
 // checked the response header directly). Pass this as `unoptimized` on
-// any <Image> whose src is one of these Supabase Storage uploads, so it's
-// served as-is — heavier than a resized/WebP version, but never blocked.
+// any <Image> whose src is one of these Supabase Storage uploads — paired
+// with resizedUrl() below so Supabase's own (already-paid-for) transform
+// does the actual resizing/compression instead, and Vercel never sees a
+// distinct-enough image to bill for.
 export function isSupabaseStorageUrl(url: string | null | undefined): boolean {
   return !!url && url.includes(PUBLIC_OBJECT_MARKER);
+}
+
+// General-purpose sibling of thumbnailUrl() for non-square content — a
+// project cover, hero slide, or news photo, where forcing a fixed
+// height (thumbnailUrl's `resize=cover`) would crop it. Only `width` is
+// sent, so Supabase scales proportionally and the browser's own
+// object-fit handles cropping to whatever the layout actually needs.
+export function resizedUrl(url: string | null | undefined, width: number, quality = 75): string | undefined {
+  if (!url) return url ?? undefined;
+  const idx = url.indexOf(PUBLIC_OBJECT_MARKER);
+  if (idx === -1) return url;
+  const base = url.slice(0, idx);
+  const path = url.slice(idx + PUBLIC_OBJECT_MARKER.length);
+  return `${base}/storage/v1/render/image/public/${path}?width=${width}&resize=contain&quality=${quality}`;
 }

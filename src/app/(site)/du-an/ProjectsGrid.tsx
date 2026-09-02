@@ -10,7 +10,7 @@ import { ProjectLightbox } from "@/components/site/ProjectLightbox";
 import { Reveal } from "@/components/site/Reveal";
 import { categoryLabel } from "@/lib/dictionary";
 import { pickLocalized } from "@/lib/i18n";
-import { isSupabaseStorageUrl } from "@/lib/imageTransform";
+import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 import { setProjectLike, trackProjectView } from "@/lib/actions/projects";
 import type { Project } from "@/lib/types";
 
@@ -219,7 +219,7 @@ export function ProjectsGrid({
               >
                 {p.cover_image_url ? (
                   <Image
-                    src={p.cover_image_url}
+                    src={isSupabaseStorageUrl(p.cover_image_url) ? (resizedUrl(p.cover_image_url, 700) ?? p.cover_image_url) : p.cover_image_url}
                     alt={p.title}
                     fill
                     unoptimized={isSupabaseStorageUrl(p.cover_image_url)}

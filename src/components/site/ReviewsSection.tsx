@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import type { Review } from "@/lib/types";
 import { useDict } from "@/components/site/LocaleProvider";
-import { isSupabaseStorageUrl } from "@/lib/imageTransform";
+import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 
 // Code-split: only director/admin ever open this dialog — regular visitors
 // shouldn't pay for it in their initial page load.
@@ -58,7 +58,7 @@ export function ReviewsSection({ reviews, canEdit = false }: { reviews: Review[]
               <div className="flex items-center gap-3">
                 {r.avatar_url ? (
                   <Image
-                    src={r.avatar_url}
+                    src={isSupabaseStorageUrl(r.avatar_url) ? (resizedUrl(r.avatar_url, 120) ?? r.avatar_url) : r.avatar_url}
                     alt={r.customer_name}
                     width={44}
                     height={44}

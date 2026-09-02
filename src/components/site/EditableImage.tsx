@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ImagePlaceholder } from "./ImagePlaceholder";
-import { isSupabaseStorageUrl } from "@/lib/imageTransform";
+import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 
 export type ImageTransform = { zoom: number; posX: number; posY: number };
 export const DEFAULT_IMAGE_TRANSFORM: ImageTransform = { zoom: 100, posX: 50, posY: 50 };
@@ -24,6 +24,7 @@ export function EditableImage({
   className = "",
   style,
   sizes,
+  resizeWidth = 1000,
   circle = false,
   placeholderVariant = "emoji",
   dropzoneLabel = "Ảnh",
@@ -39,6 +40,11 @@ export function EditableImage({
   className?: string;
   style?: React.CSSProperties;
   sizes?: string;
+  // Max width (px) to ask Supabase's transform API for — pass the actual
+  // largest size this slot ever renders at (a bit over for retina) so the
+  // director's original multi-MB upload doesn't ship untouched to a
+  // 116px avatar. No-ops for a non-Supabase src (a local blob: preview).
+  resizeWidth?: number;
   // Round the image itself into a circle (e.g. a team member avatar) — the
   // edit button stays outside the clip so it isn't cut off at the corners.
   circle?: boolean;
@@ -157,7 +163,7 @@ export function EditableImage({
           onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
         >
           <Image
-            src={shown}
+            src={isSupabaseStorageUrl(shown) ? (resizedUrl(shown, resizeWidth) ?? shown) : shown}
             alt={alt}
             fill
             unoptimized={isSupabaseStorageUrl(shown)}

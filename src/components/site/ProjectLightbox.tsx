@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useDict } from "@/components/site/LocaleProvider";
 import { categoryLabel } from "@/lib/dictionary";
 import { pickLocalized } from "@/lib/i18n";
-import { isSupabaseStorageUrl } from "@/lib/imageTransform";
+import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 import type { Project } from "@/lib/types";
 
 export function ProjectLightbox({
@@ -76,7 +76,11 @@ export function ProjectLightbox({
           {project.cover_image_url && (
             <div className="relative w-full rounded-[var(--radius-md)] overflow-hidden">
               <Image
-                src={project.cover_image_url}
+                src={
+                  isSupabaseStorageUrl(project.cover_image_url)
+                    ? (resizedUrl(project.cover_image_url, 1400) ?? project.cover_image_url)
+                    : project.cover_image_url
+                }
                 alt={title}
                 width={1400}
                 height={974}

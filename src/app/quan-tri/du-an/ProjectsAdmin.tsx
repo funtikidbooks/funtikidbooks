@@ -3,7 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { isSupabaseStorageUrl } from "@/lib/imageTransform";
+import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 import type { Project } from "@/lib/types";
 
 const ProjectEditDialog = dynamic(() => import("@/components/admin/ProjectEditDialog").then((m) => m.ProjectEditDialog), {
@@ -38,7 +38,7 @@ export function ProjectsAdmin({ initialProjects }: { initialProjects: Project[] 
               >
                 {p.cover_image_url ? (
                   <Image
-                    src={p.cover_image_url}
+                    src={isSupabaseStorageUrl(p.cover_image_url) ? (resizedUrl(p.cover_image_url, 450) ?? p.cover_image_url) : p.cover_image_url}
                     alt={p.title}
                     fill
                     unoptimized={isSupabaseStorageUrl(p.cover_image_url)}

@@ -143,6 +143,7 @@ export function AboutTeam({ members, canEdit }: { members: TeamMember[]; canEdit
                   placeholderVariant="dropzone"
                   dropzoneLabel={t.about.photoLabel}
                   dropzoneHint={t.about.photoBrowse}
+                  resizeWidth={350}
                   style={{ width: size, height: size }}
                   transform={member.photoTransform ?? DEFAULT_IMAGE_TRANSFORM}
                   onTransformChange={(next) => patchMember(member.id, { photoTransform: next })}

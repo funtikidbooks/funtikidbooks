@@ -63,6 +63,7 @@ export function NewsArticleView({ initialPost, canEdit }: { initialPost: NewsPos
         }}
         className="w-full mb-8"
         style={{ height: 340 }}
+        resizeWidth={900}
       />
 
       {excerpt && (

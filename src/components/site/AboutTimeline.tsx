@@ -70,6 +70,7 @@ export function AboutTimeline({ items, canEdit }: { items: TimelineItem[]; canEd
                     onUpload={(file) => handleUploadImage(item.id, file)}
                     className="w-full"
                     style={{ aspectRatio: "4 / 3" }}
+                    resizeWidth={700}
                   />
                 </div>
 

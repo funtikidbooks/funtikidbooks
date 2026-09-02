@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Image from "next/image";
 import { ImageCropper } from "@/components/admin/ImageCropper";
-import { isSupabaseStorageUrl } from "@/lib/imageTransform";
+import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 
 export function CoverDropzone({
   preview,
@@ -62,7 +62,14 @@ export function CoverDropzone({
       >
         {preview ? (
           <>
-            <Image src={preview} alt="" fill unoptimized={isSupabaseStorageUrl(preview)} className="object-cover" sizes="640px" />
+            <Image
+              src={isSupabaseStorageUrl(preview) ? (resizedUrl(preview, 700) ?? preview) : preview}
+              alt=""
+              fill
+              unoptimized={isSupabaseStorageUrl(preview)}
+              className="object-cover"
+              sizes="640px"
+            />
             <div
               className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-0 hover:opacity-100 transition-opacity text-white text-sm font-bold"
               style={{ background: "rgba(20,18,17,.55)" }}

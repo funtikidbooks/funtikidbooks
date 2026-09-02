@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { createEditorProject, deleteEditorProject } from "@/lib/actions/editor";
-import { isSupabaseStorageUrl } from "@/lib/imageTransform";
+import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 import type { EditorProject } from "@/lib/types";
 
 type ProjectSummary = Pick<EditorProject, "id" | "name" | "background_url" | "background_width" | "background_height" | "updated_at">;
@@ -175,7 +175,7 @@ export function EditorProjectList({ initialProjects }: { initialProjects: Projec
                 >
                   {p.background_url && (
                     <Image
-                      src={p.background_url}
+                      src={isSupabaseStorageUrl(p.background_url) ? (resizedUrl(p.background_url, 450) ?? p.background_url) : p.background_url}
                       alt={p.name}
                       fill
                       unoptimized={isSupabaseStorageUrl(p.background_url)}

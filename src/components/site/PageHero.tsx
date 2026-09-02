@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ImagePlaceholder } from "./ImagePlaceholder";
 import { EditableImage, DEFAULT_IMAGE_TRANSFORM, type ImageTransform } from "./EditableImage";
 import { saveJsonSetting, setSiteImage } from "@/lib/actions/admin";
-import { isSupabaseStorageUrl } from "@/lib/imageTransform";
+import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 
 export function PageHero({
   kicker,
@@ -91,12 +91,20 @@ export function PageHero({
           onUpload={(file) => setSiteImage(heroKey, file, revalidatePaths)}
           className="flex-1 w-full"
           style={{ minHeight: 280 }}
+          resizeWidth={1400}
           transform={imageTransform ?? DEFAULT_IMAGE_TRANSFORM}
           onTransformChange={transformKey ? (t) => saveJsonSetting(transformKey, t, revalidatePaths) : undefined}
         />
       ) : imageSrc ? (
         <div className="flex-1 w-full relative rounded-[var(--radius-lg)] overflow-hidden" style={{ minHeight: 280 }}>
-          <Image src={imageSrc} alt="" fill unoptimized={isSupabaseStorageUrl(imageSrc)} className="object-cover" priority />
+          <Image
+            src={isSupabaseStorageUrl(imageSrc) ? (resizedUrl(imageSrc, 1400) ?? imageSrc) : imageSrc}
+            alt=""
+            fill
+            unoptimized={isSupabaseStorageUrl(imageSrc)}
+            className="object-cover"
+            priority
+          />
         </div>
       ) : (
         <ImagePlaceholder emoji={emoji} className="flex-1 w-full" style={{ minHeight: 280 }} />
