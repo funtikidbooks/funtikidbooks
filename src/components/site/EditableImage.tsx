@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { ImagePlaceholder } from "./ImagePlaceholder";
+import { isSupabaseStorageUrl } from "@/lib/imageTransform";
 
 export type ImageTransform = { zoom: number; posX: number; posY: number };
 export const DEFAULT_IMAGE_TRANSFORM: ImageTransform = { zoom: 100, posX: 50, posY: 50 };
@@ -159,6 +160,7 @@ export function EditableImage({
             src={shown}
             alt={alt}
             fill
+            unoptimized={isSupabaseStorageUrl(shown)}
             className="object-cover"
             sizes={sizes}
             style={

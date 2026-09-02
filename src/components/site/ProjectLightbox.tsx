@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useDict } from "@/components/site/LocaleProvider";
 import { categoryLabel } from "@/lib/dictionary";
 import { pickLocalized } from "@/lib/i18n";
+import { isSupabaseStorageUrl } from "@/lib/imageTransform";
 import type { Project } from "@/lib/types";
 
 export function ProjectLightbox({
@@ -74,7 +75,14 @@ export function ProjectLightbox({
         <div className="max-w-[1400px] mx-auto flex flex-col gap-3 px-4 sm:px-10 py-8">
           {project.cover_image_url && (
             <div className="relative w-full rounded-[var(--radius-md)] overflow-hidden">
-              <Image src={project.cover_image_url} alt={title} width={1400} height={974} className="w-full h-auto" />
+              <Image
+                src={project.cover_image_url}
+                alt={title}
+                width={1400}
+                height={974}
+                unoptimized={isSupabaseStorageUrl(project.cover_image_url)}
+                className="w-full h-auto"
+              />
             </div>
           )}
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useDict } from "@/components/site/LocaleProvider";
 import { categoryLabel } from "@/lib/dictionary";
 import { pickLocalized } from "@/lib/i18n";
+import { isSupabaseStorageUrl } from "@/lib/imageTransform";
 import type { Project } from "@/lib/types";
 
 const ROTATE_MS = 5500;
@@ -69,7 +70,14 @@ export function ProjectCarousel({ projects }: { projects: Project[] }) {
           const card = (
             <>
               {p.cover_image_url ? (
-                <Image src={p.cover_image_url} alt={p.title} fill className="object-cover" sizes={`${CARD_WIDTH}px`} />
+                <Image
+                  src={p.cover_image_url}
+                  alt={p.title}
+                  fill
+                  unoptimized={isSupabaseStorageUrl(p.cover_image_url)}
+                  className="object-cover"
+                  sizes={`${CARD_WIDTH}px`}
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-2xl" style={{ background: "var(--color-surface)" }}>
                   🖼

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
+import { isSupabaseStorageUrl } from "@/lib/imageTransform";
 import type { Project } from "@/lib/types";
 
 const ProjectEditDialog = dynamic(() => import("@/components/admin/ProjectEditDialog").then((m) => m.ProjectEditDialog), {
@@ -36,7 +37,14 @@ export function ProjectsAdmin({ initialProjects }: { initialProjects: Project[] 
                 style={{ height: 200, opacity: p.published ? 1 : 0.5 }}
               >
                 {p.cover_image_url ? (
-                  <Image src={p.cover_image_url} alt={p.title} fill className="object-cover" sizes="360px" />
+                  <Image
+                    src={p.cover_image_url}
+                    alt={p.title}
+                    fill
+                    unoptimized={isSupabaseStorageUrl(p.cover_image_url)}
+                    className="object-cover"
+                    sizes="360px"
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center" style={{ background: "var(--color-surface)" }}>
                     🖼

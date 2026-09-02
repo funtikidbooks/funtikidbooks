@@ -10,6 +10,7 @@ import { ProjectLightbox } from "@/components/site/ProjectLightbox";
 import { Reveal } from "@/components/site/Reveal";
 import { categoryLabel } from "@/lib/dictionary";
 import { pickLocalized } from "@/lib/i18n";
+import { isSupabaseStorageUrl } from "@/lib/imageTransform";
 import { setProjectLike, trackProjectView } from "@/lib/actions/projects";
 import type { Project } from "@/lib/types";
 
@@ -221,6 +222,7 @@ export function ProjectsGrid({
                     src={p.cover_image_url}
                     alt={p.title}
                     fill
+                    unoptimized={isSupabaseStorageUrl(p.cover_image_url)}
                     className="object-cover transition-transform duration-300 group-hover:scale-105"
                     sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
                   />

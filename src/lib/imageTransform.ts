@@ -17,3 +17,16 @@ export function thumbnailUrl(url: string | null | undefined, width: number, heig
   const path = url.slice(idx + PUBLIC_OBJECT_MARKER.length);
   return `${base}/storage/v1/render/image/public/${path}?width=${width}&height=${height}&resize=cover&quality=70`;
 }
+
+// next/image's own optimizer (Vercel's Image Optimization API) bills by
+// distinct source image, separately from everything above — a growing
+// library of director-uploaded project covers, news photos, hero slides
+// etc. eventually exceeds the plan's monthly quota, at which point any
+// image next/image hasn't already cached starts 404ing with
+// OPTIMIZED_IMAGE_REQUEST_PAYMENT_REQUIRED (a real incident, not a typo:
+// checked the response header directly). Pass this as `unoptimized` on
+// any <Image> whose src is one of these Supabase Storage uploads, so it's
+// served as-is — heavier than a resized/WebP version, but never blocked.
+export function isSupabaseStorageUrl(url: string | null | undefined): boolean {
+  return !!url && url.includes(PUBLIC_OBJECT_MARKER);
+}

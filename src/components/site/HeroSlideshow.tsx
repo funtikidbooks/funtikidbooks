@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
 import { addHeroSlide, removeHeroSlide, saveJsonSetting } from "@/lib/actions/admin";
 import { DEFAULT_IMAGE_TRANSFORM, type ImageTransform } from "@/components/site/EditableImage";
+import { isSupabaseStorageUrl } from "@/lib/imageTransform";
 
 const ROTATE_MS = 6000;
 
@@ -142,6 +143,7 @@ export function HeroSlideshow({
                   alt="Funti Kidbooks Studio"
                   fill
                   priority={i === 0}
+                  unoptimized={isSupabaseStorageUrl(src)}
                   className="object-cover"
                   style={{ transform: `scale(${t.zoom / 100})`, objectPosition: `${t.posX}% ${t.posY}%`, pointerEvents: "none" }}
                 />
@@ -288,7 +290,7 @@ function HeroSlideManager({
         <div className="grid grid-cols-3 gap-2">
           {slides.map((url) => (
             <div key={url} className="relative group rounded-[8px] overflow-hidden" style={{ aspectRatio: "16 / 10" }}>
-              <Image src={url} alt="" fill className="object-cover" sizes="180px" />
+              <Image src={url} alt="" fill unoptimized={isSupabaseStorageUrl(url)} className="object-cover" sizes="180px" />
               <button
                 type="button"
                 onClick={() => handleRemove(url)}

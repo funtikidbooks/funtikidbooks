@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { createEditorProject, deleteEditorProject } from "@/lib/actions/editor";
+import { isSupabaseStorageUrl } from "@/lib/imageTransform";
 import type { EditorProject } from "@/lib/types";
 
 type ProjectSummary = Pick<EditorProject, "id" | "name" | "background_url" | "background_width" | "background_height" | "updated_at">;
@@ -173,7 +174,14 @@ export function EditorProjectList({ initialProjects }: { initialProjects: Projec
                   style={{ background: "var(--color-surface)" }}
                 >
                   {p.background_url && (
-                    <Image src={p.background_url} alt={p.name} fill className="object-contain" sizes="360px" />
+                    <Image
+                      src={p.background_url}
+                      alt={p.name}
+                      fill
+                      unoptimized={isSupabaseStorageUrl(p.background_url)}
+                      className="object-contain"
+                      sizes="360px"
+                    />
                   )}
                 </button>
                 <div className="flex items-center justify-between gap-2 p-3">
