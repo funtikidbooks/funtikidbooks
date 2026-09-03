@@ -6,11 +6,19 @@ import type { BoardLabel, TaskWithAssignee } from "@/lib/types";
 import { computeTaskProgress, taskProgressColor } from "@/lib/taskProgress";
 import { thumbnailUrl } from "@/lib/imageTransform";
 
+// dueDate is a plain calendar date with no time-of-day meaning — parsed
+// and read/formatted both as UTC (paired "Z" + timeZone: "UTC") below so
+// the round-trip stays consistent regardless of the runtime's own local
+// timezone. Without that pairing, the server (UTC) and a browser in
+// Vietnam (UTC+7) could parse "end of day" as two different absolute
+// instants — a real hydration mismatch on the board's default page, since
+// it can flip which color dueDateTone below renders. See MeetingHub.tsx's
+// own comment on this same root cause elsewhere in the app.
 function formatDueDate(dueDate: string | null) {
   if (!dueDate) return null;
-  const d = new Date(dueDate + "T00:00:00");
+  const d = new Date(dueDate + "T00:00:00Z");
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+  return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
 }
 
 // Trello-style due-date badge: red once overdue, orange within the next 24h,
@@ -18,7 +26,7 @@ function formatDueDate(dueDate: string | null) {
 function dueDateTone(dueDate: string | null, isDone: boolean): { bg: string; fg: string } {
   if (isDone) return { bg: "var(--color-accent-100)", fg: "var(--status-green)" };
   if (!dueDate) return { bg: "var(--color-neutral-100)", fg: "var(--color-neutral-600)" };
-  const due = new Date(dueDate + "T23:59:59").getTime();
+  const due = new Date(dueDate + "T23:59:59Z").getTime();
   const now = Date.now();
   if (due < now) return { bg: "var(--badge-red-bg)", fg: "var(--badge-red-fg)" };
   if (due - now < 24 * 60 * 60 * 1000) return { bg: "var(--badge-orange-bg)", fg: "var(--badge-orange-fg)" };

@@ -126,10 +126,15 @@ export function FinancialReportView({
   const breakdown = useMemo(() => costBreakdown(entries), [entries]);
   const totalCosts = breakdown.reduce((s, c) => s + c.amount, 0);
 
-  const d = new Date(`${monthStart}T00:00:00`);
-  const periodLabel = periodType === "month" ? `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}` : `Năm ${year}`;
+  // monthStart is a plain calendar month key with no time-of-day meaning —
+  // parsed and read back both as UTC so the round-trip stays consistent
+  // regardless of the runtime's own local timezone; "today" gets an
+  // explicit timeZone for the same reason. See MeetingHub.tsx's own
+  // comment on this same root cause elsewhere in the app.
+  const d = new Date(`${monthStart}T00:00:00Z`);
+  const periodLabel = periodType === "month" ? `${MONTH_LABELS[d.getUTCMonth()]} ${d.getUTCFullYear()}` : `Năm ${year}`;
   const prevPeriodLabel = periodType === "month" ? "Tháng trước" : "Năm trước";
-  const today = new Date().toLocaleDateString("vi-VN");
+  const today = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 
   const ROWS: { label: string; get: (s: typeof summary) => number; goodWhenUp: boolean; bold?: boolean; ratio?: (s: typeof summary) => number }[] = [
     { label: "Doanh thu", get: (s) => s.revenue, goodWhenUp: true },

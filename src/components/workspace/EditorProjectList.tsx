@@ -10,8 +10,18 @@ import type { EditorProject } from "@/lib/types";
 
 type ProjectSummary = Pick<EditorProject, "id" | "name" | "background_url" | "background_width" | "background_height" | "updated_at">;
 
+// Explicit timeZone — without it this reads the server's own timezone
+// (UTC on Vercel) instead of Vietnam's, a real hydration-mismatch source;
+// see MeetingHub.tsx's own comment on the same fix.
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
 }
 
 function NewProjectDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (p: EditorProject) => void }) {

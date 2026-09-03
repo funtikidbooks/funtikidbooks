@@ -206,7 +206,7 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
 
               {confirmation ? (
                 <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: "var(--status-green)" }}>
-                  ✓ Đã xác nhận lúc {new Date(confirmation.confirmed_at).toLocaleString("vi-VN")}
+                  ✓ Đã xác nhận lúc {new Date(confirmation.confirmed_at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
                 </div>
               ) : (
                 <button type="button" onClick={handleConfirm} className="btn btn-secondary btn-sm w-fit" disabled={confirming}>
@@ -223,7 +223,7 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
                     {feedback.map((f) => (
                       <div key={f.id} className="text-xs p-2 rounded-[8px]" style={{ background: "var(--color-surface)" }}>
                         <p className="whitespace-pre-wrap">{f.message}</p>
-                        <span style={{ color: "var(--color-neutral-400)" }}>{new Date(f.created_at).toLocaleString("vi-VN")}</span>
+                        <span style={{ color: "var(--color-neutral-400)" }}>{new Date(f.created_at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}</span>
                       </div>
                     ))}
                   </div>

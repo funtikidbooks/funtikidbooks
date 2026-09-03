@@ -18,11 +18,16 @@ function formatVnd(n: number) {
 }
 
 export function PayrollPrintView({ record, profile }: { record: PayrollRecord; profile: Profile }) {
-  const d = new Date(`${record.month}T00:00:00`);
-  const monthLabel = `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+  // record.month is a plain calendar date with no time-of-day meaning —
+  // parsed and read back both as UTC so the round-trip stays consistent
+  // regardless of the runtime's own local timezone; "today" gets an
+  // explicit timeZone for the same reason. See MeetingHub.tsx's own
+  // comment on this same root cause elsewhere in the app.
+  const d = new Date(`${record.month}T00:00:00Z`);
+  const monthLabel = `${MONTH_LABELS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
   const itemsTotal = record.items.reduce((sum, it) => sum + it.amount, 0);
   const total = record.base_salary + itemsTotal;
-  const today = new Date().toLocaleDateString("vi-VN");
+  const today = new Date().toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 
   return (
     <div className="flex-1 flex flex-col items-center py-8 px-4" style={{ background: "var(--color-surface)" }}>

@@ -29,8 +29,12 @@ function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
 }
 
+// issue_date is a plain calendar date with no time-of-day meaning —
+// parsed and read back both as UTC so the round-trip stays consistent
+// regardless of the runtime's own local timezone. See MeetingHub.tsx's
+// own comment on this same root cause elsewhere in the app.
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("vi-VN");
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("vi-VN", { timeZone: "UTC" });
 }
 
 function invoiceTotal(inv: Pick<Invoice, "items" | "tax_rate">) {

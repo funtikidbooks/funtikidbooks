@@ -29,8 +29,11 @@ function statusTag(status: StaffDocument["status"]) {
   return { label: "Chờ ký", className: "tag-accent" };
 }
 
+// Explicit timeZone — without it this reads the server's own timezone
+// (UTC on Vercel) instead of Vietnam's, a real hydration-mismatch source;
+// see MeetingHub.tsx's own comment on the same fix.
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("vi-VN");
+  return new Date(iso).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 }
 
 function NewDraftStarter({ profiles, onCreated, onCancel }: { profiles: Profile[]; onCreated: (id: string) => void; onCancel: () => void }) {

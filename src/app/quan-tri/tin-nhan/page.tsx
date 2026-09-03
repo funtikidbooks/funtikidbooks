@@ -4,8 +4,19 @@ import type { ContactMessage } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Quản trị — Tin nhắn khách hàng" };
 
+// Explicit timeZone — a server component, so this can't cause a hydration
+// mismatch, but without it the displayed time is the server's own (UTC on
+// Vercel) rather than Vietnam's, and — unlike a client component — nothing
+// ever corrects it afterward.
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
 }
 
 export default async function AdminMessagesPage() {

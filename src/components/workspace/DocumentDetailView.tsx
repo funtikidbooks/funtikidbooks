@@ -131,7 +131,7 @@ export function DocumentDetailView({
           className="no-print flex items-center gap-1.5 text-sm font-bold w-full max-w-[700px] mt-4"
           style={{ color: "var(--status-green)" }}
         >
-          ✓ Đã xác nhận lúc {new Date(document.signed_at).toLocaleString("vi-VN")}
+          ✓ Đã xác nhận lúc {new Date(document.signed_at).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
         </div>
       )}
 

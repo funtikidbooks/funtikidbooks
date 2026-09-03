@@ -10,8 +10,17 @@ import {
 } from "@/lib/actions/support-chat";
 import type { VisitorConversation, VisitorMessage } from "@/lib/types";
 
+// Explicit timeZone — without it this reads the server's own timezone
+// (UTC on Vercel) instead of Vietnam's, a real hydration-mismatch source;
+// see MeetingHub.tsx's own comment on the same fix.
 function formatTime(iso: string) {
-  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Ho_Chi_Minh",
+  }).format(new Date(iso));
 }
 
 function labelFor(c: VisitorConversation) {

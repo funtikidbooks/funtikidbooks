@@ -72,8 +72,15 @@ function DebtCard({ debt, onEdit }: { debt: PersonalDebt; onEdit: () => void }) 
   );
 }
 
+// iso is a plain calendar date with no time-of-day meaning — parsed and
+// formatted both as UTC (paired "Z" + timeZone: "UTC") so the round-trip
+// stays consistent regardless of the runtime's own local timezone, instead
+// of ambiguously local-parsing then local-formatting. That mismatch
+// between the server (UTC) and a browser in Vietnam (UTC+7) is what caused
+// a real, reproducible hydration error here — see MeetingHub.tsx's own
+// comment on the same root cause elsewhere in the app.
 function formatDateVn(iso: string) {
-  return new Date(`${iso}T00:00:00`).toLocaleDateString("vi-VN");
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("vi-VN", { timeZone: "UTC" });
 }
 
 // The full amortization schedule as an energy-bar summary (same idea as
