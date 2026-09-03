@@ -1485,6 +1485,28 @@ export function MeetingHub({
     const id = activeId;
     if (!id || id === DM_TAB_ID) return;
     const generation = ++resyncGenerationRef.current;
+    // Whether *this exact room* already has real data sitting in `messages`
+    // — not just whether this is the room resync() last ran for. Those two
+    // used to be treated as the same thing (both read off
+    // lastSyncedChannelIdRef), but resync() gets called a second time for a
+    // just-opened room before its own first call has finished: the realtime
+    // subscribe effect below fires resync() again the moment its channel
+    // reaches "SUBSCRIBED", which race with (and often wins against) the
+    // getRoomSync() network round trip from switching rooms in the first
+    // place. That second call used to see lastSyncedChannelIdRef already
+    // pointing at this room (the first call had just set it) and treat it
+    // as "same room, just catching up" — running a *delta* fetch off
+    // messagesRef/reactionsRef, which still held the *previous* room's
+    // arrays because the first call's full fetch hadn't landed yet to
+    // update them. A delta query against the new room using the old room's
+    // last-message timestamp as its cursor came back empty every time, and
+    // being the newer generation, that empty result is what stuck — the
+    // genuine full fetch arrived after and got discarded as stale. Gating
+    // on syncedRoomIdRef instead — only set once a call actually applies
+    // this room's real data — makes every call before that one a full
+    // fetch, so whichever lands last still fetches everything instead of a
+    // wrong-cursor nothing.
+    const alreadySynced = syncedRoomIdRef.current === id;
     const isNewRoom = lastSyncedChannelIdRef.current !== id;
     lastSyncedChannelIdRef.current = id;
 
@@ -1492,8 +1514,8 @@ export function MeetingHub({
     // localStorage (a previous session/app launch) — and hydrating the
     // in-memory map from it, so this only ever hits localStorage once per
     // room per page load, not on every switch back to it.
-    let cached = isNewRoom ? roomCacheRef.current.get(id) : undefined;
-    if (isNewRoom && !cached) {
+    let cached = !alreadySynced ? roomCacheRef.current.get(id) : undefined;
+    if (!alreadySynced && !cached) {
       const stored = loadRoomSnapshotFromStorage(id);
       if (stored) {
         cached = stored;
@@ -1518,9 +1540,9 @@ export function MeetingHub({
       // saving the previous room's data under this room's key.
       syncedRoomIdRef.current = null;
     }
-    // A cache hit only needs catching up, same as the same-room case below
-    // — a full fetch is only for a room with no snapshot at all yet.
-    const needsFullFetch = isNewRoom && !cached;
+    // A cache hit only needs catching up, same as the already-synced case
+    // below — a full fetch is only for a room with no confirmed data yet.
+    const needsFullFetch = !alreadySynced && !cached;
 
     // Reduce rather than "just read the last element" — a realtime INSERT
     // can append out of arrival order, so the newest created_at isn't
@@ -1528,10 +1550,10 @@ export function MeetingHub({
     const latestOf = (timestamps: string[]) =>
       timestamps.length === 0 ? undefined : timestamps.reduce((max, t) => (t > max ? t : max));
 
-    // messagesRef/reactionsRef still hold the *previous* room's arrays at
-    // this exact point (they only sync after this render commits) — fine
-    // for the same-room case (that's genuinely what they hold), but a new
-    // room's own baseline has to come from its cache snapshot instead.
+    // messagesRef/reactionsRef only ever get read here when alreadySynced
+    // is true (the other case is either a cache hit, using cached.* below,
+    // or a full fetch, which ignores both) — so they're guaranteed to
+    // already hold *this* room's real arrays, not a previous room's.
     const baseMessages = cached ? cached.messages : messagesRef.current;
     const baseReactions = cached ? cached.reactions : reactionsRef.current;
 
