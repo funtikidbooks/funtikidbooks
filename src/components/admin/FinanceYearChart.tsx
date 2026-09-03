@@ -104,9 +104,7 @@ export function FinanceYearChart({ rows }: { rows: FinanceYearChartRow[] }) {
               <polyline points={points} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
               {withTotals.map((r) => (
                 <circle key={r.monthIndex} cx={x(r.monthIndex)} cy={y(r[s.key])} r={3} fill={s.color}>
-                  <title>
-                    {MONTH_LABELS[r.monthIndex]}: {s.label} {new Intl.NumberFormat("vi-VN").format(r[s.key])} đ
-                  </title>
+                  <title>{`${MONTH_LABELS[r.monthIndex]}: ${s.label} ${new Intl.NumberFormat("vi-VN").format(r[s.key])} đ`}</title>
                 </circle>
               ))}
             </g>

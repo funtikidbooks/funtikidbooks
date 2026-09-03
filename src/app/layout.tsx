@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Be_Vietnam_Pro } from "next/font/google";
 import localFont from "next/font/local";
+import Script from "next/script";
 import "./globals.css";
 
 // Trying out the director's custom heading typeface — swap back to Baloo_2
@@ -102,8 +103,22 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <head>
-        <script
-          // Runs before paint so a saved dark-mode choice never flashes light first.
+        {/* A raw <script> tag here used to be what this ran as — the
+            browser's own HTML parser executes it immediately (before paint,
+            before React even loads), which is genuinely what the "no flash
+            of the wrong theme" effect needs. But React still walks that
+            same node once its own JS loads and hydrates, and — unlike a
+            plain <script> in raw HTML, which the browser already ran and
+            React knows not to re-execute — a <script> written directly in
+            JSX confused its hydration reconciliation for that node instead
+            of being cleanly skipped, throwing Hydration failed on every
+            page. next/script's beforeInteractive strategy is Next's own
+            answer to exactly this "run before paint" need — it injects the
+            same way but hands the node's hydration handling off to Next
+            instead of leaving plain React to trip over it. */}
+        <Script
+          id="theme-init"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `try{var t=localStorage.getItem("funti-theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}`,
           }}
