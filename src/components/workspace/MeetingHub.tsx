@@ -1215,6 +1215,46 @@ export function MeetingHub({
 
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+  // Sending several images at once (see handleSend) still lands as separate
+  // consecutive message rows — sendMeetingMessage only ever attaches one
+  // file per row — so "show them in a row instead of stacked" has to be
+  // reconstructed here rather than read off the data as a single group.
+  // Detected purely from the stored messages (same sender, image-only, no
+  // caption after the lead message, sent within a tight window) instead of
+  // a stored batch id, so every viewer sees the same grouping without a
+  // schema change. leaderIndex 0 is the message that renders the whole
+  // row's thumbnails; the rest render nothing of their own (see the render
+  // loop below).
+  const photoBurstInfo = useMemo(() => {
+    const map = new Map<string, { ids: string[]; leaderIndex: number }>();
+    const isBurstable = (msg: MeetingMessage) => !msg.is_recalled && !!msg.attachment_url && isImage(msg.attachment_mime);
+    const BURST_WINDOW_MS = 30 * 1000;
+    let i = 0;
+    while (i < messages.length) {
+      if (!isBurstable(messages[i])) {
+        i++;
+        continue;
+      }
+      const group = [messages[i]];
+      let j = i + 1;
+      while (
+        j < messages.length &&
+        isBurstable(messages[j]) &&
+        messages[j].sender_id === messages[i].sender_id &&
+        !messages[j].content &&
+        new Date(messages[j].created_at).getTime() - new Date(messages[j - 1].created_at).getTime() <= BURST_WINDOW_MS
+      ) {
+        group.push(messages[j]);
+        j++;
+      }
+      if (group.length > 1) {
+        const ids = group.map((g) => g.id);
+        group.forEach((g, idx) => map.set(g.id, { ids, leaderIndex: idx }));
+      }
+      i = j;
+    }
+    return map;
+  }, [messages]);
   const joinedRooms = useMemo(() => channels.filter((c) => c.joined), [channels]);
   // Top-level rooms render in the list as usual; sub-rooms are grouped under
   // their parent instead, shown indented and only while that parent is
@@ -3043,6 +3083,12 @@ export function MeetingHub({
                 </p>
               )}
               {messages.map((m, index) => {
+                // A non-leader member of a photo burst (see photoBurstInfo
+                // above) renders nothing of its own — its thumbnail is part
+                // of the leader's row further down.
+                const burst = photoBurstInfo.get(m.id);
+                if (burst && burst.leaderIndex > 0) return null;
+
                 const sender = profileById.get(m.sender_id);
                 // Zalo/Messenger-style grouping: consecutive messages from the
                 // same person within a few minutes only show the avatar/name
@@ -3051,7 +3097,15 @@ export function MeetingHub({
                 // several in a row from the same person seconds apart) was
                 // exactly the "too much dead space" staff were pointing out.
                 const prev = index > 0 ? messages[index - 1] : null;
-                const next = index < messages.length - 1 ? messages[index + 1] : null;
+                // A burst leader's "next" for grouping purposes has to skip
+                // past its own (unrendered) burst members to the message
+                // that actually follows the whole row — otherwise isGroupEnd
+                // below compares against the burst's 2nd image, which is
+                // always "same sender, seconds later", permanently hiding
+                // the row's timestamp since nothing ever renders that check
+                // as true for it.
+                const nextIndex = burst ? index + burst.ids.length : index + 1;
+                const next = nextIndex < messages.length ? messages[nextIndex] : null;
                 const isNewDay = !prev || !isSameCalendarDay(m.created_at, prev.created_at);
                 const isGroupStart =
                   !prev ||
@@ -3343,20 +3397,46 @@ export function MeetingHub({
                       )}
                       {m.attachment_url &&
                         (isImage(m.attachment_mime) ? (
-                          <button
-                            type="button"
-                            onClick={() => setLightbox({ url: m.attachment_url!, filename: m.attachment_filename })}
-                            className="mt-1 block"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={thumbnailUrl(m.attachment_url, 480)}
-                              alt={m.attachment_filename ?? ""}
-                              className="rounded-[10px] object-cover"
-                              style={{ maxWidth: 340, maxHeight: 340 }}
-                              onLoad={() => stickToBottomIfNear(false)}
-                            />
-                          </button>
+                          burst ? (
+                            <div className="mt-1 flex flex-wrap gap-1" style={{ maxWidth: 340 }}>
+                              {burst.ids.map((id) => {
+                                const bm = messageById.get(id);
+                                if (!bm?.attachment_url) return null;
+                                return (
+                                  <button
+                                    key={id}
+                                    type="button"
+                                    onClick={() => setLightbox({ url: bm.attachment_url!, filename: bm.attachment_filename })}
+                                    className="block flex-none"
+                                  >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={thumbnailUrl(bm.attachment_url, 220)}
+                                      alt={bm.attachment_filename ?? ""}
+                                      className="rounded-[10px] object-cover"
+                                      style={{ width: 108, height: 108 }}
+                                      onLoad={() => stickToBottomIfNear(false)}
+                                    />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setLightbox({ url: m.attachment_url!, filename: m.attachment_filename })}
+                              className="mt-1 block"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={thumbnailUrl(m.attachment_url, 480)}
+                                alt={m.attachment_filename ?? ""}
+                                className="rounded-[10px] object-cover"
+                                style={{ maxWidth: 340, maxHeight: 340 }}
+                                onLoad={() => stickToBottomIfNear(false)}
+                              />
+                            </button>
+                          )
                         ) : (
                           <a
                             href={m.attachment_url}
