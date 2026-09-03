@@ -51,6 +51,40 @@ const ROOM_ICONS = ["💬", "🎨", "📚", "🎬", "🧵", "🛠", "📣", "�
 // panel over to DirectMessagesPanel instead of a channel's messages.
 const DM_TAB_ID = "__dm__";
 
+// A per-room snapshot — see roomCacheRef in MeetingHub below.
+type RoomSnapshot = {
+  messages: MeetingMessage[];
+  reactions: MeetingReaction[];
+  reads: MeetingChannelRead[];
+  pinnedMessages: MeetingMessage[];
+};
+
+// Persists roomCacheRef to localStorage so it survives a full app relaunch,
+// not just switching rooms within one still-open tab — closing the iPad
+// PWA and reopening it tears down the whole page (and every in-memory
+// ref/state with it), so without this, "read one, come back later" always
+// paid for a full reload no matter how recently the room was open.
+const ROOM_CACHE_STORAGE_PREFIX = "funti-room-cache:";
+
+function loadRoomSnapshotFromStorage(channelId: string): RoomSnapshot | null {
+  try {
+    const raw = localStorage.getItem(ROOM_CACHE_STORAGE_PREFIX + channelId);
+    if (!raw) return null;
+    return JSON.parse(raw) as RoomSnapshot;
+  } catch {
+    return null; // localStorage unavailable (private browsing) or corrupt entry — just skip it
+  }
+}
+
+function saveRoomSnapshotToStorage(channelId: string, snapshot: RoomSnapshot) {
+  try {
+    localStorage.setItem(ROOM_CACHE_STORAGE_PREFIX + channelId, JSON.stringify(snapshot));
+  } catch {
+    // Unavailable, or quota exceeded — the room just won't have an instant
+    // cold-open next time, same as if this feature didn't exist.
+  }
+}
+
 const EMOJI_OPTIONS = [
   "😀", "😂", "😅", "😍", "😉", "😎", "🤔", "😢",
   "😭", "😡", "🥳", "😴", "😱", "🙌", "👀", "🤝",
@@ -1070,10 +1104,11 @@ export function MeetingHub({
   // round-trip (getMeetingMessages + getReactionsSince + getChannelReads,
   // every single time, even for a room viewed seconds ago). resync() now
   // restores this instantly on a cache hit and only fetches the delta
-  // since the snapshot, instead of the room's full history again.
-  const roomCacheRef = useRef<
-    Map<string, { messages: MeetingMessage[]; reactions: MeetingReaction[]; reads: MeetingChannelRead[]; pinnedMessages: MeetingMessage[] }>
-  >(new Map());
+  // since the snapshot, instead of the room's full history again. Seeded
+  // lazily from localStorage per room (see loadRoomSnapshotFromStorage) the
+  // first time each room is looked up here, so a cold app relaunch gets the
+  // same instant-open benefit as switching rooms within one still-open tab.
+  const roomCacheRef = useRef<Map<string, RoomSnapshot>>(new Map());
   const lastMarkedReadIdRef = useRef<string | null>(null);
   const activeIdRef = useRef(activeId);
   useEffect(() => {
@@ -1320,7 +1355,11 @@ export function MeetingHub({
   // new room and this effect fires again with data that genuinely matches it.
   useEffect(() => {
     if (!activeId || activeId === DM_TAB_ID || activeId !== lastSyncedChannelIdRef.current) return;
-    roomCacheRef.current.set(activeId, { messages, reactions, reads, pinnedMessages });
+    const snapshot: RoomSnapshot = { messages, reactions, reads, pinnedMessages };
+    roomCacheRef.current.set(activeId, snapshot);
+    // Also mirrored to localStorage (see its own comment on roomCacheRef)
+    // so this survives closing the app entirely, not just switching rooms.
+    saveRoomSnapshotToStorage(activeId, snapshot);
   }, [activeId, messages, reactions, reads, pinnedMessages]);
 
   useEffect(() => {
@@ -1393,7 +1432,18 @@ export function MeetingHub({
     const isNewRoom = lastSyncedChannelIdRef.current !== id;
     lastSyncedChannelIdRef.current = id;
 
-    const cached = isNewRoom ? roomCacheRef.current.get(id) : undefined;
+    // In-memory first (this tab's own recent visits), falling back to
+    // localStorage (a previous session/app launch) — and hydrating the
+    // in-memory map from it, so this only ever hits localStorage once per
+    // room per page load, not on every switch back to it.
+    let cached = isNewRoom ? roomCacheRef.current.get(id) : undefined;
+    if (isNewRoom && !cached) {
+      const stored = loadRoomSnapshotFromStorage(id);
+      if (stored) {
+        cached = stored;
+        roomCacheRef.current.set(id, stored);
+      }
+    }
     if (cached) {
       // Paint the last-known state immediately — no network wait — before
       // kicking off the delta fetch below.
