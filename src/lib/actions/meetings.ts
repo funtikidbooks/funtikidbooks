@@ -8,6 +8,10 @@ import { sendPushToUser } from "@/lib/push";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { MeetingChannel, MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, MeetingSearchResult, Profile } from "@/lib/types";
 
+// How many of a room's most recent messages to load on a fresh open —
+// tunable in one place since it's used both here and in getRoomSync below.
+const INITIAL_MESSAGE_PAGE_SIZE = 60;
+
 async function requireUser() {
   const supabase = await createClient();
   const {
@@ -298,12 +302,12 @@ export async function deleteChannel(channelId: string) {
 // resync().
 //
 // The full-history fetch (no afterCreatedAt — opening/switching into a room
-// for the first time this session) asks for the newest 80 instead of "the
-// first 300 ever posted": `.order(ascending: true).limit(300)` sorts
-// oldest-first *then* caps, so any room with more than 300 messages ever
-// showed the very beginning of its history and silently never reached
+// for the first time this session) asks for the newest INITIAL_MESSAGE_PAGE_SIZE
+// instead of "the first 300 ever posted": `.order(ascending: true).limit(300)`
+// sorts oldest-first *then* caps, so any room with more than 300 messages
+// ever showed the very beginning of its history and silently never reached
 // anything recent. Newest-first + limit + reversing back to chronological
-// order fixes that and, being an 80-row page instead of 300, is the main
+// order fixes that and, being a much smaller page than 300, is the main
 // thing that made a fresh room switch feel slow. There's no older-messages
 // pagination in the UI, so anything past this page was already unreachable
 // either way — this only changes *which* capped window shows up.
@@ -324,7 +328,7 @@ export async function getMeetingMessages(channelId: string, afterCreatedAt?: str
     .select("*")
     .eq("channel_id", channelId)
     .order("created_at", { ascending: false })
-    .limit(80);
+    .limit(INITIAL_MESSAGE_PAGE_SIZE);
   return ((data ?? []) as MeetingMessage[]).reverse();
 }
 
@@ -356,7 +360,12 @@ export async function getRoomSync(
         .gt("created_at", opts.messagesAfter)
         .order("created_at", { ascending: true })
         .limit(300)
-    : supabase.from("meeting_messages").select("*").eq("channel_id", channelId).order("created_at", { ascending: false }).limit(80);
+    : supabase
+        .from("meeting_messages")
+        .select("*")
+        .eq("channel_id", channelId)
+        .order("created_at", { ascending: false })
+        .limit(INITIAL_MESSAGE_PAGE_SIZE);
 
   const reactionsQuery = opts.reactionsAfter
     ? supabase
