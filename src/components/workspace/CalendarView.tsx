@@ -24,9 +24,19 @@ function toTimeInputValue(iso: string) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+// Explicit timeZone — without it this reads the server's own timezone
+// (UTC on Vercel) instead of Vietnam's, a real hydration-mismatch source
+// since it's rendered directly in the always-visible month grid below;
+// see MeetingHub.tsx's own comment on the same fix.
 function formatTime(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(iso));
+}
+
+// Same fix, for grouping a real event timestamp into its Vietnam
+// calendar day — distinct from `dateKey` above, which is only ever fed a
+// pure calendar Date object (grid cells) and is safe to read locally.
+function vnEventDateKey(iso: string) {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
 }
 
 function monthGrid(viewDate: Date): Date[] {
@@ -69,7 +79,7 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
       // "Nghỉ" events don't get a pill in the list — they turn the whole
       // day cell red instead, same as the fixed public holidays.
       if (ev.category === "off") continue;
-      const key = dateKey(new Date(ev.start_at));
+      const key = vnEventDateKey(ev.start_at);
       const list = map.get(key) ?? [];
       list.push(ev);
       map.set(key, list);
@@ -85,7 +95,7 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
     if (!enabledCategories.has("off")) return map;
     for (const ev of events) {
       if (ev.category !== "off") continue;
-      map.set(dateKey(new Date(ev.start_at)), ev);
+      map.set(vnEventDateKey(ev.start_at), ev);
     }
     return map;
   }, [events, enabledCategories]);
