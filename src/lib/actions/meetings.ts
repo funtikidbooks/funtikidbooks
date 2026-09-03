@@ -293,19 +293,124 @@ export async function deleteChannel(channelId: string) {
 }
 
 // `afterCreatedAt` (exclusive) lets a caller that already has a page of
-// messages ask for only what's new since the last one it holds, instead of
-// re-fetching the whole capped 300 every time — see MeetingHub's resync().
+// messages ask for only what's new since the last one it holds — a small,
+// fast delta fetch instead of the full-history one below. See MeetingHub's
+// resync().
+//
+// The full-history fetch (no afterCreatedAt — opening/switching into a room
+// for the first time this session) asks for the newest 80 instead of "the
+// first 300 ever posted": `.order(ascending: true).limit(300)` sorts
+// oldest-first *then* caps, so any room with more than 300 messages ever
+// showed the very beginning of its history and silently never reached
+// anything recent. Newest-first + limit + reversing back to chronological
+// order fixes that and, being an 80-row page instead of 300, is the main
+// thing that made a fresh room switch feel slow. There's no older-messages
+// pagination in the UI, so anything past this page was already unreachable
+// either way — this only changes *which* capped window shows up.
 export async function getMeetingMessages(channelId: string, afterCreatedAt?: string): Promise<MeetingMessage[]> {
   const { supabase } = await requireUser();
-  let query = supabase
+  if (afterCreatedAt) {
+    const { data } = await supabase
+      .from("meeting_messages")
+      .select("*")
+      .eq("channel_id", channelId)
+      .gt("created_at", afterCreatedAt)
+      .order("created_at", { ascending: true })
+      .limit(300);
+    return (data ?? []) as MeetingMessage[];
+  }
+  const { data } = await supabase
     .from("meeting_messages")
     .select("*")
     .eq("channel_id", channelId)
-    .order("created_at", { ascending: true })
-    .limit(300);
-  if (afterCreatedAt) query = query.gt("created_at", afterCreatedAt);
-  const { data } = await query;
-  return (data ?? []) as MeetingMessage[];
+    .order("created_at", { ascending: false })
+    .limit(80);
+  return ((data ?? []) as MeetingMessage[]).reverse();
+}
+
+// Combines getMeetingMessages + getReactionsSince + getChannelReads +
+// getPinnedMessages into one round trip instead of four. Each of those
+// calls requireUser() — a real network round trip to Supabase's *auth*
+// server via auth.getUser(), not a local check — so four separate
+// client→server calls meant four separate auth round trips stacked on top
+// of four separate queries. This pays that auth cost once and runs every
+// query in parallel server-side afterward; MeetingHub's resync() is the
+// only caller. The individual functions above stay exported for anything
+// that only ever needs one piece of this.
+export async function getRoomSync(
+  channelId: string,
+  opts: { messagesAfter?: string; reactionsAfter?: string } = {},
+): Promise<{
+  messages: MeetingMessage[];
+  reactions: MeetingReaction[];
+  reads: MeetingChannelRead[];
+  pinnedMessages: MeetingMessage[];
+}> {
+  const { supabase } = await requireUser();
+
+  const messagesQuery = opts.messagesAfter
+    ? supabase
+        .from("meeting_messages")
+        .select("*")
+        .eq("channel_id", channelId)
+        .gt("created_at", opts.messagesAfter)
+        .order("created_at", { ascending: true })
+        .limit(300)
+    : supabase.from("meeting_messages").select("*").eq("channel_id", channelId).order("created_at", { ascending: false }).limit(80);
+
+  const reactionsQuery = opts.reactionsAfter
+    ? supabase
+        .from("meeting_message_reactions")
+        .select("message_id, profile_id, emoji, created_at, meeting_messages!inner(channel_id)")
+        .eq("meeting_messages.channel_id", channelId)
+        .gt("created_at", opts.reactionsAfter)
+        .order("created_at", { ascending: true })
+        .limit(500)
+    : supabase
+        .from("meeting_message_reactions")
+        .select("message_id, profile_id, emoji, created_at, meeting_messages!inner(channel_id)")
+        .eq("meeting_messages.channel_id", channelId)
+        .order("created_at", { ascending: false })
+        .limit(200);
+
+  const readsQuery = supabase.from("meeting_channel_reads").select("*").eq("channel_id", channelId);
+
+  const pinnedQuery = supabase
+    .from("meeting_messages")
+    .select("*")
+    .eq("channel_id", channelId)
+    .not("pinned_at", "is", null)
+    .order("pinned_at", { ascending: false });
+
+  const [messagesRes, reactionsRes, readsRes, pinnedRes] = await Promise.all([
+    messagesQuery,
+    reactionsQuery,
+    readsQuery,
+    pinnedQuery,
+  ]);
+
+  const messages = (opts.messagesAfter ? (messagesRes.data ?? []) : (messagesRes.data ?? []).reverse()) as MeetingMessage[];
+
+  const reactionRows = (reactionsRes.data ?? []) as unknown as {
+    message_id: string;
+    profile_id: string;
+    emoji: string;
+    created_at: string;
+  }[];
+  const mappedReactions = reactionRows.map((r) => ({
+    message_id: r.message_id,
+    profile_id: r.profile_id,
+    emoji: r.emoji,
+    created_at: r.created_at,
+  }));
+  const reactions = opts.reactionsAfter ? mappedReactions : mappedReactions.reverse();
+
+  return {
+    messages,
+    reactions,
+    reads: (readsRes.data ?? []) as MeetingChannelRead[],
+    pinnedMessages: (pinnedRes.data ?? []) as MeetingMessage[],
+  };
 }
 
 // Searches message content across every room the caller is in (#Chung plus
@@ -573,21 +678,35 @@ export async function getPinnedMessages(channelId: string): Promise<MeetingMessa
 // messages it had *just* fetched, never for ones already on screen.
 export async function getReactionsSince(channelId: string, afterCreatedAt?: string): Promise<MeetingReaction[]> {
   const { supabase } = await requireUser();
-  let query = supabase
+  const mapRow = (r: { message_id: string; profile_id: string; emoji: string; created_at: string }) => ({
+    message_id: r.message_id,
+    profile_id: r.profile_id,
+    emoji: r.emoji,
+    created_at: r.created_at,
+  });
+  if (afterCreatedAt) {
+    const { data, error } = await supabase
+      .from("meeting_message_reactions")
+      .select("message_id, profile_id, emoji, created_at, meeting_messages!inner(channel_id)")
+      .eq("meeting_messages.channel_id", channelId)
+      .gt("created_at", afterCreatedAt)
+      .order("created_at", { ascending: true })
+      .limit(500);
+    if (error || !data) return [];
+    return data.map(mapRow);
+  }
+  // Same "newest N, not oldest N" fix as getMeetingMessages — a reaction
+  // can only ever render on a message that's also loaded, and that's now
+  // the newest 80, so there's no reason to pull the oldest 500 reactions
+  // in a room with a long history.
+  const { data, error } = await supabase
     .from("meeting_message_reactions")
     .select("message_id, profile_id, emoji, created_at, meeting_messages!inner(channel_id)")
     .eq("meeting_messages.channel_id", channelId)
-    .order("created_at", { ascending: true })
-    .limit(500);
-  if (afterCreatedAt) query = query.gt("created_at", afterCreatedAt);
-  const { data, error } = await query;
+    .order("created_at", { ascending: false })
+    .limit(200);
   if (error || !data) return [];
-  return data.map((r) => ({
-    message_id: r.message_id as string,
-    profile_id: r.profile_id as string,
-    emoji: r.emoji as string,
-    created_at: r.created_at as string,
-  }));
+  return data.map(mapRow).reverse();
 }
 
 export async function addReaction(messageId: string, emoji: string) {

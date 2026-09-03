@@ -18,10 +18,7 @@ import {
   addReaction,
   createChannel,
   deleteChannel,
-  getChannelReads,
-  getMeetingMessages,
-  getPinnedMessages,
-  getReactionsSince,
+  getRoomSync,
   joinChannel,
   leaveChannel,
   listChannelMembers,
@@ -1425,22 +1422,18 @@ export function MeetingHub({
     const messagesAfter = needsFullFetch ? undefined : latestOf(baseMessages.map((m) => m.created_at));
     const reactionsAfter = needsFullFetch ? undefined : latestOf(baseReactions.map((r) => r.created_at));
 
-    getMeetingMessages(id, messagesAfter)
-      .then((msgs) => {
+    // One combined round trip (see getRoomSync's own comment) instead of
+    // four separate ones — each of those paid for its own auth round trip
+    // to Supabase on top of its query, so four client calls meant eight
+    // network hops for a single room switch.
+    getRoomSync(id, { messagesAfter, reactionsAfter })
+      .then(({ messages: msgs, reactions: rx, reads: rd, pinnedMessages: pinned }) => {
         if (activeIdRef.current !== id) return;
         if (needsFullFetch) {
           setMessages(msgs);
         } else if (msgs.length > 0) {
           setMessages((prev) => msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev));
         }
-      })
-      .catch(() => {
-        if (needsFullFetch && activeIdRef.current === id) setMessages([]);
-      });
-
-    getReactionsSince(id, reactionsAfter)
-      .then((rx) => {
-        if (activeIdRef.current !== id) return;
         if (needsFullFetch) {
           setReactions(rx);
         } else if (rx.length > 0) {
@@ -1451,34 +1444,18 @@ export function MeetingHub({
             return fresh.length > 0 ? [...prev, ...fresh] : prev;
           });
         }
+        setReads(rd);
+        // togglePin() above already updates this optimistically for changes
+        // made from this tab — this just keeps it in sync with everyone
+        // else's, same as messages/reactions above.
+        setPinnedMessages(pinned);
       })
       .catch(() => {
-        if (needsFullFetch && activeIdRef.current === id) setReactions([]);
+        if (needsFullFetch && activeIdRef.current === id) {
+          setMessages([]);
+          setReactions([]);
+        }
       });
-
-    getChannelReads(id)
-      .then((rd) => {
-        if (activeIdRef.current === id) setReads(rd);
-      })
-      .catch(() => {
-        if (activeIdRef.current === id) setReads([]);
-      });
-
-    // Pinned messages change rarely — only refetched on an actual room
-    // switch, not every incremental resync poll. togglePin() above updates
-    // this list optimistically for changes made from this tab. A cache hit
-    // still gets a background refresh (unlike messages/reactions there's no
-    // cheap delta query for it), just not the earlier synchronous restore's
-    // job to handle — that already showed the cached pins.
-    if (isNewRoom) {
-      getPinnedMessages(id)
-        .then((pinned) => {
-          if (activeIdRef.current === id) setPinnedMessages(pinned);
-        })
-        .catch(() => {
-          if (activeIdRef.current === id) setPinnedMessages([]);
-        });
-    }
   }, [activeId, mergeServerMessage]);
 
   useEffect(() => {
