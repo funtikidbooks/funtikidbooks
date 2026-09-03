@@ -144,6 +144,11 @@ function isImage(mime: string | null) {
   return !!mime && mime.startsWith("image/");
 }
 
+// Each pending file becomes its own message row on send (see handleSend) —
+// a generous but finite cap keeps one accidental "select all" in a photo
+// picker from queuing up a hundred individual sends.
+const MAX_PENDING_FILES = 10;
+
 // Bolds the first occurrence of the search query in a result's snippet —
 // good enough for a one-line preview, no need to highlight every hit.
 function highlightMatch(content: string, query: string) {
@@ -1031,7 +1036,7 @@ export function MeetingHub({
   const [reactions, setReactions] = useState<MeetingReaction[]>([]);
   const [reads, setReads] = useState<MeetingChannelRead[]>([]);
   const [text, setText] = useState("");
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   // Temp (client-generated) ids currently in flight or that failed — drives
   // the "Đang gửi…" / "Gửi lỗi" footer on an optimistic bubble. See
   // handleSend/attemptSend below for why messages appear instantly instead
@@ -1174,20 +1179,23 @@ export function MeetingHub({
   // placeholder instead of a truncated, half-useful version of it.
   const isMobile = useIsMobileViewport();
 
-  // A real thumbnail of the pending image beats a filename chip — lets
-  // people confirm it's the right screenshot before sending. Computed
-  // during render (not in an effect) since it's a pure derivation of
-  // pendingFile; the effect below only ever revokes it, never sets state.
-  const pendingPreviewUrl = useMemo(() => {
-    if (!pendingFile || !isImage(pendingFile.type)) return null;
-    return URL.createObjectURL(pendingFile);
-  }, [pendingFile]);
+  // A real thumbnail per pending image beats a filename chip — lets people
+  // confirm they're the right pictures before sending, several at once.
+  // Computed during render (not in an effect) since it's a pure derivation
+  // of pendingFiles; the effect below only ever revokes these, never sets
+  // state.
+  const pendingPreviews = useMemo(
+    () => pendingFiles.map((file) => ({ file, previewUrl: isImage(file.type) ? URL.createObjectURL(file) : null })),
+    [pendingFiles],
+  );
 
   useEffect(() => {
     return () => {
-      if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
+      for (const p of pendingPreviews) {
+        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      }
     };
-  }, [pendingPreviewUrl]);
+  }, [pendingPreviews]);
 
   useEffect(() => {
     notificationAudioRef.current = new Audio("/sounds/dm-message.mp3");
@@ -2042,30 +2050,28 @@ export function MeetingHub({
     const clipboardData = e.clipboardData;
     if (!clipboardData) return;
 
-    let file: File | null = null;
+    let files: File[] = [];
 
     if (clipboardData.files && clipboardData.files.length > 0) {
-      file = Array.from(clipboardData.files).find((f) => f.type.startsWith("image/")) ?? null;
+      files = Array.from(clipboardData.files).filter((f) => f.type.startsWith("image/"));
     }
 
-    if (!file && clipboardData.items) {
+    if (files.length === 0 && clipboardData.items) {
       for (const item of Array.from(clipboardData.items)) {
         if (item.kind === "file" && item.type.startsWith("image/")) {
-          file = item.getAsFile();
-          if (file) break;
+          const f = item.getAsFile();
+          if (f) files.push(f);
         }
       }
     }
 
-    if (!file) return;
+    if (files.length === 0) return;
 
     e.preventDefault();
-    if (file.size > 20 * 1024 * 1024) {
-      setError("Tệp vượt quá 20MB");
-      return;
-    }
-    setError(null);
-    setPendingFile(file);
+    const valid = files.filter((f) => f.size <= 20 * 1024 * 1024);
+    setError(valid.length < files.length ? "Có ảnh vượt quá 20MB, đã bỏ qua" : null);
+    if (valid.length === 0) return;
+    setPendingFiles((prev) => [...prev, ...valid].slice(0, MAX_PENDING_FILES));
   }
 
   function pickMention(p: Profile) {
@@ -2121,35 +2127,81 @@ export function MeetingHub({
     e.preventDefault();
     if (!activeId) return;
     const trimmed = text.trim();
-    const file = pendingFile;
-    if (!trimmed && !file) return;
+    const files = pendingFiles;
+    if (!trimmed && files.length === 0) return;
     const replyId = replyingTo?.id ?? null;
-
-    const tempId = `temp-${crypto.randomUUID()}`;
-    const optimistic: MeetingMessage = {
-      id: tempId,
-      channel_id: activeId,
-      sender_id: currentUser.id,
-      content: trimmed,
-      attachment_url: null,
-      attachment_filename: file?.name ?? null,
-      attachment_mime: file?.type ?? null,
-      attachment_size: file?.size ?? null,
-      reply_to_message_id: replyId,
-      is_recalled: false,
-      pinned_at: null,
-      pinned_by: null,
-      created_at: new Date().toISOString(),
-    };
+    const channelId = activeId;
 
     setError(null);
     setText("");
-    setPendingFile(null);
+    setPendingFiles([]);
     setReplyingTo(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    pendingPayloadsRef.current.set(tempId, { content: trimmed, file, replyId });
-    setMessages((prev) => [...prev, optimistic]);
-    attemptSend(activeId, tempId, trimmed, file, replyId);
+
+    if (files.length <= 1) {
+      const file = files[0] ?? null;
+      const tempId = `temp-${crypto.randomUUID()}`;
+      const optimistic: MeetingMessage = {
+        id: tempId,
+        channel_id: channelId,
+        sender_id: currentUser.id,
+        content: trimmed,
+        attachment_url: null,
+        attachment_filename: file?.name ?? null,
+        attachment_mime: file?.type ?? null,
+        attachment_size: file?.size ?? null,
+        reply_to_message_id: replyId,
+        is_recalled: false,
+        pinned_at: null,
+        pinned_by: null,
+        created_at: new Date().toISOString(),
+      };
+      pendingPayloadsRef.current.set(tempId, { content: trimmed, file, replyId });
+      setMessages((prev) => [...prev, optimistic]);
+      attemptSend(channelId, tempId, trimmed, file, replyId);
+      return;
+    }
+
+    // Several files at once — sendMeetingMessage only ever attaches one
+    // file per message row (see its own comment), so each picked file
+    // becomes its own message instead of a single message with a gallery.
+    // Any typed caption rides along on the first one, same as WhatsApp/Zalo
+    // showing a multi-photo caption under just the lead photo. Sent one at
+    // a time rather than in parallel so their created_at timestamps land in
+    // the order they were picked, not whatever order the network happens
+    // to finish the uploads in.
+    const entries = files.map((file, i) => ({
+      file,
+      content: i === 0 ? trimmed : "",
+      replyId: i === 0 ? replyId : null,
+      tempId: `temp-${crypto.randomUUID()}`,
+    }));
+    setMessages((prev) => [
+      ...prev,
+      ...entries.map(
+        (entry): MeetingMessage => ({
+          id: entry.tempId,
+          channel_id: channelId,
+          sender_id: currentUser.id,
+          content: entry.content,
+          attachment_url: null,
+          attachment_filename: entry.file.name,
+          attachment_mime: entry.file.type,
+          attachment_size: entry.file.size,
+          reply_to_message_id: entry.replyId,
+          is_recalled: false,
+          pinned_at: null,
+          pinned_by: null,
+          created_at: new Date().toISOString(),
+        }),
+      ),
+    ]);
+    (async () => {
+      for (const entry of entries) {
+        pendingPayloadsRef.current.set(entry.tempId, { content: entry.content, file: entry.file, replyId: entry.replyId });
+        await attemptSend(channelId, entry.tempId, entry.content, entry.file, entry.replyId);
+      }
+    })();
   }
 
   function retrySend(tempId: string) {
@@ -3511,36 +3563,50 @@ export function MeetingHub({
                   {error}
                 </p>
               )}
-              {pendingFile && (
-                <div className="flex items-center gap-1.5 px-4 pt-2">
-                  {pendingPreviewUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={pendingPreviewUrl}
-                      alt=""
-                      className="rounded-[8px] object-cover flex-none"
-                      style={{ width: 44, height: 44, border: "1px solid var(--color-neutral-200)" }}
-                    />
-                  ) : (
-                    <span
-                      className="flex items-center gap-1 rounded-[8px] px-2 py-1 text-[12px] font-semibold truncate max-w-full"
-                      style={{ background: "var(--color-surface)", color: "var(--color-accent-700)" }}
+              {pendingFiles.length > 0 && (
+                <div className="flex items-center gap-1.5 px-4 pt-3 pr-2 overflow-x-auto">
+                  {pendingPreviews.map(({ file, previewUrl }, i) => (
+                    <div key={i} className="relative flex-none">
+                      {previewUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={previewUrl}
+                          alt=""
+                          className="rounded-[8px] object-cover"
+                          style={{ width: 44, height: 44, border: "1px solid var(--color-neutral-200)" }}
+                        />
+                      ) : (
+                        <span
+                          className="flex items-center gap-1 rounded-[8px] px-2 py-1 text-[12px] font-semibold truncate max-w-[120px]"
+                          style={{ background: "var(--color-surface)", color: "var(--color-accent-700)", height: 44 }}
+                        >
+                          📄 {file.name}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="absolute flex items-center justify-center rounded-full"
+                        style={{ top: -6, right: -6, width: 16, height: 16, fontSize: 9, background: "var(--color-neutral-700)", color: "#fff", lineHeight: 1 }}
+                        aria-label="Bỏ tệp này"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {pendingFiles.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingFiles([]);
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
+                      className="flex-none text-[11px] font-semibold underline whitespace-nowrap"
+                      style={{ color: "var(--color-neutral-500)" }}
                     >
-                      📄 {pendingFile.name}
-                    </span>
+                      Bỏ hết ({pendingFiles.length})
+                    </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPendingFile(null);
-                      if (fileInputRef.current) fileInputRef.current.value = "";
-                    }}
-                    className="btn-icon flex-none"
-                    style={{ width: 22, height: 22, padding: 0, fontSize: 12 }}
-                    aria-label="Bỏ tệp đính kèm"
-                  >
-                    ✕
-                  </button>
                 </div>
               )}
               <form ref={composerFormRef} onSubmit={handleSend} className="flex items-end gap-2 p-3">
@@ -3579,16 +3645,16 @@ export function MeetingHub({
                   ref={fileInputRef}
                   type="file"
                   accept="image/*,application/pdf"
+                  multiple
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0] ?? null;
-                    if (f && f.size > 20 * 1024 * 1024) {
-                      setError("Tệp vượt quá 20MB");
-                      e.target.value = "";
-                      return;
-                    }
-                    setError(null);
-                    setPendingFile(f);
+                    const picked = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    if (picked.length === 0) return;
+                    const valid = picked.filter((f) => f.size <= 20 * 1024 * 1024);
+                    setError(valid.length < picked.length ? "Có tệp vượt quá 20MB, đã bỏ qua" : null);
+                    if (valid.length === 0) return;
+                    setPendingFiles((prev) => [...prev, ...valid].slice(0, MAX_PENDING_FILES));
                   }}
                 />
                 <textarea
