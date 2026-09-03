@@ -1101,6 +1101,18 @@ export function MeetingHub({
   // already within 150px, or the view is left sitting above the true bottom.
   const stickyUntilRef = useRef(0);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  // Bumped on every resync() call; each call's async getRoomSync() result
+  // only gets applied if this still matches the value it captured when it
+  // started. Tapping through several rooms faster than each fetch finishes
+  // used to leave every one of those fetches running to completion and
+  // racing to write its own result over whatever a later one had already
+  // set — piling up server-action calls (each still doing its own
+  // real work) that only got slower to fully drain the more of them were
+  // in flight at once, which is exactly what rapidly tapping through a
+  // run of rooms triggers. This doesn't cancel the in-flight request
+  // itself, just makes a superseded one's result a no-op instead of a
+  // wasted (and potentially wrong) state update once it does arrive.
+  const resyncGenerationRef = useRef(0);
   const messageIdsRef = useRef<Set<string>>(new Set());
   // Latest messages array, read (not reacted to) from inside resync() below —
   // it has to stay out of resync's own dependency array (see there) so a
@@ -1370,10 +1382,16 @@ export function MeetingHub({
   useEffect(() => {
     if (!activeId || activeId === DM_TAB_ID || activeId !== lastSyncedChannelIdRef.current) return;
     const snapshot: RoomSnapshot = { messages, reactions, reads, pinnedMessages };
+    // The in-memory copy (what resync() actually reads) is cheap and stays
+    // instant. The localStorage mirror — a synchronous JSON.stringify +
+    // write — is debounced separately: a cache-restore immediately
+    // followed by a delta-merge (every resync()) otherwise fired this
+    // twice per switch, and rapidly tapping through several rooms stacked
+    // those main-thread writes up right when the page has the least room
+    // to spare for them.
     roomCacheRef.current.set(activeId, snapshot);
-    // Also mirrored to localStorage (see its own comment on roomCacheRef)
-    // so this survives closing the app entirely, not just switching rooms.
-    saveRoomSnapshotToStorage(activeId, snapshot);
+    const timer = setTimeout(() => saveRoomSnapshotToStorage(activeId, snapshot), 400);
+    return () => clearTimeout(timer);
   }, [activeId, messages, reactions, reads, pinnedMessages]);
 
   useEffect(() => {
@@ -1443,6 +1461,7 @@ export function MeetingHub({
   const resync = useCallback(() => {
     const id = activeId;
     if (!id || id === DM_TAB_ID) return;
+    const generation = ++resyncGenerationRef.current;
     const isNewRoom = lastSyncedChannelIdRef.current !== id;
     lastSyncedChannelIdRef.current = id;
 
@@ -1492,7 +1511,15 @@ export function MeetingHub({
     // network hops for a single room switch.
     getRoomSync(id, { messagesAfter, reactionsAfter })
       .then(({ messages: msgs, reactions: rx, reads: rd, pinnedMessages: pinned }) => {
-        if (activeIdRef.current !== id) return;
+        // A newer resync() (this room again, or a switch elsewhere) has
+        // already run since this call started — its own result already
+        // reflects wherever the user actually is now, so applying this
+        // stale one on top would either be a no-op at best or, if it
+        // resolves after the newer call's own network round trip, silently
+        // undo it. activeIdRef alone isn't enough to catch this: two
+        // overlapping calls for the very same room (tap A, then B, then
+        // back to A before either finished) both pass that check.
+        if (resyncGenerationRef.current !== generation || activeIdRef.current !== id) return;
         if (needsFullFetch) {
           setMessages(msgs);
         } else if (msgs.length > 0) {
@@ -1515,7 +1542,7 @@ export function MeetingHub({
         setPinnedMessages(pinned);
       })
       .catch(() => {
-        if (needsFullFetch && activeIdRef.current === id) {
+        if (resyncGenerationRef.current === generation && needsFullFetch && activeIdRef.current === id) {
           setMessages([]);
           setReactions([]);
         }
