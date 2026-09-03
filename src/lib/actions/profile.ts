@@ -2,18 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { Profile } from "@/lib/types";
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
-  return { supabase, user };
-}
 
 // Every teammate's basic profile — used by pickers (forward-message
 // destinations, @mentions) that need the full roster but aren't the

@@ -1,18 +1,9 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { FoodShop, FoodShopMenuItem } from "@/lib/types";
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
-  return { supabase, user };
-}
 
 const ALLOWED_PHOTO_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 const MAX_PHOTO_SIZE = 20 * 1024 * 1024;

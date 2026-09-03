@@ -1,19 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { Task } from "@/lib/types";
 import { logTaskActivity } from "@/lib/actions/task-detail";
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
-  return { supabase, user };
-}
 
 export async function createColumn(boardId: string, title: string) {
   const { supabase } = await requireUser();

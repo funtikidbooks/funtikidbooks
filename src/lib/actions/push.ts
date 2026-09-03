@@ -1,16 +1,7 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
-  return { supabase, user };
-}
 
 export async function savePushSubscription(sub: { endpoint: string; keys: { p256dh: string; auth: string } }) {
   const { supabase, user } = await requireUser();

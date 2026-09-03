@@ -1,7 +1,7 @@
 "use server";
 
 import { after } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import { sendPushToUser } from "@/lib/push";
 import { sendPayslipEmail } from "@/lib/mail";
@@ -19,28 +19,11 @@ import type {
 // Director, or any staff whose chức danh is exactly "Project Manager" —
 // mirrors the can_manage_hr() RLS helper in supabase/schema.sql.
 async function requireHrManager() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
-
+  const { supabase, user } = await requireUser();
   const { data: profile } = await supabase.from("profiles").select("access_role, role").eq("id", user.id).maybeSingle();
   if (profile?.access_role !== "director" && profile?.role !== "Project Manager") {
     throw new Error("Bạn không có quyền này.");
   }
-  return { supabase, user };
-}
-
-// Any logged-in staff member, reading only their own data — RLS on
-// payroll_records/payroll_feedback (profile_id = auth.uid()) is the real
-// enforcement here, this just gets a client + the caller's id.
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
   return { supabase, user };
 }
 

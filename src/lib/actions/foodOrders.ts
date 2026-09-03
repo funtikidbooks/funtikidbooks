@@ -1,18 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { vnToday } from "@/lib/constants/attendance";
 import type { FoodOrderItem, FoodOrderRound } from "@/lib/types";
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
-  return { supabase, user };
-}
 
 // Every round started today, oldest first — several can coexist (lunch,
 // then a separate afternoon trà sữa round), so the panel renders one card

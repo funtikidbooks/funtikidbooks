@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { MeetingHub } from "@/components/workspace/MeetingHub";
 import { getDmTabLabel, listChannels } from "@/lib/actions/meetings";
 import type { Profile } from "@/lib/types";
@@ -7,10 +7,11 @@ import type { Profile } from "@/lib/types";
 export const metadata: Metadata = { title: "Trò chuyện & họp" };
 
 export default async function MeetingPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // The parent layout already redirects an unauthenticated visitor away
+  // before this ever renders — requireUser() here just reuses that same
+  // per-request-cached auth check (see its comment in lib/supabase/server.ts)
+  // instead of re-verifying the JWT against Supabase's auth server again.
+  const { supabase, user } = await requireUser();
 
   const [channels, { data: profiles }, dmTabLabel] = await Promise.all([
     listChannels(),

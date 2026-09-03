@@ -3,7 +3,7 @@
 import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { MeetingChannel, MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, MeetingSearchResult, Profile } from "@/lib/types";
@@ -11,15 +11,6 @@ import type { MeetingChannel, MeetingChannelPublic, MeetingChannelRead, MeetingM
 // How many of a room's most recent messages to load on a fresh open —
 // tunable in one place since it's used both here and in getRoomSync below.
 const INITIAL_MESSAGE_PAGE_SIZE = 60;
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
-  return { supabase, user };
-}
 
 function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");

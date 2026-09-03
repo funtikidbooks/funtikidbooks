@@ -1,18 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { BrushAsset, BrushCategory } from "@/lib/types";
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
-  return { supabase, user };
-}
 
 // The actual file bytes go straight from the browser to Supabase Storage
 // (see BrushLibrary.tsx) instead of through this server action — brush

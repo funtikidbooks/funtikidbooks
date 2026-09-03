@@ -1,7 +1,8 @@
 import type { Viewport } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { after } from "next/server";
+import { requireUser } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/workspace/Sidebar";
 import { ChatManagerProvider } from "@/components/workspace/ChatManager";
 import { ChatDock } from "@/components/workspace/ChatDock";
@@ -35,12 +36,19 @@ export default async function WorkspaceLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  // Goes through the shared, per-request-cached requireUser() (see its own
+  // comment in lib/supabase/server.ts) instead of calling auth.getUser()
+  // directly, so every other action below that also calls requireUser()
+  // internally — getUnreadCounts, countMyPendingDocuments, checkInIfNeeded
+  // — reuses this same auth check instead of each re-verifying the JWT
+  // against Supabase's auth server on its own. That redundant chain of
+  // auth round trips was a real, measurable slice of why a cold workspace
+  // load felt slow.
+  let supabase: Awaited<ReturnType<typeof requireUser>>["supabase"];
+  let user: Awaited<ReturnType<typeof requireUser>>["user"];
+  try {
+    ({ supabase, user } = await requireUser());
+  } catch {
     redirect("/dang-nhap?next=/workspace");
   }
 
@@ -58,7 +66,13 @@ export default async function WorkspaceLayout({
     countMyPendingDocuments().catch(() => 0),
   ]);
 
-  await checkInIfNeeded().catch(() => {});
+  // Auto-check-in bookkeeping has zero bearing on what this layout renders
+  // — it used to sit here as a sequential `await` (its own auth check plus
+  // 2-3 more DB calls) after the Promise.all above had already resolved,
+  // purely blocking the response while the page waited on work nothing on
+  // screen needed. after() runs it once the response is already on its way
+  // to the browser instead.
+  after(() => checkInIfNeeded().catch(() => {}));
 
   // Admin accounts handle site content, not the Kanban workspace — send
   // them to the panel that's actually theirs.

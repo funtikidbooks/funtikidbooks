@@ -2,19 +2,10 @@
 
 import { randomUUID } from "node:crypto";
 import { after } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { DirectMessage, DirectMessageReaction, DirectMessageSearchResult } from "@/lib/types";
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
-  return { supabase, user };
-}
 
 // `afterCreatedAt` (exclusive) lets a caller that already has a page of
 // messages ask for only what's new since the last one it holds, instead of

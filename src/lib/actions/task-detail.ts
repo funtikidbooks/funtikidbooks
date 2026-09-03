@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 import { mapTaskAssignees } from "@/lib/mapTaskAssignees";
 import type {
   ChecklistItem,
@@ -23,15 +23,6 @@ const TASK_SELECT =
   "id, board_id, column_id, code, title, description, assignee_id, start_date, due_date, progress, position, cover_image_url, labels, created_by, created_at, updated_at, assignee:profiles!tasks_assignee_id_fkey(id, display_name, avatar_url), assignees:task_assignees(profile:profiles(id, display_name, avatar_url))" as const;
 const ACTIVITY_SELECT =
   "id, task_id, actor_id, type, metadata, created_at, actor:profiles(id, display_name, avatar_url)" as const;
-
-async function requireUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
-  return { supabase, user };
-}
 
 // Fire-and-forget: a failed activity-log insert should never break the
 // actual mutation (attaching a file, moving a card) that triggered it.

@@ -1,15 +1,29 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
 import { useChatManager, useLiveProfiles } from "@/components/workspace/ChatManager";
 import { DirectMessagesPanel } from "@/components/workspace/DirectMessagesPanel";
-import { FoodOrderPanel } from "@/components/workspace/FoodOrderPanel";
-import { VideoCallModal } from "@/components/workspace/VideoCallModal";
-import { ImageLightbox } from "@/components/workspace/ImageLightbox";
-import { ForwardMessageModal, type ForwardableAttachment } from "@/components/workspace/ForwardMessageModal";
+import type { ForwardableAttachment } from "@/components/workspace/ForwardMessageModal";
+
+// Code-split: each of these only ever renders once its own trigger state
+// flips true (opening a call, viewing an image, forwarding a message,
+// switching into the food-order room) — a cold app launch shouldn't have
+// to download and parse all four just to show the message list, which is
+// the only thing actually on screen most of the time. `ssr: false` is fine
+// here since none of them can render meaningfully without client state
+// (a call already in progress, a clicked image, etc.) that doesn't exist
+// on the server anyway.
+const FoodOrderPanel = dynamic(() => import("@/components/workspace/FoodOrderPanel").then((m) => m.FoodOrderPanel), { ssr: false });
+const VideoCallModal = dynamic(() => import("@/components/workspace/VideoCallModal").then((m) => m.VideoCallModal), { ssr: false });
+const ImageLightbox = dynamic(() => import("@/components/workspace/ImageLightbox").then((m) => m.ImageLightbox), { ssr: false });
+const ForwardMessageModal = dynamic(
+  () => import("@/components/workspace/ForwardMessageModal").then((m) => m.ForwardMessageModal),
+  { ssr: false },
+);
 import { useCallPresence } from "@/lib/useCallPresence";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 import { thumbnailUrl } from "@/lib/imageTransform";
