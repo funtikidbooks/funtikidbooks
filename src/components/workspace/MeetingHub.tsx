@@ -896,6 +896,33 @@ export function MeetingHub({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The mount-only effect above misses every notification clicked *after*
+  // this page was already open: sw.js still focuses the tab and posts the
+  // same {type: "notification-click", url} message (see PushSetup.tsx), but
+  // a same-route query-string change doesn't remount this component, so
+  // that first effect never re-runs — the click would silently do nothing.
+  // Listening for the message directly here, on top of PushSetup's own
+  // router.push (which only keeps the address bar in sync), is what
+  // actually switches the open conversation on a click that lands while
+  // already sitting on /workspace/hop.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    function onMessage(event: MessageEvent) {
+      if (event.data?.type !== "notification-click" || typeof event.data.url !== "string") return;
+      const params = new URL(event.data.url, window.location.origin).searchParams;
+      const dm = params.get("dm");
+      const room = params.get("room");
+      if (dm) {
+        setInitialDmPeerId(dm);
+        setActiveId(DM_TAB_ID);
+      } else if (room && initialChannels.some((c) => c.id === room)) {
+        setActiveId(room);
+      }
+    }
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [initialChannels]);
+
   // Someone else adding this user to a room (an invite) or this user joining
   // a public room from a different device/tab both write a
   // meeting_channel_members row for them — without watching that, the new

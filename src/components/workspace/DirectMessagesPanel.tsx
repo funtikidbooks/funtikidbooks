@@ -70,9 +70,22 @@ export function DirectMessagesPanel({
   );
 
   // Deep-linked in from a push notification click — clear that peer's
-  // unread badge the same way clicking their row in the rail would.
+  // unread badge the same way clicking their row in the rail would, and
+  // actually switch the open conversation. This panel stays mounted across
+  // clicks that arrive while the DM tab is already open (only the room list
+  // vs. this tab toggles mount/unmount, not clicks within it), so
+  // `useState(initialPeerId ?? null)` above only ever captures the peer from
+  // the click that first mounted it — later clicks need this effect to move
+  // `selectedPeerId` over too, or the panel just silently keeps showing
+  // whichever conversation was already open.
   useEffect(() => {
-    if (initialPeerId) clearDmUnread(initialPeerId);
+    if (!initialPeerId) return;
+    clearDmUnread(initialPeerId);
+    // Genuinely syncing with an external system (the URL a notification
+    // click landed on), same reasoning as MeetingHub's own initialDmPeerId
+    // effect — not state needlessly mirrored from other React state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSelectedPeerId(initialPeerId);
   }, [initialPeerId, clearDmUnread]);
   const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
   const [showVideoCall, setShowVideoCall] = useState(false);
