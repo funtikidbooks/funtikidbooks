@@ -16,8 +16,13 @@ const TYPE_LABELS: Record<StaffDocumentType, string> = {
   other: "Chứng từ khác",
 };
 
+// Explicit timeZone — without it this reads the *runtime's* local
+// timezone, and the server (Vercel, UTC) formats a different clock time
+// than a browser in Vietnam (UTC+7) does for the same instant. That's a
+// real hydration mismatch on first load, same root cause fixed in
+// MeetingHub.tsx/CalendarView.tsx (see their own comments on it).
 function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("vi-VN");
+  return new Date(iso).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 }
 
 // The actual printable page — company header, the document body, and a

@@ -7,6 +7,7 @@ import { usePresence } from "@/lib/usePresence";
 import { updateJoinedAt } from "@/lib/actions/admin";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { bankColor, formatAccountNumber } from "@/lib/bankDisplay";
+import { vnToday } from "@/lib/constants/attendance";
 import { StaffBankInfoModal } from "@/components/workspace/StaffBankInfoModal";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import type { Profile, StaffBankInfo } from "@/lib/types";
@@ -28,13 +29,19 @@ function toDateInputValue(iso: string) {
   return iso.slice(0, 10);
 }
 
+// Explicit timeZone on both — without it these read the server's own
+// timezone (UTC on Vercel) instead of Vietnam's, a real hydration-mismatch
+// source; see MeetingHub.tsx's own comment on the same fix.
 function formatJoinDate(iso: string) {
-  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(iso));
+  return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Ho_Chi_Minh" }).format(
+    new Date(iso),
+  );
 }
 
 function formatTenure(iso: string) {
   const start = new Date(iso);
-  const now = new Date();
+  const [ny, nm, nd] = vnToday().split("-").map(Number);
+  const now = new Date(ny, nm - 1, nd);
   let months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
   if (now.getDate() < start.getDate()) months -= 1;
   months = Math.max(0, months);

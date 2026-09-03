@@ -576,8 +576,15 @@ function FoodOrderRoundCard({
     }
   }
 
-  const dateLabel = new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit" }).format(
-    new Date(`${round.order_date}T00:00:00`),
+  // order_date is a plain calendar date with no time-of-day meaning —
+  // parsed and formatted both as UTC (paired "Z" + timeZone: "UTC") so the
+  // round-trip is consistent regardless of the runtime's own local
+  // timezone, instead of ambiguously local-parsing then local-formatting,
+  // which is what caused a real hydration mismatch between the server
+  // (UTC) and a browser in Vietnam (UTC+7) — see MeetingHub.tsx's comment
+  // on the same root cause elsewhere in the app.
+  const dateLabel = new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", timeZone: "UTC" }).format(
+    new Date(`${round.order_date}T00:00:00Z`),
   );
 
   return (

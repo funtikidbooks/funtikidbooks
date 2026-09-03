@@ -5,6 +5,7 @@ import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
 import { createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from "@/lib/actions/calendar";
 import { EVENT_CATEGORIES, categoryOf, holidayOn } from "@/lib/constants/calendar";
+import { vnToday } from "@/lib/constants/attendance";
 import type { CalendarEvent, EventCategory } from "@/lib/types";
 
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
@@ -47,10 +48,13 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
   initialEvents: CalendarEvent[];
 }) {
   const [events, setEvents] = useState(initialEvents);
+  // Same reasoning as `today` below: builds off vnToday()'s explicit
+  // Vietnam-timezone date instead of a bare `new Date()`, whose month/year
+  // could otherwise come out a day off between server and client right
+  // around a month boundary.
   const [viewDate, setViewDate] = useState(() => {
-    const d = new Date();
-    d.setDate(1);
-    return d;
+    const [y, m] = vnToday().split("-").map(Number);
+    return new Date(y, m - 1, 1);
   });
   const [enabledCategories, setEnabledCategories] = useState<Set<EventCategory>>(
     () => new Set(EVENT_CATEGORIES.map((c) => c.id)),
@@ -87,7 +91,17 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
   }, [events, enabledCategories]);
 
   const grid = useMemo(() => monthGrid(viewDate), [viewDate]);
-  const today = new Date();
+  // vnToday() (an explicit Asia/Ho_Chi_Minh formatted string), not
+  // `new Date()` — plain `new Date()` here read "today" using whatever
+  // timezone the *runtime* happens to be in, which meant the server
+  // (Vercel, UTC) and a browser in Vietnam (UTC+7) genuinely disagreed on
+  // which calendar date was "today" for roughly 7 hours out of every day —
+  // exactly the gap between UTC's midnight and Vietnam's. That's what the
+  // "today" highlight below is compared against, so server-rendered HTML
+  // and the client's own hydration render could land on two different
+  // cells for a large chunk of each day, not just some rare instant at
+  // midnight — the recurring "Minified React error #418" on this page.
+  const today = vnToday();
 
   function changeMonth(delta: number) {
     setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
@@ -196,7 +210,7 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
           <div className="grid grid-cols-7">
             {grid.map((day) => {
               const inMonth = day.getMonth() === viewDate.getMonth();
-              const isToday = dateKey(day) === dateKey(today);
+              const isToday = dateKey(day) === today;
               const dayEvents = eventsByDay.get(dateKey(day)) ?? [];
               const offEvent = offDayByKey.get(dateKey(day));
               const holiday = holidayOn(day) ?? (offEvent ? { label: offEvent.title } : undefined);

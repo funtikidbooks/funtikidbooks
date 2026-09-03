@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions/messages";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
+import { vnToday } from "@/lib/constants/attendance";
 import { translateMessage } from "@/lib/actions/translate";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import type { DirectMessage, DirectMessageReaction, Profile } from "@/lib/types";
@@ -63,27 +64,41 @@ function TypingDots({ label }: { label: string }) {
   );
 }
 
+// Explicit timeZone throughout — without it these read the *runtime's*
+// local timezone, and the server (Vercel, UTC) disagrees with a browser in
+// Vietnam (UTC+7) on both clock time and, for part of every day, the
+// calendar date itself. Real hydration mismatch on first load; same root
+// cause and fix as MeetingHub.tsx's own copy of this (see its comment).
+const VN_TZ = "Asia/Ho_Chi_Minh";
+
 function formatTime(date: string) {
-  return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(date));
+  return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone: VN_TZ }).format(new Date(date));
+}
+
+function vnDateKey(iso: string) {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: VN_TZ });
 }
 
 function isSameCalendarDay(a: string, b: string) {
-  const da = new Date(a);
-  const db = new Date(b);
-  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+  return vnDateKey(a) === vnDateKey(b);
+}
+
+function addDaysToDateKey(key: string, delta: number) {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
 }
 
 // Same Zalo-style date divider as the room chat (MeetingHub) — kept as its
 // own local copy rather than a shared import, same reasoning as formatTime
 // above.
 function formatDateDivider(date: string) {
-  const d = new Date(date);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  if (isSameCalendarDay(date, today.toISOString())) return "Hôm nay";
-  if (isSameCalendarDay(date, yesterday.toISOString())) return "Hôm qua";
-  return new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
+  const key = vnDateKey(date);
+  const todayKey = vnToday();
+  if (key === todayKey) return "Hôm nay";
+  if (key === addDaysToDateKey(todayKey, -1)) return "Hôm qua";
+  return new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: VN_TZ }).format(
+    new Date(date),
+  );
 }
 
 function isImage(mime: string | null) {

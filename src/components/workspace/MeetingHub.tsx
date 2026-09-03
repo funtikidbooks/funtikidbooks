@@ -26,6 +26,7 @@ const ForwardMessageModal = dynamic(
 );
 import { useCallPresence } from "@/lib/useCallPresence";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
+import { vnToday } from "@/lib/constants/attendance";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import {
   addChannelMember,
@@ -117,27 +118,51 @@ const EMOJI_OPTIONS = [
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀", "🙏"];
 
+// Every date/time display here is pinned to Asia/Ho_Chi_Minh explicitly
+// rather than left to whatever timezone the runtime defaults to —
+// `Intl.DateTimeFormat`/`.getFullYear()` and friends read the *runtime's*
+// local timezone when none is given, and the server (Vercel, UTC) and a
+// browser in Vietnam (UTC+7) disagree on both the clock time and, for
+// roughly 7 hours out of every day, the calendar date itself. Without an
+// explicit timezone, a message's rendered time (and which day's divider it
+// falls under) could come out different on the server-rendered HTML than
+// on the client's own hydration render — a real, reproducible hydration
+// mismatch (and wrong-looking times, momentarily, before React discarded
+// the mismatched server HTML and re-rendered client-side).
+const VN_TZ = "Asia/Ho_Chi_Minh";
+
 function formatTime(date: string) {
-  return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(date));
+  return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone: VN_TZ }).format(new Date(date));
+}
+
+// "YYYY-MM-DD" per Vietnam's calendar, not the runtime's local one — see
+// vnToday() in lib/constants/attendance.ts, the same technique.
+function vnDateKey(iso: string) {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: VN_TZ });
 }
 
 function isSameCalendarDay(a: string, b: string) {
-  const da = new Date(a);
-  const db = new Date(b);
-  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+  return vnDateKey(a) === vnDateKey(b);
+}
+
+// Date.UTC (not a local constructor) so this arithmetic doesn't reintroduce
+// the same runtime-timezone dependence on the calendar keys it's given.
+function addDaysToDateKey(key: string, delta: number) {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
 }
 
 // Zalo-style date divider between messages that land on different days —
 // "Hôm nay"/"Hôm qua" for the two most recent, a full weekday + date
 // otherwise so scrolling back through older history still reads clearly.
 function formatDateDivider(date: string) {
-  const d = new Date(date);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  if (isSameCalendarDay(date, today.toISOString())) return "Hôm nay";
-  if (isSameCalendarDay(date, yesterday.toISOString())) return "Hôm qua";
-  return new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
+  const key = vnDateKey(date);
+  const todayKey = vnToday();
+  if (key === todayKey) return "Hôm nay";
+  if (key === addDaysToDateKey(todayKey, -1)) return "Hôm qua";
+  return new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: VN_TZ }).format(
+    new Date(date),
+  );
 }
 
 function isImage(mime: string | null) {
