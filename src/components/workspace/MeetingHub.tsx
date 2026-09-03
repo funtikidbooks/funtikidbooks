@@ -2144,7 +2144,13 @@ export function MeetingHub({
     }
   }
 
-  async function handleRecallMessage(id: string) {
+  // These seven all render into (or get called from) the memoized message
+  // list built further down — see its own comment on why every one of them
+  // has to be a stable useCallback instead of a plain function declaration:
+  // a plain one gets a fresh identity every render, which would silently
+  // force that memo to recompute every render too, defeating the whole
+  // point of memoizing it in the first place.
+  const handleRecallMessage = useCallback(async (id: string) => {
     if (!confirm("Thu hồi tin nhắn này? Mọi người sẽ thấy \"Đã thu hồi\" thay cho nội dung.")) return;
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, is_recalled: true, content: "", attachment_url: null } : m)));
     try {
@@ -2153,83 +2159,92 @@ export function MeetingHub({
       // best effort — a realtime UPDATE (or the next channel switch) will
       // reconcile if this silently failed server-side
     }
-  }
+  }, []);
 
-  async function toggleReaction(messageId: string, emoji: string) {
-    const already = reactions.some(
-      (r) => r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji,
-    );
-    setReactions((prev) =>
-      already
-        ? prev.filter((r) => !(r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji))
-        : [...prev, { message_id: messageId, profile_id: currentUser.id, emoji, created_at: new Date().toISOString() }],
-    );
-    setReactionPickerFor(null);
-    try {
-      if (already) await removeReaction(messageId, emoji);
-      else await addReaction(messageId, emoji);
-    } catch {
-      // optimistic update may drift from the server on failure — next
-      // channel load or a realtime event from another tab will correct it
-    }
-  }
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      const already = reactions.some(
+        (r) => r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji,
+      );
+      setReactions((prev) =>
+        already
+          ? prev.filter((r) => !(r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji))
+          : [...prev, { message_id: messageId, profile_id: currentUser.id, emoji, created_at: new Date().toISOString() }],
+      );
+      setReactionPickerFor(null);
+      try {
+        if (already) await removeReaction(messageId, emoji);
+        else await addReaction(messageId, emoji);
+      } catch {
+        // optimistic update may drift from the server on failure — next
+        // channel load or a realtime event from another tab will correct it
+      }
+    },
+    [reactions, currentUser.id],
+  );
 
-  async function togglePin(message: MeetingMessage) {
-    const pin = !message.pinned_at;
-    const patch = { pinned_at: pin ? new Date().toISOString() : null, pinned_by: pin ? currentUser.id : null };
-    setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, ...patch } : m)));
-    setPinnedMessages((prev) =>
-      pin ? [{ ...message, ...patch }, ...prev] : prev.filter((m) => m.id !== message.id),
-    );
-    try {
-      await togglePinMessage(message.id, pin);
-    } catch (err) {
-      // revert the optimistic update on failure
-      setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
-      setPinnedMessages((prev) => (pin ? prev.filter((m) => m.id !== message.id) : [message, ...prev]));
-      alert(err instanceof Error ? err.message : "Không thể ghim tin nhắn");
-    }
-  }
+  const togglePin = useCallback(
+    async (message: MeetingMessage) => {
+      const pin = !message.pinned_at;
+      const patch = { pinned_at: pin ? new Date().toISOString() : null, pinned_by: pin ? currentUser.id : null };
+      setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, ...patch } : m)));
+      setPinnedMessages((prev) =>
+        pin ? [{ ...message, ...patch }, ...prev] : prev.filter((m) => m.id !== message.id),
+      );
+      try {
+        await togglePinMessage(message.id, pin);
+      } catch (err) {
+        // revert the optimistic update on failure
+        setMessages((prev) => prev.map((m) => (m.id === message.id ? message : m)));
+        setPinnedMessages((prev) => (pin ? prev.filter((m) => m.id !== message.id) : [message, ...prev]));
+        alert(err instanceof Error ? err.message : "Không thể ghim tin nhắn");
+      }
+    },
+    [currentUser.id],
+  );
 
   // Free unofficial Google endpoint (see translate.ts) rather than dumping
   // the whole room through a translator — staff were copy-pasting a
   // client's English paste-in into Google Translate by hand, one message
   // at a time, only when they actually needed it.
-  async function toggleTranslate(message: MeetingMessage) {
-    if (shownTranslationIds.has(message.id)) {
-      setShownTranslationIds((prev) => {
-        const next = new Set(prev);
-        next.delete(message.id);
-        return next;
-      });
-      return;
-    }
-    if (translations[message.id] !== undefined) {
-      setShownTranslationIds((prev) => new Set(prev).add(message.id));
-      return;
-    }
-    setTranslatingIds((prev) => new Set(prev).add(message.id));
-    try {
-      const { translated } = await translateMessage(message.content);
-      setTranslations((prev) => ({ ...prev, [message.id]: translated }));
-      setShownTranslationIds((prev) => new Set(prev).add(message.id));
-    } catch {
-      alert("Không thể dịch lúc này, thử lại sau.");
-    } finally {
-      setTranslatingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(message.id);
-        return next;
-      });
-    }
-  }
+  const toggleTranslate = useCallback(
+    async (message: MeetingMessage) => {
+      if (shownTranslationIds.has(message.id)) {
+        setShownTranslationIds((prev) => {
+          const next = new Set(prev);
+          next.delete(message.id);
+          return next;
+        });
+        return;
+      }
+      if (translations[message.id] !== undefined) {
+        setShownTranslationIds((prev) => new Set(prev).add(message.id));
+        return;
+      }
+      setTranslatingIds((prev) => new Set(prev).add(message.id));
+      try {
+        const { translated } = await translateMessage(message.content);
+        setTranslations((prev) => ({ ...prev, [message.id]: translated }));
+        setShownTranslationIds((prev) => new Set(prev).add(message.id));
+      } catch {
+        alert("Không thể dịch lúc này, thử lại sau.");
+      } finally {
+        setTranslatingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(message.id);
+          return next;
+        });
+      }
+    },
+    [shownTranslationIds, translations],
+  );
 
   // iPad/tablet: there's no hover, so the small 😊/↩/✕ row never reveals
   // itself, and tapping a bubble just triggers iOS's native text-selection
   // callout. A finger-or-pen press-and-hold on the bubble opens the quick
   // reaction picker instead — same gesture as iMessage/Messenger. Mouse
   // users already have the hover row, so this only arms for touch/pen.
-  function handleBubblePressStart(e: React.PointerEvent, messageId: string) {
+  const handleBubblePressStart = useCallback((e: React.PointerEvent, messageId: string) => {
     if (e.pointerType === "mouse") return;
     // A press directly on the message text is left alone — native
     // selection/copy still works there. Only a press on the bubble's own
@@ -2242,14 +2257,14 @@ export function MeetingHub({
       setShowEmojiPicker(false);
       setReactionPickerFor(messageId);
     }, 450);
-  }
+  }, []);
 
-  function cancelBubblePress() {
+  const cancelBubblePress = useCallback(() => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
-  }
+  }, []);
 
   // Lets a screenshot copied to the clipboard (or any image, really) go
   // straight into the composer with Ctrl+V, same as Slack/Messenger — no
@@ -2429,12 +2444,518 @@ export function MeetingHub({
     })();
   }
 
-  function retrySend(tempId: string) {
-    if (!activeId) return;
-    const payload = pendingPayloadsRef.current.get(tempId);
-    if (!payload) return;
-    attemptSend(activeId, tempId, payload.content, payload.file, payload.replyId);
-  }
+  const retrySend = useCallback(
+    (tempId: string) => {
+      if (!activeId) return;
+      const payload = pendingPayloadsRef.current.get(tempId);
+      if (!payload) return;
+      attemptSend(activeId, tempId, payload.content, payload.file, payload.replyId);
+    },
+    [activeId, attemptSend],
+  );
+
+  /* Wrapped in useMemo — this block used to be plain inline JSX,
+                  which meant React rebuilt and diffed every visible message
+                  row on *any* component state change, not just ones that
+                  actually affect the list: typing in the composer, the
+                  mention dropdown filtering per keystroke, hovering a
+                  reaction. None of that touches what a message row renders,
+                  but without memoization the whole ~200-row list still paid
+                  for it every single time. The dependency array below is
+                  everything the row bodies actually read — react-hooks'
+                  exhaustive-deps lint rule catches anything missing here,
+                  so trust that warning over trimming this list by eye. */
+  const messageListJsx = useMemo(
+                () =>
+                  messages.map((m, index) => {
+                // A non-leader member of a photo burst (see photoBurstInfo
+                // above) renders nothing of its own — its thumbnail is part
+                // of the leader's row further down.
+                const burst = photoBurstInfo.get(m.id);
+                if (burst && burst.leaderIndex > 0) return null;
+
+                const sender = profileById.get(m.sender_id);
+                // Zalo/Messenger-style grouping: consecutive messages from the
+                // same person within a few minutes only show the avatar/name
+                // once, with tight spacing between them — the repeated
+                // avatar + name + full gap on every single message (even
+                // several in a row from the same person seconds apart) was
+                // exactly the "too much dead space" staff were pointing out.
+                const prev = index > 0 ? messages[index - 1] : null;
+                // A burst leader's "next" for grouping purposes has to skip
+                // past its own (unrendered) burst members to the message
+                // that actually follows the whole row — otherwise isGroupEnd
+                // below compares against the burst's 2nd image, which is
+                // always "same sender, seconds later", permanently hiding
+                // the row's timestamp since nothing ever renders that check
+                // as true for it.
+                const nextIndex = burst ? index + burst.ids.length : index + 1;
+                const next = nextIndex < messages.length ? messages[nextIndex] : null;
+                const isNewDay = !prev || !isSameCalendarDay(m.created_at, prev.created_at);
+                const isGroupStart =
+                  !prev ||
+                  isNewDay ||
+                  prev.sender_id !== m.sender_id ||
+                  new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() > 5 * 60 * 1000;
+                // Same idea in reverse — only the last message of a run shows
+                // its time, like Zalo/Messenger, instead of repeating it under
+                // every single message in the group.
+                const isGroupEnd =
+                  !next ||
+                  next.sender_id !== m.sender_id ||
+                  new Date(next.created_at).getTime() - new Date(m.created_at).getTime() > 5 * 60 * 1000;
+                const mine = m.sender_id === currentUser.id;
+                const isPending = pendingIds.has(m.id);
+                const isFailed = failedIds.has(m.id);
+                const msgReactions = reactions.filter((r) => r.message_id === m.id);
+                const grouped = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
+                  (acc[r.emoji] ??= []).push(r.profile_id);
+                  return acc;
+                }, {});
+                const seenBy = seenByMessageId.get(m.id) ?? [];
+                const quoted = m.reply_to_message_id ? messageById.get(m.reply_to_message_id) : undefined;
+                const quotedSender = quoted ? profileById.get(quoted.sender_id) : undefined;
+
+                const actionButtons = (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowEmojiPicker(false);
+                        setMoreMenuFor(null);
+                        setReactionPickerFor(reactionPickerFor === m.id ? null : m.id);
+                      }}
+                      className="btn-icon"
+                      style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
+                      aria-label="Thả cảm xúc"
+                    >
+                      😊
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReactionPickerFor(null);
+                        setMoreMenuFor(moreMenuFor === m.id ? null : m.id);
+                      }}
+                      className="btn-icon"
+                      style={{ width: 20, height: 20, padding: 0, fontSize: 13 }}
+                      aria-label="Thêm tuỳ chọn"
+                      title="Thêm"
+                    >
+                      ⋯
+                    </button>
+                    {moreMenuFor === m.id &&
+                      (() => {
+                        const menuItems = (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setReplyingTo(m);
+                                setMoreMenuFor(null);
+                                textInputRef.current?.focus();
+                              }}
+                              className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
+                            >
+                              ↩ Trả lời
+                            </button>
+                            {m.content && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMoreMenuFor(null);
+                                  toggleTranslate(m);
+                                }}
+                                disabled={translatingIds.has(m.id)}
+                                className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
+                              >
+                                🌐 {translatingIds.has(m.id) ? "Đang dịch…" : "Dịch Anh ⇄ Việt"}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMoreMenuFor(null);
+                                setForwarding({
+                                  content: m.content,
+                                  attachment: m.attachment_url
+                                    ? { url: m.attachment_url, filename: m.attachment_filename, mime: m.attachment_mime, size: m.attachment_size }
+                                    : null,
+                                });
+                              }}
+                              className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
+                            >
+                              ➡️ Chuyển tiếp
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMoreMenuFor(null);
+                                togglePin(m);
+                              }}
+                              className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
+                            >
+                              📌 {m.pinned_at ? "Bỏ ghim" : "Ghim"}
+                            </button>
+                            {mine && !m.is_recalled && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMoreMenuFor(null);
+                                  handleRecallMessage(m.id);
+                                }}
+                                className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
+                                style={{ color: "var(--status-red, #c22)" }}
+                              >
+                                ✕ Thu hồi
+                              </button>
+                            )}
+                          </>
+                        );
+
+                        // Phone keeps the centered sheet (built to dodge the
+                        // cut-off/clipping a viewport-edge-anchored popover
+                        // got into on small screens) — iPad/desktop have
+                        // room to spare, so there sếp Phúc wants the older
+                        // dropdown-from-the-⋯-button behavior back.
+                        return isMobile ? (
+                          <Modal onClose={() => setMoreMenuFor(null)} maxWidth={300}>
+                            <div className="flex flex-col p-1.5">{menuItems}</div>
+                          </Modal>
+                        ) : (
+                          <div
+                            ref={popoverRef}
+                            className="card elev-lg flex flex-col p-1.5"
+                            style={{
+                              position: "absolute",
+                              bottom: "100%",
+                              [mine ? "right" : "left"]: 0,
+                              marginBottom: 6,
+                              zIndex: 10,
+                              minWidth: 190,
+                            }}
+                          >
+                            {menuItems}
+                          </div>
+                        );
+                      })()}
+                    {reactionPickerFor === m.id && (
+                      <div
+                        ref={popoverRef}
+                        className="card elev-lg flex items-center gap-1 p-1.5"
+                        style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, marginBottom: 6, zIndex: 10 }}
+                      >
+                        {QUICK_REACTIONS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => toggleReaction(m.id, emoji)}
+                            className="btn-icon"
+                            style={{ width: 26, height: 26, padding: 0, fontSize: 15 }}
+                            aria-label={emoji}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                        {m.content && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard?.writeText(m.content).catch(() => {});
+                              setReactionPickerFor(null);
+                            }}
+                            className="btn-icon"
+                            style={{ width: 26, height: 26, padding: 0, fontSize: 13 }}
+                            aria-label="Sao chép"
+                            title="Sao chép"
+                          >
+                            📋
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+
+                return (
+                  <Fragment key={m.id}>
+                    {isNewDay && (
+                      <div className="flex items-center justify-center my-3">
+                        <span
+                          className="text-[11px] font-semibold px-3 py-1 rounded-full"
+                          style={{ background: "var(--color-surface)", color: "var(--color-neutral-500)" }}
+                        >
+                          {formatDateDivider(m.created_at)}
+                        </span>
+                      </div>
+                    )}
+                    <div
+                    id={`meeting-msg-${m.id}`}
+                    className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}
+                    style={{ marginTop: isGroupStart ? 12 : 2, opacity: isPending ? 0.6 : 1 }}
+                  >
+                    {isGroupStart ? <Avatar profile={sender} /> : <span className="flex-none" style={{ width: 28 }} />}
+                    <div className={`flex flex-col min-w-0 ${mine ? "items-end" : "items-start"} max-w-[85%]`}>
+                      {isGroupStart && (
+                        <span className="text-[11px] font-semibold mb-0.5" style={{ color: "var(--color-neutral-500)" }}>
+                          {mine ? "Bạn" : (sender?.display_name ?? "Ẩn danh")}
+                        </span>
+                      )}
+                      {m.pinned_at && (
+                        <span className="text-[10px] font-semibold mb-0.5" style={{ color: "var(--color-accent-700)" }} title="Đã ghim">
+                          📌 Đã ghim
+                        </span>
+                      )}
+                      {m.is_recalled ? (
+                        <div
+                          className="rounded-[12px] px-3 py-2 text-sm italic"
+                          style={{ background: "var(--color-surface)", color: "var(--color-neutral-500)" }}
+                        >
+                          Đã thu hồi
+                        </div>
+                      ) : (
+                        <>
+                      {m.reply_to_message_id && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const el = document.getElementById(`meeting-msg-${m.reply_to_message_id}`);
+                            el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                          }}
+                          className="flex flex-col text-left rounded-[8px] px-2.5 py-1.5 mb-1 max-w-full"
+                          style={{
+                            background: "var(--color-surface)",
+                            borderLeft: "3px solid var(--color-accent-500)",
+                          }}
+                        >
+                          <span className="text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
+                            {quoted ? (quotedSender?.display_name ?? "Ẩn danh") : "Tin nhắn gốc"}
+                          </span>
+                          <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)", maxWidth: 220 }}>
+                            {quoted ? (quoted.is_recalled ? "Đã thu hồi" : quoted.content || (quoted.attachment_url ? "📎 Tệp đính kèm" : "")) : "Đã bị xoá"}
+                          </span>
+                        </button>
+                      )}
+                      {m.content && (
+                        <div className={`flex items-end gap-1 min-w-0 max-w-full ${mine ? "flex-row-reverse" : ""}`}>
+                          <div
+                            className="min-w-0 rounded-[12px] px-3 py-2 text-[17px] whitespace-pre-wrap break-words"
+                            style={{
+                              background: isFailed
+                                ? "var(--status-red-100, #fde2e2)"
+                                : mine
+                                  ? "var(--color-accent-500)"
+                                  : "var(--color-surface)",
+                              color: isFailed ? "var(--status-red, #c22)" : mine ? "#fff" : "var(--color-text)",
+                            }}
+                            onPointerDown={(e) => handleBubblePressStart(e, m.id)}
+                            onPointerUp={cancelBubblePress}
+                            onPointerLeave={cancelBubblePress}
+                            onPointerCancel={cancelBubblePress}
+                            onContextMenu={(e) => {
+                              if (longPressFiredRef.current) e.preventDefault();
+                            }}
+                          >
+                            <span className="fk-message-text">{renderContent(m.content, namesPattern, mine)}</span>
+                            {shownTranslationIds.has(m.id) && (
+                              <div
+                                className="mt-1.5 pt-1.5 text-[15px]"
+                                style={{
+                                  borderTop: `1px solid ${mine ? "rgba(255,255,255,.3)" : "var(--color-neutral-200)"}`,
+                                  opacity: 0.9,
+                                }}
+                              >
+                                <span
+                                  className="text-[10px] font-bold block mb-0.5"
+                                  style={{ opacity: 0.7, letterSpacing: "0.03em" }}
+                                >
+                                  🌐 ĐÃ DỊCH
+                                </span>
+                                {translations[m.id] || "(không có nội dung)"}
+                              </div>
+                            )}
+                          </div>
+                          <span className="fk-msg-actions relative inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-none">
+                            {actionButtons}
+                          </span>
+                        </div>
+                      )}
+                      {m.attachment_url &&
+                        (isImage(m.attachment_mime) ? (
+                          burst ? (
+                            <div className="mt-1 flex flex-wrap gap-1" style={{ maxWidth: 340 }}>
+                              {burst.ids.map((id) => {
+                                const bm = messageById.get(id);
+                                if (!bm?.attachment_url) return null;
+                                return (
+                                  <button
+                                    key={id}
+                                    type="button"
+                                    onClick={() => setLightbox({ url: bm.attachment_url!, filename: bm.attachment_filename })}
+                                    className="block flex-none"
+                                  >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={thumbnailUrl(bm.attachment_url, 220)}
+                                      alt={bm.attachment_filename ?? ""}
+                                      className="rounded-[10px] object-cover"
+                                      style={{ width: 108, height: 108 }}
+                                      onLoad={() => stickToBottomIfNear(false)}
+                                    />
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setLightbox({ url: m.attachment_url!, filename: m.attachment_filename })}
+                              className="mt-1 block"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={thumbnailUrl(m.attachment_url, 480)}
+                                alt={m.attachment_filename ?? ""}
+                                className="rounded-[10px] object-cover"
+                                style={{ maxWidth: 340, maxHeight: 340 }}
+                                onLoad={() => stickToBottomIfNear(false)}
+                              />
+                            </button>
+                          )
+                        ) : (
+                          <a
+                            href={m.attachment_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold"
+                            style={{ background: "var(--color-surface)", color: "var(--color-accent-700)" }}
+                          >
+                            📄 {m.attachment_filename}
+                          </a>
+                        ))}
+                      {!m.attachment_url && m.attachment_filename && (
+                        <div
+                          className="mt-1 flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold"
+                          style={{ background: "var(--color-surface)", color: "var(--color-neutral-500)" }}
+                        >
+                          📎 {m.attachment_filename} {isFailed ? "— chưa gửi được" : "— đang gửi…"}
+                        </div>
+                      )}
+
+                      {Object.keys(grouped).length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {Object.entries(grouped).map(([emoji, ids]) => {
+                            const reactedByMe = ids.includes(currentUser.id);
+                            const reactionKey = `${m.id}:${emoji}`;
+                            const names = ids.map((id) => profileById.get(id)?.display_name ?? "").filter(Boolean);
+                            return (
+                              <span key={emoji} className="relative inline-block">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleReaction(m.id, emoji)}
+                                  onMouseEnter={() => setHoveredReaction(reactionKey)}
+                                  onMouseLeave={() => setHoveredReaction((prev) => (prev === reactionKey ? null : prev))}
+                                  className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold"
+                                  style={{
+                                    background: reactedByMe ? "var(--color-accent-100)" : "var(--color-surface)",
+                                    border: `1px solid ${reactedByMe ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
+                                  }}
+                                >
+                                  <span aria-hidden>{emoji}</span>
+                                  {ids.length}
+                                </button>
+                                {hoveredReaction === reactionKey && names.length > 0 && (
+                                  <span
+                                    className="absolute z-10 rounded-[8px] px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap"
+                                    style={{
+                                      bottom: "calc(100% + 6px)",
+                                      left: "50%",
+                                      transform: "translateX(-50%)",
+                                      background: "var(--color-neutral-900, #1a1a1a)",
+                                      color: "#fff",
+                                      boxShadow: "var(--shadow-md, 0 2px 8px rgba(0,0,0,.25))",
+                                    }}
+                                  >
+                                    {emoji} {names.join(", ")}
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                        </>
+                      )}
+
+                      {isFailed ? (
+                        <button
+                          type="button"
+                          onClick={() => retrySend(m.id)}
+                          className="text-[11px] font-semibold mt-0.5"
+                          style={{ color: "var(--status-red, #c22)" }}
+                        >
+                          ⚠️ Gửi lỗi — Bấm để gửi lại
+                        </button>
+                      ) : isPending ? (
+                        <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
+                          Đang gửi…
+                        </span>
+                      ) : (
+                        (isGroupEnd || (!m.content && !m.is_recalled)) && (
+                        <span className="flex items-center gap-1.5 mt-0.5">
+                          {isGroupEnd && (
+                            <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
+                              {formatTime(m.created_at)}
+                            </span>
+                          )}
+                          {!m.content && !m.is_recalled && (
+                            <span className="fk-msg-actions relative inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {actionButtons}
+                            </span>
+                          )}
+                        </span>
+                        )
+                      )}
+                      {seenBy.length > 0 && (
+                        <span className="flex items-center -space-x-1 mt-0.5" title={seenBy.map((id) => profileById.get(id)?.display_name ?? "").filter(Boolean).join(", ")}>
+                          {seenBy.map((id) => (
+                            <Avatar key={id} profile={profileById.get(id)} size={14} />
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  </Fragment>
+                );
+                  }),
+                [
+                  messages,
+                  photoBurstInfo,
+                  profileById,
+                  messageById,
+                  reactions,
+                  seenByMessageId,
+                  currentUser.id,
+                  pendingIds,
+                  failedIds,
+                  reactionPickerFor,
+                  moreMenuFor,
+                  translatingIds,
+                  isMobile,
+                  hoveredReaction,
+                  namesPattern,
+                  shownTranslationIds,
+                  translations,
+                  handleRecallMessage,
+                  togglePin,
+                  toggleReaction,
+                  handleBubblePressStart,
+                  cancelBubblePress,
+                  retrySend,
+                  stickToBottomIfNear,
+                  toggleTranslate,
+                ],
+  );
 
   return (
     <div className="flex flex-1 min-h-0">
@@ -3254,467 +3775,7 @@ export function MeetingHub({
                   — Đầu cuộc trò chuyện —
                 </p>
               )}
-              {messages.map((m, index) => {
-                // A non-leader member of a photo burst (see photoBurstInfo
-                // above) renders nothing of its own — its thumbnail is part
-                // of the leader's row further down.
-                const burst = photoBurstInfo.get(m.id);
-                if (burst && burst.leaderIndex > 0) return null;
-
-                const sender = profileById.get(m.sender_id);
-                // Zalo/Messenger-style grouping: consecutive messages from the
-                // same person within a few minutes only show the avatar/name
-                // once, with tight spacing between them — the repeated
-                // avatar + name + full gap on every single message (even
-                // several in a row from the same person seconds apart) was
-                // exactly the "too much dead space" staff were pointing out.
-                const prev = index > 0 ? messages[index - 1] : null;
-                // A burst leader's "next" for grouping purposes has to skip
-                // past its own (unrendered) burst members to the message
-                // that actually follows the whole row — otherwise isGroupEnd
-                // below compares against the burst's 2nd image, which is
-                // always "same sender, seconds later", permanently hiding
-                // the row's timestamp since nothing ever renders that check
-                // as true for it.
-                const nextIndex = burst ? index + burst.ids.length : index + 1;
-                const next = nextIndex < messages.length ? messages[nextIndex] : null;
-                const isNewDay = !prev || !isSameCalendarDay(m.created_at, prev.created_at);
-                const isGroupStart =
-                  !prev ||
-                  isNewDay ||
-                  prev.sender_id !== m.sender_id ||
-                  new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() > 5 * 60 * 1000;
-                // Same idea in reverse — only the last message of a run shows
-                // its time, like Zalo/Messenger, instead of repeating it under
-                // every single message in the group.
-                const isGroupEnd =
-                  !next ||
-                  next.sender_id !== m.sender_id ||
-                  new Date(next.created_at).getTime() - new Date(m.created_at).getTime() > 5 * 60 * 1000;
-                const mine = m.sender_id === currentUser.id;
-                const isPending = pendingIds.has(m.id);
-                const isFailed = failedIds.has(m.id);
-                const msgReactions = reactions.filter((r) => r.message_id === m.id);
-                const grouped = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
-                  (acc[r.emoji] ??= []).push(r.profile_id);
-                  return acc;
-                }, {});
-                const seenBy = seenByMessageId.get(m.id) ?? [];
-                const quoted = m.reply_to_message_id ? messageById.get(m.reply_to_message_id) : undefined;
-                const quotedSender = quoted ? profileById.get(quoted.sender_id) : undefined;
-
-                const actionButtons = (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowEmojiPicker(false);
-                        setMoreMenuFor(null);
-                        setReactionPickerFor(reactionPickerFor === m.id ? null : m.id);
-                      }}
-                      className="btn-icon"
-                      style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
-                      aria-label="Thả cảm xúc"
-                    >
-                      😊
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReactionPickerFor(null);
-                        setMoreMenuFor(moreMenuFor === m.id ? null : m.id);
-                      }}
-                      className="btn-icon"
-                      style={{ width: 20, height: 20, padding: 0, fontSize: 13 }}
-                      aria-label="Thêm tuỳ chọn"
-                      title="Thêm"
-                    >
-                      ⋯
-                    </button>
-                    {moreMenuFor === m.id &&
-                      (() => {
-                        const menuItems = (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setReplyingTo(m);
-                                setMoreMenuFor(null);
-                                textInputRef.current?.focus();
-                              }}
-                              className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
-                            >
-                              ↩ Trả lời
-                            </button>
-                            {m.content && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMoreMenuFor(null);
-                                  toggleTranslate(m);
-                                }}
-                                disabled={translatingIds.has(m.id)}
-                                className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
-                              >
-                                🌐 {translatingIds.has(m.id) ? "Đang dịch…" : "Dịch Anh ⇄ Việt"}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMoreMenuFor(null);
-                                setForwarding({
-                                  content: m.content,
-                                  attachment: m.attachment_url
-                                    ? { url: m.attachment_url, filename: m.attachment_filename, mime: m.attachment_mime, size: m.attachment_size }
-                                    : null,
-                                });
-                              }}
-                              className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
-                            >
-                              ➡️ Chuyển tiếp
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMoreMenuFor(null);
-                                togglePin(m);
-                              }}
-                              className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
-                            >
-                              📌 {m.pinned_at ? "Bỏ ghim" : "Ghim"}
-                            </button>
-                            {mine && !m.is_recalled && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMoreMenuFor(null);
-                                  handleRecallMessage(m.id);
-                                }}
-                                className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
-                                style={{ color: "var(--status-red, #c22)" }}
-                              >
-                                ✕ Thu hồi
-                              </button>
-                            )}
-                          </>
-                        );
-
-                        // Phone keeps the centered sheet (built to dodge the
-                        // cut-off/clipping a viewport-edge-anchored popover
-                        // got into on small screens) — iPad/desktop have
-                        // room to spare, so there sếp Phúc wants the older
-                        // dropdown-from-the-⋯-button behavior back.
-                        return isMobile ? (
-                          <Modal onClose={() => setMoreMenuFor(null)} maxWidth={300}>
-                            <div className="flex flex-col p-1.5">{menuItems}</div>
-                          </Modal>
-                        ) : (
-                          <div
-                            ref={popoverRef}
-                            className="card elev-lg flex flex-col p-1.5"
-                            style={{
-                              position: "absolute",
-                              bottom: "100%",
-                              [mine ? "right" : "left"]: 0,
-                              marginBottom: 6,
-                              zIndex: 10,
-                              minWidth: 190,
-                            }}
-                          >
-                            {menuItems}
-                          </div>
-                        );
-                      })()}
-                    {reactionPickerFor === m.id && (
-                      <div
-                        ref={popoverRef}
-                        className="card elev-lg flex items-center gap-1 p-1.5"
-                        style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, marginBottom: 6, zIndex: 10 }}
-                      >
-                        {QUICK_REACTIONS.map((emoji) => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => toggleReaction(m.id, emoji)}
-                            className="btn-icon"
-                            style={{ width: 26, height: 26, padding: 0, fontSize: 15 }}
-                            aria-label={emoji}
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                        {m.content && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard?.writeText(m.content).catch(() => {});
-                              setReactionPickerFor(null);
-                            }}
-                            className="btn-icon"
-                            style={{ width: 26, height: 26, padding: 0, fontSize: 13 }}
-                            aria-label="Sao chép"
-                            title="Sao chép"
-                          >
-                            📋
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </>
-                );
-
-                return (
-                  <Fragment key={m.id}>
-                    {isNewDay && (
-                      <div className="flex items-center justify-center my-3">
-                        <span
-                          className="text-[11px] font-semibold px-3 py-1 rounded-full"
-                          style={{ background: "var(--color-surface)", color: "var(--color-neutral-500)" }}
-                        >
-                          {formatDateDivider(m.created_at)}
-                        </span>
-                      </div>
-                    )}
-                    <div
-                    id={`meeting-msg-${m.id}`}
-                    className={`group flex items-start gap-2 ${mine ? "flex-row-reverse" : ""}`}
-                    style={{ marginTop: isGroupStart ? 12 : 2, opacity: isPending ? 0.6 : 1 }}
-                  >
-                    {isGroupStart ? <Avatar profile={sender} /> : <span className="flex-none" style={{ width: 28 }} />}
-                    <div className={`flex flex-col min-w-0 ${mine ? "items-end" : "items-start"} max-w-[85%]`}>
-                      {isGroupStart && (
-                        <span className="text-[11px] font-semibold mb-0.5" style={{ color: "var(--color-neutral-500)" }}>
-                          {mine ? "Bạn" : (sender?.display_name ?? "Ẩn danh")}
-                        </span>
-                      )}
-                      {m.pinned_at && (
-                        <span className="text-[10px] font-semibold mb-0.5" style={{ color: "var(--color-accent-700)" }} title="Đã ghim">
-                          📌 Đã ghim
-                        </span>
-                      )}
-                      {m.is_recalled ? (
-                        <div
-                          className="rounded-[12px] px-3 py-2 text-sm italic"
-                          style={{ background: "var(--color-surface)", color: "var(--color-neutral-500)" }}
-                        >
-                          Đã thu hồi
-                        </div>
-                      ) : (
-                        <>
-                      {m.reply_to_message_id && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const el = document.getElementById(`meeting-msg-${m.reply_to_message_id}`);
-                            el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                          }}
-                          className="flex flex-col text-left rounded-[8px] px-2.5 py-1.5 mb-1 max-w-full"
-                          style={{
-                            background: "var(--color-surface)",
-                            borderLeft: "3px solid var(--color-accent-500)",
-                          }}
-                        >
-                          <span className="text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
-                            {quoted ? (quotedSender?.display_name ?? "Ẩn danh") : "Tin nhắn gốc"}
-                          </span>
-                          <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)", maxWidth: 220 }}>
-                            {quoted ? (quoted.is_recalled ? "Đã thu hồi" : quoted.content || (quoted.attachment_url ? "📎 Tệp đính kèm" : "")) : "Đã bị xoá"}
-                          </span>
-                        </button>
-                      )}
-                      {m.content && (
-                        <div className={`flex items-end gap-1 min-w-0 max-w-full ${mine ? "flex-row-reverse" : ""}`}>
-                          <div
-                            className="min-w-0 rounded-[12px] px-3 py-2 text-[17px] whitespace-pre-wrap break-words"
-                            style={{
-                              background: isFailed
-                                ? "var(--status-red-100, #fde2e2)"
-                                : mine
-                                  ? "var(--color-accent-500)"
-                                  : "var(--color-surface)",
-                              color: isFailed ? "var(--status-red, #c22)" : mine ? "#fff" : "var(--color-text)",
-                            }}
-                            onPointerDown={(e) => handleBubblePressStart(e, m.id)}
-                            onPointerUp={cancelBubblePress}
-                            onPointerLeave={cancelBubblePress}
-                            onPointerCancel={cancelBubblePress}
-                            onContextMenu={(e) => {
-                              if (longPressFiredRef.current) e.preventDefault();
-                            }}
-                          >
-                            <span className="fk-message-text">{renderContent(m.content, namesPattern, mine)}</span>
-                            {shownTranslationIds.has(m.id) && (
-                              <div
-                                className="mt-1.5 pt-1.5 text-[15px]"
-                                style={{
-                                  borderTop: `1px solid ${mine ? "rgba(255,255,255,.3)" : "var(--color-neutral-200)"}`,
-                                  opacity: 0.9,
-                                }}
-                              >
-                                <span
-                                  className="text-[10px] font-bold block mb-0.5"
-                                  style={{ opacity: 0.7, letterSpacing: "0.03em" }}
-                                >
-                                  🌐 ĐÃ DỊCH
-                                </span>
-                                {translations[m.id] || "(không có nội dung)"}
-                              </div>
-                            )}
-                          </div>
-                          <span className="fk-msg-actions relative inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-none">
-                            {actionButtons}
-                          </span>
-                        </div>
-                      )}
-                      {m.attachment_url &&
-                        (isImage(m.attachment_mime) ? (
-                          burst ? (
-                            <div className="mt-1 flex flex-wrap gap-1" style={{ maxWidth: 340 }}>
-                              {burst.ids.map((id) => {
-                                const bm = messageById.get(id);
-                                if (!bm?.attachment_url) return null;
-                                return (
-                                  <button
-                                    key={id}
-                                    type="button"
-                                    onClick={() => setLightbox({ url: bm.attachment_url!, filename: bm.attachment_filename })}
-                                    className="block flex-none"
-                                  >
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img
-                                      src={thumbnailUrl(bm.attachment_url, 220)}
-                                      alt={bm.attachment_filename ?? ""}
-                                      className="rounded-[10px] object-cover"
-                                      style={{ width: 108, height: 108 }}
-                                      onLoad={() => stickToBottomIfNear(false)}
-                                    />
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setLightbox({ url: m.attachment_url!, filename: m.attachment_filename })}
-                              className="mt-1 block"
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={thumbnailUrl(m.attachment_url, 480)}
-                                alt={m.attachment_filename ?? ""}
-                                className="rounded-[10px] object-cover"
-                                style={{ maxWidth: 340, maxHeight: 340 }}
-                                onLoad={() => stickToBottomIfNear(false)}
-                              />
-                            </button>
-                          )
-                        ) : (
-                          <a
-                            href={m.attachment_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-1 flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold"
-                            style={{ background: "var(--color-surface)", color: "var(--color-accent-700)" }}
-                          >
-                            📄 {m.attachment_filename}
-                          </a>
-                        ))}
-                      {!m.attachment_url && m.attachment_filename && (
-                        <div
-                          className="mt-1 flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold"
-                          style={{ background: "var(--color-surface)", color: "var(--color-neutral-500)" }}
-                        >
-                          📎 {m.attachment_filename} {isFailed ? "— chưa gửi được" : "— đang gửi…"}
-                        </div>
-                      )}
-
-                      {Object.keys(grouped).length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {Object.entries(grouped).map(([emoji, ids]) => {
-                            const reactedByMe = ids.includes(currentUser.id);
-                            const reactionKey = `${m.id}:${emoji}`;
-                            const names = ids.map((id) => profileById.get(id)?.display_name ?? "").filter(Boolean);
-                            return (
-                              <span key={emoji} className="relative inline-block">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleReaction(m.id, emoji)}
-                                  onMouseEnter={() => setHoveredReaction(reactionKey)}
-                                  onMouseLeave={() => setHoveredReaction((prev) => (prev === reactionKey ? null : prev))}
-                                  className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold"
-                                  style={{
-                                    background: reactedByMe ? "var(--color-accent-100)" : "var(--color-surface)",
-                                    border: `1px solid ${reactedByMe ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
-                                  }}
-                                >
-                                  <span aria-hidden>{emoji}</span>
-                                  {ids.length}
-                                </button>
-                                {hoveredReaction === reactionKey && names.length > 0 && (
-                                  <span
-                                    className="absolute z-10 rounded-[8px] px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap"
-                                    style={{
-                                      bottom: "calc(100% + 6px)",
-                                      left: "50%",
-                                      transform: "translateX(-50%)",
-                                      background: "var(--color-neutral-900, #1a1a1a)",
-                                      color: "#fff",
-                                      boxShadow: "var(--shadow-md, 0 2px 8px rgba(0,0,0,.25))",
-                                    }}
-                                  >
-                                    {emoji} {names.join(", ")}
-                                  </span>
-                                )}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
-                        </>
-                      )}
-
-                      {isFailed ? (
-                        <button
-                          type="button"
-                          onClick={() => retrySend(m.id)}
-                          className="text-[11px] font-semibold mt-0.5"
-                          style={{ color: "var(--status-red, #c22)" }}
-                        >
-                          ⚠️ Gửi lỗi — Bấm để gửi lại
-                        </button>
-                      ) : isPending ? (
-                        <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
-                          Đang gửi…
-                        </span>
-                      ) : (
-                        (isGroupEnd || (!m.content && !m.is_recalled)) && (
-                        <span className="flex items-center gap-1.5 mt-0.5">
-                          {isGroupEnd && (
-                            <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
-                              {formatTime(m.created_at)}
-                            </span>
-                          )}
-                          {!m.content && !m.is_recalled && (
-                            <span className="fk-msg-actions relative inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {actionButtons}
-                            </span>
-                          )}
-                        </span>
-                        )
-                      )}
-                      {seenBy.length > 0 && (
-                        <span className="flex items-center -space-x-1 mt-0.5" title={seenBy.map((id) => profileById.get(id)?.display_name ?? "").filter(Boolean).join(", ")}>
-                          {seenBy.map((id) => (
-                            <Avatar key={id} profile={profileById.get(id)} size={14} />
-                          ))}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  </Fragment>
-                );
-              })}
+              {messageListJsx}
             </div>
 
             {showJumpToBottom && (
