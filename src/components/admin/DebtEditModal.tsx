@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { upsertPersonalDebt } from "@/lib/actions/finance";
+import { formatVnd } from "@/lib/financeSummary";
 import type { PersonalDebt } from "@/lib/types";
 
 export function DebtEditModal({
@@ -16,8 +17,20 @@ export function DebtEditModal({
 }) {
   const [totalAmount, setTotalAmount] = useState<number | "">(debt.total_amount ?? "");
   const [remainingAmount, setRemainingAmount] = useState<number | "">(debt.remaining_amount ?? "");
+  const [repayment, setRepayment] = useState<number | "">("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Typing a repayment here subtracts it from what "Còn nợ" was when the
+  // modal opened — not from whatever's currently in that field — so typing
+  // then correcting the repayment amount doesn't stack subtractions on top
+  // of each other. "Còn nợ" stays directly editable too, for a manual
+  // correction that has nothing to do with a payment just made.
+  function applyRepayment(value: number | "") {
+    setRepayment(value);
+    const opening = debt.remaining_amount ?? 0;
+    setRemainingAmount(value === "" ? opening : Math.max(0, opening - Number(value)));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,6 +68,20 @@ export function DebtEditModal({
 
         <div className="flex flex-col gap-4 px-6 py-6">
           <div className="field">
+            <label htmlFor="debt-repayment">Vừa trả nợ (VNĐ)</label>
+            <input
+              id="debt-repayment"
+              type="number"
+              min={0}
+              className="input"
+              placeholder="Nhập số tiền vừa trả — tự trừ vào Còn nợ bên dưới"
+              value={repayment}
+              onChange={(e) => applyRepayment(e.target.value === "" ? "" : Number(e.target.value))}
+              autoFocus
+            />
+          </div>
+
+          <div className="field">
             <label htmlFor="debt-total">Tổng nợ (VNĐ)</label>
             <input
               id="debt-total"
@@ -64,7 +91,6 @@ export function DebtEditModal({
               placeholder="Chưa nhập"
               value={totalAmount}
               onChange={(e) => setTotalAmount(e.target.value === "" ? "" : Number(e.target.value))}
-              autoFocus
             />
           </div>
 
@@ -79,6 +105,11 @@ export function DebtEditModal({
               value={remainingAmount}
               onChange={(e) => setRemainingAmount(e.target.value === "" ? "" : Number(e.target.value))}
             />
+            {repayment !== "" && (
+              <p className="text-xs mt-1" style={{ color: "var(--color-neutral-500)" }}>
+                {formatVnd(debt.remaining_amount ?? 0)} − {formatVnd(Number(repayment))} = {formatVnd(remainingAmount === "" ? 0 : remainingAmount)}
+              </p>
+            )}
           </div>
 
           {error && (

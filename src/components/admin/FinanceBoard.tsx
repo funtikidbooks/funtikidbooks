@@ -328,8 +328,14 @@ export function FinanceBoard({
   );
 
   const d = new Date(`${monthStart}T00:00:00`);
-  const monthLabel = `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+  const selectedMonthIndex = d.getMonth();
+  const selectedYear = d.getFullYear();
   const isCurrentMonth = monthStart === firstOfMonth(vnToday());
+  // ±6 years around today comfortably covers the company's real history
+  // without the list growing unbounded — the ← → arrows still reach
+  // anything older/newer than that.
+  const todayYear = Number(vnToday().slice(0, 4));
+  const yearOptions = Array.from({ length: 8 }, (_, i) => todayYear - 6 + i);
 
   return (
     <div className="flex-1 flex flex-col p-6 gap-6 overflow-y-auto">
@@ -344,7 +350,32 @@ export function FinanceBoard({
         <button type="button" onClick={() => goToMonth(addMonths(monthStart, -1))} className="btn-icon" aria-label="Tháng trước">
           ←
         </button>
-        <span className="text-sm font-bold">{monthLabel}</span>
+        <select
+          value={selectedMonthIndex}
+          onChange={(e) => goToMonth(monthKey(selectedYear, Number(e.target.value)))}
+          className="input text-sm font-bold"
+          style={{ width: "auto", padding: "6px 10px" }}
+          aria-label="Chọn tháng"
+        >
+          {MONTH_LABELS.map((label, i) => (
+            <option key={i} value={i}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={selectedYear}
+          onChange={(e) => goToMonth(monthKey(Number(e.target.value), selectedMonthIndex))}
+          className="input text-sm font-bold"
+          style={{ width: "auto", padding: "6px 10px" }}
+          aria-label="Chọn năm"
+        >
+          {yearOptions.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
         <button type="button" onClick={() => goToMonth(addMonths(monthStart, 1))} className="btn-icon" aria-label="Tháng sau">
           →
         </button>
