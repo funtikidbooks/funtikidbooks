@@ -78,7 +78,16 @@ type RoomSnapshot = {
 // PWA and reopening it tears down the whole page (and every in-memory
 // ref/state with it), so without this, "read one, come back later" always
 // paid for a full reload no matter how recently the room was open.
-const ROOM_CACHE_STORAGE_PREFIX = "funti-room-cache:";
+//
+// Versioned (v2, not just "funti-room-cache:") because an earlier build
+// could write one room's messages under another room's key when tapping
+// through several rooms fast enough — fixed via syncedRoomIdRef above, but
+// any bad entry it already wrote to a device's real localStorage before
+// this fix shipped would otherwise keep showing the wrong room's messages
+// forever (a delta fetch only appends new messages, it never notices or
+// replaces wrong old ones). Bumping the prefix orphans every pre-fix entry
+// instead of trying to detect which ones are actually bad.
+const ROOM_CACHE_STORAGE_PREFIX = "funti-room-cache:v2:";
 
 function loadRoomSnapshotFromStorage(channelId: string): RoomSnapshot | null {
   try {
@@ -1135,6 +1144,19 @@ export function MeetingHub({
   // first time each room is looked up here, so a cold app relaunch gets the
   // same instant-open benefit as switching rooms within one still-open tab.
   const roomCacheRef = useRef<Map<string, RoomSnapshot>>(new Map());
+  // Which room's data is actually sitting in `messages`/etc. right now —
+  // set the moment resync() knows that (a cache hit, or a full fetch that
+  // landed), cleared while a brand-new room has neither yet. Guards the
+  // cache-write effect below: without it, that effect ran off nothing but
+  // lastSyncedChannelIdRef, which resync() advances to the new room
+  // *before* it has anything to show for it (no cache, fetch still in
+  // flight) — on that render `messages` was still the *previous* room's
+  // array, and the effect happily wrote that stale array into the *new*
+  // room's cache slot under its id. If the fetch then got superseded by
+  // another quick tap (a real scenario when tapping through several rooms
+  // fast), nothing ever came along to overwrite that bad entry — the wrong
+  // room's messages stayed cached under this room's key for good.
+  const syncedRoomIdRef = useRef<string | null>(null);
   const lastMarkedReadIdRef = useRef<string | null>(null);
   const activeIdRef = useRef(activeId);
   useEffect(() => {
@@ -1370,17 +1392,18 @@ export function MeetingHub({
   // On the render right after activeId changes, `messages`/etc. still hold
   // the *previous* room's data (they only catch up once resync()'s own
   // setState calls land) — writing that stale snapshot under the *new*
-  // room's key here would then have resync() itself read its own
-  // just-written garbage as a "cache hit" for a room it's never actually
-  // fetched, since this effect is declared (and so runs) before the
-  // resync-triggering effect below in the same commit. Guarding on
-  // lastSyncedChannelIdRef — only set to activeId by resync() itself once
-  // it has decided how to populate this room's state — closes that window:
-  // it's still the *previous* room's id on that first stale-data render, so
-  // the write is correctly skipped until resync() has actually run for the
-  // new room and this effect fires again with data that genuinely matches it.
+  // room's key here would corrupt that room's cache with another room's
+  // messages. lastSyncedChannelIdRef alone doesn't close this window: for a
+  // brand-new room with no cache, resync() advances it to the new id
+  // immediately but has nothing to paint yet (the fetch is still in
+  // flight), so `messages` is still the old room's array on that render.
+  // syncedRoomIdRef is only set once resync() actually has data that
+  // matches the room it just claimed — a cache hit, or a landed fetch — so
+  // gating on it (not just lastSyncedChannelIdRef) skips the write until
+  // this effect fires again with data that genuinely matches activeId.
   useEffect(() => {
     if (!activeId || activeId === DM_TAB_ID || activeId !== lastSyncedChannelIdRef.current) return;
+    if (syncedRoomIdRef.current !== activeId) return;
     const snapshot: RoomSnapshot = { messages, reactions, reads, pinnedMessages };
     // The in-memory copy (what resync() actually reads) is cheap and stays
     // instant. The localStorage mirror — a synchronous JSON.stringify +
@@ -1479,11 +1502,21 @@ export function MeetingHub({
     }
     if (cached) {
       // Paint the last-known state immediately — no network wait — before
-      // kicking off the delta fetch below.
+      // kicking off the delta fetch below. This room's state already
+      // matches its id at this point, so the cache-write effect is safe
+      // to fire for it.
       setMessages(cached.messages);
       setReactions(cached.reactions);
       setReads(cached.reads);
       setPinnedMessages(cached.pinnedMessages);
+      syncedRoomIdRef.current = id;
+    } else if (isNewRoom) {
+      // A brand-new room with nothing cached yet — `messages`/etc. on this
+      // render are still the *previous* room's arrays, and will stay that
+      // way until the full fetch below lands. Clearing this marks the gap
+      // so the cache-write effect skips writing until then instead of
+      // saving the previous room's data under this room's key.
+      syncedRoomIdRef.current = null;
     }
     // A cache hit only needs catching up, same as the same-room case below
     // — a full fetch is only for a room with no snapshot at all yet.
@@ -1540,11 +1573,13 @@ export function MeetingHub({
         // made from this tab — this just keeps it in sync with everyone
         // else's, same as messages/reactions above.
         setPinnedMessages(pinned);
+        if (needsFullFetch) syncedRoomIdRef.current = id;
       })
       .catch(() => {
         if (resyncGenerationRef.current === generation && needsFullFetch && activeIdRef.current === id) {
           setMessages([]);
           setReactions([]);
+          syncedRoomIdRef.current = id;
         }
       });
   }, [activeId, mergeServerMessage]);
