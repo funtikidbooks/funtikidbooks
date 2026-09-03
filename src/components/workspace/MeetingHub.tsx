@@ -1068,6 +1068,15 @@ export function MeetingHub({
   // rooms, need the full history" apart from "same room, only catching up
   // on what was missed" without that also being a reactive dependency.
   const lastSyncedChannelIdRef = useRef<string | null>(null);
+  // Last-known snapshot per room, kept after switching away — switching
+  // back used to always show a blank/stale list for a full network
+  // round-trip (getMeetingMessages + getReactionsSince + getChannelReads,
+  // every single time, even for a room viewed seconds ago). resync() now
+  // restores this instantly on a cache hit and only fetches the delta
+  // since the snapshot, instead of the room's full history again.
+  const roomCacheRef = useRef<
+    Map<string, { messages: MeetingMessage[]; reactions: MeetingReaction[]; reads: MeetingChannelRead[]; pinnedMessages: MeetingMessage[] }>
+  >(new Map());
   const lastMarkedReadIdRef = useRef<string | null>(null);
   const activeIdRef = useRef(activeId);
   useEffect(() => {
@@ -1296,6 +1305,19 @@ export function MeetingHub({
     reactionsRef.current = reactions;
   }, [reactions]);
 
+  // Keeps roomCacheRef current for whichever room is open, so leaving it
+  // (switching to another room, or to the DM tab) always freezes an
+  // up-to-date snapshot for next time. On the very render where activeId
+  // has just changed but messages/reactions haven't caught up to the new
+  // room yet, this fires once with the previous room's still-stale state —
+  // harmless, since the resync() effect's own setState calls immediately
+  // trigger a follow-up render (before anything else runs) where this
+  // fires again with the corrected data, overwriting that transient write.
+  useEffect(() => {
+    if (!activeId || activeId === DM_TAB_ID) return;
+    roomCacheRef.current.set(activeId, { messages, reactions, reads, pinnedMessages });
+  }, [activeId, messages, reactions, reads, pinnedMessages]);
+
   useEffect(() => {
     if (!showEmojiPicker && !reactionPickerFor && !moreMenuFor) return;
     function handleClickOutside(e: MouseEvent) {
@@ -1347,7 +1369,11 @@ export function MeetingHub({
   // manual reload. Called on room switch, on tab focus/visibility, and
   // whenever the channel below (re)subscribes.
   //
-  // On an actual room switch this loads the full history same as before.
+  // On an actual room switch, a cache hit (roomCacheRef — see there) shows
+  // the snapshot from last time instantly and only fetches what changed
+  // since; a genuinely first-ever visit still loads the full history. Room
+  // switches used to always pay for that full history again, even when
+  // switching straight back to a room viewed seconds earlier.
   // Everywhere else — tab refocus, a reconnect while still looking at the
   // same room — messages and reactions each fetch only what's newer than
   // the newest one already held (independently of each other, since a
@@ -1362,32 +1388,52 @@ export function MeetingHub({
     const isNewRoom = lastSyncedChannelIdRef.current !== id;
     lastSyncedChannelIdRef.current = id;
 
+    const cached = isNewRoom ? roomCacheRef.current.get(id) : undefined;
+    if (cached) {
+      // Paint the last-known state immediately — no network wait — before
+      // kicking off the delta fetch below.
+      setMessages(cached.messages);
+      setReactions(cached.reactions);
+      setReads(cached.reads);
+      setPinnedMessages(cached.pinnedMessages);
+    }
+    // A cache hit only needs catching up, same as the same-room case below
+    // — a full fetch is only for a room with no snapshot at all yet.
+    const needsFullFetch = isNewRoom && !cached;
+
     // Reduce rather than "just read the last element" — a realtime INSERT
     // can append out of arrival order, so the newest created_at isn't
     // guaranteed to be the last item in either array.
     const latestOf = (timestamps: string[]) =>
       timestamps.length === 0 ? undefined : timestamps.reduce((max, t) => (t > max ? t : max));
 
-    const messagesAfter = isNewRoom ? undefined : latestOf(messagesRef.current.map((m) => m.created_at));
-    const reactionsAfter = isNewRoom ? undefined : latestOf(reactionsRef.current.map((r) => r.created_at));
+    // messagesRef/reactionsRef still hold the *previous* room's arrays at
+    // this exact point (they only sync after this render commits) — fine
+    // for the same-room case (that's genuinely what they hold), but a new
+    // room's own baseline has to come from its cache snapshot instead.
+    const baseMessages = cached ? cached.messages : messagesRef.current;
+    const baseReactions = cached ? cached.reactions : reactionsRef.current;
+
+    const messagesAfter = needsFullFetch ? undefined : latestOf(baseMessages.map((m) => m.created_at));
+    const reactionsAfter = needsFullFetch ? undefined : latestOf(baseReactions.map((r) => r.created_at));
 
     getMeetingMessages(id, messagesAfter)
       .then((msgs) => {
         if (activeIdRef.current !== id) return;
-        if (isNewRoom) {
+        if (needsFullFetch) {
           setMessages(msgs);
         } else if (msgs.length > 0) {
           setMessages((prev) => msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev));
         }
       })
       .catch(() => {
-        if (isNewRoom && activeIdRef.current === id) setMessages([]);
+        if (needsFullFetch && activeIdRef.current === id) setMessages([]);
       });
 
     getReactionsSince(id, reactionsAfter)
       .then((rx) => {
         if (activeIdRef.current !== id) return;
-        if (isNewRoom) {
+        if (needsFullFetch) {
           setReactions(rx);
         } else if (rx.length > 0) {
           setReactions((prev) => {
@@ -1399,7 +1445,7 @@ export function MeetingHub({
         }
       })
       .catch(() => {
-        if (isNewRoom && activeIdRef.current === id) setReactions([]);
+        if (needsFullFetch && activeIdRef.current === id) setReactions([]);
       });
 
     getChannelReads(id)
@@ -1412,7 +1458,10 @@ export function MeetingHub({
 
     // Pinned messages change rarely — only refetched on an actual room
     // switch, not every incremental resync poll. togglePin() above updates
-    // this list optimistically for changes made from this tab.
+    // this list optimistically for changes made from this tab. A cache hit
+    // still gets a background refresh (unlike messages/reactions there's no
+    // cheap delta query for it), just not the earlier synchronous restore's
+    // job to handle — that already showed the cached pins.
     if (isNewRoom) {
       getPinnedMessages(id)
         .then((pinned) => {
