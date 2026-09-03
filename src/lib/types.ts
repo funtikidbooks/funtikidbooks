@@ -409,6 +409,32 @@ export type StaffDocument = {
   updated_at: string;
 };
 
+// CCCD (national ID) + residence info per employee — director/PM-only
+// reference data, kept off profiles itself (see its own comment in
+// schema.sql for why). One row per profile, upserted in place rather than
+// versioned — front/back_image_path are storage paths in the private
+// staff-id-documents bucket, not public URLs; a viewable URL is fetched
+// separately as a short-lived signed link (see getStaffIdImageUrl).
+export type StaffIdDocument = {
+  id: string;
+  profile_id: string;
+  full_name: string | null;
+  id_number: string | null;
+  dob: string | null;
+  sex: string | null;
+  permanent_address: string | null;
+  temporary_address: string | null;
+  issued_date: string | null;
+  issued_place: string | null;
+  expiry_date: string | null;
+  front_image_path: string | null;
+  back_image_path: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PayrollFeedbackStatus = "pending" | "approved" | "rejected";
 
 export type PayrollFeedback = {
@@ -956,6 +982,12 @@ export type Database = {
         Row: StaffDocument;
         Insert: Partial<StaffDocument> & { profile_id: string; type: StaffDocumentType; title: string; content: string };
         Update: Partial<StaffDocument>;
+        Relationships: [];
+      };
+      staff_id_documents: {
+        Row: StaffIdDocument;
+        Insert: Partial<StaffIdDocument> & { profile_id: string };
+        Update: Partial<StaffIdDocument>;
         Relationships: [];
       };
       finance_entries: {

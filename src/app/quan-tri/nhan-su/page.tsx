@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { listAllProfiles } from "@/lib/actions/admin";
+import { listStaffIdDocuments } from "@/lib/actions/staffId";
 import { StaffRoles } from "./StaffRoles";
 
 export const metadata: Metadata = { title: "Quản trị — Nhân sự" };
@@ -22,6 +23,6 @@ export default async function AdminStaffPage() {
     redirect("/quan-tri");
   }
 
-  const profiles = await listAllProfiles();
-  return <StaffRoles initialProfiles={profiles} currentUserId={user!.id} isDirector={isDirector} />;
+  const [profiles, idDocuments] = await Promise.all([listAllProfiles(), listStaffIdDocuments()]);
+  return <StaffRoles initialProfiles={profiles} currentUserId={user!.id} isDirector={isDirector} initialIdDocuments={idDocuments} />;
 }

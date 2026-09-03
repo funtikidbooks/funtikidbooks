@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { CreateAccountDialog } from "@/components/admin/CreateAccountDialog";
+import { StaffIdModal } from "@/components/admin/StaffIdModal";
 import { deleteStaffAccount, updateAccessRole, updateJobTitle } from "@/lib/actions/admin";
 import { JOB_TITLE_SUGGESTIONS } from "@/lib/constants/staff";
-import type { AccessRole, Profile } from "@/lib/types";
+import type { AccessRole, Profile, StaffIdDocument } from "@/lib/types";
 
 const ROLE_LABELS: Record<AccessRole, string> = {
   director: "Giám đốc",
@@ -16,16 +17,22 @@ export function StaffRoles({
   initialProfiles,
   currentUserId,
   isDirector,
+  initialIdDocuments,
 }: {
   initialProfiles: Profile[];
   currentUserId: string;
   isDirector: boolean;
+  initialIdDocuments: StaffIdDocument[];
 }) {
   const [profiles, setProfiles] = useState(initialProfiles);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [idDocsByProfile, setIdDocsByProfile] = useState(
+    () => new Map(initialIdDocuments.map((d) => [d.profile_id, d])),
+  );
+  const [editingIdFor, setEditingIdFor] = useState<Profile | null>(null);
 
   function changeRole(id: string, role: AccessRole) {
     const prev = profiles;
@@ -124,6 +131,16 @@ export function StaffRoles({
                   {p.email}
                 </span>
               </div>
+              <button
+                type="button"
+                className="btn-icon flex-none"
+                onClick={() => setEditingIdFor(p)}
+                aria-label={`CCCD của ${p.display_name}`}
+                title={idDocsByProfile.has(p.id) ? "Đã có thông tin CCCD" : "Chưa có thông tin CCCD"}
+                style={idDocsByProfile.has(p.id) ? { color: "var(--color-accent-700)" } : undefined}
+              >
+                🪪
+              </button>
               {isDirector ? (
                 <>
                   <input
@@ -185,6 +202,15 @@ export function StaffRoles({
         <CreateAccountDialog
           onClose={() => setShowCreate(false)}
           onCreated={(p) => setProfiles((prev) => [...prev, p].sort((a, b) => a.display_name.localeCompare(b.display_name)))}
+        />
+      )}
+
+      {editingIdFor && (
+        <StaffIdModal
+          profile={editingIdFor}
+          existing={idDocsByProfile.get(editingIdFor.id) ?? null}
+          onClose={() => setEditingIdFor(null)}
+          onSaved={(doc) => setIdDocsByProfile((prev) => new Map(prev).set(doc.profile_id, doc))}
         />
       )}
     </div>

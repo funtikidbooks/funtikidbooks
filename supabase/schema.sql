@@ -2579,3 +2579,66 @@ begin
     alter publication supabase_realtime add table public.staff_documents;
   end if;
 end $$;
+
+-- staff_id_documents: CCCD (national ID) + residence info per employee —
+-- director asked for this so he can look it up himself later instead of
+-- re-asking each employee or digging through Zalo every time (e.g. when
+-- drafting a hợp đồng, which needs exactly this). One row per profile.
+-- Deliberately its own table rather than columns on profiles: profiles is
+-- selected broadly all over this app (member lists, chat, presence, ...),
+-- and a CCCD number sitting on that same row would only take one careless
+-- `select *` elsewhere to leak into a context that has no business seeing
+-- it. Director-or-PM only, same as staff_documents/payroll — and unlike
+-- staff_documents, no "staff can view own" policy at all: this is
+-- HR-internal reference data, not something an employee needs to pull up
+-- about themselves through this tool.
+-- ---------------------------------------------------------------------------
+create table if not exists public.staff_id_documents (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null unique references public.profiles (id) on delete cascade,
+  full_name text,
+  id_number text,
+  dob date,
+  sex text,
+  permanent_address text,
+  temporary_address text,
+  issued_date date,
+  issued_place text,
+  expiry_date date,
+  front_image_path text,
+  back_image_path text,
+  note text,
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.staff_id_documents enable row level security;
+
+drop policy if exists "hr can manage staff id documents" on public.staff_id_documents;
+create policy "hr can manage staff id documents"
+  on public.staff_id_documents for all
+  to authenticated
+  using (public.can_manage_hr())
+  with check (public.can_manage_hr());
+
+drop trigger if exists staff_id_documents_set_updated_at on public.staff_id_documents;
+create trigger staff_id_documents_set_updated_at
+  before update on public.staff_id_documents
+  for each row execute procedure public.set_updated_at();
+
+-- Private bucket — unlike task-attachments/site-content/etc (all
+-- public:true), a leaked CCCD photo is a real identity-theft risk for the
+-- employee it belongs to, so this one is never given a permanent public
+-- URL. The app fetches a short-lived signed URL server-side on demand
+-- instead (see getStaffIdDocument in lib/actions/staffId.ts).
+insert into storage.buckets (id, name, public)
+values ('staff-id-documents', 'staff-id-documents', false)
+on conflict (id) do nothing;
+
+drop policy if exists "hr can manage staff id storage" on storage.objects;
+create policy "hr can manage staff id storage"
+  on storage.objects for all
+  to authenticated
+  using (bucket_id = 'staff-id-documents' and public.can_manage_hr())
+  with check (bucket_id = 'staff-id-documents' and public.can_manage_hr());
