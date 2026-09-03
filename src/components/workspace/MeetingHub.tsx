@@ -109,6 +109,30 @@ function saveRoomSnapshotToStorage(channelId: string, snapshot: RoomSnapshot) {
   }
 }
 
+// A room's `messages` array had no upper bound: every resync() delta and
+// every realtime INSERT only ever appended, and the in-memory/localStorage
+// cache above snapshots whatever that array holds — so a room used daily
+// (Chung, the general room) quietly grew a little every day, for as long as
+// this browser kept its cache, with nothing ever trimming it back down.
+// That's what made switching rooms feel *progressively* laggier over time
+// rather than consistently slow: every switch instant-paints the cached
+// snapshot (see resync()'s own comment) by re-rendering the *entire* array
+// as real DOM — reaction rows, avatars, image attachments and all, none of
+// it virtualized — so the render cost scaled with however large that one
+// room happened to have grown, unbounded. Capping at the state-mutation
+// source (every call site below that can grow the array) keeps a healthy
+// buffer above the 60-message initial page — plenty for "just switched
+// back into this room, everything still feels the same as before" — while
+// guaranteeing the render cost has a ceiling no matter how long the app
+// stays installed. The one known tradeoff: jumping to a search result
+// older than this window won't find it in the DOM to scroll to — already
+// true today for anyone without months of this exact browser's cache
+// built up, just inconsistently so.
+const MAX_LOADED_MESSAGES = 200;
+function capMessages(list: MeetingMessage[]) {
+  return list.length > MAX_LOADED_MESSAGES ? list.slice(list.length - MAX_LOADED_MESSAGES) : list;
+}
+
 const EMOJI_OPTIONS = [
   "😀", "😂", "😅", "😍", "😉", "😎", "🤔", "😢",
   "😭", "😡", "🥳", "😴", "😱", "🙌", "👀", "🤝",
@@ -1528,7 +1552,7 @@ export function MeetingHub({
           return next;
         }
       }
-      return [...prev, confirmed];
+      return capMessages([...prev, confirmed]);
     },
     [currentUser.id],
   );
@@ -1600,7 +1624,7 @@ export function MeetingHub({
       // kicking off the delta fetch below. This room's state already
       // matches its id at this point, so the cache-write effect is safe
       // to fire for it.
-      setMessages(cached.messages);
+      setMessages(capMessages(cached.messages));
       setReactions(cached.reactions);
       setReads(cached.reads);
       setPinnedMessages(cached.pinnedMessages);
@@ -1651,7 +1675,7 @@ export function MeetingHub({
         if (needsFullFetch) {
           setMessages(msgs);
         } else if (msgs.length > 0) {
-          setMessages((prev) => msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev));
+          setMessages((prev) => capMessages(msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev)));
         }
         if (needsFullFetch) {
           setReactions(rx);
@@ -2245,7 +2269,7 @@ export function MeetingHub({
         created_at: new Date().toISOString(),
       };
       pendingPayloadsRef.current.set(tempId, { content: trimmed, file, replyId });
-      setMessages((prev) => [...prev, optimistic]);
+      setMessages((prev) => capMessages([...prev, optimistic]));
       attemptSend(channelId, tempId, trimmed, file, replyId);
       return;
     }
@@ -2264,26 +2288,28 @@ export function MeetingHub({
       replyId: i === 0 ? replyId : null,
       tempId: `temp-${crypto.randomUUID()}`,
     }));
-    setMessages((prev) => [
-      ...prev,
-      ...entries.map(
-        (entry): MeetingMessage => ({
-          id: entry.tempId,
-          channel_id: channelId,
-          sender_id: currentUser.id,
-          content: entry.content,
-          attachment_url: null,
-          attachment_filename: entry.file.name,
-          attachment_mime: entry.file.type,
-          attachment_size: entry.file.size,
-          reply_to_message_id: entry.replyId,
-          is_recalled: false,
-          pinned_at: null,
-          pinned_by: null,
-          created_at: new Date().toISOString(),
-        }),
-      ),
-    ]);
+    setMessages((prev) =>
+      capMessages([
+        ...prev,
+        ...entries.map(
+          (entry): MeetingMessage => ({
+            id: entry.tempId,
+            channel_id: channelId,
+            sender_id: currentUser.id,
+            content: entry.content,
+            attachment_url: null,
+            attachment_filename: entry.file.name,
+            attachment_mime: entry.file.type,
+            attachment_size: entry.file.size,
+            reply_to_message_id: entry.replyId,
+            is_recalled: false,
+            pinned_at: null,
+            pinned_by: null,
+            created_at: new Date().toISOString(),
+          }),
+        ),
+      ]),
+    );
     (async () => {
       for (const entry of entries) {
         pendingPayloadsRef.current.set(entry.tempId, { content: entry.content, file: entry.file, replyId: entry.replyId });
