@@ -1,12 +1,13 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
   addDirectReaction,
   getConversation,
   getDirectReactionsSince,
+  getOlderDirectMessages,
   markDirectMessagesRead,
   removeDirectReaction,
   sendDirectMessage,
@@ -112,6 +113,18 @@ function linkify(text: string): (string | { url: string })[] {
   return parts.map((part) => (/^https?:\/\//.test(part) ? { url: part } : part));
 }
 
+// Same fix, same reasoning, as MeetingHub.tsx's own capMessages — see its
+// comment. A busy 1:1 conversation (this app's own director↔staff DMs are
+// already past 100) would otherwise keep every message ever exchanged in
+// memory and re-render all of it on every switch, forever. The higher
+// MAX_EXPANDED ceiling is for once loadOlderMessages below has actually
+// pulled in more than the normal window — see its own comment.
+const MAX_LOADED_MESSAGES = 200;
+const MAX_EXPANDED_MESSAGES = 2000;
+function capMessages(list: DirectMessage[], limit: number) {
+  return list.length > limit ? list.slice(list.length - limit) : list;
+}
+
 // The message list + composer for a 1:1 conversation — shared by the small
 // floating ChatWindow and the full-panel "Riêng" tab in Trò chuyện & họp, so
 // fixes/features (typing indicator, reactions-free plain bubbles, paste,
@@ -190,6 +203,17 @@ export function DirectConversation({
   // conversations, need the full history" apart from "same conversation,
   // only catching up on what was missed".
   const lastSyncedPeerIdRef = useRef<string | null>(null);
+  // Scroll-to-load-older state — see loadOlderMessages below, same shape as
+  // MeetingHub's own copy of this (its comment covers the reasoning for
+  // each piece: refs for a synchronous read inside handleListScroll,
+  // manuallyExpandedRef for capMessages' raised ceiling, scrollAdjustRef
+  // for the layout-effect scroll-position restore).
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreOlder, setHasMoreOlder] = useState(true);
+  const loadingOlderRef = useRef(false);
+  const hasMoreOlderRef = useRef(true);
+  const manuallyExpandedRef = useRef(false);
+  const scrollAdjustRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
   const peerTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentAtRef = useRef(0);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -233,6 +257,13 @@ export function DirectConversation({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [reactionPickerFor]);
 
+  // See capMessages' own comment on the two ceilings — this just picks
+  // whichever one currently applies.
+  const capMessagesForRoom = useCallback(
+    (list: DirectMessage[]) => capMessages(list, manuallyExpandedRef.current ? MAX_EXPANDED_MESSAGES : MAX_LOADED_MESSAGES),
+    [],
+  );
+
   // Reconciles a server-confirmed row against the optimistic placeholder
   // that's standing in for it. Matches by tempId when the caller knows it
   // (our own send resolving); otherwise (the realtime INSERT echoing our
@@ -258,9 +289,9 @@ export function DirectConversation({
           return next;
         }
       }
-      return [...prev, confirmed];
+      return capMessagesForRoom([...prev, confirmed]);
     },
-    [currentUser.id],
+    [currentUser.id, capMessagesForRoom],
   );
 
   // Catches up this conversation after the realtime subscription below may
@@ -280,6 +311,14 @@ export function DirectConversation({
     const isNewPeer = lastSyncedPeerIdRef.current !== peer.id;
     lastSyncedPeerIdRef.current = peer.id;
 
+    // Fresh peer, fresh scroll-to-load-older state — see the identical
+    // reset in MeetingHub's resync() for why.
+    if (isNewPeer) {
+      hasMoreOlderRef.current = true;
+      setHasMoreOlder(true);
+      manuallyExpandedRef.current = false;
+    }
+
     // Reduce rather than "just read the last element" — a realtime INSERT
     // can append out of arrival order, so the newest created_at isn't
     // guaranteed to be the last item in either array (see MeetingHub's
@@ -295,7 +334,7 @@ export function DirectConversation({
         if (isNewPeer) {
           setMessages(msgs);
         } else if (msgs.length > 0) {
-          setMessages((prev) => msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev));
+          setMessages((prev) => capMessagesForRoom(msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev)));
         }
       })
       .catch(() => {
@@ -319,7 +358,7 @@ export function DirectConversation({
       .catch(() => {
         if (isNewPeer) setReactions([]);
       });
-  }, [peer.id, mergeServerMessage]);
+  }, [peer.id, mergeServerMessage, capMessagesForRoom]);
 
   useEffect(() => {
     resync();
@@ -453,16 +492,70 @@ export function DirectConversation({
     }
   }, []);
 
+  // Zalo/Messenger-style "scroll to the top, older messages load in" — see
+  // MeetingHub's own copy of this for the full reasoning (scroll-anchor
+  // restore, the raised cap while expanded, etc.). Reads peer/messages
+  // through refs rather than closing over them directly so this can stay a
+  // stable callback.
+  const loadOlderMessages = useCallback(async () => {
+    if (loadingOlderRef.current || !hasMoreOlderRef.current) return;
+    const oldest = messagesRef.current[0];
+    if (!oldest) return;
+    const peerId = peer.id;
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    try {
+      const { messages: older, reactions: olderReactions } = await getOlderDirectMessages(peerId, oldest.created_at);
+      // Switched conversations while this was in flight.
+      if (lastSyncedPeerIdRef.current !== peerId) return;
+      if (older.length === 0) {
+        hasMoreOlderRef.current = false;
+        setHasMoreOlder(false);
+        return;
+      }
+      const el = listRef.current;
+      if (el) scrollAdjustRef.current = { prevScrollHeight: el.scrollHeight, prevScrollTop: el.scrollTop };
+      manuallyExpandedRef.current = true;
+      setMessages((prev) => [...older, ...prev]);
+      if (olderReactions.length > 0) {
+        setReactions((prev) => {
+          const key = (r: DirectMessageReaction) => `${r.message_id}:${r.profile_id}:${r.emoji}`;
+          const seen = new Set(prev.map(key));
+          const fresh = olderReactions.filter((r) => !seen.has(key(r)));
+          return fresh.length > 0 ? [...prev, ...fresh] : prev;
+        });
+      }
+    } catch {
+      // Transient network hiccup — the next scroll-up tick just retries.
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
+  }, [peer.id]);
+
+  // Keeps the reader anchored to the same message after loadOlderMessages
+  // prepends a page above it — see MeetingHub's identical layout effect.
+  useLayoutEffect(() => {
+    const adjust = scrollAdjustRef.current;
+    if (!adjust) return;
+    scrollAdjustRef.current = null;
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = adjust.prevScrollTop + (el.scrollHeight - adjust.prevScrollHeight);
+  }, [messages]);
+
   // Fires on manual scroll — catches the reader scrolling away from the
   // bottom themselves, which the effect-driven stickToBottomIfNear calls
   // (new message/read-receipt updates) don't see since nothing about the
-  // data changed.
+  // data changed. Also the trigger for loading older messages, same
+  // threshold as MeetingHub's.
   const handleListScroll = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     setShowJumpToBottom(distanceFromBottom > 400);
-  }, []);
+    if (el.scrollTop < 200) loadOlderMessages();
+  }, [loadOlderMessages]);
 
   // A read-receipt UPDATE (the "Đã xem" label appearing) changes an
   // existing message's read_at in place via .map(), which doesn't change
@@ -521,56 +614,67 @@ export function DirectConversation({
     channelRef.current?.send({ type: "broadcast", event: "typing", payload: { userId: currentUser.id } });
   }
 
-  async function toggleReaction(messageId: string, emoji: string) {
-    const already = reactions.some(
-      (r) => r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji,
-    );
-    setReactions((prev) =>
-      already
-        ? prev.filter((r) => !(r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji))
-        : [...prev, { message_id: messageId, profile_id: currentUser.id, emoji, created_at: new Date().toISOString() }],
-    );
-    setReactionPickerFor(null);
-    try {
-      if (already) await removeDirectReaction(messageId, emoji);
-      else await addDirectReaction(messageId, emoji);
-    } catch {
-      // optimistic update may drift from the server on failure — next
-      // resync or a realtime event from another tab will correct it
-    }
-  }
+  // Both wrapped in useCallback — the memoized message list further down
+  // needs these two to be stable between unrelated renders, or the memo
+  // recomputes every render anyway and the memoization is a no-op. See
+  // MeetingHub's identical comment on why a plain function declaration
+  // doesn't work here.
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      const already = reactions.some(
+        (r) => r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji,
+      );
+      setReactions((prev) =>
+        already
+          ? prev.filter((r) => !(r.message_id === messageId && r.profile_id === currentUser.id && r.emoji === emoji))
+          : [...prev, { message_id: messageId, profile_id: currentUser.id, emoji, created_at: new Date().toISOString() }],
+      );
+      setReactionPickerFor(null);
+      try {
+        if (already) await removeDirectReaction(messageId, emoji);
+        else await addDirectReaction(messageId, emoji);
+      } catch {
+        // optimistic update may drift from the server on failure — next
+        // resync or a realtime event from another tab will correct it
+      }
+    },
+    [reactions, currentUser.id],
+  );
 
   // Free unofficial Google endpoint (see translate.ts) rather than dumping
   // the whole conversation through a translator — only when actually
   // needed for a specific message.
-  async function toggleTranslate(message: DirectMessage) {
-    if (shownTranslationIds.has(message.id)) {
-      setShownTranslationIds((prev) => {
-        const next = new Set(prev);
-        next.delete(message.id);
-        return next;
-      });
-      return;
-    }
-    if (translations[message.id] !== undefined) {
-      setShownTranslationIds((prev) => new Set(prev).add(message.id));
-      return;
-    }
-    setTranslatingIds((prev) => new Set(prev).add(message.id));
-    try {
-      const { translated } = await translateMessage(message.content);
-      setTranslations((prev) => ({ ...prev, [message.id]: translated }));
-      setShownTranslationIds((prev) => new Set(prev).add(message.id));
-    } catch {
-      alert("Không thể dịch lúc này, thử lại sau.");
-    } finally {
-      setTranslatingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(message.id);
-        return next;
-      });
-    }
-  }
+  const toggleTranslate = useCallback(
+    async (message: DirectMessage) => {
+      if (shownTranslationIds.has(message.id)) {
+        setShownTranslationIds((prev) => {
+          const next = new Set(prev);
+          next.delete(message.id);
+          return next;
+        });
+        return;
+      }
+      if (translations[message.id] !== undefined) {
+        setShownTranslationIds((prev) => new Set(prev).add(message.id));
+        return;
+      }
+      setTranslatingIds((prev) => new Set(prev).add(message.id));
+      try {
+        const { translated } = await translateMessage(message.content);
+        setTranslations((prev) => ({ ...prev, [message.id]: translated }));
+        setShownTranslationIds((prev) => new Set(prev).add(message.id));
+      } catch {
+        alert("Không thể dịch lúc này, thử lại sau.");
+      } finally {
+        setTranslatingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(message.id);
+          return next;
+        });
+      }
+    },
+    [shownTranslationIds, translations],
+  );
 
   // Lets a screenshot copied to the clipboard (or any image) go straight
   // into the composer with Ctrl+V, same as the room chat's composer —
@@ -671,15 +775,18 @@ export function DirectConversation({
     setPendingFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     pendingPayloadsRef.current.set(tempId, { content: trimmed, file });
-    setMessages((prev) => [...prev, optimistic]);
+    setMessages((prev) => capMessagesForRoom([...prev, optimistic]));
     attemptSend(tempId, trimmed, file);
   }
 
-  function retrySend(tempId: string) {
-    const payload = pendingPayloadsRef.current.get(tempId);
-    if (!payload) return;
-    attemptSend(tempId, payload.content, payload.file);
-  }
+  const retrySend = useCallback(
+    (tempId: string) => {
+      const payload = pendingPayloadsRef.current.get(tempId);
+      if (!payload) return;
+      attemptSend(tempId, payload.content, payload.file);
+    },
+    [attemptSend],
+  );
 
   // Messenger-style: only the LAST of my messages the peer has actually
   // seen gets the "Đã xem" label, not every read message — walk from the
@@ -706,7 +813,25 @@ export function DirectConversation({
             Chưa có tin nhắn nào.
           </p>
         )}
-        {messages.map((m, index) => {
+        {loadingOlder && (
+          <p className="text-[11px] text-center py-2" style={{ color: "var(--color-neutral-500)" }}>
+            Đang tải tin nhắn cũ hơn…
+          </p>
+        )}
+        {!loadingOlder && !hasMoreOlder && messages.length > 0 && (
+          <p className="text-[10px] text-center py-2" style={{ color: "var(--color-neutral-400)" }}>
+            — Đầu cuộc trò chuyện —
+          </p>
+        )}
+        {/* Wrapped in useMemo — see MeetingHub's identical block for the
+            full reasoning: without it, typing in the composer or hovering a
+            reaction rebuilds every visible message row, not just the one
+            that actually changed. The dependency array is everything the
+            row bodies below actually read; trust react-hooks'
+            exhaustive-deps lint warning over trimming this by eye. */}
+        {useMemo(
+          () =>
+            messages.map((m, index) => {
           const mine = m.sender_id === currentUser.id;
           const isPending = pendingIds.has(m.id);
           const isFailed = failedIds.has(m.id);
@@ -999,7 +1124,26 @@ export function DirectConversation({
             </div>
             </Fragment>
           );
-        })}
+            }),
+          [
+            messages,
+            currentUser.id,
+            pendingIds,
+            failedIds,
+            reactions,
+            translatingIds,
+            reactionPickerFor,
+            toggleReaction,
+            toggleTranslate,
+            shownTranslationIds,
+            translations,
+            hoveredReaction,
+            retrySend,
+            lastSeenMineMessageId,
+            peer,
+            stickToBottomIfNear,
+          ],
+        )}
         {peerTyping && (
           <div className="flex items-center gap-1.5">
             <div
