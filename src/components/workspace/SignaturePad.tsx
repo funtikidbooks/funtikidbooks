@@ -1,22 +1,63 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { signatureFont } from "@/lib/fonts/signature";
 
 export type SignaturePadHandle = {
   getBlob: () => Promise<Blob | null>;
   clear: () => void;
 };
 
-// A minimal draw-to-sign canvas — Pointer Events so mouse, touch, and
-// stylus all just work without separate handlers. The drawing is read out
-// as a PNG Blob via the imperative handle on submit, rather than pushing
-// every stroke up as state, since nothing outside needs to react mid-draw.
-export const SignaturePad = forwardRef<SignaturePadHandle, { onChange: (hasDrawn: boolean) => void }>(
+type Mode = "draw" | "type";
+
+// Renders `text` centered in a cursive font onto a fresh canvas sized like
+// the draw pad, shrinking the font until it fits — a typed name can run
+// much longer than the pad is wide. document.fonts.load() first because a
+// canvas fillText draws with whatever font is *already* active; without
+// waiting for it, this would silently fall back to the browser default the
+// first time (before the font's had a chance to finish loading).
+async function renderTypedSignature(text: string, width: number, height: number): Promise<Blob | null> {
+  const family = signatureFont.style.fontFamily;
+  let size = 56;
+  await document.fonts.load(`700 ${size}px ${family}`);
+
+  const canvas = document.createElement("canvas");
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = width * ratio;
+  canvas.height = height * ratio;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.scale(ratio, ratio);
+
+  const maxWidth = width - 32;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#141211";
+  for (; size > 18; size -= 2) {
+    ctx.font = `700 ${size}px ${family}`;
+    if (ctx.measureText(text).width <= maxWidth) break;
+  }
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillText(text, width / 2, height / 2, maxWidth);
+
+  return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
+}
+
+// Draw-to-sign works well with a finger or Apple Pencil (Pointer Events
+// cover both), but drawing a legible signature with a mouse on a desktop
+// computer is clumsy for most people — "Nhập tên để ký" renders whatever
+// they type in a cursive font instead, going through the same getBlob()
+// handle so the rest of the sign flow (upload, staff_documents row) never
+// needs to know which mode produced the image.
+export const SignaturePad = forwardRef<SignaturePadHandle, { onChange: (hasContent: boolean) => void }>(
   function SignaturePad({ onChange }, ref) {
+    const [mode, setMode] = useState<Mode>("draw");
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const drawingRef = useRef(false);
     const lastPointRef = useRef<{ x: number; y: number } | null>(null);
     const [hasDrawn, setHasDrawn] = useState(false);
+    const [typedName, setTypedName] = useState("");
+    const padWidthRef = useRef(600);
 
     // Backs the canvas with real device pixels (crisp strokes on
     // retina/phone screens) while CSS keeps it laid out at its declared size.
@@ -25,6 +66,7 @@ export const SignaturePad = forwardRef<SignaturePadHandle, { onChange: (hasDrawn
       if (!canvas) return;
       const ratio = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
+      padWidthRef.current = rect.width;
       canvas.width = rect.width * ratio;
       canvas.height = rect.height * ratio;
       const ctx = canvas.getContext("2d");
@@ -38,12 +80,18 @@ export const SignaturePad = forwardRef<SignaturePadHandle, { onChange: (hasDrawn
     }, []);
 
     useImperativeHandle(ref, () => ({
-      getBlob: () =>
-        new Promise((resolve) => {
+      getBlob: () => {
+        if (mode === "type") {
+          const trimmed = typedName.trim();
+          if (!trimmed) return Promise.resolve(null);
+          return renderTypedSignature(trimmed, padWidthRef.current, 180);
+        }
+        return new Promise((resolve) => {
           const canvas = canvasRef.current;
           if (!canvas) return resolve(null);
           canvas.toBlob((blob) => resolve(blob), "image/png");
-        }),
+        });
+      },
       clear,
     }));
 
@@ -84,31 +132,88 @@ export const SignaturePad = forwardRef<SignaturePadHandle, { onChange: (hasDrawn
     function clear() {
       const canvas = canvasRef.current;
       const ctx = canvas?.getContext("2d");
-      if (!canvas || !ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
       setHasDrawn(false);
+      setTypedName("");
       onChange(false);
+    }
+
+    function switchMode(next: Mode) {
+      if (next === mode) return;
+      clear();
+      setMode(next);
     }
 
     return (
       <div className="flex flex-col gap-2">
-        <canvas
-          ref={canvasRef}
-          className="touch-none select-none rounded-[10px] w-full"
-          style={{ height: 180, background: "#fff", border: "1.5px dashed var(--color-neutral-300)", cursor: "crosshair" }}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-        />
-        <div className="flex items-center justify-between">
-          <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
-            Ký bằng ngón tay hoặc chuột vào khung trên
-          </span>
-          <button type="button" onClick={clear} className="btn btn-ghost btn-sm">
-            Xoá, ký lại
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => switchMode("draw")}
+            className={mode === "draw" ? "btn btn-primary btn-sm" : "btn btn-ghost btn-sm"}
+          >
+            ✍️ Vẽ chữ ký
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode("type")}
+            className={mode === "type" ? "btn btn-primary btn-sm" : "btn btn-ghost btn-sm"}
+          >
+            ⌨️ Nhập tên để ký
           </button>
         </div>
+
+        {mode === "draw" ? (
+          <>
+            <canvas
+              ref={canvasRef}
+              className="touch-none select-none rounded-[10px] w-full"
+              style={{ height: 180, background: "#fff", border: "1.5px dashed var(--color-neutral-300)", cursor: "crosshair" }}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                Ký bằng ngón tay, Apple Pencil hoặc chuột vào khung trên
+              </span>
+              <button type="button" onClick={clear} className="btn btn-ghost btn-sm">
+                Xoá, ký lại
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div
+              className="flex items-center justify-center rounded-[10px] w-full px-4 overflow-hidden"
+              style={{ height: 180, background: "#fff", border: "1.5px dashed var(--color-neutral-300)" }}
+            >
+              <span
+                className={signatureFont.className}
+                style={{ fontSize: 40, fontWeight: 700, color: "#141211", whiteSpace: "nowrap" }}
+              >
+                {typedName.trim() || " "}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                className="input flex-1"
+                placeholder="Nhập họ tên để ký"
+                value={typedName}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setTypedName(value);
+                  onChange(value.trim().length > 0);
+                }}
+              />
+              <button type="button" onClick={clear} className="btn btn-ghost btn-sm flex-none">
+                Xoá
+              </button>
+            </div>
+          </>
+        )}
       </div>
     );
   },

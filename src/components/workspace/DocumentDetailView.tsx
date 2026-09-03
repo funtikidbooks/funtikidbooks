@@ -37,7 +37,7 @@ export function DocumentDetailView({
 
   async function handleSign() {
     if (!hasDrawn) {
-      setError("Vui lòng ký vào khung chữ ký trước.");
+      setError("Vui lòng ký hoặc nhập tên vào khung chữ ký trước.");
       return;
     }
     if (!signedName.trim()) {
