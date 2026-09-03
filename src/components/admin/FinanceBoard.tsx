@@ -233,7 +233,9 @@ export function FinanceBoard({
     // immediately, not wait on a round-trip for a single boolean.
     setHomeLoanInstallments((prev) => prev.map((i) => (i.id === id ? { ...i, is_paid: paid } : i)));
     try {
-      await setHomeLoanInstallmentPaid(id, paid);
+      const { addedEntry, removedEntryId } = await setHomeLoanInstallmentPaid(id, paid);
+      if (addedEntry) handleSaved(addedEntry);
+      if (removedEntryId) removeEntryFromState(removedEntryId);
     } catch {
       setHomeLoanInstallments((prev) => prev.map((i) => (i.id === id ? { ...i, is_paid: !paid } : i)));
     }
@@ -274,16 +276,25 @@ export function FinanceBoard({
     }
   }
 
+  // entryMonth always equals monthStart for a save from FinanceEntryModal
+  // (it's passed entryMonth={monthStart} below), but not for one arriving
+  // from the debt-repayment/home-loan-kỳ flows further up — those file
+  // under the debt's own relevant month, which may not be whatever's
+  // currently open here. Guarding entries (not just yearEntries, which
+  // already checked its own month) keeps an off-month entry from quietly
+  // padding out the currently-open month's Biến phí on screen.
   function handleSaved(entry: FinanceEntry) {
-    setEntries((prev) => {
-      const idx = prev.findIndex((e) => e.id === entry.id);
-      return idx === -1 ? [...prev, entry] : prev.map((e, i) => (i === idx ? entry : e));
-    });
-    // The saved entry's month is always the currently-open month here, but
-    // the year table only refetches when the director actually looks at
-    // it again (goToYear) — cheap to keep in sync now rather than serve a
+    const matchesOpenMonth = firstOfMonth(entry.entry_month) === firstOfMonth(monthStart);
+    if (matchesOpenMonth) {
+      setEntries((prev) => {
+        const idx = prev.findIndex((e) => e.id === entry.id);
+        return idx === -1 ? [...prev, entry] : prev.map((e, i) => (i === idx ? entry : e));
+      });
+    }
+    // The year table only refetches when the director actually looks at it
+    // again (goToYear) — cheap to keep in sync now rather than serve a
     // stale total if they scroll down right after saving.
-    if (firstOfMonth(entry.entry_month) === firstOfMonth(monthStart) && entry.entry_month.startsWith(`${year}-`)) {
+    if (matchesOpenMonth && entry.entry_month.startsWith(`${year}-`)) {
       setYearEntries((prev) => {
         const idx = prev.findIndex((e) => e.id === entry.id);
         return idx === -1 ? [...prev, entry] : prev.map((e, i) => (i === idx ? entry : e));
@@ -291,10 +302,14 @@ export function FinanceBoard({
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Xoá khoản này?")) return;
+  function removeEntryFromState(id: string) {
     setEntries((prev) => prev.filter((e) => e.id !== id));
     setYearEntries((prev) => prev.filter((e) => e.id !== id));
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Xoá khoản này?")) return;
+    removeEntryFromState(id);
     await deleteFinanceEntry(id).catch(() => {});
   }
 
@@ -606,8 +621,12 @@ export function FinanceBoard({
       {editingDebt && (
         <DebtEditModal
           debt={editingDebt}
+          monthStart={monthStart}
           onClose={() => setEditingDebt(null)}
-          onSaved={(saved) => setDebts((prev) => prev.map((d) => (d.id === saved.id ? saved : d)))}
+          onSaved={(saved, addedEntry) => {
+            setDebts((prev) => prev.map((d) => (d.id === saved.id ? saved : d)));
+            if (addedEntry) handleSaved(addedEntry);
+          }}
         />
       )}
     </div>

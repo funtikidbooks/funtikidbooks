@@ -4,16 +4,21 @@ import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { upsertPersonalDebt } from "@/lib/actions/finance";
 import { formatVnd } from "@/lib/financeSummary";
-import type { PersonalDebt } from "@/lib/types";
+import type { FinanceEntry, PersonalDebt } from "@/lib/types";
 
 export function DebtEditModal({
   debt,
+  monthStart,
   onClose,
   onSaved,
 }: {
   debt: PersonalDebt;
+  // Which month a repayment entered here gets filed under in Biến phí —
+  // the month currently open on the Tài chính page, not necessarily
+  // today's real month (the director may be back-filling an earlier one).
+  monthStart: string;
   onClose: () => void;
-  onSaved: (debt: PersonalDebt) => void;
+  onSaved: (debt: PersonalDebt, addedEntry: FinanceEntry | null) => void;
 }) {
   const [totalAmount, setTotalAmount] = useState<number | "">(debt.total_amount ?? "");
   const [remainingAmount, setRemainingAmount] = useState<number | "">(debt.remaining_amount ?? "");
@@ -41,13 +46,14 @@ export function DebtEditModal({
     setSaving(true);
     setError(null);
     try {
-      const saved = await upsertPersonalDebt({
+      const { debt: saved, addedEntry } = await upsertPersonalDebt({
         id: debt.id,
         label: debt.label,
         totalAmount: totalAmount === "" ? null : Number(totalAmount),
         remainingAmount: remainingAmount === "" ? null : Number(remainingAmount),
+        repayment: repayment !== "" && Number(repayment) > 0 ? { amount: Number(repayment), month: monthStart } : undefined,
       });
-      onSaved(saved);
+      onSaved(saved, addedEntry);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
@@ -79,6 +85,11 @@ export function DebtEditModal({
               onChange={(e) => applyRepayment(e.target.value === "" ? "" : Number(e.target.value))}
               autoFocus
             />
+            {repayment !== "" && Number(repayment) > 0 && (
+              <p className="text-xs mt-1" style={{ color: "var(--color-neutral-500)" }}>
+                Số tiền này sẽ tự cộng vào Biến phí của tháng đang xem trên Tài chính.
+              </p>
+            )}
           </div>
 
           <div className="field">
