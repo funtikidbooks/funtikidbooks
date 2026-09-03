@@ -45,7 +45,7 @@ export function ChatHeadBubbles({ profiles }: { profiles: Profile[] }) {
   // whatever re-renders a new unread message or ChatManager update causes.
   const containerRef = useRef<HTMLDivElement>(null);
   const [rightPx, setRightPx] = useState(16);
-  const dragRef = useRef<{ startX: number; startRight: number; dragging: boolean } | null>(null);
+  const dragRef = useRef<{ startX: number; startRight: number; dragging: boolean; bubbleId: string | null } | null>(null);
   const wasDraggingRef = useRef(false);
 
   function clampRight(right: number) {
@@ -55,7 +55,8 @@ export function ChatHeadBubbles({ profiles }: { profiles: Profile[] }) {
   }
 
   function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    dragRef.current = { startX: e.clientX, startRight: rightPx, dragging: false };
+    const bubbleId = (e.target as HTMLElement).closest("button[data-bubble-id]")?.getAttribute("data-bubble-id") ?? null;
+    dragRef.current = { startX: e.clientX, startRight: rightPx, dragging: false, bubbleId };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
 
@@ -75,6 +76,15 @@ export function ChatHeadBubbles({ profiles }: { profiles: Profile[] }) {
     if (drag.dragging) {
       const deltaX = e.clientX - drag.startX;
       setRightPx(clampRight(drag.startRight - deltaX));
+    } else if (drag.bubbleId) {
+      // setPointerCapture above retargets the container's own pointerup —
+      // and with it, the browser's synthesized click — away from whichever
+      // bubble button was actually tapped, so a plain tap's click handler
+      // on the button below never fires. Opening the chat straight from
+      // here (once we know it wasn't a drag) is what makes tapping a
+      // bubble actually work instead of silently doing nothing.
+      const profile = bubbles.find((p) => p.id === drag.bubbleId);
+      if (profile) openChat(profile);
     }
     wasDraggingRef.current = drag.dragging;
     dragRef.current = null;
@@ -118,10 +128,13 @@ export function ChatHeadBubbles({ profiles }: { profiles: Profile[] }) {
         <button
           key={p.id}
           type="button"
+          data-bubble-id={p.id}
           onClick={() => {
-            // A drag that just ended fires a click right after pointerup —
-            // swallow exactly that one so dragging the bubble doesn't also
-            // pop the chat window open.
+            // Pointer taps are opened from handlePointerUp above instead
+            // (see its comment) — this onClick only fires for keyboard
+            // activation (Enter/Space), which never goes through the
+            // pointer handlers at all. It also still swallows the stray
+            // click a drag can produce, same as before.
             if (wasDraggingRef.current) {
               wasDraggingRef.current = false;
               return;
