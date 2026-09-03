@@ -87,7 +87,10 @@ export function DocumentDetailView({
   }
 
   return (
-    <div className="flex-1 flex flex-col items-center py-8 px-4" style={{ background: "var(--color-surface)" }}>
+    <div
+      className="flex-1 min-h-0 overflow-y-auto flex flex-col items-center py-8 px-4"
+      style={{ background: "var(--color-surface)" }}
+    >
       <div className="no-print flex items-center justify-between w-full max-w-[700px] mb-4">
         <Link href={backHref} className="text-sm font-bold" style={{ color: "var(--color-accent-600)" }}>
           ← {backLabel}
