@@ -1631,6 +1631,22 @@ export function MeetingHub({
     };
   }, [resync]);
 
+  // Safety net for a realtime channel that's gone quietly dead — confirmed
+  // live: Supabase's socket can stop delivering postgres_changes events for
+  // an already-open room without ever firing its own close/error callback,
+  // so nothing here would otherwise notice. Staff saw this as messages only
+  // ever showing up after a reload, even though push notifications (a
+  // separate server-side path, unaffected) kept arriving fine — the tab was
+  // never backgrounded so the focus/visibilitychange resync above never
+  // fired either. Polling resync() on a plain timer while a room stays open
+  // costs one cheap delta fetch per tick when the socket is actually fine,
+  // and is what actually recovers it when the socket has gone stale.
+  useEffect(() => {
+    if (!activeId || activeId === DM_TAB_ID) return;
+    const interval = setInterval(resync, 20000);
+    return () => clearInterval(interval);
+  }, [activeId, resync]);
+
   // Mark the newest message in the currently-open channel as "seen by me" —
   // fires again whenever a fresh message arrives while the channel stays
   // open, same as Messenger updating your read position live. No local
@@ -1734,8 +1750,15 @@ export function MeetingHub({
       // Fires with "SUBSCRIBED" both on the initial connect and after any
       // reconnect — resyncing here is what catches up on messages that
       // arrived during a drop, since Realtime doesn't replay missed events.
+      // Also resync on a drop itself (TIMED_OUT/CHANNEL_ERROR/CLOSED): the
+      // client library doesn't always resubscribe this exact channel object
+      // on its own, and the periodic safety-net poll below already covers
+      // "went quiet with no status change at all" — this just closes the
+      // gap faster on a drop that does surface one of these statuses.
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") resync();
+        if (status === "SUBSCRIBED" || status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") {
+          resync();
+        }
       });
 
     channelRef.current = channel;
