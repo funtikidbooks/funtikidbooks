@@ -1307,14 +1307,22 @@ export function MeetingHub({
 
   // Keeps roomCacheRef current for whichever room is open, so leaving it
   // (switching to another room, or to the DM tab) always freezes an
-  // up-to-date snapshot for next time. On the very render where activeId
-  // has just changed but messages/reactions haven't caught up to the new
-  // room yet, this fires once with the previous room's still-stale state —
-  // harmless, since the resync() effect's own setState calls immediately
-  // trigger a follow-up render (before anything else runs) where this
-  // fires again with the corrected data, overwriting that transient write.
+  // up-to-date snapshot for next time.
+  //
+  // On the render right after activeId changes, `messages`/etc. still hold
+  // the *previous* room's data (they only catch up once resync()'s own
+  // setState calls land) — writing that stale snapshot under the *new*
+  // room's key here would then have resync() itself read its own
+  // just-written garbage as a "cache hit" for a room it's never actually
+  // fetched, since this effect is declared (and so runs) before the
+  // resync-triggering effect below in the same commit. Guarding on
+  // lastSyncedChannelIdRef — only set to activeId by resync() itself once
+  // it has decided how to populate this room's state — closes that window:
+  // it's still the *previous* room's id on that first stale-data render, so
+  // the write is correctly skipped until resync() has actually run for the
+  // new room and this effect fires again with data that genuinely matches it.
   useEffect(() => {
-    if (!activeId || activeId === DM_TAB_ID) return;
+    if (!activeId || activeId === DM_TAB_ID || activeId !== lastSyncedChannelIdRef.current) return;
     roomCacheRef.current.set(activeId, { messages, reactions, reads, pinnedMessages });
   }, [activeId, messages, reactions, reads, pinnedMessages]);
 
