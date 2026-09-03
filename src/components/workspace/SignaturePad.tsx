@@ -52,12 +52,17 @@ async function renderTypedSignature(text: string, width: number, height: number)
 export const SignaturePad = forwardRef<SignaturePadHandle, { onChange: (hasContent: boolean) => void }>(
   function SignaturePad({ onChange }, ref) {
     const [mode, setMode] = useState<Mode>("draw");
+    // Always mounted regardless of mode (unlike canvasRef, which only
+    // exists in draw mode) — type mode measures this fresh at sign time
+    // instead of caching a width from whenever the draw canvas happened to
+    // last mount, which could be stale or, if draw mode was never visited
+    // this session, never set at all.
+    const containerRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const drawingRef = useRef(false);
     const lastPointRef = useRef<{ x: number; y: number } | null>(null);
     const [hasDrawn, setHasDrawn] = useState(false);
     const [typedName, setTypedName] = useState("");
-    const padWidthRef = useRef(600);
 
     // Backs the canvas with real device pixels (crisp strokes on
     // retina/phone screens) while CSS keeps it laid out at its declared size.
@@ -66,7 +71,6 @@ export const SignaturePad = forwardRef<SignaturePadHandle, { onChange: (hasConte
       if (!canvas) return;
       const ratio = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
-      padWidthRef.current = rect.width;
       canvas.width = rect.width * ratio;
       canvas.height = rect.height * ratio;
       const ctx = canvas.getContext("2d");
@@ -84,7 +88,8 @@ export const SignaturePad = forwardRef<SignaturePadHandle, { onChange: (hasConte
         if (mode === "type") {
           const trimmed = typedName.trim();
           if (!trimmed) return Promise.resolve(null);
-          return renderTypedSignature(trimmed, padWidthRef.current, 180);
+          const width = containerRef.current?.getBoundingClientRect().width || 600;
+          return renderTypedSignature(trimmed, width, 180);
         }
         return new Promise((resolve) => {
           const canvas = canvasRef.current;
@@ -145,7 +150,7 @@ export const SignaturePad = forwardRef<SignaturePadHandle, { onChange: (hasConte
     }
 
     return (
-      <div className="flex flex-col gap-2">
+      <div ref={containerRef} className="flex flex-col gap-2">
         <div className="flex items-center gap-1.5">
           <button
             type="button"
