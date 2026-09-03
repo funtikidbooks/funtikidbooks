@@ -12,6 +12,11 @@ import type { MeetingChannel, MeetingChannelPublic, MeetingChannelRead, MeetingM
 // tunable in one place since it's used both here and in getRoomSync below.
 const INITIAL_MESSAGE_PAGE_SIZE = 60;
 
+// One "scroll up for more" batch, Zalo/Messenger-style — see
+// getOlderMeetingMessages below and MeetingHub's loadOlderMessages, its
+// only caller.
+const OLDER_MESSAGE_PAGE_SIZE = 40;
+
 function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const hash = scryptSync(password, salt, 64).toString("hex");
@@ -321,6 +326,37 @@ export async function getMeetingMessages(channelId: string, afterCreatedAt?: str
     .order("created_at", { ascending: false })
     .limit(INITIAL_MESSAGE_PAGE_SIZE);
   return ((data ?? []) as MeetingMessage[]).reverse();
+}
+
+// One page of history older than whatever's currently loaded — the
+// "scroll to the top, it loads more" counterpart to getMeetingMessages'
+// initial page above. Reactions come along for this batch (looked up by
+// exact message id, not a channel+time-range join like getRoomSync uses)
+// since the messages themselves are brand new to the client and would
+// otherwise render with no reactions until a reload.
+export async function getOlderMeetingMessages(
+  channelId: string,
+  beforeCreatedAt: string,
+): Promise<{ messages: MeetingMessage[]; reactions: MeetingReaction[] }> {
+  const { supabase } = await requireUser();
+  const { data: msgData } = await supabase
+    .from("meeting_messages")
+    .select("*")
+    .eq("channel_id", channelId)
+    .lt("created_at", beforeCreatedAt)
+    .order("created_at", { ascending: false })
+    .limit(OLDER_MESSAGE_PAGE_SIZE);
+  const messages = ((msgData ?? []) as MeetingMessage[]).reverse();
+  if (messages.length === 0) return { messages: [], reactions: [] };
+
+  const { data: rxData } = await supabase
+    .from("meeting_message_reactions")
+    .select("message_id, profile_id, emoji, created_at")
+    .in(
+      "message_id",
+      messages.map((m) => m.id),
+    );
+  return { messages, reactions: (rxData ?? []) as MeetingReaction[] };
 }
 
 // Combines getMeetingMessages + getReactionsSince + getChannelReads +

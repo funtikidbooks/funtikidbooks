@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
@@ -33,6 +33,7 @@ import {
   addReaction,
   createChannel,
   deleteChannel,
+  getOlderMeetingMessages,
   getRoomSync,
   joinChannel,
   leaveChannel,
@@ -124,13 +125,21 @@ function saveRoomSnapshotToStorage(channelId: string, snapshot: RoomSnapshot) {
 // buffer above the 60-message initial page — plenty for "just switched
 // back into this room, everything still feels the same as before" — while
 // guaranteeing the render cost has a ceiling no matter how long the app
-// stays installed. The one known tradeoff: jumping to a search result
-// older than this window won't find it in the DOM to scroll to — already
-// true today for anyone without months of this exact browser's cache
-// built up, just inconsistently so.
+// stays installed.
+//
+// Once someone actually scrolls to the top and pulls in older history via
+// loadOlderMessages (see MeetingHub's own comment there), capping back
+// down to MAX_LOADED_MESSAGES on the very next incoming message would
+// silently throw away the history they just asked for and could even move
+// their scroll anchor out from under them — so that flips the ceiling up
+// to MAX_EXPANDED_MESSAGES instead (a component-level helper below picks
+// which one applies), a generous backstop rather than a real target, purely
+// so one very long sitting can't grow the DOM without limit either. It
+// resets back to the normal ceiling on the next room switch.
 const MAX_LOADED_MESSAGES = 200;
-function capMessages(list: MeetingMessage[]) {
-  return list.length > MAX_LOADED_MESSAGES ? list.slice(list.length - MAX_LOADED_MESSAGES) : list;
+const MAX_EXPANDED_MESSAGES = 2000;
+function capMessages(list: MeetingMessage[], limit: number) {
+  return list.length > limit ? list.slice(list.length - limit) : list;
 }
 
 const EMOJI_OPTIONS = [
@@ -1212,10 +1221,35 @@ export function MeetingHub({
   // room's messages stayed cached under this room's key for good.
   const syncedRoomIdRef = useRef<string | null>(null);
   const lastMarkedReadIdRef = useRef<string | null>(null);
+  // Scroll-to-load-older state (see loadOlderMessages below). Refs mirror
+  // the two bits of state for a synchronous read inside handleListScroll —
+  // a fast scroll gesture can fire several times before a setState from the
+  // previous call has actually committed, and reading state there would let
+  // more than one fetch for the same page slip through that gap.
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasMoreOlder, setHasMoreOlder] = useState(true);
+  const loadingOlderRef = useRef(false);
+  const hasMoreOlderRef = useRef(true);
+  // Whether the current room's history has been pulled past the normal
+  // MAX_LOADED_MESSAGES window this visit — see capMessages' own comment on
+  // why that raises the cap instead of leaving it capped. Reset alongside
+  // hasMoreOlderRef whenever resync() detects an actual room switch.
+  const manuallyExpandedRef = useRef(false);
+  // Set right before prepending an older-messages page, consumed by the
+  // useLayoutEffect below — restores the reader's scroll position after
+  // new content lands above what they were looking at, the same way a
+  // taller viewport keeps its scroll anchor when content above it resizes.
+  const scrollAdjustRef = useRef<{ prevScrollHeight: number; prevScrollTop: number } | null>(null);
   const activeIdRef = useRef(activeId);
   useEffect(() => {
     activeIdRef.current = activeId;
   }, [activeId]);
+  // See capMessages' own comment on the two ceilings — this just picks
+  // whichever one currently applies.
+  const capMessagesForRoom = useCallback(
+    (list: MeetingMessage[]) => capMessages(list, manuallyExpandedRef.current ? MAX_EXPANDED_MESSAGES : MAX_LOADED_MESSAGES),
+    [],
+  );
   const popoverRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
@@ -1552,9 +1586,9 @@ export function MeetingHub({
           return next;
         }
       }
-      return capMessages([...prev, confirmed]);
+      return capMessagesForRoom([...prev, confirmed]);
     },
-    [currentUser.id],
+    [currentUser.id, capMessagesForRoom],
   );
 
   // Catches up the active channel after the realtime subscription below may
@@ -1607,6 +1641,16 @@ export function MeetingHub({
     const isNewRoom = lastSyncedChannelIdRef.current !== id;
     lastSyncedChannelIdRef.current = id;
 
+    // Fresh room, fresh scroll-to-load-older state — otherwise a room
+    // switch could inherit "already scrolled to the very top" or the
+    // raised message ceiling (see capMessages) from whatever room was open
+    // before it.
+    if (isNewRoom) {
+      hasMoreOlderRef.current = true;
+      setHasMoreOlder(true);
+      manuallyExpandedRef.current = false;
+    }
+
     // In-memory first (this tab's own recent visits), falling back to
     // localStorage (a previous session/app launch) — and hydrating the
     // in-memory map from it, so this only ever hits localStorage once per
@@ -1624,7 +1668,7 @@ export function MeetingHub({
       // kicking off the delta fetch below. This room's state already
       // matches its id at this point, so the cache-write effect is safe
       // to fire for it.
-      setMessages(capMessages(cached.messages));
+      setMessages(capMessagesForRoom(cached.messages));
       setReactions(cached.reactions);
       setReads(cached.reads);
       setPinnedMessages(cached.pinnedMessages);
@@ -1675,7 +1719,7 @@ export function MeetingHub({
         if (needsFullFetch) {
           setMessages(msgs);
         } else if (msgs.length > 0) {
-          setMessages((prev) => capMessages(msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev)));
+          setMessages((prev) => capMessagesForRoom(msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev)));
         }
         if (needsFullFetch) {
           setReactions(rx);
@@ -1701,7 +1745,7 @@ export function MeetingHub({
           syncedRoomIdRef.current = id;
         }
       });
-  }, [activeId, mergeServerMessage]);
+  }, [activeId, mergeServerMessage, capMessagesForRoom]);
 
   useEffect(() => {
     lastMarkedReadIdRef.current = null;
@@ -1879,16 +1923,83 @@ export function MeetingHub({
     }
   }, []);
 
+  // Zalo/Messenger-style "scroll to the top, older messages load in" —
+  // capMessages (see its own comment) already bounds what a room keeps
+  // loaded automatically, so this is the only way to actually see further
+  // back than that. Reads activeId/messages through refs rather than
+  // closing over the values directly so this can stay a stable callback
+  // (handleListScroll below fires on every scroll event, and re-creating
+  // its own dependency on every keystroke-speed scroll tick isn't free).
+  const loadOlderMessages = useCallback(async () => {
+    const id = activeIdRef.current;
+    if (!id || id === DM_TAB_ID) return;
+    if (loadingOlderRef.current || !hasMoreOlderRef.current) return;
+    const oldest = messagesRef.current[0];
+    if (!oldest) return;
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    try {
+      const { messages: older, reactions: olderReactions } = await getOlderMeetingMessages(id, oldest.created_at);
+      // Switched rooms while this was in flight — a stale page prepended to
+      // whatever room the user is actually looking at now would corrupt it.
+      if (activeIdRef.current !== id) return;
+      if (older.length === 0) {
+        hasMoreOlderRef.current = false;
+        setHasMoreOlder(false);
+        return;
+      }
+      // Captured now, restored by the useLayoutEffect below once the
+      // prepended content has actually committed to the DOM — otherwise the
+      // reader's view jumps down by exactly the height of what just loaded
+      // above it, since scrollTop stays numerically the same while
+      // scrollHeight grows underneath it.
+      const el = listRef.current;
+      if (el) scrollAdjustRef.current = { prevScrollHeight: el.scrollHeight, prevScrollTop: el.scrollTop };
+      manuallyExpandedRef.current = true;
+      setMessages((prev) => [...older, ...prev]);
+      if (olderReactions.length > 0) {
+        setReactions((prev) => {
+          const key = (r: MeetingReaction) => `${r.message_id}:${r.profile_id}:${r.emoji}`;
+          const seen = new Set(prev.map(key));
+          const fresh = olderReactions.filter((r) => !seen.has(key(r)));
+          return fresh.length > 0 ? [...prev, ...fresh] : prev;
+        });
+      }
+    } catch {
+      // Transient network hiccup — the next scroll-up tick just retries.
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
+  }, []);
+
+  // Keeps the reader anchored to the same message after loadOlderMessages
+  // prepends a page above it — a plain useEffect would run after the
+  // browser has already painted the jump, so this has to be a layout
+  // effect to correct scrollTop in the same frame, before it's visible.
+  useLayoutEffect(() => {
+    const adjust = scrollAdjustRef.current;
+    if (!adjust) return;
+    scrollAdjustRef.current = null;
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = adjust.prevScrollTop + (el.scrollHeight - adjust.prevScrollHeight);
+  }, [messages]);
+
   // Fires on every manual scroll of the message list — catches the reader
   // scrolling themselves away from the bottom, which the effect-driven
   // stickToBottomIfNear calls (message/reaction updates) don't see on their
-  // own since nothing about the data changed.
+  // own since nothing about the data changed. Also the trigger for loading
+  // older messages: getting within reach of the top starts the fetch
+  // slightly before the reader actually hits it, same as the "kéo tuốt
+  // lên" feel Zalo has.
   const handleListScroll = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     setShowJumpToBottom(distanceFromBottom > 400);
-  }, []);
+    if (el.scrollTop < 200) loadOlderMessages();
+  }, [loadOlderMessages]);
 
   // Reactions and "seen by" read receipts now load independently of
   // messages (see resync()) and can settle a beat after the message list
@@ -2269,7 +2380,7 @@ export function MeetingHub({
         created_at: new Date().toISOString(),
       };
       pendingPayloadsRef.current.set(tempId, { content: trimmed, file, replyId });
-      setMessages((prev) => capMessages([...prev, optimistic]));
+      setMessages((prev) => capMessagesForRoom([...prev, optimistic]));
       attemptSend(channelId, tempId, trimmed, file, replyId);
       return;
     }
@@ -2289,7 +2400,7 @@ export function MeetingHub({
       tempId: `temp-${crypto.randomUUID()}`,
     }));
     setMessages((prev) =>
-      capMessages([
+      capMessagesForRoom([
         ...prev,
         ...entries.map(
           (entry): MeetingMessage => ({
@@ -3131,6 +3242,16 @@ export function MeetingHub({
               {messages.length === 0 && (
                 <p className="text-[13px] text-center mt-4" style={{ color: "var(--color-neutral-500)" }}>
                   Chưa có tin nhắn nào trong phòng này.
+                </p>
+              )}
+              {loadingOlder && (
+                <p className="text-[12px] text-center py-2" style={{ color: "var(--color-neutral-500)" }}>
+                  Đang tải tin nhắn cũ hơn…
+                </p>
+              )}
+              {!loadingOlder && !hasMoreOlder && messages.length > 0 && (
+                <p className="text-[11px] text-center py-2" style={{ color: "var(--color-neutral-400)" }}>
+                  — Đầu cuộc trò chuyện —
                 </p>
               )}
               {messages.map((m, index) => {
