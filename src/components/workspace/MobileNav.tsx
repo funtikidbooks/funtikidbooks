@@ -39,7 +39,7 @@ const PRIMARY_NAV_IPHONE_APP = [
   { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐" },
 ];
 
-export function MobileNav({ isDirector }: { isDirector: boolean }) {
+export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
   const pathname = usePathname();
   const [showMore, setShowMore] = useState(false);
   const { theme, toggleTheme } = useTheme();
@@ -162,13 +162,13 @@ export function MobileNav({ isDirector }: { isDirector: boolean }) {
                 <span aria-hidden>{item.icon}</span> {item.label}
               </Link>
             ))}
-            {isDirector && (
+            {canOpenAdmin && (
               <Link
                 href="/quan-tri"
                 onClick={() => setShowMore(false)}
                 className="ws-nav-link flex items-center gap-2.5 px-2 py-2.5 rounded-[8px] text-[14px] font-semibold"
               >
-                <span aria-hidden>🛠</span> Quản trị nội dung
+                <span aria-hidden>🛠</span> Quản trị
               </Link>
             )}
             <button

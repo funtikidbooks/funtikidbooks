@@ -80,6 +80,13 @@ export default async function WorkspaceLayout({
     created_at: new Date().toISOString(),
   };
 
+  // Same "director or exact chức danh 'Project Manager'" rule as
+  // can_manage_hr() in schema.sql — a PM can already see the HR/finance
+  // sections of /quan-tri once there, but had no link into it at all
+  // (this icon and MobileNav's were both director-only), so they had no
+  // way to discover the URL themselves.
+  const canOpenAdmin = myProfile.access_role === "director" || myProfile.role === "Project Manager";
+
   return (
     <ChatManagerProvider currentUserId={user.id} initialUnreadCounts={unreadCounts}>
       <TabNotificationBadge />
@@ -115,13 +122,13 @@ export default async function WorkspaceLayout({
                 profiles={(allProfiles ?? []) as Profile[]}
               />
               <div className="flex items-center gap-2">
-                {myProfile.access_role === "director" && (
+                {canOpenAdmin && (
                   <Link
                     href="/quan-tri"
                     className="ws-quan-tri-link btn-icon flex-none hidden md:inline-flex"
                     style={{ width: 30, height: 30, padding: 0, color: "var(--color-accent-2-700)", background: "var(--color-accent-2-100)" }}
-                    title="Quản trị nội dung"
-                    aria-label="Quản trị nội dung"
+                    title="Quản trị"
+                    aria-label="Quản trị"
                   >
                     🛠
                   </Link>
@@ -133,7 +140,7 @@ export default async function WorkspaceLayout({
             <div className="flex-1 flex flex-col min-h-0">{children}</div>
           </div>
         </div>
-        <MobileNav isDirector={myProfile.access_role === "director"} />
+        <MobileNav canOpenAdmin={canOpenAdmin} />
       </div>
       <ChatDock currentUser={{ id: myProfile.id, display_name: myProfile.display_name }} />
       <ChatHeadBubbles profiles={(allProfiles ?? []) as Profile[]} />
