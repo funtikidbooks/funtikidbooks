@@ -857,6 +857,60 @@ export function DirectConversation({
             (acc[r.emoji] ??= []).push(r.profile_id);
             return acc;
           }, {});
+          // Rendered as an absolutely-positioned child of whichever element
+          // is the message's actual last visible content (bubble or
+          // attachment) so it hugs that element's own corner — anchoring it
+          // to the outer row instead landed it off the row's invisible
+          // hover-actions spacer, floating away from the bubble.
+          const reactionsBadge = Object.keys(grouped).length > 0 && (
+            <div
+              className="flex flex-wrap gap-1"
+              style={{ position: "absolute", bottom: -10, [mine ? "left" : "right"]: -4, zIndex: 1 }}
+            >
+              {Object.entries(grouped).map(([emoji, ids]) => {
+                const reactedByMe = ids.includes(currentUser.id);
+                const reactionKey = `${m.id}:${emoji}`;
+                // Only two people can ever be in this conversation, so
+                // there's no need for a profile lookup — just tell the
+                // two apart directly.
+                const names = ids.map((id) => (id === currentUser.id ? "Bạn" : peer.display_name));
+                return (
+                  <span key={emoji} className="relative inline-block">
+                    <button
+                      type="button"
+                      onClick={() => toggleReaction(m.id, emoji)}
+                      onMouseEnter={() => setHoveredReaction(reactionKey)}
+                      onMouseLeave={() => setHoveredReaction((prev) => (prev === reactionKey ? null : prev))}
+                      className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold"
+                      style={{
+                        background: reactedByMe ? "var(--color-accent-100)" : "var(--color-surface)",
+                        border: `1px solid ${reactedByMe ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
+                        boxShadow: "var(--shadow-sm, 0 1px 3px rgba(0,0,0,.15))",
+                      }}
+                    >
+                      <span aria-hidden><Emoji emoji={emoji} size={14} /></span>
+                      {ids.length}
+                    </button>
+                    {hoveredReaction === reactionKey && (
+                      <span
+                        className="absolute z-10 rounded-[8px] px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap"
+                        style={{
+                          bottom: "calc(100% + 6px)",
+                          left: "50%",
+                          transform: "translateX(-50%)",
+                          background: "var(--color-neutral-900, #1a1a1a)",
+                          color: "#fff",
+                          boxShadow: "var(--shadow-md, 0 2px 8px rgba(0,0,0,.25))",
+                        }}
+                      >
+                        {emoji} {names.join(", ")}
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          );
           const translateButton = m.content && (
             <button
               type="button"
@@ -942,11 +996,12 @@ export function DirectConversation({
               className={`group flex flex-col min-w-0 ${mine ? "items-end self-end" : "items-start self-start"} max-w-[82%]`}
               style={{ marginTop: isGroupStart ? 12 : 2, opacity: isPending ? 0.6 : 1 }}
             >
-              <div className={`relative min-w-0 max-w-full ${Object.keys(grouped).length > 0 ? "mb-2" : ""}`}>
               {m.content && (
-                <div className={`flex items-end gap-1 min-w-0 max-w-full ${mine ? "flex-row-reverse" : ""}`}>
+                <div
+                  className={`flex items-end gap-1 min-w-0 max-w-full ${mine ? "flex-row-reverse" : ""} ${!m.attachment_url && reactionsBadge ? "mb-2" : ""}`}
+                >
                   <div
-                    className="min-w-0 rounded-[12px] px-3 py-1.5 text-[17px] whitespace-pre-wrap break-words"
+                    className="relative min-w-0 rounded-[12px] px-3 py-1.5 text-[17px] whitespace-pre-wrap break-words"
                     style={{
                       background: isFailed ? "var(--status-red-100, #fde2e2)" : mine ? "var(--color-accent-500)" : "var(--color-surface)",
                       color: isFailed ? "var(--status-red, #c22)" : mine ? "#fff" : "var(--color-text)",
@@ -997,6 +1052,7 @@ export function DirectConversation({
                         {translations[m.id] || "(không có nội dung)"}
                       </div>
                     )}
+                    {!m.attachment_url && reactionsBadge}
                   </div>
                   {translateButton}
                   {reactionButton}
@@ -1004,33 +1060,39 @@ export function DirectConversation({
               )}
               {m.attachment_url &&
                 (isImage(m.attachment_mime) ? (
-                  <div className={`flex items-end gap-1 mt-1 ${mine ? "flex-row-reverse" : ""}`}>
-                    <button
-                      type="button"
-                      onClick={() => setLightbox({ url: m.attachment_url!, filename: m.attachment_filename })}
-                      className="block"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={thumbnailUrl(m.attachment_url, 480)}
-                        alt={m.attachment_filename ?? ""}
-                        className="rounded-[10px] object-cover"
-                        style={{ maxWidth: 340, maxHeight: 340 }}
-                        onLoad={() => stickToBottomIfNear(false)}
-                      />
-                    </button>
+                  <div className={`flex items-end gap-1 mt-1 ${mine ? "flex-row-reverse" : ""} ${reactionsBadge ? "mb-2" : ""}`}>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setLightbox({ url: m.attachment_url!, filename: m.attachment_filename })}
+                        className="block"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={thumbnailUrl(m.attachment_url, 480)}
+                          alt={m.attachment_filename ?? ""}
+                          className="rounded-[10px] object-cover"
+                          style={{ maxWidth: 340, maxHeight: 340 }}
+                          onLoad={() => stickToBottomIfNear(false)}
+                        />
+                      </button>
+                      {reactionsBadge}
+                    </div>
                     {!m.content && reactionButton}
                   </div>
                 ) : (
-                  <a
-                    href={m.attachment_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold"
-                    style={{ background: "var(--color-surface)", color: "var(--color-accent-700)" }}
-                  >
-                    📄 {m.attachment_filename}
-                  </a>
+                  <div className={`relative inline-block mt-1 ${reactionsBadge ? "mb-2" : ""}`}>
+                    <a
+                      href={m.attachment_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold"
+                      style={{ background: "var(--color-surface)", color: "var(--color-accent-700)" }}
+                    >
+                      📄 {m.attachment_filename}
+                    </a>
+                    {reactionsBadge}
+                  </div>
                 ))}
               {!m.attachment_url && m.attachment_filename && (
                 <div
@@ -1040,59 +1102,6 @@ export function DirectConversation({
                   📎 {m.attachment_filename} {isFailed ? "— chưa gửi được" : "— đang gửi…"}
                 </div>
               )}
-              {Object.keys(grouped).length > 0 && (
-                // Overlaps the bubble's bottom-outer corner Messenger-style
-                // (the side with room to spare — away from the screen edge
-                // the bubble itself hugs) instead of sitting in its own row.
-                <div
-                  className="flex flex-wrap gap-1"
-                  style={{ position: "absolute", bottom: -10, [mine ? "left" : "right"]: -4, zIndex: 1 }}
-                >
-                  {Object.entries(grouped).map(([emoji, ids]) => {
-                    const reactedByMe = ids.includes(currentUser.id);
-                    const reactionKey = `${m.id}:${emoji}`;
-                    // Only two people can ever be in this conversation, so
-                    // there's no need for a profile lookup — just tell the
-                    // two apart directly.
-                    const names = ids.map((id) => (id === currentUser.id ? "Bạn" : peer.display_name));
-                    return (
-                      <span key={emoji} className="relative inline-block">
-                        <button
-                          type="button"
-                          onClick={() => toggleReaction(m.id, emoji)}
-                          onMouseEnter={() => setHoveredReaction(reactionKey)}
-                          onMouseLeave={() => setHoveredReaction((prev) => (prev === reactionKey ? null : prev))}
-                          className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold"
-                          style={{
-                            background: reactedByMe ? "var(--color-accent-100)" : "var(--color-surface)",
-                            border: `1px solid ${reactedByMe ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
-                            boxShadow: "var(--shadow-sm, 0 1px 3px rgba(0,0,0,.15))",
-                          }}
-                        >
-                          <span aria-hidden><Emoji emoji={emoji} size={14} /></span>
-                          {ids.length}
-                        </button>
-                        {hoveredReaction === reactionKey && (
-                          <span
-                            className="absolute z-10 rounded-[8px] px-2.5 py-1.5 text-[13px] font-medium whitespace-nowrap"
-                            style={{
-                              bottom: "calc(100% + 6px)",
-                              left: "50%",
-                              transform: "translateX(-50%)",
-                              background: "var(--color-neutral-900, #1a1a1a)",
-                              color: "#fff",
-                              boxShadow: "var(--shadow-md, 0 2px 8px rgba(0,0,0,.25))",
-                            }}
-                          >
-                            {emoji} {names.join(", ")}
-                          </span>
-                        )}
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-              </div>
               {isFailed ? (
                 <button
                   type="button"
