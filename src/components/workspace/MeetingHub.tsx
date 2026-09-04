@@ -28,6 +28,7 @@ import { useCallPresence } from "@/lib/useCallPresence";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 import { vnToday } from "@/lib/constants/attendance";
 import { thumbnailUrl } from "@/lib/imageTransform";
+import { Emoji } from "@/lib/emoji";
 import {
   addChannelMember,
   addReaction,
@@ -2651,10 +2652,10 @@ export function MeetingHub({
                             type="button"
                             onClick={() => toggleReaction(m.id, emoji)}
                             className="btn-icon"
-                            style={{ width: 26, height: 26, padding: 0, fontSize: 15 }}
+                            style={{ width: 26, height: 26, padding: 0 }}
                             aria-label={emoji}
                           >
-                            {emoji}
+                            <Emoji emoji={emoji} size={20} />
                           </button>
                         ))}
                         {m.content && (
@@ -2861,7 +2862,7 @@ export function MeetingHub({
                                     border: `1px solid ${reactedByMe ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
                                   }}
                                 >
-                                  <span aria-hidden>{emoji}</span>
+                                  <span aria-hidden><Emoji emoji={emoji} size={14} /></span>
                                   {ids.length}
                                 </button>
                                 {hoveredReaction === reactionKey && names.length > 0 && (
@@ -3873,10 +3874,10 @@ export function MeetingHub({
                         textInputRef.current?.focus();
                       }}
                       className="btn-icon"
-                      style={{ width: 26, height: 26, padding: 0, fontSize: 15 }}
+                      style={{ width: 26, height: 26, padding: 0 }}
                       aria-label={emoji}
                     >
-                      {emoji}
+                      <Emoji emoji={emoji} size={20} />
                     </button>
                   ))}
                 </div>
