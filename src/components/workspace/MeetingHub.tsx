@@ -3098,7 +3098,10 @@ export function MeetingHub({
             </button>
           </span>
         </div>
-        <div className="flex flex-col gap-1 overflow-y-auto flex-1 min-h-0">
+        <div
+          className="flex flex-col gap-1 overflow-y-auto flex-1 min-h-0"
+          style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+        >
           {customTopLevelRooms.map((r) => {
             const roomUnread = meetingUnreadCounts[r.id] ?? 0;
             const children = childRoomsByParent.get(r.id) ?? [];
