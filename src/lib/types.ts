@@ -435,6 +435,23 @@ export type StaffIdDocument = {
   updated_at: string;
 };
 
+// "Tài liệu" — file_path is a storage path in the private documents-library
+// bucket, not a public URL; a downloadable link is fetched separately as a
+// short-lived signed link (see getDocumentLibraryFileUrl).
+export type DocumentLibraryItem = {
+  id: string;
+  title: string;
+  folder: string | null;
+  file_path: string;
+  file_name: string;
+  file_size: number | null;
+  mime_type: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PayrollFeedbackStatus = "pending" | "approved" | "rejected";
 
 export type PayrollFeedback = {
@@ -988,6 +1005,12 @@ export type Database = {
         Row: StaffIdDocument;
         Insert: Partial<StaffIdDocument> & { profile_id: string };
         Update: Partial<StaffIdDocument>;
+        Relationships: [];
+      };
+      document_library_items: {
+        Row: DocumentLibraryItem;
+        Insert: Partial<DocumentLibraryItem> & { title: string; file_path: string; file_name: string };
+        Update: Partial<DocumentLibraryItem>;
         Relationships: [];
       };
       finance_entries: {

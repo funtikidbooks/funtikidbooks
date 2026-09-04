@@ -2642,3 +2642,52 @@ create policy "hr can manage staff id storage"
   to authenticated
   using (bucket_id = 'staff-id-documents' and public.can_manage_hr())
   with check (bucket_id = 'staff-id-documents' and public.can_manage_hr());
+
+-- ---------------------------------------------------------------------------
+-- document_library_items: "Tài liệu" — a director/PM-only file library for
+-- external reference documents (SOP, thuế, bảo hiểm nhân viên, bảng lương
+-- gốc, v.v.), organized into free-text folders. Same can_manage_hr() gate
+-- and private-bucket-with-signed-URLs pattern as staff_id_documents above —
+-- see supabase/migrations/document_library.sql for the standalone version.
+-- ---------------------------------------------------------------------------
+create table if not exists public.document_library_items (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  folder text,
+  file_path text not null,
+  file_name text not null,
+  file_size integer,
+  mime_type text,
+  note text,
+  created_by uuid references public.profiles (id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists document_library_items_folder_idx
+  on public.document_library_items (folder);
+
+alter table public.document_library_items enable row level security;
+
+drop policy if exists "hr can manage document library items" on public.document_library_items;
+create policy "hr can manage document library items"
+  on public.document_library_items for all
+  to authenticated
+  using (public.can_manage_hr())
+  with check (public.can_manage_hr());
+
+drop trigger if exists document_library_items_set_updated_at on public.document_library_items;
+create trigger document_library_items_set_updated_at
+  before update on public.document_library_items
+  for each row execute procedure public.set_updated_at();
+
+insert into storage.buckets (id, name, public)
+values ('documents-library', 'documents-library', false)
+on conflict (id) do nothing;
+
+drop policy if exists "hr can manage document library storage" on storage.objects;
+create policy "hr can manage document library storage"
+  on storage.objects for all
+  to authenticated
+  using (bucket_id = 'documents-library' and public.can_manage_hr())
+  with check (bucket_id = 'documents-library' and public.can_manage_hr());
