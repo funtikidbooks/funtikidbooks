@@ -963,11 +963,27 @@ export function MeetingHub({
   profiles: profilesProp,
   initialChannels,
   initialDmTabLabel,
+  initialRoomId = null,
+  initialMessages = [],
+  initialReactions = [],
+  initialReads = [],
+  initialPinnedMessages = [],
 }: {
   currentUser: { id: string; display_name: string };
   profiles: Profile[];
   initialChannels: MeetingChannelPublic[];
   initialDmTabLabel: string;
+  // Pre-fetched server-side for whichever room MeetingHub defaults to (the
+  // general room — the only one deterministic enough to prefetch without
+  // risking a hydration mismatch, since the client's own default is the
+  // same lookup off initialChannels, not anything from localStorage). Lets
+  // the very first paint show real messages instead of an empty list while
+  // resync() below makes its first network round trip.
+  initialRoomId?: string | null;
+  initialMessages?: MeetingMessage[];
+  initialReactions?: MeetingReaction[];
+  initialReads?: MeetingChannelRead[];
+  initialPinnedMessages?: MeetingMessage[];
 }) {
   const { setActiveMeetingChannel, unreadCounts: dmUnreadCounts, meetingUnreadCounts } = useChatManager();
   // Patched with any live profile edits (name/avatar) a colleague has made
@@ -1091,9 +1107,9 @@ export function MeetingHub({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser.id]);
 
-  const [messages, setMessages] = useState<MeetingMessage[]>([]);
-  const [reactions, setReactions] = useState<MeetingReaction[]>([]);
-  const [reads, setReads] = useState<MeetingChannelRead[]>([]);
+  const [messages, setMessages] = useState<MeetingMessage[]>(initialMessages);
+  const [reactions, setReactions] = useState<MeetingReaction[]>(initialReactions);
+  const [reads, setReads] = useState<MeetingChannelRead[]>(initialReads);
   const [text, setText] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   // Temp (client-generated) ids currently in flight or that failed — drives
@@ -1143,7 +1159,7 @@ export function MeetingHub({
   const [mediaTab, setMediaTab] = useState<"images" | "links" | "files">("images");
   const [mediaSearch, setMediaSearch] = useState("");
   const [showPinned, setShowPinned] = useState(false);
-  const [pinnedMessages, setPinnedMessages] = useState<MeetingMessage[]>([]);
+  const [pinnedMessages, setPinnedMessages] = useState<MeetingMessage[]>(initialPinnedMessages);
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [lightbox, setLightbox] = useState<{ url: string; filename: string | null } | null>(null);
   // Shows a floating "jump to latest" button once the reader has scrolled
@@ -1191,13 +1207,16 @@ export function MeetingHub({
   // it has to stay out of resync's own dependency array (see there) so a
   // new message arriving doesn't tear down and recreate the realtime
   // channel subscription on every single message.
-  const messagesRef = useRef<MeetingMessage[]>([]);
+  const messagesRef = useRef<MeetingMessage[]>(initialMessages);
   // Same idea as messagesRef, for the reactions delta-fetch in resync().
-  const reactionsRef = useRef<MeetingReaction[]>([]);
+  const reactionsRef = useRef<MeetingReaction[]>(initialReactions);
   // Which room resync() last actually fetched — lets it tell "just switched
   // rooms, need the full history" apart from "same room, only catching up
   // on what was missed" without that also being a reactive dependency.
-  const lastSyncedChannelIdRef = useRef<string | null>(null);
+  // Pre-seeded to the room the server already fetched for (see initialRoomId)
+  // so resync()'s very first call treats it as "same room, catch up" instead
+  // of re-fetching everything it was just handed in the initial HTML.
+  const lastSyncedChannelIdRef = useRef<string | null>(initialRoomId);
   // Last-known snapshot per room, kept after switching away — switching
   // back used to always show a blank/stale list for a full network
   // round-trip (getMeetingMessages + getReactionsSince + getChannelReads,
@@ -1220,7 +1239,7 @@ export function MeetingHub({
   // another quick tap (a real scenario when tapping through several rooms
   // fast), nothing ever came along to overwrite that bad entry — the wrong
   // room's messages stayed cached under this room's key for good.
-  const syncedRoomIdRef = useRef<string | null>(null);
+  const syncedRoomIdRef = useRef<string | null>(initialRoomId);
   const lastMarkedReadIdRef = useRef<string | null>(null);
   // Scroll-to-load-older state (see loadOlderMessages below). Refs mirror
   // the two bits of state for a synchronous read inside handleListScroll —
