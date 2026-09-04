@@ -2959,9 +2959,17 @@ export function MeetingHub({
 
   return (
     <div className="flex flex-1 min-h-0">
-      {/* Room list — a persistent column at sm+, a full-screen overlay on phones */}
+      {/* Room list — a persistent column at sm+, a full-screen overlay on
+          phones. z-50 (not z-40) while open on phone: MobileNav's own bottom
+          tab bar is also fixed at z-40, and since it sits later in the DOM
+          it painted on top of this overlay's own bottom edge at that tie —
+          the last ~70px of the room list (its real bottom, safe-area inset
+          included) was rendered right underneath MobileNav, unreachable no
+          matter how the scroll itself behaved. A full-screen overlay like
+          this should sit above the persistent bottom chrome anyway, same as
+          MobileNav's own "Thêm" sheet already does at z-50. */}
       <div
-        className={`${showRoomListMobile ? "flex fixed inset-0 z-40" : "hidden"} sm:flex sm:static sm:z-auto flex-col gap-3 px-3 py-4 sm:w-[240px] sm:flex-none`}
+        className={`${showRoomListMobile ? "flex fixed inset-0 z-50" : "hidden"} sm:flex sm:static sm:z-auto flex-col min-h-0 gap-3 px-3 py-4 sm:w-[240px] sm:flex-none`}
         style={{ borderRight: "1px solid var(--color-neutral-200)", background: "var(--color-bg)" }}
       >
         <div className="flex items-center justify-between px-1">
