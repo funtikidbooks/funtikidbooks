@@ -1772,6 +1772,83 @@ export function MeetingHub({
     resync();
   }, [resync]);
 
+  // Warms every OTHER joined room's cache in the background after the active
+  // room's own load, so tapping into any of them — even the very first time
+  // this session — paints from cache instead of waiting on a fresh network
+  // round trip, the same instant-open resync() already gives a room once
+  // it's actually been visited once. Deliberately sequential with a gap
+  // between rooms (not one Promise.all burst): firing a dozen-plus queries
+  // at once would compete with the active room's own resync()/realtime
+  // setup for the same connection, and most of those rooms may never get
+  // opened this session anyway. Starts after a short delay so it never
+  // competes with the active room's own initial paint. A room that becomes
+  // active mid-pass is left to resync() instead — that path has fresher
+  // data by the time it's actually the one on screen, so writing this
+  // stale result over it would regress it.
+  useEffect(() => {
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const latestOf = (timestamps: string[]) =>
+        timestamps.length === 0 ? undefined : timestamps.reduce((max, t) => (t > max ? t : max));
+      for (const room of joinedRooms) {
+        if (cancelled) return;
+        if (room.id === activeIdRef.current) continue;
+        let base = roomCacheRef.current.get(room.id);
+        if (!base) {
+          const stored = loadRoomSnapshotFromStorage(room.id);
+          if (stored) {
+            base = stored;
+            roomCacheRef.current.set(room.id, stored);
+          }
+        }
+        const messagesAfter = base ? latestOf(base.messages.map((m) => m.created_at)) : undefined;
+        const reactionsAfter = base ? latestOf(base.reactions.map((r) => r.created_at)) : undefined;
+        try {
+          const {
+            messages: msgs,
+            reactions: rx,
+            reads: rd,
+            pinnedMessages: pinned,
+          } = await getRoomSync(room.id, { messagesAfter, reactionsAfter });
+          if (cancelled || room.id === activeIdRef.current) continue;
+          const priorBase = base;
+          const mergedMessages = priorBase
+            ? capMessages(
+                [...priorBase.messages, ...msgs.filter((m) => !priorBase.messages.some((bm) => bm.id === m.id))],
+                MAX_LOADED_MESSAGES,
+              )
+            : msgs;
+          const mergedReactions = priorBase
+            ? (() => {
+                const key = (r: MeetingReaction) => `${r.message_id}:${r.profile_id}:${r.emoji}`;
+                const seen = new Set(priorBase.reactions.map(key));
+                return [...priorBase.reactions, ...rx.filter((r) => !seen.has(key(r)))];
+              })()
+            : rx;
+          const snapshot: RoomSnapshot = { messages: mergedMessages, reactions: mergedReactions, reads: rd, pinnedMessages: pinned };
+          roomCacheRef.current.set(room.id, snapshot);
+          saveRoomSnapshotToStorage(room.id, snapshot);
+        } catch {
+          // Best-effort — this room just won't have a warm cache yet; opening
+          // it still works the same as before this existed, via resync()'s
+          // own fetch.
+        }
+        // A gap between rooms, not back-to-back — friendly to Supabase and
+        // to whatever the active room's own fetches need the connection for.
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+    }, 1500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+    // Deliberately mount-only (see comment above) — joinedRooms/activeIdRef
+    // are read fresh when the timer fires and live inside the loop, not
+    // meant to restart this pass every time the room list or activeId
+    // itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     function handleVisible() {
       if (document.visibilityState === "visible") resync();
