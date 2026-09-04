@@ -2737,6 +2737,7 @@ export function MeetingHub({
                           </span>
                         </button>
                       )}
+                      <div className={`relative min-w-0 max-w-full ${Object.keys(grouped).length > 0 ? "mb-2" : ""}`}>
                       {m.content && (
                         <div className={`flex items-end gap-1 min-w-0 max-w-full ${mine ? "flex-row-reverse" : ""}`}>
                           <div
@@ -2844,7 +2845,13 @@ export function MeetingHub({
                       )}
 
                       {Object.keys(grouped).length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
+                        // Overlaps the bubble's bottom-outer corner Messenger-style
+                        // (the side with room to spare — away from the screen edge
+                        // the bubble itself hugs) instead of sitting in its own row.
+                        <div
+                          className="flex flex-wrap gap-1"
+                          style={{ position: "absolute", bottom: -10, [mine ? "left" : "right"]: -4, zIndex: 1 }}
+                        >
                           {Object.entries(grouped).map(([emoji, ids]) => {
                             const reactedByMe = ids.includes(currentUser.id);
                             const reactionKey = `${m.id}:${emoji}`;
@@ -2860,6 +2867,7 @@ export function MeetingHub({
                                   style={{
                                     background: reactedByMe ? "var(--color-accent-100)" : "var(--color-surface)",
                                     border: `1px solid ${reactedByMe ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
+                                    boxShadow: "var(--shadow-sm, 0 1px 3px rgba(0,0,0,.15))",
                                   }}
                                 >
                                   <span aria-hidden><Emoji emoji={emoji} size={14} /></span>
@@ -2885,6 +2893,7 @@ export function MeetingHub({
                           })}
                         </div>
                       )}
+                      </div>
                         </>
                       )}
 
