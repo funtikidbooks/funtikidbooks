@@ -898,7 +898,13 @@ export function DirectConversation({
                           bottom: "calc(100% + 6px)",
                           left: "50%",
                           transform: "translateX(-50%)",
-                          background: "var(--color-neutral-900, #1a1a1a)",
+                          // A literal dark color, not the --color-neutral-900
+                          // token: that token's own ink/background pairing
+                          // FLIPS per theme (it means "strongest ink", which
+                          // is near-black on the light theme but near-white
+                          // on the dark one) — in dark mode it was rendering
+                          // this white-text tooltip on a near-white pill.
+                          background: "rgba(20, 18, 17, 0.94)",
                           color: "#fff",
                           boxShadow: "var(--shadow-md, 0 2px 8px rgba(0,0,0,.25))",
                         }}
