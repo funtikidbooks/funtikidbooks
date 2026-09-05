@@ -2428,8 +2428,8 @@ export function MeetingHub({
     if (files.length === 0) return;
 
     e.preventDefault();
-    const valid = files.filter((f) => f.size <= 20 * 1024 * 1024);
-    setError(valid.length < files.length ? "Có ảnh vượt quá 20MB, đã bỏ qua" : null);
+    const valid = files.filter((f) => f.size <= 50 * 1024 * 1024);
+    setError(valid.length < files.length ? "Có ảnh vượt quá 50MB, đã bỏ qua" : null);
     if (valid.length === 0) return;
     setPendingFiles((prev) => [...prev, ...valid].slice(0, MAX_PENDING_FILES));
   }
@@ -4163,8 +4163,8 @@ export function MeetingHub({
                     const picked = Array.from(e.target.files ?? []);
                     e.target.value = "";
                     if (picked.length === 0) return;
-                    const valid = picked.filter((f) => f.size <= 20 * 1024 * 1024);
-                    setError(valid.length < picked.length ? "Có tệp vượt quá 20MB, đã bỏ qua" : null);
+                    const valid = picked.filter((f) => f.size <= 50 * 1024 * 1024);
+                    setError(valid.length < picked.length ? "Có tệp vượt quá 50MB, đã bỏ qua" : null);
                     if (valid.length === 0) return;
                     setPendingFiles((prev) => [...prev, ...valid].slice(0, MAX_PENDING_FILES));
                   }}

@@ -513,11 +513,20 @@ create policy "staff can read attachments" on public.task_attachments for select
 drop policy if exists "staff can write attachments" on public.task_attachments;
 create policy "staff can write attachments" on public.task_attachments for all to authenticated using (true) with check (true);
 
--- Storage bucket for task cover / comment images. Public read so <img> tags
--- can load them directly; writes are restricted to signed-in staff.
-insert into storage.buckets (id, name, public)
-values ('task-attachments', 'task-attachments', true)
-on conflict (id) do nothing;
+-- Storage bucket for task cover / comment images, and chat/DM attachments.
+-- Public read so <img> tags can load them directly; writes are restricted
+-- to signed-in staff. Chat attachments are uploaded straight from the
+-- browser to this bucket (not routed through a server action, which Vercel
+-- caps at 4.5MB regardless of app config), so the only ceiling left is this
+-- one. Pinned at exactly 50MB — the project's global "Max file size" (Studio
+-- → Settings → Storage) is still the Supabase default, and any per-bucket
+-- limit above that gets rejected outright (confirmed directly: 50MB
+-- succeeds, 55MB+ fails with EntityTooLarge) regardless of what this SQL
+-- says. Going higher than 50MB needs that dashboard setting raised first —
+-- only the project owner can do that, it isn't reachable via the API/CLI.
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('task-attachments', 'task-attachments', true, 52428800)
+on conflict (id) do update set file_size_limit = 52428800;
 
 drop policy if exists "staff can upload task attachments" on storage.objects;
 create policy "staff can upload task attachments"

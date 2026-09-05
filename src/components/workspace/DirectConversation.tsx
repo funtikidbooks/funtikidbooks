@@ -717,8 +717,8 @@ export function DirectConversation({
     if (!file) return;
 
     e.preventDefault();
-    if (file.size > 20 * 1024 * 1024) {
-      setError("Tệp vượt quá 20MB");
+    if (file.size > 50 * 1024 * 1024) {
+      setError("Tệp vượt quá 50MB");
       return;
     }
     setError(null);
@@ -1344,8 +1344,8 @@ export function DirectConversation({
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0] ?? null;
-              if (f && f.size > 20 * 1024 * 1024) {
-                setError("Tệp vượt quá 20MB");
+              if (f && f.size > 50 * 1024 * 1024) {
+                setError("Tệp vượt quá 50MB");
                 e.target.value = "";
                 return;
               }

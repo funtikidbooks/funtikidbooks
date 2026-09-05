@@ -170,7 +170,7 @@ export async function searchDirectMessages(query: string): Promise<DirectMessage
 }
 
 const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
-const MAX_SIZE = 20 * 1024 * 1024;
+const MAX_SIZE = 50 * 1024 * 1024;
 
 // The file itself is uploaded to Supabase Storage client-side (see
 // DirectConversation's attemptSend) rather than routed through this action
@@ -192,7 +192,7 @@ export async function sendDirectMessage(
 
   if (attachment) {
     if (!ALLOWED_TYPES.has(attachment.mime)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF, WEBP hoặc PDF");
-    if (attachment.size > MAX_SIZE) throw new Error("Tệp vượt quá 20MB");
+    if (attachment.size > MAX_SIZE) throw new Error("Tệp vượt quá 50MB");
   }
 
   if (!trimmed && !attachment) return null;
