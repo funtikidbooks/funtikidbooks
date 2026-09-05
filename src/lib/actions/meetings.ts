@@ -1,6 +1,6 @@
 "use server";
 
-import { randomUUID, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createClient, requireUser } from "@/lib/supabase/server";
@@ -493,31 +493,30 @@ export async function searchMeetingMessages(query: string): Promise<MeetingSearc
 const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
 const MAX_SIZE = 20 * 1024 * 1024;
 
+// The file itself is uploaded to Supabase Storage client-side (see
+// MeetingHub's attemptSend) rather than routed through this action as
+// FormData — Vercel caps a serverless function's own request body at 4.5MB
+// regardless of Next.js's own (much larger) bodySizeLimit config, a
+// platform limit no app-level setting can raise. A staff illustration file
+// clears that in one photo — this consistently failed with an opaque
+// "unexpected response" error for any attachment over that line. This
+// action only ever receives the already-uploaded object's metadata, which
+// is JSON-small no matter the file size. The type/size checks below are
+// still worth keeping as a sanity guard even though they now trust
+// client-reported metadata instead of the real bytes — this is an internal
+// staff tool, not a public upload endpoint.
 export async function sendMeetingMessage(
   channelId: string,
   content: string,
-  formData?: FormData,
+  attachment?: { url: string; filename: string; mime: string; size: number } | null,
   replyToMessageId?: string | null,
 ) {
   const { supabase, user } = await requireUser();
   const trimmed = content.trim();
 
-  let attachment: { url: string; filename: string; mime: string; size: number } | null = null;
-  const file = formData?.get("file");
-  if (file instanceof File) {
-    if (!ALLOWED_TYPES.has(file.type)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF, WEBP hoặc PDF");
-    if (file.size > MAX_SIZE) throw new Error("Tệp vượt quá 20MB");
-
-    const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
-    const storagePath = `meetings/${channelId}/${randomUUID()}.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("task-attachments")
-      .upload(storagePath, file, { contentType: file.type });
-    if (uploadError) throw new Error("Không thể tải tệp lên");
-
-    const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
-    attachment = { url: publicUrlData.publicUrl, filename: file.name, mime: file.type, size: file.size };
+  if (attachment) {
+    if (!ALLOWED_TYPES.has(attachment.mime)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF, WEBP hoặc PDF");
+    if (attachment.size > MAX_SIZE) throw new Error("Tệp vượt quá 20MB");
   }
 
   if (!trimmed && !attachment) return null;

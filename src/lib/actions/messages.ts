@@ -1,6 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { after } from "next/server";
 import { requireUser } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
@@ -173,27 +172,27 @@ export async function searchDirectMessages(query: string): Promise<DirectMessage
 const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
 const MAX_SIZE = 20 * 1024 * 1024;
 
-export async function sendDirectMessage(recipientId: string, content: string, formData?: FormData) {
+// The file itself is uploaded to Supabase Storage client-side (see
+// DirectConversation's attemptSend) rather than routed through this action
+// as FormData — Vercel caps a serverless function's own request body at
+// 4.5MB regardless of Next.js's own (much larger) bodySizeLimit config, a
+// platform limit no app-level setting can raise. A staff illustration file
+// clears that in one photo. This action only ever receives the already-
+// uploaded object's metadata, which is JSON-small no matter the file size.
+// The type/size checks below are still worth keeping as a sanity guard even
+// though they now trust client-reported metadata instead of the real
+// bytes — this is an internal staff tool, not a public upload endpoint.
+export async function sendDirectMessage(
+  recipientId: string,
+  content: string,
+  attachment?: { url: string; filename: string; mime: string; size: number } | null,
+) {
   const { supabase, user } = await requireUser();
   const trimmed = content.trim();
 
-  let attachment: { url: string; filename: string; mime: string; size: number } | null = null;
-  const file = formData?.get("file");
-  if (file instanceof File) {
-    if (!ALLOWED_TYPES.has(file.type)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF, WEBP hoặc PDF");
-    if (file.size > MAX_SIZE) throw new Error("Tệp vượt quá 20MB");
-
-    const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
-    const conversationKey = [user.id, recipientId].sort().join("-");
-    const storagePath = `dm/${conversationKey}/${randomUUID()}.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("task-attachments")
-      .upload(storagePath, file, { contentType: file.type });
-    if (uploadError) throw new Error("Không thể tải tệp lên");
-
-    const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
-    attachment = { url: publicUrlData.publicUrl, filename: file.name, mime: file.type, size: file.size };
+  if (attachment) {
+    if (!ALLOWED_TYPES.has(attachment.mime)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF, WEBP hoặc PDF");
+    if (attachment.size > MAX_SIZE) throw new Error("Tệp vượt quá 20MB");
   }
 
   if (!trimmed && !attachment) return null;

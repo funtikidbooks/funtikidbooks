@@ -735,12 +735,28 @@ export function DirectConversation({
       });
       setPendingIds((prev) => new Set(prev).add(tempId));
       try {
-        let formData: FormData | undefined;
+        // Uploaded straight to Supabase Storage from here rather than
+        // routed through sendDirectMessage as FormData — Vercel caps a
+        // serverless function's own request body at 4.5MB no matter what
+        // Next.js's bodySizeLimit config says, a platform limit that isn't
+        // ours to raise. A staff illustration file clears that in one
+        // photo, which is exactly what was failing with an opaque
+        // "unexpected response" error. The server action only ever sees the
+        // already-uploaded object's small JSON metadata now.
+        let attachment: { url: string; filename: string; mime: string; size: number } | null = null;
         if (file) {
-          formData = new FormData();
-          formData.append("file", file);
+          const supabase = createClient();
+          const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+          const conversationKey = [currentUser.id, peer.id].sort().join("-");
+          const storagePath = `dm/${conversationKey}/${crypto.randomUUID()}.${ext}`;
+          const { error: uploadError } = await supabase.storage
+            .from("task-attachments")
+            .upload(storagePath, file, { contentType: file.type });
+          if (uploadError) throw new Error("Không thể tải tệp lên");
+          const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
+          attachment = { url: publicUrlData.publicUrl, filename: file.name, mime: file.type, size: file.size };
         }
-        const sent = await sendDirectMessage(peer.id, content, formData);
+        const sent = await sendDirectMessage(peer.id, content, attachment);
         if (sent) {
           setMessages((prev) => mergeServerMessage(prev, sent, tempId));
           pendingPayloadsRef.current.delete(tempId);
@@ -756,7 +772,7 @@ export function DirectConversation({
         });
       }
     },
-    [peer.id, mergeServerMessage],
+    [peer.id, currentUser.id, mergeServerMessage],
   );
 
   // Appears instantly instead of waiting on the send round-trip — matches
