@@ -31,6 +31,19 @@ const TYPING_BROADCAST_THROTTLE_MS = 2000;
 // six-item literal, not worth a shared module for.
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "🎉", "👀", "🙏"];
 
+// A thrown business-logic error (file too big, etc.) is always our own
+// Vietnamese message and safe to show as-is. Anything else — a
+// framework/network failure like Next.js's own "An unexpected response was
+// received from the server." on a dropped mobile upload — is raw English
+// internals that scared and confused non-technical staff without telling
+// them what to actually do. Vietnamese text always carries a diacritic in
+// this range, which plain English/ASCII errors never do, so it doubles as a
+// cheap "is this one of ours" check without needing a custom Error subclass.
+function sendErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && /[À-ỹ]/.test(err.message)) return err.message;
+  return fallback;
+}
+
 // A curated set of quick-pick emoji for a small popover — no need to pull
 // in a whole emoji-picker dependency for a work chat.
 const EMOJI_OPTIONS = [
@@ -733,7 +746,7 @@ export function DirectConversation({
           pendingPayloadsRef.current.delete(tempId);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Không thể gửi tin nhắn. Vui lòng thử lại.");
+        setError(sendErrorMessage(err, "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại."));
         setFailedIds((prev) => new Set(prev).add(tempId));
       } finally {
         setPendingIds((prev) => {

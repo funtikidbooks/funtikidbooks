@@ -143,6 +143,19 @@ function capMessages(list: MeetingMessage[], limit: number) {
   return list.length > limit ? list.slice(list.length - limit) : list;
 }
 
+// A thrown business-logic error (file too big, not a room member, etc.) is
+// always our own Vietnamese message and safe to show as-is. Anything else —
+// a framework/network failure like Next.js's own "An unexpected response was
+// received from the server." on a dropped mobile upload — is raw English
+// internals that scared and confused non-technical staff without telling
+// them what to actually do. Vietnamese text always carries a diacritic in
+// this range, which plain English/ASCII errors never do, so it doubles as a
+// cheap "is this one of ours" check without needing a custom Error subclass.
+function sendErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && /[À-ỹ]/.test(err.message)) return err.message;
+  return fallback;
+}
+
 const EMOJI_OPTIONS = [
   "😀", "😂", "😅", "😍", "😉", "😎", "🤔", "😢",
   "😭", "😡", "🥳", "😴", "😱", "🙌", "👀", "🤝",
@@ -1785,7 +1798,19 @@ export function MeetingHub({
   // active mid-pass is left to resync() instead — that path has fresher
   // data by the time it's actually the one on screen, so writing this
   // stale result over it would regress it.
+  //
+  // Skipped entirely on phones — staff reported messages getting stuck on
+  // "Đang gửi…" on mobile shortly after this shipped. A phone's radio has
+  // far less real concurrency than a desktop's connection (still true even
+  // multiplexed over one HTTP/2 connection — one flaky cell link, not six
+  // independent ones), so a dozen-plus background fetches firing right as
+  // someone opens the app and immediately tries to send a message can starve
+  // that send behind the warm-up queue instead of running alongside it
+  // unnoticed the way it does on desktop. The instant-room-switch benefit
+  // also matters least on a phone, where someone typically has one room open
+  // at a time anyway — not worth risking the composer over.
   useEffect(() => {
+    if (isMobile) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       const latestOf = (timestamps: string[]) =>
@@ -2440,7 +2465,7 @@ export function MeetingHub({
           pendingPayloadsRef.current.delete(tempId);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Không thể gửi tin nhắn.");
+        setError(sendErrorMessage(err, "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại."));
         setFailedIds((prev) => new Set(prev).add(tempId));
       } finally {
         setPendingIds((prev) => {
