@@ -1130,6 +1130,14 @@ export function MeetingHub({
   // handleSend/attemptSend below for why messages appear instantly instead
   // of waiting on the server round-trip.
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+  // Read from inside the background room-warming effect further down —
+  // kept out of that effect's own dependency array (it's deliberately
+  // mount-only) so this is the only way it can see "is a send actually in
+  // flight right now" without restarting the whole pass every keystroke.
+  const pendingIdsRef = useRef(pendingIds);
+  useEffect(() => {
+    pendingIdsRef.current = pendingIds;
+  }, [pendingIds]);
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const pendingPayloadsRef = useRef<Map<string, { content: string; file: File | null; replyId: string | null }>>(
     new Map(),
@@ -1809,18 +1817,27 @@ export function MeetingHub({
   // data by the time it's actually the one on screen, so writing this
   // stale result over it would regress it.
   //
-  // Skipped entirely on phones — staff reported messages getting stuck on
-  // "Đang gửi…" on mobile shortly after this shipped. A phone's radio has
-  // far less real concurrency than a desktop's connection (still true even
-  // multiplexed over one HTTP/2 connection — one flaky cell link, not six
-  // independent ones), so a dozen-plus background fetches firing right as
-  // someone opens the app and immediately tries to send a message can starve
-  // that send behind the warm-up queue instead of running alongside it
-  // unnoticed the way it does on desktop. The instant-room-switch benefit
-  // also matters least on a phone, where someone typically has one room open
-  // at a time anyway — not worth risking the composer over.
+  // Skipped on any touch-primary device, not just narrow phone viewports —
+  // staff reported messages still getting stuck on "Đang gửi…" on iPad
+  // after the first fix here, which only checked isMobile (viewport
+  // <768px). An iPad is 768px+ even in portrait, so it never tripped that
+  // check and kept running this pass the whole time. `(pointer: coarse)` is
+  // the actual signal this needs — it's true for any touch-first device
+  // regardless of screen size, and false for a mouse/trackpad regardless of
+  // how the window happens to be sized. A phone/tablet's radio has far less
+  // real concurrency than a desktop's connection (still true even
+  // multiplexed over one HTTP/2 connection — one flaky cell/wifi link, not
+  // six independent ones), so a dozen-plus background fetches firing right
+  // as someone opens the app and tries to send a message can starve that
+  // send behind the warm-up queue instead of running alongside it unnoticed
+  // the way it does on desktop.
+  //
+  // Belt-and-suspenders even on desktop: checks pendingIdsRef before each
+  // room's fetch and, if a real send is in flight right now, waits instead
+  // of firing — actively yielding to a genuine user action instead of just
+  // hoping the timing never collides with one.
   useEffect(() => {
-    if (isMobile) return;
+    if (isMobile || window.matchMedia("(pointer: coarse)").matches) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       const latestOf = (timestamps: string[]) =>
@@ -1828,6 +1845,14 @@ export function MeetingHub({
       for (const room of joinedRooms) {
         if (cancelled) return;
         if (room.id === activeIdRef.current) continue;
+        // A message is actively being sent right now — step aside instead
+        // of competing with it for the connection. Checked again after each
+        // wait rather than just skipping this room outright, since a send
+        // usually only takes a moment.
+        while (pendingIdsRef.current.size > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          if (cancelled) return;
+        }
         let base = roomCacheRef.current.get(room.id);
         if (!base) {
           const stored = loadRoomSnapshotFromStorage(room.id);
@@ -1877,10 +1902,10 @@ export function MeetingHub({
       cancelled = true;
       clearTimeout(timer);
     };
-    // Deliberately mount-only (see comment above) — joinedRooms/activeIdRef
-    // are read fresh when the timer fires and live inside the loop, not
-    // meant to restart this pass every time the room list or activeId
-    // itself changes.
+    // Deliberately mount-only (see comment above) — joinedRooms/activeIdRef/
+    // pendingIdsRef are read fresh when the timer fires and live inside the
+    // loop, not meant to restart this pass every time the room list,
+    // activeId, or pendingIds itself changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
