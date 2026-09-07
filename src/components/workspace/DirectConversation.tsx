@@ -25,6 +25,9 @@ import type { DirectMessage, DirectMessageReaction, Profile } from "@/lib/types"
 // typing broadcasts (no point spamming one per keystroke).
 const TYPING_IDLE_MS = 3000;
 const TYPING_BROADCAST_THROTTLE_MS = 2000;
+// Same ceiling as MeetingHub's own pendingFiles — a sanity cap, not a real
+// expected use case.
+const MAX_PENDING_FILES = 10;
 
 // Same quick-pick set as the room chat's reaction popover (MeetingHub) —
 // kept as its own local copy rather than a shared import since it's just a
@@ -172,7 +175,7 @@ export function DirectConversation({
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const pendingPayloadsRef = useRef<Map<string, { content: string; file: File | null }>>(new Map());
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [peerTyping, setPeerTyping] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -234,20 +237,23 @@ export function DirectConversation({
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
 
-  // A real thumbnail of the pending image beats a filename chip — lets
-  // people confirm it's the right screenshot before sending. Computed
-  // during render (not in an effect) since it's a pure derivation of
-  // pendingFile; the effect below only ever revokes it, never sets state.
-  const pendingPreviewUrl = useMemo(() => {
-    if (!pendingFile || !isImage(pendingFile.type)) return null;
-    return URL.createObjectURL(pendingFile);
-  }, [pendingFile]);
+  // A real thumbnail per pending image beats a filename chip — lets people
+  // confirm they're the right pictures before sending, several at once.
+  // Computed during render (not in an effect) since it's a pure derivation
+  // of pendingFiles; the effect below only ever revokes these, never sets
+  // state.
+  const pendingPreviews = useMemo(
+    () => pendingFiles.map((file) => ({ file, previewUrl: isImage(file.type) ? URL.createObjectURL(file) : null })),
+    [pendingFiles],
+  );
 
   useEffect(() => {
     return () => {
-      if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
+      for (const p of pendingPreviews) {
+        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      }
     };
-  }, [pendingPreviewUrl]);
+  }, [pendingPreviews]);
 
   useEffect(() => {
     if (!showEmojiPicker) return;
@@ -699,30 +705,28 @@ export function DirectConversation({
     const clipboardData = e.clipboardData;
     if (!clipboardData) return;
 
-    let file: File | null = null;
+    let files: File[] = [];
 
     if (clipboardData.files && clipboardData.files.length > 0) {
-      file = Array.from(clipboardData.files).find((f) => f.type.startsWith("image/")) ?? null;
+      files = Array.from(clipboardData.files).filter((f) => f.type.startsWith("image/"));
     }
 
-    if (!file && clipboardData.items) {
+    if (files.length === 0 && clipboardData.items) {
       for (const item of Array.from(clipboardData.items)) {
         if (item.kind === "file" && item.type.startsWith("image/")) {
-          file = item.getAsFile();
-          if (file) break;
+          const f = item.getAsFile();
+          if (f) files.push(f);
         }
       }
     }
 
-    if (!file) return;
+    if (files.length === 0) return;
 
     e.preventDefault();
-    if (file.size > 50 * 1024 * 1024) {
-      setError("Tệp vượt quá 50MB");
-      return;
-    }
-    setError(null);
-    setPendingFile(file);
+    const valid = files.filter((f) => f.size <= 50 * 1024 * 1024);
+    setError(valid.length < files.length ? "Có ảnh vượt quá 50MB, đã bỏ qua" : null);
+    if (valid.length === 0) return;
+    setPendingFiles((prev) => [...prev, ...valid].slice(0, MAX_PENDING_FILES));
   }
 
   const attemptSend = useCallback(
@@ -783,30 +787,71 @@ export function DirectConversation({
   function handleSend(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = text.trim();
-    const file = pendingFile;
-    if (!trimmed && !file) return;
-
-    const tempId = `temp-${crypto.randomUUID()}`;
-    const optimistic: DirectMessage = {
-      id: tempId,
-      sender_id: currentUser.id,
-      recipient_id: peer.id,
-      content: trimmed,
-      attachment_url: null,
-      attachment_filename: file?.name ?? null,
-      attachment_mime: file?.type ?? null,
-      attachment_size: file?.size ?? null,
-      created_at: new Date().toISOString(),
-      read_at: null,
-    };
+    const files = pendingFiles;
+    if (!trimmed && files.length === 0) return;
 
     setError(null);
     setText("");
-    setPendingFile(null);
+    setPendingFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    pendingPayloadsRef.current.set(tempId, { content: trimmed, file });
-    setMessages((prev) => capMessagesForRoom([...prev, optimistic]));
-    attemptSend(tempId, trimmed, file);
+
+    if (files.length <= 1) {
+      const file = files[0] ?? null;
+      const tempId = `temp-${crypto.randomUUID()}`;
+      const optimistic: DirectMessage = {
+        id: tempId,
+        sender_id: currentUser.id,
+        recipient_id: peer.id,
+        content: trimmed,
+        attachment_url: null,
+        attachment_filename: file?.name ?? null,
+        attachment_mime: file?.type ?? null,
+        attachment_size: file?.size ?? null,
+        created_at: new Date().toISOString(),
+        read_at: null,
+      };
+      pendingPayloadsRef.current.set(tempId, { content: trimmed, file });
+      setMessages((prev) => capMessagesForRoom([...prev, optimistic]));
+      attemptSend(tempId, trimmed, file);
+      return;
+    }
+
+    // Several images at once — sendDirectMessage only ever attaches one file
+    // per message row, same reasoning as MeetingHub's own multi-file
+    // handleSend: each picked file becomes its own message instead of a
+    // single message with a gallery, with any typed caption riding along on
+    // the first one. Sent one at a time (not in parallel) so their
+    // created_at timestamps land in pick order, not upload-finish order.
+    const entries = files.map((file, i) => ({
+      file,
+      content: i === 0 ? trimmed : "",
+      tempId: `temp-${crypto.randomUUID()}`,
+    }));
+    setMessages((prev) =>
+      capMessagesForRoom([
+        ...prev,
+        ...entries.map(
+          (entry): DirectMessage => ({
+            id: entry.tempId,
+            sender_id: currentUser.id,
+            recipient_id: peer.id,
+            content: entry.content,
+            attachment_url: null,
+            attachment_filename: entry.file.name,
+            attachment_mime: entry.file.type,
+            attachment_size: entry.file.size,
+            created_at: new Date().toISOString(),
+            read_at: null,
+          }),
+        ),
+      ]),
+    );
+    (async () => {
+      for (const entry of entries) {
+        pendingPayloadsRef.current.set(entry.tempId, { content: entry.content, file: entry.file });
+        await attemptSend(entry.tempId, entry.content, entry.file);
+      }
+    })();
   }
 
   const retrySend = useCallback(
@@ -1274,36 +1319,50 @@ export function DirectConversation({
             {error}
           </p>
         )}
-        {pendingFile && (
-          <div className="flex items-center gap-1.5 px-2.5 pt-1.5">
-            {pendingPreviewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={pendingPreviewUrl}
-                alt=""
-                className="rounded-[8px] object-cover flex-none"
-                style={{ width: 44, height: 44, border: "1px solid var(--color-neutral-200)" }}
-              />
-            ) : (
-              <span
-                className="flex items-center gap-1 rounded-[8px] px-2 py-1 text-[11px] font-semibold truncate max-w-full"
-                style={{ background: "var(--color-surface)", color: "var(--color-accent-700)" }}
+        {pendingFiles.length > 0 && (
+          <div className="flex items-center gap-1.5 px-2.5 pt-1.5 overflow-x-auto">
+            {pendingPreviews.map(({ file, previewUrl }, i) => (
+              <div key={i} className="relative flex-none">
+                {previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewUrl}
+                    alt=""
+                    className="rounded-[8px] object-cover"
+                    style={{ width: 44, height: 44, border: "1px solid var(--color-neutral-200)" }}
+                  />
+                ) : (
+                  <span
+                    className="flex items-center gap-1 rounded-[8px] px-2 py-1 text-[11px] font-semibold truncate max-w-[120px]"
+                    style={{ background: "var(--color-surface)", color: "var(--color-accent-700)", height: 44 }}
+                  >
+                    📄 {file.name}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPendingFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                  className="absolute flex items-center justify-center rounded-full"
+                  style={{ top: -6, right: -6, width: 16, height: 16, fontSize: 9, background: "var(--color-neutral-700)", color: "#fff", lineHeight: 1 }}
+                  aria-label="Bỏ tệp này"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {pendingFiles.length > 1 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingFiles([]);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                className="flex-none text-[11px] font-semibold underline whitespace-nowrap"
+                style={{ color: "var(--color-neutral-500)" }}
               >
-                📄 {pendingFile.name}
-              </span>
+                Bỏ hết ({pendingFiles.length})
+              </button>
             )}
-            <button
-              type="button"
-              onClick={() => {
-                setPendingFile(null);
-                if (fileInputRef.current) fileInputRef.current.value = "";
-              }}
-              className="btn-icon flex-none"
-              style={{ width: 20, height: 20, padding: 0, fontSize: 11 }}
-              aria-label="Bỏ tệp đính kèm"
-            >
-              ✕
-            </button>
           </div>
         )}
         <form ref={composerFormRef} onSubmit={handleSend} className="flex items-end gap-1.5 p-2">
@@ -1341,16 +1400,16 @@ export function DirectConversation({
             ref={fileInputRef}
             type="file"
             accept="image/*,application/pdf"
+            multiple
             className="hidden"
             onChange={(e) => {
-              const f = e.target.files?.[0] ?? null;
-              if (f && f.size > 50 * 1024 * 1024) {
-                setError("Tệp vượt quá 50MB");
-                e.target.value = "";
-                return;
-              }
-              setError(null);
-              setPendingFile(f);
+              const picked = Array.from(e.target.files ?? []);
+              e.target.value = "";
+              if (picked.length === 0) return;
+              const valid = picked.filter((f) => f.size <= 50 * 1024 * 1024);
+              setError(valid.length < picked.length ? "Có tệp vượt quá 50MB, đã bỏ qua" : null);
+              if (valid.length === 0) return;
+              setPendingFiles((prev) => [...prev, ...valid].slice(0, MAX_PENDING_FILES));
             }}
           />
           <textarea

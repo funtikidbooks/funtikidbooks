@@ -50,6 +50,7 @@ export function MyAttendance({
   }, [initialEntries, liveOverlay]);
   const [otherMonthEntries, setOtherMonthEntries] = useState<AttendanceEntry[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [view, setView] = useState<"calendar" | "table">("calendar");
   const router = useRouter();
   const isCurrentMonth = monthStart === firstOfMonth(vnToday());
   const entries = useMemo(
@@ -137,6 +138,32 @@ export function MyAttendance({
   const monthLabel = `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
   const dates = monthGridDates(monthStart);
 
+  // Shared between the calendar grid and the table view below — one badge
+  // per day, computed once instead of duplicating this same status-priority
+  // chain (off > paid leave > half day > leave > absent > checked in >
+  // not-yet-checked-in > weekend) in two places that could quietly drift
+  // apart from each other.
+  function dayBadge(date: string, entry: AttendanceEntry | undefined, inMonth: boolean) {
+    const isFuture = date > today;
+    const weekday = isMonToFri(date) && !offDateSet.has(date);
+    if (entry?.status === "off") return <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
+    if (entry?.status === "paid_leave") return <span style={{ color: "var(--status-blue)" }}>Nghỉ có lương</span>;
+    if (entry?.status === "half_day") return <span style={{ color: "var(--status-purple)" }}>Nửa công</span>;
+    if (entry?.status === "leave") return <span style={{ color: "var(--color-neutral-500)" }}>Nghỉ</span>;
+    if (entry?.status === "absent") return <span style={{ color: "var(--status-red)" }}>Vắng</span>;
+    if (entry?.check_in_at) {
+      const late = isLateCheckIn(entry.check_in_at);
+      return (
+        <span style={{ color: late ? "var(--status-yellow)" : "var(--status-green)" }}>
+          {formatCheckInTime(entry.check_in_at)}
+        </span>
+      );
+    }
+    if (inMonth && !isFuture && weekday) return <span style={{ color: "var(--color-neutral-400)" }}>Chưa vào làm</span>;
+    if (inMonth && !weekday) return <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
+    return null;
+  }
+
   return (
     <div className="flex-1 flex flex-col p-6 gap-5 overflow-y-auto">
       <div>
@@ -180,68 +207,114 @@ export function MyAttendance({
             Tháng này
           </button>
         )}
+        <div className="flex items-center gap-1 ml-auto rounded-[8px] p-0.5" style={{ background: "var(--color-surface)" }}>
+          <button
+            type="button"
+            onClick={() => setView("calendar")}
+            className="btn-sm rounded-[6px]"
+            style={{
+              padding: "4px 10px",
+              background: view === "calendar" ? "var(--color-panel)" : "transparent",
+              fontWeight: view === "calendar" ? 700 : 500,
+            }}
+          >
+            Lịch
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("table")}
+            className="btn-sm rounded-[6px]"
+            style={{
+              padding: "4px 10px",
+              background: view === "table" ? "var(--color-panel)" : "transparent",
+              fontWeight: view === "table" ? 700 : 500,
+            }}
+          >
+            Bảng
+          </button>
+        </div>
       </div>
 
-      <div className="card elev-sm p-4" style={{ opacity: loading ? 0.6 : 1, maxWidth: 720 }}>
-        <div className="grid grid-cols-7 gap-1 mb-1">
-          {WEEKDAYS_SHORT.map((w) => (
-            <div key={w} className="text-center text-[11px] font-bold py-1" style={{ color: "var(--color-neutral-500)" }}>
-              {w}
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {dates.map((date) => {
-            const inMonth = isSameMonth(date, monthStart);
-            const entry = byDate.get(date);
-            const isToday = date === today;
-            const isFuture = date > today;
-            const weekday = isMonToFri(date) && !offDateSet.has(date);
-
-            let badge: React.ReactNode = null;
-            if (entry?.status === "off") {
-              badge = <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
-            } else if (entry?.status === "paid_leave") {
-              badge = <span style={{ color: "var(--status-blue)" }}>Nghỉ có lương</span>;
-            } else if (entry?.status === "half_day") {
-              badge = <span style={{ color: "var(--status-purple)" }}>Nửa công</span>;
-            } else if (entry?.status === "leave") {
-              badge = <span style={{ color: "var(--color-neutral-500)" }}>Nghỉ</span>;
-            } else if (entry?.status === "absent") {
-              badge = <span style={{ color: "var(--status-red)" }}>Vắng</span>;
-            } else if (entry?.check_in_at) {
-              const late = isLateCheckIn(entry.check_in_at);
-              badge = (
-                <span style={{ color: late ? "var(--status-yellow)" : "var(--status-green)" }}>
-                  {formatCheckInTime(entry.check_in_at)}
-                </span>
-              );
-            } else if (inMonth && !isFuture && weekday) {
-              badge = <span style={{ color: "var(--color-neutral-400)" }}>Chưa vào làm</span>;
-            } else if (inMonth && !weekday) {
-              badge = <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
-            }
-
-            return (
-              <div
-                key={date}
-                title={entry?.note ?? undefined}
-                className="flex flex-col items-center justify-center rounded-[8px] py-2 gap-0.5"
-                style={{
-                  background: isToday ? "var(--color-accent-100)" : "transparent",
-                  opacity: inMonth ? 1 : 0.3,
-                  minHeight: 54,
-                }}
-              >
-                <span className="text-[11px] font-semibold">{Number(date.slice(8, 10))}</span>
-                <span className="text-[10px] font-bold text-center" style={{ lineHeight: 1.3 }}>
-                  {badge}
-                </span>
+      {view === "calendar" ? (
+        <div className="card elev-sm p-4" style={{ opacity: loading ? 0.6 : 1, maxWidth: 720 }}>
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {WEEKDAYS_SHORT.map((w) => (
+              <div key={w} className="text-center text-[11px] font-bold py-1" style={{ color: "var(--color-neutral-500)" }}>
+                {w}
               </div>
-            );
-          })}
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {dates.map((date) => {
+              const inMonth = isSameMonth(date, monthStart);
+              const entry = byDate.get(date);
+              const isToday = date === today;
+              return (
+                <div
+                  key={date}
+                  title={entry?.note ?? undefined}
+                  className="flex flex-col items-center justify-center rounded-[8px] py-2 gap-0.5"
+                  style={{
+                    background: isToday ? "var(--color-accent-100)" : "transparent",
+                    opacity: inMonth ? 1 : 0.3,
+                    minHeight: 54,
+                  }}
+                >
+                  <span className="text-[11px] font-semibold">{Number(date.slice(8, 10))}</span>
+                  <span className="text-[10px] font-bold text-center" style={{ lineHeight: 1.3 }}>
+                    {dayBadge(date, entry, inMonth)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="card elev-sm overflow-x-auto" style={{ opacity: loading ? 0.6 : 1, maxWidth: 720 }}>
+          <table className="w-full text-[13px]" style={{ borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+                <th className="text-left font-bold px-3 py-2" style={{ color: "var(--color-neutral-500)" }}>Ngày</th>
+                <th className="text-left font-bold px-3 py-2" style={{ color: "var(--color-neutral-500)" }}>Trạng thái</th>
+                <th className="text-left font-bold px-3 py-2" style={{ color: "var(--color-neutral-500)" }}>Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dates
+                .filter((date) => isSameMonth(date, monthStart))
+                .map((date) => {
+                  const entry = byDate.get(date);
+                  const isToday = date === today;
+                  const dow = new Date(`${date}T00:00:00`).getDay();
+                  return (
+                    <tr
+                      key={date}
+                      style={{
+                        borderBottom: "1px solid var(--color-neutral-100)",
+                        background: isToday ? "var(--color-accent-100)" : undefined,
+                      }}
+                    >
+                      <td className="px-3 py-1.5 font-semibold">
+                        {Number(date.slice(8, 10))}/{Number(date.slice(5, 7))} · {WEEKDAYS_SHORT[dow]}
+                      </td>
+                      <td className="px-3 py-1.5 font-bold">{dayBadge(date, entry, true)}</td>
+                      <td className="px-3 py-1.5 truncate" style={{ color: "var(--color-neutral-500)", maxWidth: 240 }}>
+                        {entry?.note ?? ""}
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+            <tfoot>
+              <tr style={{ borderTop: "2px solid var(--color-neutral-200)" }}>
+                <td className="px-3 py-2 font-bold" colSpan={3}>
+                  Tổng {stats.present} ngày công · {stats.late} ngày trễ · {stats.absent} ngày vắng · {stats.leave} ngày nghỉ phép
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
