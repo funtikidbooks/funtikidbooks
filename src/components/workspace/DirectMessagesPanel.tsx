@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useChatManager, useLiveProfiles } from "@/components/workspace/ChatManager";
 import { DirectConversation } from "@/components/workspace/DirectConversation";
 import { VideoCallModal } from "@/components/workspace/VideoCallModal";
-import { searchDirectMessages } from "@/lib/actions/messages";
+import { getRecentDmPreviews, searchDirectMessages, type DmPreview } from "@/lib/actions/messages";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { useCallPresence } from "@/lib/useCallPresence";
 import { usePresence } from "@/lib/usePresence";
@@ -174,27 +174,42 @@ export function DirectMessagesPanel({
     clearDmUnread(peer.id);
   }
 
+  // Zalo-style: whichever conversation actually has the most recent
+  // message (sent or received) floats to the top, and the rail shows what
+  // that message said instead of just a name. Refetched whenever a new DM
+  // arrives (recentSenderOrder changing) and on peer switches (covers
+  // sending a message yourself, then moving to another conversation) —
+  // not fully live while you stay parked on the same conversation you're
+  // actively sending in, but that's also the one moment nobody's looking
+  // at this rail anyway.
+  const [previews, setPreviews] = useState<Record<string, DmPreview>>({});
+  useEffect(() => {
+    getRecentDmPreviews()
+      .then(setPreviews)
+      .catch(() => {});
+  }, [recentSenderOrder, selectedPeerId]);
+
   const teammates = useMemo(() => {
     return profiles
       .filter((p) => p.id !== currentUser.id)
       .sort((a, b) => {
-        const aRecent = recentSenderOrder.indexOf(a.id);
-        const bRecent = recentSenderOrder.indexOf(b.id);
-        if (aRecent !== -1 && bRecent !== -1) return aRecent - bRecent;
-        if (aRecent !== -1) return -1;
-        if (bRecent !== -1) return 1;
-
         const aUnread = unreadCounts[a.id] ?? 0;
         const bUnread = unreadCounts[b.id] ?? 0;
         if (aUnread > 0 && bUnread === 0) return -1;
         if (aUnread === 0 && bUnread > 0) return 1;
+
+        const aTime = previews[a.id]?.created_at;
+        const bTime = previews[b.id]?.created_at;
+        if (aTime && bTime) return new Date(bTime).getTime() - new Date(aTime).getTime();
+        if (aTime) return -1;
+        if (bTime) return 1;
 
         const aOnline = onlineIds.has(a.id) ? 0 : 1;
         const bOnline = onlineIds.has(b.id) ? 0 : 1;
         if (aOnline !== bOnline) return aOnline - bOnline;
         return a.display_name.localeCompare(b.display_name);
       });
-  }, [profiles, currentUser.id, recentSenderOrder, unreadCounts, onlineIds]);
+  }, [profiles, currentUser.id, unreadCounts, onlineIds, previews]);
 
   return (
     <div className="flex flex-1 min-h-0">
@@ -373,6 +388,17 @@ export function DirectMessagesPanel({
             const online = onlineIds.has(p.id);
             const unread = unreadCounts[p.id] ?? 0;
             const active = selectedPeer?.id === p.id;
+            const preview = previews[p.id];
+            const previewText = preview
+              ? preview.content?.trim()
+                ? preview.content
+                : preview.attachment_filename
+                  ? `📎 ${preview.attachment_filename}`
+                  : ""
+              : "";
+            const subtitle = previewText
+              ? `${preview!.sender_id === currentUser.id ? "Bạn: " : ""}${previewText}`
+              : (p.role ?? (online ? "Đang hoạt động" : ""));
             return (
               <button
                 key={p.id}
@@ -415,7 +441,7 @@ export function DirectMessagesPanel({
                     {p.display_name}
                   </span>
                   <span className="block text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
-                    {p.role ?? (online ? "Đang hoạt động" : "")}
+                    {subtitle}
                   </span>
                 </span>
                 {unread > 0 && (

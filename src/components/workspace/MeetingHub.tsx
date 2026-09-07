@@ -2769,6 +2769,18 @@ export function MeetingHub({
                                 type="button"
                                 onClick={() => {
                                   setMoreMenuFor(null);
+                                  navigator.clipboard?.writeText(m.content).catch(() => {});
+                                }}
+                                className="ws-nav-link flex items-center gap-2 px-3 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
+                              >
+                                📋 Sao chép
+                              </button>
+                            )}
+                            {m.content && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMoreMenuFor(null);
                                   toggleTranslate(m);
                                 }}
                                 disabled={translatingIds.has(m.id)}

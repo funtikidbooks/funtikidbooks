@@ -231,7 +231,7 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
                   onClick={() => setCreateDate(day)}
                   className="flex flex-col items-start gap-1 p-1.5 text-left"
                   style={{
-                    minHeight: 92,
+                    minHeight: 100,
                     borderRight: "1px solid var(--color-neutral-200)",
                     borderBottom: "1px solid var(--color-neutral-200)",
                     background: holiday ? "rgba(192, 82, 79, 0.07)" : inMonth ? "var(--color-panel)" : "var(--color-surface)",
@@ -239,10 +239,10 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
                   }}
                 >
                   <span
-                    className="text-xs font-bold flex items-center justify-center flex-none"
+                    className="text-sm font-bold flex items-center justify-center flex-none"
                     style={{
-                      width: 20,
-                      height: 20,
+                      width: 24,
+                      height: 24,
                       borderRadius: "50%",
                       background: isToday ? "var(--color-accent-500)" : "transparent",
                       color: isToday ? "#fff" : holiday ? "var(--status-red)" : "var(--color-text)",
@@ -262,7 +262,7 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
                             }
                           : undefined
                       }
-                      className="rounded-[4px] px-1 py-0.5 text-[10px] font-bold truncate w-full"
+                      className="rounded-[4px] px-1 py-0.5 text-[11.5px] font-bold truncate w-full"
                       style={{ background: "rgba(192, 82, 79, 0.12)", color: "var(--status-red)" }}
                       title={holiday.label}
                     >
@@ -281,7 +281,7 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
                             e.stopPropagation();
                             setEditingEvent(ev);
                           }}
-                          className="flex items-center gap-1 rounded-[4px] px-1 py-0.5 text-[10px] font-semibold truncate w-full"
+                          className="flex items-center gap-1 rounded-[4px] px-1 py-0.5 text-[11.5px] font-semibold truncate w-full"
                           style={{ background: "var(--color-surface)" }}
                         >
                           <span className="rounded-full flex-none" style={{ width: 6, height: 6, background: cat.color }} />
@@ -292,7 +292,7 @@ export function CalendarView({ currentUserId, isDirector, initialEvents }: {
                       );
                     })}
                     {dayEvents.length > 3 && (
-                      <span className="text-[10px] font-semibold" style={{ color: "var(--color-neutral-500)" }}>
+                      <span className="text-[11.5px] font-semibold" style={{ color: "var(--color-neutral-500)" }}>
                         +{dayEvents.length - 3} khác
                       </span>
                     )}

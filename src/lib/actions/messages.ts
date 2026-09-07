@@ -298,6 +298,49 @@ export async function getUnreadCounts(): Promise<Record<string, number>> {
   return counts;
 }
 
+export type DmPreview = {
+  peer_id: string;
+  content: string;
+  created_at: string;
+  sender_id: string;
+  attachment_filename: string | null;
+};
+
+// One row per conversation partner — whichever message (sent or received)
+// is most recent — for the "Riêng" rail's Zalo-style preview line and
+// most-recent-first ordering. That rail used to only ever sort by incoming
+// messages (recentSenderOrder in ChatManager) and show a person's role/
+// online status instead of what was actually said, so a conversation you'd
+// just messaged (but hadn't gotten a reply to yet) sat wherever it already
+// was instead of bubbling up, and there was no way to tell what any
+// conversation was about without opening it. Capped at the 500 most recent
+// messages across every conversation rather than queried per-peer — plenty
+// to cover every conversation with any real recent activity, and one query
+// instead of one per teammate.
+export async function getRecentDmPreviews(): Promise<Record<string, DmPreview>> {
+  const { supabase, user } = await requireUser();
+  const { data } = await supabase
+    .from("direct_messages")
+    .select("sender_id, recipient_id, content, attachment_filename, created_at")
+    .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`)
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  const previews: Record<string, DmPreview> = {};
+  for (const m of data ?? []) {
+    const peerId = (m.sender_id === user.id ? m.recipient_id : m.sender_id) as string;
+    if (previews[peerId]) continue;
+    previews[peerId] = {
+      peer_id: peerId,
+      content: m.content as string,
+      created_at: m.created_at as string,
+      sender_id: m.sender_id as string,
+      attachment_filename: m.attachment_filename as string | null,
+    };
+  }
+  return previews;
+}
+
 export async function markConversationRead(peerId: string) {
   const { supabase, user } = await requireUser();
   await supabase
