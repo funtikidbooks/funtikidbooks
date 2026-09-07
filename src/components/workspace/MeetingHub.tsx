@@ -1478,7 +1478,10 @@ export function MeetingHub({
     };
   }, [activeRoomIdForMembers]);
 
-  const displayedRoomMembers = activeRoomIdForMembers ? roomMembers : [];
+  const displayedRoomMembers = useMemo(
+    () => (activeRoomIdForMembers ? roomMembers : []),
+    [activeRoomIdForMembers, roomMembers],
+  );
 
   const namesPattern = useMemo(() => {
     const names = profiles
@@ -1535,10 +1538,17 @@ export function MeetingHub({
   const mentionCandidates = useMemo(() => {
     if (mentionQuery === null) return [];
     const q = mentionQuery.toLowerCase();
-    return profiles
+    // Scoped to this room's actual roster wherever one exists (any custom
+    // room — displayedRoomMembers is empty only for "Chung"/"Đặt đồ ăn",
+    // which have no roster because every staff member is implicitly in
+    // them, so the full company list is the right fallback there) — @-ing
+    // someone was offering every single staff member regardless of whether
+    // they were even in the room being typed in.
+    const pool = displayedRoomMembers.length > 0 ? displayedRoomMembers : profiles;
+    return pool
       .filter((p) => p.display_name.toLowerCase().includes(q))
       .sort((a, b) => a.display_name.localeCompare(b.display_name));
-  }, [mentionQuery, profiles]);
+  }, [mentionQuery, profiles, displayedRoomMembers]);
 
   useEffect(() => {
     messageIdsRef.current = new Set(messages.map((m) => m.id));

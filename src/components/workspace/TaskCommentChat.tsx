@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { addComment, getTaskActivity, getTaskComments, uploadTaskAttachment } from "@/lib/actions/task-detail";
+import { addComment, getTaskActivity, getTaskComments, updateComment, uploadTaskAttachment } from "@/lib/actions/task-detail";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import type { Profile, TaskActivity, TaskAttachment, TaskComment } from "@/lib/types";
 
@@ -59,6 +59,8 @@ export function TaskCommentChat({
   const [pending, setPending] = useState<TaskAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -102,6 +104,39 @@ export function TaskCommentChat({
     } finally {
       setUploading(false);
     }
+  }
+
+  // Ctrl+V only ever reached the file picker button before — the composer
+  // itself had no paste handler at all, so an image copied from elsewhere
+  // (a screenshot, a browser image) silently did nothing.
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+    if (files.length === 0) return;
+    e.preventDefault();
+    const list = new DataTransfer();
+    files.forEach((f) => list.items.add(f));
+    handleFiles(list.files);
+  }
+
+  function startEdit(comment: TaskComment) {
+    setEditingId(comment.id);
+    setEditText(comment.content);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditText("");
+  }
+
+  async function saveEdit(commentId: string) {
+    const trimmed = editText.trim();
+    if (!trimmed) return;
+    const prevComments = comments;
+    setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, content: trimmed } : c)));
+    setEditingId(null);
+    setEditText("");
+    const updated = await updateComment(commentId, trimmed);
+    if (!updated) setComments(prevComments);
   }
 
   async function handleSend(e: React.FormEvent) {
@@ -190,8 +225,57 @@ export function TaskCommentChat({
                   <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
                     {formatTime(item.created_at)}
                   </span>
+                  {item.data.user_id === currentUser.id && editingId !== item.data.id && (
+                    <button
+                      type="button"
+                      onClick={() => startEdit(item.data)}
+                      className="text-[11px] font-semibold"
+                      style={{ color: "var(--color-accent-700)" }}
+                    >
+                      Sửa
+                    </button>
+                  )}
                 </div>
-                {item.data.content && <p className="text-[13.5px] whitespace-pre-wrap">{item.data.content}</p>}
+                {editingId === item.data.id ? (
+                  <div className="flex flex-col gap-1.5 mt-1">
+                    <textarea
+                      className="input"
+                      style={{ resize: "none", padding: "6px 10px", fontSize: 13.5 }}
+                      rows={2}
+                      autoFocus
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          saveEdit(item.data.id);
+                        } else if (e.key === "Escape") {
+                          cancelEdit();
+                        }
+                      }}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => saveEdit(item.data.id)}
+                        className="btn btn-primary btn-sm"
+                        style={{ padding: "2px 10px", fontSize: 12 }}
+                      >
+                        Lưu
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="text-[12px] font-semibold"
+                        style={{ color: "var(--color-neutral-500)" }}
+                      >
+                        Huỷ
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  item.data.content && <p className="text-[13.5px] whitespace-pre-wrap">{item.data.content}</p>
+                )}
                 {item.data.attachments.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {item.data.attachments.map((att) => (
@@ -256,6 +340,7 @@ export function TaskCommentChat({
                 handleSend(e);
               }
             }}
+            onPaste={handlePaste}
             placeholder="Viết bình luận…"
           />
           <button

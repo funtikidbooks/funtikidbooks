@@ -65,6 +65,14 @@ export function EditTaskDialog({
   const [dueDate, setDueDate] = useState(task.due_date ?? "");
   const [coverUrl, setCoverUrl] = useState(task.cover_image_url);
   const [labels, setLabels] = useState<string[]>(task.labels ?? []);
+  // See toggleLabel below — kept in sync with `labels` state, but also
+  // written to synchronously inside toggleLabel itself so back-to-back
+  // toggles in the same tick read the truly-latest array instead of
+  // whatever `labels` still closed over from the last completed render.
+  const labelsRef = useRef(labels);
+  useEffect(() => {
+    labelsRef.current = labels;
+  }, [labels]);
   const [columnId, setColumnId] = useState(task.column_id);
   const [labelMenuOpen, setLabelMenuOpen] = useState(false);
   const [assigneeMenuOpen, setAssigneeMenuOpen] = useState(false);
@@ -112,7 +120,17 @@ export function EditTaskDialog({
   }
 
   function toggleLabel(labelId: string) {
-    const next = labels.includes(labelId) ? labels.filter((id) => id !== labelId) : [...labels, labelId];
+    // Reads/writes labelsRef rather than the closed-over `labels` variable —
+    // picking two labels in a quick pair of clicks (exactly the reported
+    // repro: tagging a task both "gấp" and "dự án giá cao") fires this
+    // twice before the first click's setLabels has actually committed and
+    // re-rendered, so the second call was building `next` off the same
+    // stale array the first call started from and silently overwriting it.
+    // The ref is updated synchronously here, so the very next call in the
+    // same tick already sees it — state alone can't offer that.
+    const current = labelsRef.current;
+    const next = current.includes(labelId) ? current.filter((id) => id !== labelId) : [...current, labelId];
+    labelsRef.current = next;
     setLabels(next);
     pushUpdate({ labels: next });
     startTransition(async () => {

@@ -57,7 +57,7 @@ export function DirectMessagesPanel({
   initialPeerId?: string | null;
   label: string;
 }) {
-  const { unreadCounts, recentSenderOrder, clearDmUnread } = useChatManager();
+  const { unreadCounts, recentSenderOrder, clearDmUnread, setActiveDmPeer } = useChatManager();
   // Patched with any live profile edits (name/avatar) a colleague has made
   // since this page loaded — see useLiveProfiles.
   const profiles = useLiveProfiles(profilesProp);
@@ -71,6 +71,15 @@ export function DirectMessagesPanel({
     () => (selectedPeerId ? (profiles.find((p) => p.id === selectedPeerId) ?? null) : null),
     [selectedPeerId, profiles],
   );
+
+  // Tells ChatManager which conversation this panel has open, the same way
+  // MeetingHub reports its own activeId via setActiveMeetingChannel — a DM
+  // arriving for this exact peer while already looking straight at them
+  // here shouldn't still ding the notification sound or bump their badge.
+  useEffect(() => {
+    setActiveDmPeer(selectedPeerId);
+    return () => setActiveDmPeer(null);
+  }, [selectedPeerId, setActiveDmPeer]);
 
   // Deep-linked in from a push notification click — clear that peer's
   // unread badge the same way clicking their row in the rail would, and

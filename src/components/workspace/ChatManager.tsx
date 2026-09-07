@@ -17,6 +17,13 @@ type ChatManagerValue = {
   unreadCounts: Record<string, number>;
   meetingUnreadCounts: Record<string, number>;
   setActiveMeetingChannel: (channelId: string | null) => void;
+  // Same idea as setActiveMeetingChannel, for whichever peer the embedded
+  // "Riêng" panel (DirectMessagesPanel) currently has open — a floating
+  // ChatWindow already suppresses its own badge/sound via openChatIdsRef,
+  // but the embedded panel isn't a ChatWindow, so without this a DM arriving
+  // while someone was already looking straight at that conversation still
+  // played the notification sound and bumped the badge.
+  setActiveDmPeer: (profileId: string | null) => void;
   totalUnreadCount: number;
   // Sender ids in "most recently messaged me" order, for the Messenger-style
   // dropdown to bubble a conversation to the top the moment a DM arrives.
@@ -52,6 +59,7 @@ export function ChatManagerProvider({
   // is already looking at it (MeetingHub reports this via
   // setActiveMeetingChannel whenever its own activeId changes).
   const activeMeetingChannelIdRef = useRef<string | null>(null);
+  const activeDmPeerIdRef = useRef<string | null>(null);
   const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
@@ -60,6 +68,40 @@ export function ChatManagerProvider({
 
   useEffect(() => {
     notificationAudioRef.current = new Audio("/sounds/dm-message.mp3");
+  }, []);
+
+  // Browsers block Audio.play() until the page has had at least one real
+  // user gesture (click/tap/key) this session — calling it any earlier
+  // fails silently (the .catch() below swallows it), which is exactly what
+  // "the notification sound plays sometimes, not others" turned out to be:
+  // silent right after a fresh load/reload, working again the moment
+  // someone clicks anything at all. A one-off play-then-pause on the very
+  // first interaction "unlocks" it well before any real notification needs
+  // to play, instead of leaving that unlock to chance.
+  useEffect(() => {
+    let unlocked = false;
+    function unlock() {
+      if (unlocked) return;
+      unlocked = true;
+      const audio = notificationAudioRef.current;
+      if (audio) {
+        audio.play().then(
+          () => {
+            audio.pause();
+            audio.currentTime = 0;
+          },
+          () => {},
+        );
+      }
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    }
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
   }, []);
 
   const clearDmUnread = useCallback((profileId: string) => {
@@ -94,6 +136,14 @@ export function ChatManagerProvider({
       return next;
     });
   }, []);
+
+  const setActiveDmPeer = useCallback(
+    (profileId: string | null) => {
+      activeDmPeerIdRef.current = profileId;
+      if (profileId) clearDmUnread(profileId);
+    },
+    [clearDmUnread],
+  );
 
   // Re-fetches both unread counts from the server and replaces local state
   // wholesale — the source of truth (dm_reads / meeting_channel_reads)
@@ -143,17 +193,18 @@ export function ChatManagerProvider({
         { event: "INSERT", schema: "public", table: "direct_messages", filter: `recipient_id=eq.${currentUserId}` },
         (payload) => {
           const row = payload.new as DirectMessage;
-          // Plays for every incoming DM regardless of whether that chat
-          // window happens to be open — this is the one subscription that
-          // sees all of them, unlike each ChatWindow's own per-conversation
-          // subscription.
+          setRecentSenderOrder((prev) => [row.sender_id, ...prev.filter((id) => id !== row.sender_id)]);
+          // Already looking straight at this exact conversation — either a
+          // floating ChatWindow for this peer is open, or the embedded
+          // "Riêng" panel has them selected. No badge, no sound; the
+          // conversation's own realtime subscription is what actually shows
+          // the message.
+          if (openChatIdsRef.current.has(row.sender_id) || activeDmPeerIdRef.current === row.sender_id) return;
           const audio = notificationAudioRef.current;
           if (audio) {
             audio.currentTime = 0;
             audio.play().catch(() => {});
           }
-          setRecentSenderOrder((prev) => [row.sender_id, ...prev.filter((id) => id !== row.sender_id)]);
-          if (openChatIdsRef.current.has(row.sender_id)) return;
           setUnreadCounts((prev) => ({ ...prev, [row.sender_id]: (prev[row.sender_id] ?? 0) + 1 }));
         },
       )
@@ -216,6 +267,7 @@ export function ChatManagerProvider({
         unreadCounts,
         meetingUnreadCounts,
         setActiveMeetingChannel,
+        setActiveDmPeer,
         totalUnreadCount,
         recentSenderOrder,
         profileOverrides,

@@ -191,6 +191,28 @@ export async function addComment(taskId: string, content: string, attachmentIds:
   };
 }
 
+export async function updateComment(commentId: string, content: string) {
+  const { supabase, user } = await requireUser();
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+
+  // Scoped to the comment's own author at the app level, same as
+  // deleteComment below — the table's own RLS policy is permissive (any
+  // signed-in staff member), matching this codebase's internal-tool trust
+  // model, so this .eq is what actually keeps editing to your own comments.
+  const { data, error } = await supabase
+    .from("task_comments")
+    .update({ content: trimmed })
+    .eq("id", commentId)
+    .eq("user_id", user.id)
+    .select(COMMENT_SELECT)
+    .single();
+
+  if (error || !data) return null;
+  revalidatePath("/workspace");
+  return data as unknown as Omit<TaskComment, "attachments">;
+}
+
 export async function deleteComment(commentId: string) {
   const { supabase, user } = await requireUser();
 
