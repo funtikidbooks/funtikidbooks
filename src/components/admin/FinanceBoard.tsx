@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   deleteFinanceEntry,
   getMonthlySalaryTotal,
@@ -253,6 +253,27 @@ export function FinanceBoard({
   const [yearSalaryTotals, setYearSalaryTotals] = useState(initialYearSalaryTotals);
   const [yearLoading, setYearLoading] = useState(false);
 
+  // Quỹ tiền = lợi nhuận ròng luỹ kế tới hết tháng trước, cộng thêm lợi
+  // nhuận ròng của tháng đang xem (biến động ngay khi thêm/xoá khoản thu
+  // chi) — nên nó bắt đầu bằng đúng số dư cuối tháng trước rồi tăng/giảm
+  // sống theo các khoản biến phí/doanh thu vừa nhập.
+  const [prevMonthNet, setPrevMonthNet] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const prevMonth = addMonths(monthStart, -1);
+    Promise.all([listFinanceEntries(prevMonth), getMonthlySalaryTotal(prevMonth)])
+      .then(([e, s]) => {
+        if (cancelled) return;
+        setPrevMonthNet(computeFinanceSummary(e, s).netProfit);
+      })
+      .catch(() => {
+        if (!cancelled) setPrevMonthNet(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [monthStart]);
+
   async function goToMonth(newStart: string) {
     setMonthStart(newStart);
     setLoading(true);
@@ -321,6 +342,7 @@ export function FinanceBoard({
   }
 
   const summary = useMemo(() => computeFinanceSummary(entries, salaryTotal), [entries, salaryTotal]);
+  const cashFund = prevMonthNet === null ? null : prevMonthNet + summary.netProfit;
 
   const yearRows = useMemo(
     () =>
@@ -361,11 +383,30 @@ export function FinanceBoard({
 
   return (
     <div className="flex-1 flex flex-col p-6 gap-6 overflow-y-auto">
-      <div>
-        <h1 className="text-xl">Tài chính kinh doanh</h1>
-        <p className="text-sm mt-1" style={{ color: "var(--color-neutral-500)" }}>
-          Chỉ Giám đốc xem được. Lương nhân viên lấy tự động từ Bảng lương của tháng — không cần nhập lại ở đây.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-xl">Tài chính kinh doanh</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--color-neutral-500)" }}>
+            Chỉ Giám đốc xem được. Lương nhân viên lấy tự động từ Bảng lương của tháng — không cần nhập lại ở đây.
+          </p>
+        </div>
+        <div
+          className="card px-4 py-3 flex flex-col gap-1 items-end"
+          style={{ background: cashFund !== null && cashFund < 0 ? "rgba(192,82,79,0.1)" : "var(--color-accent-2-100)", minWidth: 200 }}
+        >
+          <span className="text-[11px] font-bold" style={{ color: cashFund !== null && cashFund < 0 ? "var(--status-red)" : "var(--color-accent-2-800)" }}>
+            QUỸ TIỀN
+          </span>
+          <span
+            className="text-xl font-bold"
+            style={{ color: cashFund !== null && cashFund < 0 ? "var(--status-red)" : "var(--color-accent-2-800)" }}
+          >
+            {cashFund === null ? "…" : formatVnd(cashFund)}
+          </span>
+          <span className="text-[10px] text-right" style={{ color: "var(--color-neutral-400)" }}>
+            Luỹ kế lợi nhuận ròng đến hiện tại
+          </span>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">
