@@ -146,6 +146,12 @@ export function MyAttendance({
   function dayBadge(date: string, entry: AttendanceEntry | undefined, inMonth: boolean) {
     const isFuture = date > today;
     const weekday = isMonToFri(date) && !offDateSet.has(date);
+    // A PM/director declaring a day off on the shared calendar should win
+    // over whatever's already in `entry` — most often a stale "present"
+    // from someone who logged in (and got auto-checked-in) before that day
+    // got marked off — instead of quietly showing a check-in time on a
+    // day that's now supposed to read as a holiday.
+    if (offDateSet.has(date)) return <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
     if (entry?.status === "off") return <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
     if (entry?.status === "paid_leave") return <span style={{ color: "var(--status-blue)" }}>Nghỉ có lương</span>;
     if (entry?.status === "half_day") return <span style={{ color: "var(--status-purple)" }}>Nửa công</span>;

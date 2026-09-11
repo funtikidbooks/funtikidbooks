@@ -135,7 +135,12 @@ export function AttendanceMonthDetail({
                   const weekday = isMonToFri(date) && !offDateSet.has(date);
 
                   let badge: React.ReactNode = null;
-                  if (entry?.status === "off") {
+                  // Same override as elsewhere: a calendar-wide off day wins
+                  // over a stale entry (e.g. an auto-checked-in "present"
+                  // recorded before the day got marked off).
+                  if (offDateSet.has(date)) {
+                    badge = <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
+                  } else if (entry?.status === "off") {
                     badge = <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
                   } else if (entry?.status === "paid_leave") {
                     badge = <span style={{ color: "var(--status-blue)" }}>Nghỉ lương</span>;

@@ -127,7 +127,16 @@ export function AttendanceBoard({
           {staff.map((p) => {
             const entry = todayByProfile.get(p.id);
             let statusNode: React.ReactNode;
-            if (entry?.status === "off") {
+            // Same override as MyAttendance's dayBadge: a calendar-wide off
+            // day wins over a stale entry (e.g. someone auto-checked-in
+            // before it got marked off).
+            if (offDateSet.has(today)) {
+              statusNode = (
+                <span className="text-xs" style={{ color: "var(--color-neutral-400)" }}>
+                  Ngày nghỉ
+                </span>
+              );
+            } else if (entry?.status === "off") {
               statusNode = (
                 <span className="text-xs" style={{ color: "var(--color-neutral-400)" }}>
                   Ngày nghỉ
