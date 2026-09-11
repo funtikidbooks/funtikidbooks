@@ -2700,3 +2700,53 @@ create policy "hr can manage document library storage"
   to authenticated
   using (bucket_id = 'documents-library' and public.can_manage_hr())
   with check (bucket_id = 'documents-library' and public.can_manage_hr());
+
+-- ---------------------------------------------------------------------------
+-- hour_reports: end-of-day time logs staff on hourly-rate projects post in
+-- the "Chung" room chat every day (see submitHourReport in
+-- lib/actions/hourReports.ts, and the "📊 Báo cáo giờ" composer button in
+-- MeetingHub). Turns that free-text chat habit into something a PM can
+-- filter/tally — the Server Action that inserts a row here also posts the
+-- same content as a normal chat message, so nothing changes about how
+-- staff read the "Chung" feed day to day. project_channel_id points at
+-- whichever meeting room represents the client project (e.g. "Dự án
+-- Brittany") rather than the room the report was actually posted in
+-- (almost always "Chung") — reusing the room list instead of maintaining a
+-- separate "projects" master list.
+-- ---------------------------------------------------------------------------
+create table if not exists public.hour_reports (
+  id uuid primary key default gen_random_uuid(),
+  profile_id uuid not null references public.profiles (id) on delete cascade,
+  project_channel_id uuid references public.meeting_channels (id) on delete set null,
+  message_id uuid references public.meeting_messages (id) on delete set null,
+  work_date date not null,
+  hours numeric(4,1) not null check (hours > 0 and hours <= 24),
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists hour_reports_profile_date_idx
+  on public.hour_reports (profile_id, work_date);
+create index if not exists hour_reports_project_channel_idx
+  on public.hour_reports (project_channel_id);
+
+alter table public.hour_reports enable row level security;
+
+drop policy if exists "staff can log their own hour reports" on public.hour_reports;
+create policy "staff can log their own hour reports"
+  on public.hour_reports for insert
+  to authenticated
+  with check (profile_id = auth.uid());
+
+drop policy if exists "staff can read their own hour reports" on public.hour_reports;
+create policy "staff can read their own hour reports"
+  on public.hour_reports for select
+  to authenticated
+  using (profile_id = auth.uid());
+
+drop policy if exists "hr can manage hour reports" on public.hour_reports;
+create policy "hr can manage hour reports"
+  on public.hour_reports for all
+  to authenticated
+  using (public.can_manage_hr())
+  with check (public.can_manage_hr());

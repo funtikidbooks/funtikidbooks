@@ -346,6 +346,17 @@ export type AttendanceEntry = {
   created_at: string;
 };
 
+export type HourReport = {
+  id: string;
+  profile_id: string;
+  project_channel_id: string | null;
+  message_id: string | null;
+  work_date: string;
+  hours: number;
+  note: string | null;
+  created_at: string;
+};
+
 export type PayrollItem = {
   label: string;
   amount: number; // positive = allowance/bonus, negative = deduction
@@ -963,6 +974,12 @@ export type Database = {
         Row: AttendanceEntry;
         Insert: Partial<AttendanceEntry> & { profile_id: string; work_date: string };
         Update: Partial<AttendanceEntry>;
+        Relationships: [];
+      };
+      hour_reports: {
+        Row: HourReport;
+        Insert: Partial<HourReport> & { profile_id: string; work_date: string; hours: number };
+        Update: Partial<HourReport>;
         Relationships: [];
       };
       payroll_records: {
