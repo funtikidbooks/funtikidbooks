@@ -16,10 +16,19 @@ create table if not exists public.hour_reports (
   created_at timestamptz not null default now()
 );
 
+-- Lets a PM/director check a report off once they've actually looked at
+-- it — the "Báo cáo giờ" admin page shows a nav badge for anything still
+-- unreviewed so a report can't quietly go unnoticed the way it could
+-- scrolling past it in chat.
+alter table public.hour_reports add column if not exists reviewed_at timestamptz;
+alter table public.hour_reports add column if not exists reviewed_by uuid references public.profiles (id) on delete set null;
+
 create index if not exists hour_reports_profile_date_idx
   on public.hour_reports (profile_id, work_date);
 create index if not exists hour_reports_project_channel_idx
   on public.hour_reports (project_channel_id);
+create index if not exists hour_reports_unreviewed_idx
+  on public.hour_reports (reviewed_at) where reviewed_at is null;
 
 alter table public.hour_reports enable row level security;
 

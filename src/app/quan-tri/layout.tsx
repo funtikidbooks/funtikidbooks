@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { listPendingPayrollFeedbackIds } from "@/lib/actions/payroll";
+import { listUnreviewedHourReportIds } from "@/lib/actions/hourReports";
 
 export default async function AdminLayout({
   children,
@@ -33,7 +34,10 @@ export default async function AdminLayout({
   }
 
   const isDirector = profile.access_role === "director";
-  const initialPendingPayrollFeedbackIds = isDirector || isProjectManager ? await listPendingPayrollFeedbackIds() : [];
+  const isHrManager = isDirector || isProjectManager;
+  const [initialPendingPayrollFeedbackIds, initialUnreviewedHourReportIds] = isHrManager
+    ? await Promise.all([listPendingPayrollFeedbackIds(), listUnreviewedHourReportIds()])
+    : [[], []];
 
   return (
     <div className="flex flex-col md:flex-row min-h-screen" style={{ background: "var(--color-bg)" }}>
@@ -45,6 +49,7 @@ export default async function AdminLayout({
           jobTitle: profile.role,
         }}
         initialPendingPayrollFeedbackIds={initialPendingPayrollFeedbackIds}
+        initialUnreviewedHourReportIds={initialUnreviewedHourReportIds}
       />
       <div className="flex-1 flex flex-col min-w-0">{children}</div>
     </div>

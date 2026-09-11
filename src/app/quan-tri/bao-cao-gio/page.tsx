@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { listHourReports } from "@/lib/actions/hourReports";
+import { listHourReports, listUnreviewedHourReportIds } from "@/lib/actions/hourReports";
 import { listChannels } from "@/lib/actions/meetings";
 import { HourReportsAdmin } from "@/components/admin/HourReportsAdmin";
 import type { Profile } from "@/lib/types";
@@ -23,8 +23,9 @@ export default async function AdminHourReportsPage() {
     redirect("/quan-tri");
   }
 
-  const [reports, channels, { data: profiles }] = await Promise.all([
+  const [reports, unreviewedIds, channels, { data: profiles }] = await Promise.all([
     listHourReports(),
+    listUnreviewedHourReportIds(),
     listChannels(),
     supabase
       .from("profiles")
@@ -32,5 +33,12 @@ export default async function AdminHourReportsPage() {
       .order("display_name", { ascending: true }),
   ]);
 
-  return <HourReportsAdmin initialReports={reports} channels={channels} staff={(profiles ?? []) as Profile[]} />;
+  return (
+    <HourReportsAdmin
+      initialReports={reports}
+      initialUnreviewedCount={unreviewedIds.length}
+      channels={channels}
+      staff={(profiles ?? []) as Profile[]}
+    />
+  );
 }

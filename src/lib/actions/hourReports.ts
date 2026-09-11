@@ -92,3 +92,34 @@ export async function listHourReports(filters?: { monthStart?: string }): Promis
 
   return (data ?? []) as HourReport[];
 }
+
+// Every never-reviewed report regardless of month — the "chỉ hiện chưa
+// xem" toggle on the admin page reads from this instead of listHourReports
+// so nothing from a prior month can go unnoticed just because no one
+// happened to flip back to that month.
+export async function listUnreviewedHourReports(): Promise<HourReport[]> {
+  const { supabase } = await requireHrManager();
+  const { data } = await supabase
+    .from("hour_reports")
+    .select("*")
+    .is("reviewed_at", null)
+    .order("work_date", { ascending: true });
+  return (data ?? []) as HourReport[];
+}
+
+// Same "unreviewed" set, just ids — backs the red nav-badge dot in
+// AdminSidebar, same convention as listPendingPayrollFeedbackIds().
+export async function listUnreviewedHourReportIds(): Promise<string[]> {
+  const { supabase } = await requireHrManager();
+  const { data } = await supabase.from("hour_reports").select("id").is("reviewed_at", null);
+  return (data ?? []).map((r) => r.id as string);
+}
+
+export async function markHourReportReviewed(id: string, reviewed: boolean) {
+  const { supabase, user } = await requireHrManager();
+  const { error } = await supabase
+    .from("hour_reports")
+    .update({ reviewed_at: reviewed ? new Date().toISOString() : null, reviewed_by: reviewed ? user.id : null })
+    .eq("id", id);
+  if (error) throw new Error("Không thể cập nhật trạng thái xem.");
+}

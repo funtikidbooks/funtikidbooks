@@ -354,6 +354,8 @@ export type HourReport = {
   work_date: string;
   hours: number;
   note: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
   created_at: string;
 };
 
