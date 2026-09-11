@@ -30,12 +30,14 @@ const MORE_NAV = [
 
 // The installed iPhone app trades the "4 most-used + everything else behind
 // Thêm" tradeoff for just the sections the director actually wants on the
-// home screen — Chấm công moves up to a primary tab, Thành viên and the
-// other MORE_NAV sections drop out of the nav entirely. iPad keeps the
-// regular nav even when installed the same way (see useShowsIphoneAppNav).
+// home screen — Chấm công and Báo cáo giờ move up to primary tabs, Thành
+// viên and the other MORE_NAV sections drop out of the nav entirely. iPad
+// keeps the regular nav even when installed the same way (see
+// useShowsIphoneAppNav).
 const PRIMARY_NAV_IPHONE_APP = [
   { href: "/workspace", label: "Công việc", icon: "📊" },
   { href: "/workspace/hop", label: "Trò chuyện", icon: "💬" },
+  { href: "/workspace/bao-cao-gio", label: "Báo cáo giờ", icon: "⏱️" },
   { href: "/workspace/lich", label: "Lịch", icon: "📅" },
   { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐" },
 ];
