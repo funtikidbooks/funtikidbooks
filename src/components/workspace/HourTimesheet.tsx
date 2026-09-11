@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { deleteHourEntry, listWeekHourReports, logHours, setProjectWeeklyCap } from "@/lib/actions/hourReports";
+import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { WEEKDAYS_SHORT, addDays, formatDayLabel, mondayOf, vnToday, weekDaysOf } from "@/lib/constants/attendance";
 import type { HourReport, MeetingChannelPublic, Profile } from "@/lib/types";
 
@@ -131,7 +132,7 @@ export function HourTimesheet({
       <div>
         <h1 className="text-xl">Báo cáo giờ</h1>
         <p className="text-sm mt-1" style={{ color: "var(--color-neutral-500)" }}>
-          Bấm vào một ô để nhập giờ của bạn — mọi người đều thấy được giờ của nhau. Di chuột vào số để xem ai báo bao nhiêu.
+          Bấm vào một ô để nhập giờ của bạn — mọi người đều thấy avatar ai đã báo giờ. Di chuột vào để xem chi tiết từng người.
         </p>
       </div>
 
@@ -227,9 +228,35 @@ export function HourTimesheet({
                           onClick={() => startEditingCell(project.id, date)}
                           title={breakdown || undefined}
                           className="px-2 py-2 text-center cursor-pointer"
-                          style={{ fontWeight: mine ? 700 : 400, color: total > 0 ? "var(--color-text)" : "var(--color-neutral-300)" }}
                         >
-                          {total > 0 ? total : "–"}
+                          {entries.length === 0 ? (
+                            <span style={{ color: "var(--color-neutral-300)" }}>–</span>
+                          ) : (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <div className="flex items-center justify-center">
+                                {entries.map((r, i) => {
+                                  const person = staffById.get(r.profile_id);
+                                  const isMe = r.profile_id === currentUserId;
+                                  return person ? (
+                                    <div
+                                      key={r.id}
+                                      style={{
+                                        marginLeft: i === 0 ? 0 : -8,
+                                        borderRadius: "50%",
+                                        border: `1.5px solid ${isMe ? "var(--color-accent-500)" : "var(--color-surface)"}`,
+                                        zIndex: entries.length - i,
+                                      }}
+                                    >
+                                      <AttendanceAvatar profile={person} size={18} />
+                                    </div>
+                                  ) : null;
+                                })}
+                              </div>
+                              <span className="text-xs" style={{ fontWeight: mine ? 700 : 400 }}>
+                                {total}
+                              </span>
+                            </div>
+                          )}
                         </td>
                       );
                     })}
