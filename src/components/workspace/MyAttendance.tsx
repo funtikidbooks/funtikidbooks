@@ -12,8 +12,8 @@ import {
   addMonths,
   firstOfMonth,
   formatCheckInTime,
+  isDefaultWorkDay,
   isLateCheckIn,
-  isMonToFri,
   isSameMonth,
   monthGridDates,
   summarizeAttendance,
@@ -145,7 +145,7 @@ export function MyAttendance({
   // apart from each other.
   function dayBadge(date: string, entry: AttendanceEntry | undefined, inMonth: boolean) {
     const isFuture = date > today;
-    const weekday = isMonToFri(date) && !offDateSet.has(date);
+    const weekday = isDefaultWorkDay(date) && !offDateSet.has(date);
     // A PM/director declaring a day off on the shared calendar should win
     // over whatever's already in `entry` — most often a stale "present"
     // from someone who logged in (and got auto-checked-in) before that day

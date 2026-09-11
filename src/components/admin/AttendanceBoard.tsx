@@ -10,8 +10,8 @@ import {
   WORK_HOURS_LABEL,
   firstOfMonth,
   formatCheckInTime,
+  isDefaultWorkDay,
   isLateCheckIn,
-  isMonToFri,
   vnToday,
 } from "@/lib/constants/attendance";
 import type { AttendanceEntry, Profile } from "@/lib/types";
@@ -107,7 +107,7 @@ export function AttendanceBoard({
     }
   }
 
-  const weekday = isMonToFri(today) && !offDateSet.has(today);
+  const weekday = isDefaultWorkDay(today) && !offDateSet.has(today);
 
   return (
     <div className="flex-1 flex flex-col p-6 gap-5 overflow-y-auto">

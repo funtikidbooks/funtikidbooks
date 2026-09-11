@@ -67,6 +67,17 @@ export function isMonToFri(dateStr: string): boolean {
   return weekdayIndex(dateStr) <= 4;
 }
 
+// Same "Sunday is always off, Saturday varies" rule checkInIfNeeded() uses
+// to decide whether to auto-record a check-in (see its own comment) — used
+// by the attendance views to decide whether an empty cell with no entry and
+// no explicit calendar off-day should read "Chưa vào làm"/blank (a Saturday
+// is assumed workable unless marked off) rather than presumptively "Ngày
+// nghỉ". isMonToFri() alone would mark every Saturday off by default, which
+// is wrong on any Saturday the company actually works.
+export function isDefaultWorkDay(dateStr: string): boolean {
+  return weekdayIndex(dateStr) !== 6;
+}
+
 export function formatCheckInTime(iso: string): string {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Ho_Chi_Minh" }).format(
     new Date(iso),

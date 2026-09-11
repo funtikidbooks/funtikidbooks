@@ -10,8 +10,8 @@ import {
   addMonths,
   firstOfMonth,
   formatCheckInTime,
+  isDefaultWorkDay,
   isLateCheckIn,
-  isMonToFri,
   isSameMonth,
   monthGridDates,
   summarizeAttendance,
@@ -132,7 +132,7 @@ export function AttendanceMonthDetail({
                   const entry = byDate.get(date);
                   const isToday = date === today;
                   const isFuture = date > today;
-                  const weekday = isMonToFri(date) && !offDateSet.has(date);
+                  const weekday = isDefaultWorkDay(date) && !offDateSet.has(date);
 
                   let badge: React.ReactNode = null;
                   // Same override as elsewhere: a calendar-wide off day wins
