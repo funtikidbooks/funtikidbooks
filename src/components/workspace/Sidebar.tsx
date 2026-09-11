@@ -11,13 +11,10 @@ import { resetThemeOnSignOut } from "@/lib/useTheme";
 import { STANDALONE_ALLOWED_HREFS, useShowsIphoneAppNav } from "@/lib/useIsStandalone";
 import type { Profile } from "@/lib/types";
 
-// Pinned above the "KHÔNG GIAN LÀM VIỆC" group entirely, per sếp Phúc —
-// its own top-of-sidebar item rather than folded into either group below.
-const PINNED_NAV = [{ href: "/workspace/bao-cao-gio", label: "Báo cáo giờ", icon: "⏱️", enabled: true }];
-
 const NAV = [
   { href: "/workspace", label: "Bảng công việc", icon: "📊", enabled: true },
   { href: "/workspace/hop", label: "Trò chuyện & họp", icon: "💬", enabled: true },
+  { href: "/workspace/bao-cao-gio", label: "Báo cáo giờ", icon: "⏱️", enabled: true },
 ];
 
 // Split into its own "NỘI BỘ" group below a divider, per sếp Phúc —
@@ -49,9 +46,6 @@ export function Sidebar({
   const { totalUnreadCount } = useChatManager();
   const myAvatarUrl = profiles.find((p) => p.id === currentUserId)?.avatar_url ?? null;
   const showsIphoneAppNav = useShowsIphoneAppNav();
-  const visiblePinnedNav = showsIphoneAppNav
-    ? PINNED_NAV.filter((item) => STANDALONE_ALLOWED_HREFS.has(item.href))
-    : PINNED_NAV;
   const visibleNav = showsIphoneAppNav ? NAV.filter((item) => STANDALONE_ALLOWED_HREFS.has(item.href)) : NAV;
   const visibleInternalNav = showsIphoneAppNav
     ? INTERNAL_NAV.filter((item) => STANDALONE_ALLOWED_HREFS.has(item.href))
@@ -117,11 +111,9 @@ export function Sidebar({
       </Link>
 
       <div className="flex flex-col gap-1">
-        {visiblePinnedNav.map((item) => NavLink(item))}
-
         <div
           className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1"
-          style={{ color: "var(--color-neutral-500)", marginTop: visiblePinnedNav.length > 0 ? 8 : 0 }}
+          style={{ color: "var(--color-neutral-500)" }}
         >
           KHÔNG GIAN LÀM VIỆC
         </div>
