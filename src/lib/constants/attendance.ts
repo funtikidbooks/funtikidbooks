@@ -12,8 +12,9 @@ export const WORK_START_MINUTE = 0;
 export const WORK_HOURS_LABEL = "09:00 – 18:30 (Thứ 2 – Thứ 6)";
 
 // A check-in up to this many minutes after WORK_START still counts as
-// on-time — only later than that gets flagged "Trễ".
-export const LATE_GRACE_MINUTES = 15;
+// on-time — only later than that gets flagged "Trễ". 5 minutes grace means
+// 09:05 is still on-time and 09:06 onward is "Trễ".
+export const LATE_GRACE_MINUTES = 5;
 
 // Logging into the workspace before this time doesn't auto-record a
 // check-in at all (someone browsing at 3am or 8am isn't "at work" yet) —
