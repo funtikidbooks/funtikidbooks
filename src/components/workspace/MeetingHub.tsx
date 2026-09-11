@@ -1109,7 +1109,13 @@ export function MeetingHub({
         const row = payload.new as { id: string; name: string; icon: string; password_hash: string | null };
         refreshChannel(row.id, { name: row.name, icon: row.icon, has_password: !!row.password_hash });
       })
-      .subscribe();
+      // Also resync on reconnect (a network blip drops the socket, then
+      // Supabase's client silently rejoins it) — postgres_changes has no
+      // replay, so a membership added/removed during that gap would
+      // otherwise never show up until the next full page load.
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") listChannels().then(setChannels).catch(() => {});
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -1479,7 +1485,15 @@ export function MeetingHub({
             .catch(() => {});
         },
       )
-      .subscribe();
+      // Same reconnect-resync as the memberships channel above — a roster
+      // change during a brief drop otherwise sits stale until reload.
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          listChannelMembers(activeRoomIdForMembers)
+            .then((members) => setRoomMembers(members))
+            .catch(() => {});
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
