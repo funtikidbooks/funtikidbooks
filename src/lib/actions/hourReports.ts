@@ -22,48 +22,55 @@ function formatDateVn(date: string) {
   return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
 }
 
-// Logs an hourly-rate day's work AND posts the same thing as a normal chat
-// message in whichever room the composer's "📊 Báo cáo giờ" button was
-// clicked from (almost always "Chung") — staff keep reading the exact same
-// feed they always have, but now there's also a structured row a PM can
+// Logs one or more hourly-rate days' work (staff catching up several days
+// at once report them all together — see the "+ Thêm ngày" checklist in
+// HourReportModal) AND posts the same thing as ONE normal chat message in
+// whichever room the composer's "📊 Báo cáo giờ" button was clicked from
+// (almost always "Chung") — staff keep reading the exact same feed they
+// always have, but now there's also a structured row per day a PM can
 // filter/tally on the "Báo cáo giờ" admin page instead of reading chat and
 // adding hours up by hand.
-export async function submitHourReport(input: {
+export async function submitHourReports(input: {
   postChannelId: string;
   projectChannelId: string;
   projectName: string;
-  workDate: string;
-  hours: number;
-  note: string;
+  entries: { workDate: string; hours: number; note: string }[];
 }) {
   const { supabase, user } = await requireUser();
 
-  if (!(input.hours > 0 && input.hours <= 24)) throw new Error("Số giờ không hợp lệ (0 – 24).");
-  const trimmedNote = input.note.trim();
+  if (input.entries.length === 0) throw new Error("Chưa có ngày nào để báo cáo.");
+  for (const e of input.entries) {
+    if (!(e.hours > 0 && e.hours <= 24)) throw new Error("Số giờ không hợp lệ (0 – 24).");
+  }
 
-  const content = `📊 Báo cáo giờ — ${input.projectName}\n${formatDateVn(input.workDate)}${trimmedNote ? `: ${trimmedNote}` : ""} — ${input.hours} tiếng`;
+  const lines = input.entries.map((e) => {
+    const trimmedNote = e.note.trim();
+    return `${formatDateVn(e.workDate)}${trimmedNote ? `: ${trimmedNote}` : ""} — ${e.hours} tiếng`;
+  });
+  const content = `📊 Báo cáo giờ — ${input.projectName}\n${lines.join("\n")}`;
 
   const sent = await sendMeetingMessage(input.postChannelId, content);
 
   const { data, error } = await supabase
     .from("hour_reports")
-    .insert({
-      profile_id: user.id,
-      project_channel_id: input.projectChannelId,
-      message_id: sent?.id ?? null,
-      work_date: input.workDate,
-      hours: input.hours,
-      note: trimmedNote || null,
-    })
-    .select("*")
-    .single();
+    .insert(
+      input.entries.map((e) => ({
+        profile_id: user.id,
+        project_channel_id: input.projectChannelId,
+        message_id: sent?.id ?? null,
+        work_date: e.workDate,
+        hours: e.hours,
+        note: e.note.trim() || null,
+      })),
+    )
+    .select("*");
 
   // The chat message already went through either way — a director checking
-  // "Báo cáo giờ" and not finding this one entry is a much smaller problem
+  // "Báo cáo giờ" and not finding these entries is a much smaller problem
   // than losing a message someone thinks they already sent.
   if (error || !data) throw new Error("Đã gửi tin nhắn nhưng chưa lưu được báo cáo giờ — thử lại giúp em nhé.");
 
-  return { message: sent, report: data as HourReport };
+  return { message: sent, reports: data as HourReport[] };
 }
 
 // HR-only — powers the "Báo cáo giờ" admin filter/tally page. Returns raw
