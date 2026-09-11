@@ -21,14 +21,20 @@ async function requireHrManager() {
 // in place (see the unique index in supabase/migrations/hour_reports.sql)
 // instead of piling up duplicate entries the way separate chat messages
 // would have.
-export async function logHours(input: { projectChannelId: string; workDate: string; hours: number }) {
+export async function logHours(input: { projectChannelId: string; workDate: string; hours: number; note?: string }) {
   const { supabase, user } = await requireUser();
   if (!(input.hours > 0 && input.hours <= 24)) throw new Error("Số giờ không hợp lệ (0 – 24).");
 
   const { data, error } = await supabase
     .from("hour_reports")
     .upsert(
-      { profile_id: user.id, project_channel_id: input.projectChannelId, work_date: input.workDate, hours: input.hours },
+      {
+        profile_id: user.id,
+        project_channel_id: input.projectChannelId,
+        work_date: input.workDate,
+        hours: input.hours,
+        note: input.note?.trim() || null,
+      },
       { onConflict: "profile_id,project_channel_id,work_date" },
     )
     .select("*")

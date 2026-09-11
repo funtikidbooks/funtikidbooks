@@ -1,10 +1,117 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Modal } from "@/components/ui/Modal";
 import { deleteHourEntry, listWeekHourReports, logHours, setProjectWeeklyCap } from "@/lib/actions/hourReports";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { WEEKDAYS_SHORT, addDays, formatDayLabel, mondayOf, vnToday, weekDaysOf } from "@/lib/constants/attendance";
 import type { HourReport, MeetingChannelPublic, Profile } from "@/lib/types";
+
+// A small modal rather than an inline table-cell input — a note textarea
+// inline would force that one day-column wider across every row in the
+// table. The cell itself stays a bare number; content only shows up here,
+// opened by clicking the day.
+function HourEntryModal({
+  projectLabel,
+  date,
+  initialHours,
+  initialNote,
+  hasExisting,
+  saving,
+  deleting,
+  onSave,
+  onDelete,
+  onClose,
+}: {
+  projectLabel: string;
+  date: string;
+  initialHours: string;
+  initialNote: string;
+  hasExisting: boolean;
+  saving: boolean;
+  deleting: boolean;
+  onSave: (hours: string, note: string) => Promise<string | void>;
+  onDelete: () => Promise<string | void>;
+  onClose: () => void;
+}) {
+  const [hours, setHours] = useState(initialHours);
+  const [note, setNote] = useState(initialNote);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <Modal onClose={onClose} maxWidth={360}>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setError((await onSave(hours, note)) || null);
+        }}
+        className="flex flex-col gap-4 p-6"
+      >
+        <div>
+          <h2 className="text-lg">{projectLabel}</h2>
+          <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
+            {formatDayLabel(date)}
+          </p>
+        </div>
+
+        <div className="field">
+          <label htmlFor="hr-hours">Số giờ</label>
+          <input
+            id="hr-hours"
+            autoFocus
+            type="text"
+            inputMode="decimal"
+            className="input"
+            placeholder="vd. 5.5"
+            value={hours}
+            onChange={(e) => setHours(e.target.value)}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="hr-note">Nội dung công việc</label>
+          <textarea
+            id="hr-note"
+            className="input resize-none"
+            rows={3}
+            placeholder="vd. sketch chapter 9 (tranh 1,2,4)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </div>
+
+        {error && (
+          <p className="text-sm font-semibold" style={{ color: "var(--status-red)" }}>
+            {error}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between gap-3">
+          {hasExisting ? (
+            <button
+              type="button"
+              onClick={async () => setError((await onDelete()) || null)}
+              className="btn btn-danger btn-sm"
+              disabled={saving || deleting}
+            >
+              {deleting ? "Đang xoá…" : "🗑 Xoá"}
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={onClose} className="btn btn-ghost" disabled={saving || deleting}>
+              Huỷ
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving || deleting}>
+              {saving ? "Đang lưu…" : "Lưu"}
+            </button>
+          </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}
 
 // Upwork-style shared weekly timesheet — every project as a row, Mon–Sun as
 // columns, everyone's hours visible to everyone (this replaced an earlier
@@ -34,8 +141,9 @@ export function HourTimesheet({
     () => Object.fromEntries(channels.map((c) => [c.id, c.weekly_hour_cap])),
   );
   const [loading, setLoading] = useState(false);
-  const [editingCell, setEditingCell] = useState<string | null>(null);
-  const [editingValue, setEditingValue] = useState("");
+  const [editingEntry, setEditingEntry] = useState<{ project: MeetingChannelPublic; date: string } | null>(null);
+  const [entrySaving, setEntrySaving] = useState(false);
+  const [entryDeleting, setEntryDeleting] = useState(false);
   const [editingCap, setEditingCap] = useState<string | null>(null);
   const [capValue, setCapValue] = useState("");
 
@@ -46,7 +154,6 @@ export function HourTimesheet({
 
   async function goToWeek(newStart: string) {
     setWeekStart(newStart);
-    setEditingCell(null);
     setLoading(true);
     try {
       setReports(await listWeekHourReports(newStart));
@@ -57,10 +164,6 @@ export function HourTimesheet({
     }
   }
 
-  function cellKey(channelId: string, date: string) {
-    return `${channelId}-${date}`;
-  }
-
   function reportsFor(channelId: string, date: string) {
     return reports.filter((r) => r.project_channel_id === channelId && r.work_date === date);
   }
@@ -69,47 +172,40 @@ export function HourTimesheet({
     return reports.filter((r) => r.project_channel_id === channelId).reduce((sum, r) => sum + r.hours, 0);
   }
 
-  function startEditingCell(channelId: string, date: string) {
-    const mine = reportsFor(channelId, date).find((r) => r.profile_id === currentUserId);
-    setEditingCap(null);
-    setEditingCell(cellKey(channelId, date));
-    setEditingValue(mine ? String(mine.hours) : "");
+  async function saveEntry(hours: string, note: string): Promise<string | void> {
+    if (!editingEntry) return;
+    const { project, date } = editingEntry;
+    const mine = reportsFor(project.id, date).find((r) => r.profile_id === currentUserId);
+    const parsed = Number(hours.replace(",", "."));
+    if (!(parsed > 0 && parsed <= 24)) return "Nhập số giờ hợp lệ (0 – 24).";
+
+    setEntrySaving(true);
+    try {
+      const saved = await logHours({ projectChannelId: project.id, workDate: date, hours: parsed, note });
+      setReports((prev) => (mine ? prev.map((r) => (r.id === mine.id ? saved : r)) : [...prev, saved]));
+      setEditingEntry(null);
+    } catch (err) {
+      return err instanceof Error ? err.message : "Có lỗi xảy ra";
+    } finally {
+      setEntrySaving(false);
+    }
   }
 
-  async function commitCell(channelId: string, date: string) {
-    const key = cellKey(channelId, date);
-    setEditingCell(null);
-    const mine = reportsFor(channelId, date).find((r) => r.profile_id === currentUserId);
-    const parsed = Number(editingValue.replace(",", "."));
+  async function deleteEntry(): Promise<string | void> {
+    if (!editingEntry) return;
+    const { project, date } = editingEntry;
+    const mine = reportsFor(project.id, date).find((r) => r.profile_id === currentUserId);
+    if (!mine) return;
 
-    if (!editingValue.trim() || !(parsed > 0)) {
-      if (!mine) return;
-      setReports((prev) => prev.filter((r) => r.id !== mine.id));
-      try {
-        await deleteHourEntry(mine.id);
-      } catch {
-        setReports((prev) => (prev.some((r) => r.id === mine.id) ? prev : [...prev, mine]));
-      }
-      return;
-    }
-
-    if (!(parsed > 0 && parsed <= 24)) return;
-
-    const optimistic: HourReport = {
-      id: mine?.id ?? `temp-${key}`,
-      profile_id: currentUserId,
-      project_channel_id: channelId,
-      work_date: date,
-      hours: parsed,
-      note: null,
-      created_at: mine?.created_at ?? new Date().toISOString(),
-    };
-    setReports((prev) => (mine ? prev.map((r) => (r.id === mine.id ? optimistic : r)) : [...prev, optimistic]));
+    setEntryDeleting(true);
     try {
-      const saved = await logHours({ projectChannelId: channelId, workDate: date, hours: parsed });
-      setReports((prev) => prev.map((r) => (r.id === optimistic.id ? saved : r)));
-    } catch {
-      setReports((prev) => (mine ? prev.map((r) => (r.id === optimistic.id ? mine : r)) : prev.filter((r) => r.id !== optimistic.id)));
+      await deleteHourEntry(mine.id);
+      setReports((prev) => prev.filter((r) => r.id !== mine.id));
+      setEditingEntry(null);
+    } catch (err) {
+      return err instanceof Error ? err.message : "Có lỗi xảy ra";
+    } finally {
+      setEntryDeleting(false);
     }
   }
 
@@ -127,12 +223,14 @@ export function HourTimesheet({
     }
   }
 
+  const editingMine = editingEntry ? reportsFor(editingEntry.project.id, editingEntry.date).find((r) => r.profile_id === currentUserId) : null;
+
   return (
     <div className="flex-1 flex flex-col p-3 md:p-6 gap-4 md:gap-5 overflow-y-auto">
       <div>
         <h1 className="text-xl">Báo cáo giờ</h1>
         <p className="text-sm mt-1" style={{ color: "var(--color-neutral-500)" }}>
-          Bấm vào một ô để nhập giờ của bạn — mọi người đều thấy avatar ai đã báo giờ. Di chuột vào để xem chi tiết từng người.
+          Bấm vào một ô để nhập giờ và nội dung công việc — mọi người đều thấy avatar ai đã báo giờ. Di chuột vào để xem chi tiết từng người.
         </p>
       </div>
 
@@ -208,38 +306,20 @@ export function HourTimesheet({
                       {project.icon} {project.name}
                     </td>
                     {days.map((date) => {
-                      const key = cellKey(project.id, date);
                       const entries = reportsFor(project.id, date);
                       const total = entries.reduce((sum, r) => sum + r.hours, 0);
                       const breakdown = entries
-                        .map((r) => `${staffById.get(r.profile_id)?.display_name ?? "?"}: ${r.hours}h`)
-                        .join(", ");
+                        .map((r) => {
+                          const name = staffById.get(r.profile_id)?.display_name ?? "?";
+                          return r.note ? `${name}: ${r.hours}h (${r.note})` : `${name}: ${r.hours}h`;
+                        })
+                        .join("\n");
                       const mine = entries.some((r) => r.profile_id === currentUserId);
 
-                      if (editingCell === key) {
-                        return (
-                          <td key={date} className="px-1 py-1 text-center">
-                            <input
-                              autoFocus
-                              type="text"
-                              inputMode="decimal"
-                              className="input text-center"
-                              style={{ width: 44, padding: "4px 2px" }}
-                              value={editingValue}
-                              onChange={(e) => setEditingValue(e.target.value)}
-                              onBlur={() => commitCell(project.id, date)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") e.currentTarget.blur();
-                                if (e.key === "Escape") setEditingCell(null);
-                              }}
-                            />
-                          </td>
-                        );
-                      }
                       return (
                         <td
                           key={date}
-                          onClick={() => startEditingCell(project.id, date)}
+                          onClick={() => setEditingEntry({ project, date })}
                           title={breakdown || undefined}
                           className="px-1 py-2 text-center cursor-pointer"
                         >
@@ -298,7 +378,6 @@ export function HourTimesheet({
                             style={{ cursor: isHrManager ? "pointer" : "default" }}
                             onClick={() => {
                               if (!isHrManager) return;
-                              setEditingCell(null);
                               setEditingCap(project.id);
                               setCapValue(cap !== null ? String(cap) : "");
                             }}
@@ -327,6 +406,21 @@ export function HourTimesheet({
           </tbody>
         </table>
       </div>
+
+      {editingEntry && (
+        <HourEntryModal
+          projectLabel={`${editingEntry.project.icon} ${editingEntry.project.name}`}
+          date={editingEntry.date}
+          initialHours={editingMine ? String(editingMine.hours) : ""}
+          initialNote={editingMine?.note ?? ""}
+          hasExisting={!!editingMine}
+          saving={entrySaving}
+          deleting={entryDeleting}
+          onSave={saveEntry}
+          onDelete={deleteEntry}
+          onClose={() => setEditingEntry(null)}
+        />
+      )}
     </div>
   );
 }
