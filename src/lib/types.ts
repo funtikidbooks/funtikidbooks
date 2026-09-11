@@ -119,6 +119,9 @@ export type MeetingChannel = {
   // Weekly hour budget shown as a filling progress bar on the "Báo cáo
   // giờ" timesheet — null means no cap set. Director/PM-only to edit.
   weekly_hour_cap: number | null;
+  // "theo giờ" vs "theo chặng" (milestone/fixed-price per phase) — only
+  // 'hourly' rooms show up as a row on the "Báo cáo giờ" timesheet.
+  billing_type: "hourly" | "milestone";
 };
 
 // What the client actually receives for a channel — password_hash is never

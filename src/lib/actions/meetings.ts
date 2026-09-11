@@ -38,7 +38,7 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
     supabase
       .from("meeting_channels")
       .select(
-        "id, name, icon, is_general, is_food_room, created_by, created_at, password_hash, parent_channel_id, weekly_hour_cap",
+        "id, name, icon, is_general, is_food_room, created_by, created_at, password_hash, parent_channel_id, weekly_hour_cap, billing_type",
       )
       .order("is_general", { ascending: false })
       .order("is_food_room", { ascending: false })
@@ -86,6 +86,7 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
       created_at: c.created_at as string,
       parent_channel_id: (c.parent_channel_id as string | null | undefined) ?? null,
       weekly_hour_cap: (c.weekly_hour_cap as number | null | undefined) ?? null,
+      billing_type: ((c.billing_type as "hourly" | "milestone" | undefined) ?? "hourly") as "hourly" | "milestone",
       has_password: !!c.password_hash,
       joined,
       is_new: !isGeneral && !isFoodRoom && joined && seenAtByChannelId.get(c.id as string) == null,
@@ -93,7 +94,13 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
   });
 }
 
-export async function createChannel(name: string, password: string, icon: string, parentChannelId?: string | null) {
+export async function createChannel(
+  name: string,
+  password: string,
+  icon: string,
+  parentChannelId?: string | null,
+  billingType?: "hourly" | "milestone",
+) {
   const { supabase, user } = await requireUser();
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Thiếu tên phòng");
@@ -101,7 +108,9 @@ export async function createChannel(name: string, password: string, icon: string
   // parent_channel_id is only ever included when actually nesting under a
   // room, so a director who hasn't re-run supabase/schema.sql yet (adding
   // that column) can still create ordinary top-level rooms without erroring
-  // — only the sub-room feature itself needs that migration.
+  // — only the sub-room feature itself needs that migration. billing_type
+  // is left out entirely when not passed, same reasoning — its own column
+  // default ('hourly') covers a schema that hasn't been re-run yet either.
   const insertRow: Partial<MeetingChannel> & { name: string; icon: string; is_general: boolean; created_by: string } = {
     name: trimmed,
     icon: icon.trim() || "💬",
@@ -110,6 +119,7 @@ export async function createChannel(name: string, password: string, icon: string
     created_by: user.id,
   };
   if (parentChannelId) insertRow.parent_channel_id = parentChannelId;
+  if (billingType) insertRow.billing_type = billingType;
 
   const { data, error } = await supabase.from("meeting_channels").insert(insertRow).select("id").single();
 
@@ -231,9 +241,12 @@ export async function addChannelMember(channelId: string, profileId: string) {
 // gate here (the UI only ever shows this to the creator, matching how
 // "Xoá phòng" is already gated) — this just turns a plain-text password
 // into a hash before it touches the row, same as createChannel().
-export async function updateChannel(channelId: string, input: { name?: string; password?: string | null }) {
+export async function updateChannel(
+  channelId: string,
+  input: { name?: string; password?: string | null; billingType?: "hourly" | "milestone" },
+) {
   const { supabase } = await requireUser();
-  const patch: { name?: string; password_hash?: string | null } = {};
+  const patch: { name?: string; password_hash?: string | null; billing_type?: "hourly" | "milestone" } = {};
   if (input.name !== undefined) {
     const trimmed = input.name.trim();
     if (!trimmed) throw new Error("Thiếu tên phòng");
@@ -242,6 +255,7 @@ export async function updateChannel(channelId: string, input: { name?: string; p
   if (input.password !== undefined) {
     patch.password_hash = input.password && input.password.trim() ? hashPassword(input.password.trim()) : null;
   }
+  if (input.billingType !== undefined) patch.billing_type = input.billingType;
   const { error } = await supabase.from("meeting_channels").update(patch).eq("id", channelId);
   if (error) throw new Error("Không thể cập nhật phòng");
   revalidatePath("/workspace/hop");

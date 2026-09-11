@@ -2761,3 +2761,14 @@ create policy "hr can manage hour reports"
 -- the timesheet, summed across every staff member logging hours to that
 -- project that week. Director/PM-only to edit (can_manage_hr()).
 alter table public.meeting_channels add column if not exists weekly_hour_cap numeric(5,1);
+
+-- "theo giờ" (hourly) vs "theo chặng" (milestone/fixed-price per phase) —
+-- set at room creation, editable after from "Thông tin phòng" (room
+-- creator or director — same gate as renaming the room). Only 'hourly'
+-- rooms show up on the "Báo cáo giờ" timesheet. Existing rooms default to
+-- 'hourly' so the timesheet doesn't suddenly go empty — sếp Phúc reviews
+-- and flips the milestone-based ones off from there.
+alter table public.meeting_channels add column if not exists billing_type text not null default 'hourly';
+alter table public.meeting_channels drop constraint if exists meeting_channels_billing_type_check;
+alter table public.meeting_channels add constraint meeting_channels_billing_type_check
+  check (billing_type in ('hourly', 'milestone'));

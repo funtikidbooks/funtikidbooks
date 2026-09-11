@@ -150,7 +150,10 @@ export function HourTimesheet({
   const days = weekDaysOf(weekStart);
   const isCurrentWeek = weekStart === mondayOf(vnToday());
   const staffById = useMemo(() => new Map(staff.map((p) => [p.id, p])), [staff]);
-  const projects = useMemo(() => channels.filter((c) => !c.is_general && !c.is_food_room), [channels]);
+  const projects = useMemo(
+    () => channels.filter((c) => !c.is_general && !c.is_food_room && c.billing_type === "hourly"),
+    [channels],
+  );
 
   async function goToWeek(newStart: string) {
     setWeekStart(newStart);
@@ -288,7 +291,7 @@ export function HourTimesheet({
             {projects.length === 0 ? (
               <tr>
                 <td colSpan={10} className="px-3 py-6 text-center text-sm" style={{ color: "var(--color-neutral-500)" }}>
-                  Chưa có phòng dự án nào.
+                  Chưa có dự án nào được đánh dấu &quot;Theo giờ&quot; — vào phòng họp, mở &quot;Thông tin phòng&quot; để chọn.
                 </td>
               </tr>
             ) : (

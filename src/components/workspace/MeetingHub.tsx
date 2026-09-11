@@ -328,6 +328,7 @@ function CreateRoomModal({
   const [locked, setLocked] = useState(false);
   const [icon, setIcon] = useState(ROOM_ICONS[0]);
   const [parentId, setParentId] = useState(initialParentId ?? "");
+  const [billingType, setBillingType] = useState<"hourly" | "milestone">("hourly");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -341,7 +342,7 @@ function CreateRoomModal({
     setSaving(true);
     setError(null);
     try {
-      const id = await createChannel(name, locked ? password : "", icon, parentId || null);
+      const id = await createChannel(name, locked ? password : "", icon, parentId || null, billingType);
       onCreated(id);
       onClose();
     } catch (err) {
@@ -409,6 +410,37 @@ function CreateRoomModal({
             required
             autoFocus
           />
+        </div>
+
+        <div className="field">
+          <label>Loại dự án</label>
+          <div className="flex gap-2 mt-1">
+            {(
+              [
+                { value: "hourly", label: "⏱️ Theo giờ" },
+                { value: "milestone", label: "🚩 Theo chặng" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setBillingType(opt.value)}
+                className="px-3 py-1.5 rounded-full text-sm font-semibold"
+                style={{
+                  background: billingType === opt.value ? "var(--color-accent-500)" : "var(--color-surface)",
+                  color: billingType === opt.value ? "#fff" : "var(--color-text)",
+                  border: `1.5px solid ${billingType === opt.value ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {billingType === "hourly" && (
+            <p className="text-[11px] mt-1" style={{ color: "var(--color-neutral-500)" }}>
+              Dự án theo giờ sẽ xuất hiện trong &quot;Báo cáo giờ&quot; để nhân viên ghi giờ làm.
+            </p>
+          )}
         </div>
 
         <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
@@ -643,6 +675,7 @@ function RoomInfoDropdown({
   channelId,
   channelName,
   hasPassword,
+  billingType,
   isOwner,
   profiles,
   onClose,
@@ -653,10 +686,11 @@ function RoomInfoDropdown({
   channelId: string;
   channelName: string;
   hasPassword: boolean;
+  billingType: "hourly" | "milestone";
   isOwner: boolean;
   profiles: Profile[];
   onClose: () => void;
-  onUpdated: (patch: { name?: string; has_password?: boolean }) => void;
+  onUpdated: (patch: { name?: string; has_password?: boolean; billing_type?: "hourly" | "milestone" }) => void;
   onMemberAdded: (profileId: string) => void;
   onMemberRemoved: (profileId: string) => void;
 }) {
@@ -679,6 +713,7 @@ function RoomInfoDropdown({
   const [passwordEnabled, setPasswordEnabled] = useState(hasPassword);
   const [currentHasPassword, setCurrentHasPassword] = useState(hasPassword);
   const [passwordInput, setPasswordInput] = useState("");
+  const [billingTypeInput, setBillingTypeInput] = useState(billingType);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSaved, setSettingsSaved] = useState(false);
@@ -689,15 +724,16 @@ function RoomInfoDropdown({
     setSettingsError(null);
     setSettingsSaved(false);
     try {
-      const patch: { name?: string; password?: string | null } = {};
+      const patch: { name?: string; password?: string | null; billingType?: "hourly" | "milestone" } = {};
       const trimmedName = nameInput.trim();
       if (trimmedName && trimmedName !== channelName) patch.name = trimmedName;
       if (!passwordEnabled && currentHasPassword) patch.password = null;
       else if (passwordEnabled && passwordInput.trim()) patch.password = passwordInput.trim();
+      if (billingTypeInput !== billingType) patch.billingType = billingTypeInput;
 
       if (Object.keys(patch).length > 0) {
         await updateChannel(channelId, patch);
-        onUpdated({ name: patch.name, has_password: passwordEnabled });
+        onUpdated({ name: patch.name, has_password: passwordEnabled, billing_type: patch.billingType });
         setCurrentHasPassword(passwordEnabled);
         setPasswordInput("");
       }
@@ -830,6 +866,31 @@ function RoomInfoDropdown({
                 onChange={(e) => setNameInput(e.target.value.slice(0, 60))}
                 style={{ padding: "6px 10px", fontSize: 13 }}
               />
+            </div>
+            <div className="field">
+              <label className="text-[11px]">Loại dự án</label>
+              <div className="flex gap-2 mt-1">
+                {(
+                  [
+                    { value: "hourly", label: "⏱️ Theo giờ" },
+                    { value: "milestone", label: "🚩 Theo chặng" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setBillingTypeInput(opt.value)}
+                    className="px-2.5 py-1 rounded-full text-[12px] font-semibold"
+                    style={{
+                      background: billingTypeInput === opt.value ? "var(--color-accent-500)" : "var(--color-surface)",
+                      color: billingTypeInput === opt.value ? "#fff" : "var(--color-text)",
+                      border: `1.5px solid ${billingTypeInput === opt.value ? "var(--color-accent-500)" : "var(--color-neutral-200)"}`,
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <label className="flex items-center gap-2 text-[12px] font-semibold cursor-pointer">
               <input type="checkbox" checked={passwordEnabled} onChange={(e) => setPasswordEnabled(e.target.checked)} />
@@ -1006,7 +1067,8 @@ export function MeetingHub({
   const [dmTabLabel, setDmTabLabelState] = useState(initialDmTabLabel);
   const [showLabelsEditor, setShowLabelsEditor] = useState(false);
   const myProfile = profiles.find((p) => p.id === currentUser.id);
-  const isDirectorOrPm = myProfile?.access_role === "director" || myProfile?.role === "Project Manager";
+  const isDirector = myProfile?.access_role === "director";
+  const isDirectorOrPm = isDirector || myProfile?.role === "Project Manager";
   const [activeId, setActiveId] = useState<string | null>(
     initialChannels.find((c) => c.is_general)?.id ?? initialChannels[0]?.id ?? null,
   );
@@ -2272,7 +2334,7 @@ export function MeetingHub({
     selectChannel(id);
   }
 
-  function handleChannelUpdated(id: string, patch: { name?: string; has_password?: boolean }) {
+  function handleChannelUpdated(id: string, patch: { name?: string; has_password?: boolean; billing_type?: "hourly" | "milestone" }) {
     setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   }
 
@@ -3977,7 +4039,8 @@ export function MeetingHub({
                 channelId={activeChannel.id}
                 channelName={activeChannel.name}
                 hasPassword={activeChannel.has_password}
-                isOwner={activeChannel.created_by === currentUser.id}
+                billingType={activeChannel.billing_type}
+                isOwner={activeChannel.created_by === currentUser.id || isDirector}
                 profiles={profiles.filter((p) => p.id !== currentUser.id)}
                 onClose={() => setShowAddMember(false)}
                 onUpdated={(patch) => handleChannelUpdated(activeChannel.id, patch)}
