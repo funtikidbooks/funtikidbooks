@@ -20,6 +20,7 @@ const NAV = [
 // everything after Trò chuyện & họp is more "internal tooling" than the
 // core workspace/chat pair above it.
 const INTERNAL_NAV = [
+  { href: "/workspace/bao-cao-gio", label: "Báo cáo giờ", icon: "⏱️", enabled: true },
   { href: "/workspace/kho-font", label: "Kho font & brush", icon: "🔤", enabled: true },
   { href: "/workspace/tinh-kho-sach", label: "Tính khổ sách", icon: "📐", enabled: true },
   { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️", enabled: true },

@@ -20,6 +20,7 @@ const PRIMARY_NAV = [
 ];
 
 const MORE_NAV = [
+  { href: "/workspace/bao-cao-gio", label: "Báo cáo giờ", icon: "⏱️" },
   { href: "/workspace/kho-font", label: "Kho font & brush", icon: "🔤" },
   { href: "/workspace/tinh-kho-sach", label: "Tính khổ sách", icon: "📐" },
   { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️" },

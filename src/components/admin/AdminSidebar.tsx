@@ -23,7 +23,6 @@ const NAV = [
 const HR_NAV = [
   { href: "/quan-tri/nhan-su", label: "Nhân sự & phân quyền", icon: "🧑‍🤝‍🧑" },
   { href: "/quan-tri/cham-cong", label: "Chấm công", icon: "🕐" },
-  { href: "/quan-tri/bao-cao-gio", label: "Báo cáo giờ", icon: "📊" },
   { href: "/quan-tri/bang-luong", label: "Bảng lương", icon: "💰" },
   { href: "/quan-tri/hop-dong", label: "Hợp đồng", icon: "📄" },
   { href: "/quan-tri/hoa-don", label: "Tạo hoá đơn điện tử", icon: "🧾" },
@@ -40,11 +39,9 @@ const DIRECTOR_ONLY_NAV = [
 export function AdminSidebar({
   user,
   initialPendingPayrollFeedbackIds,
-  initialUnreviewedHourReportIds,
 }: {
   user: { displayName: string; email: string; accessRole: AccessRole; jobTitle: string | null };
   initialPendingPayrollFeedbackIds: string[];
-  initialUnreviewedHourReportIds: string[];
 }) {
   const pathname = usePathname();
   const isDirector = user.accessRole === "director";
@@ -83,50 +80,11 @@ export function AdminSidebar({
 
   const hasPendingPayrollFeedback = pendingFeedbackIds.size > 0;
 
-  // Same pattern again for "Báo cáo giờ" — an hour report can't quietly
-  // scroll past unnoticed in chat if there's a live dot here the moment one
-  // comes in, cleared the moment someone ticks "Đã xem" on the page itself.
-  const [unreviewedHourReportIds, setUnreviewedHourReportIds] = useState<Set<string>>(
-    () => new Set(initialUnreviewedHourReportIds),
-  );
-
-  useEffect(() => {
-    if (!isDirector && !isProjectManager) return;
-    const supabase = createClient();
-    const channel = supabase
-      .channel("sidebar-hour-reports-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "hour_reports" }, (payload) => {
-        const isDelete = payload.eventType === "DELETE";
-        const row = (isDelete ? payload.old : payload.new) as { id: string; reviewed_at: string | null };
-        setUnreviewedHourReportIds((prev) => {
-          const next = new Set(prev);
-          if (isDelete || row.reviewed_at) next.delete(row.id);
-          else next.add(row.id);
-          return next;
-        });
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [isDirector, isProjectManager]);
-
-  const hasUnreviewedHourReports = unreviewedHourReportIds.size > 0;
-
   // Closing here (not via a pathname-watching effect) mirrors how
   // MobileNav's own "Thêm" sheet closes itself — every navigational
   // element in the drawer just closes it directly on click. A no-op on
   // the desktop <aside> instance since mobileOpen is already false there.
-  function NavLink({
-    item,
-    showDot,
-    dotTitle,
-  }: {
-    item: { href: string; label: string; icon: string };
-    showDot?: boolean;
-    dotTitle?: string;
-  }) {
+  function NavLink({ item, showDot }: { item: { href: string; label: string; icon: string }; showDot?: boolean }) {
     const active = pathname.startsWith(item.href);
     return (
       <Link
@@ -142,7 +100,7 @@ export function AdminSidebar({
         {item.label}
         {showDot && (
           <span
-            title={dotTitle ?? "Có thắc mắc lương chưa xử lý"}
+            title="Có thắc mắc lương chưa xử lý"
             className="rounded-full flex-none"
             style={{ width: 8, height: 8, background: "var(--status-red)" }}
           />
@@ -201,11 +159,7 @@ export function AdminSidebar({
             <NavLink
               key={item.href}
               item={item}
-              showDot={
-                (item.href === "/quan-tri/bang-luong" && hasPendingPayrollFeedback) ||
-                (item.href === "/quan-tri/bao-cao-gio" && hasUnreviewedHourReports)
-              }
-              dotTitle={item.href === "/quan-tri/bao-cao-gio" ? "Có báo cáo giờ chưa xem" : undefined}
+              showDot={item.href === "/quan-tri/bang-luong" && hasPendingPayrollFeedback}
             />
           ))}
           {isDirector && DIRECTOR_ONLY_NAV.map((item) => <NavLink key={item.href} item={item} />)}

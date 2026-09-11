@@ -116,6 +116,9 @@ export type MeetingChannel = {
   created_by: string | null;
   created_at: string;
   parent_channel_id: string | null;
+  // Weekly hour budget shown as a filling progress bar on the "Báo cáo
+  // giờ" timesheet — null means no cap set. Director/PM-only to edit.
+  weekly_hour_cap: number | null;
 };
 
 // What the client actually receives for a channel — password_hash is never
@@ -350,12 +353,9 @@ export type HourReport = {
   id: string;
   profile_id: string;
   project_channel_id: string | null;
-  message_id: string | null;
   work_date: string;
   hours: number;
   note: string | null;
-  reviewed_at: string | null;
-  reviewed_by: string | null;
   created_at: string;
 };
 

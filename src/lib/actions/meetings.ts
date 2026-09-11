@@ -37,7 +37,9 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
   const [channelsResult, membershipsResult] = await Promise.all([
     supabase
       .from("meeting_channels")
-      .select("id, name, icon, is_general, is_food_room, created_by, created_at, password_hash, parent_channel_id")
+      .select(
+        "id, name, icon, is_general, is_food_room, created_by, created_at, password_hash, parent_channel_id, weekly_hour_cap",
+      )
       .order("is_general", { ascending: false })
       .order("is_food_room", { ascending: false })
       .order("created_at", { ascending: true }),
@@ -83,6 +85,7 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
       created_by: c.created_by as string | null,
       created_at: c.created_at as string,
       parent_channel_id: (c.parent_channel_id as string | null | undefined) ?? null,
+      weekly_hour_cap: (c.weekly_hour_cap as number | null | undefined) ?? null,
       has_password: !!c.password_hash,
       joined,
       is_new: !isGeneral && !isFoodRoom && joined && seenAtByChannelId.get(c.id as string) == null,

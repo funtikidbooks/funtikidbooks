@@ -7,7 +7,6 @@ import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
 import { useChatManager, useLiveProfiles } from "@/components/workspace/ChatManager";
 import { DirectMessagesPanel } from "@/components/workspace/DirectMessagesPanel";
-import { HourReportModal } from "@/components/workspace/HourReportModal";
 import type { ForwardableAttachment } from "@/components/workspace/ForwardMessageModal";
 
 // Code-split: each of these only ever renders once its own trigger state
@@ -1189,7 +1188,6 @@ export function MeetingHub({
   const [showPinned, setShowPinned] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<MeetingMessage[]>(initialPinnedMessages);
   const [showVideoCall, setShowVideoCall] = useState(false);
-  const [showHourReport, setShowHourReport] = useState(false);
   const [lightbox, setLightbox] = useState<{ url: string; filename: string | null } | null>(null);
   // Shows a floating "jump to latest" button once the reader has scrolled
   // far enough from the bottom that the auto-stick-to-bottom behavior
@@ -4216,16 +4214,6 @@ export function MeetingHub({
                 >
                   📞
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowHourReport(true)}
-                  className="btn-icon flex-none"
-                  style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
-                  aria-label="Báo cáo giờ"
-                  title="Báo cáo giờ làm theo dự án"
-                >
-                  📊
-                </button>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -4289,9 +4277,6 @@ export function MeetingHub({
           displayName={currentUser.display_name}
           onClose={() => setShowVideoCall(false)}
         />
-      )}
-      {showHourReport && activeId && (
-        <HourReportModal channels={channels} postChannelId={activeId} onClose={() => setShowHourReport(false)} />
       )}
       {lightbox && (
         <ImageLightbox url={lightbox.url} filename={lightbox.filename} onClose={() => setLightbox(null)} />

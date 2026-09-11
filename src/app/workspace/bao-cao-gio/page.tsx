@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { listHourReports, listUnreviewedHourReportIds } from "@/lib/actions/hourReports";
+import { listWeekHourReports } from "@/lib/actions/hourReports";
 import { listChannels } from "@/lib/actions/meetings";
-import { HourReportsAdmin } from "@/components/admin/HourReportsAdmin";
+import { HourTimesheet } from "@/components/workspace/HourTimesheet";
+import { mondayOf, vnToday } from "@/lib/constants/attendance";
 import type { Profile } from "@/lib/types";
 
-export const metadata: Metadata = { title: "Quản trị — Báo cáo giờ" };
+export const metadata: Metadata = { title: "Báo cáo giờ" };
 
-export default async function AdminHourReportsPage() {
+export default async function HourTimesheetPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -18,14 +18,10 @@ export default async function AdminHourReportsPage() {
     .select("access_role, role")
     .eq("id", user!.id)
     .maybeSingle();
+  const isHrManager = profile?.access_role === "director" || profile?.role === "Project Manager";
 
-  if (profile?.access_role !== "director" && profile?.role !== "Project Manager") {
-    redirect("/quan-tri");
-  }
-
-  const [reports, unreviewedIds, channels, { data: profiles }] = await Promise.all([
-    listHourReports(),
-    listUnreviewedHourReportIds(),
+  const [reports, channels, { data: profiles }] = await Promise.all([
+    listWeekHourReports(mondayOf(vnToday())),
     listChannels(),
     supabase
       .from("profiles")
@@ -34,11 +30,12 @@ export default async function AdminHourReportsPage() {
   ]);
 
   return (
-    <HourReportsAdmin
+    <HourTimesheet
       initialReports={reports}
-      initialUnreviewedCount={unreviewedIds.length}
       channels={channels}
       staff={(profiles ?? []) as Profile[]}
+      currentUserId={user!.id}
+      isHrManager={isHrManager}
     />
   );
 }
