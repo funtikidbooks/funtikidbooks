@@ -128,7 +128,7 @@ export function HourTimesheet({
   }
 
   return (
-    <div className="flex-1 flex flex-col p-6 gap-5 overflow-y-auto">
+    <div className="flex-1 flex flex-col p-3 md:p-6 gap-4 md:gap-5 overflow-y-auto">
       <div>
         <h1 className="text-xl">Báo cáo giờ</h1>
         <p className="text-sm mt-1" style={{ color: "var(--color-neutral-500)" }}>
@@ -153,24 +153,35 @@ export function HourTimesheet({
         )}
       </div>
 
+      {/* Dự án column stays pinned (position: sticky) while the rest of the
+          table scrolls horizontally underneath it — on iPad/phone this is
+          the difference between always knowing which row you're on and
+          having to scroll back left every time to check. */}
       <div style={{ opacity: loading ? 0.6 : 1 }} className="card overflow-x-auto">
         <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-              <th className="text-left px-3 py-2 text-[11px] font-bold" style={{ color: "var(--color-neutral-500)" }}>
+              <th
+                className="text-left px-2 md:px-3 py-2 text-[11px] font-bold"
+                style={{ color: "var(--color-neutral-500)", position: "sticky", left: 0, background: "var(--color-panel)", zIndex: 2 }}
+              >
                 Dự án
               </th>
               {days.map((date, i) => (
-                <th key={date} className="text-center px-2 py-2 text-[11px] font-bold" style={{ color: "var(--color-neutral-500)", minWidth: 64 }}>
+                <th
+                  key={date}
+                  className="text-center px-1 md:px-2 py-2 text-[11px] font-bold"
+                  style={{ color: "var(--color-neutral-500)", minWidth: 48 }}
+                >
                   {WEEKDAYS_SHORT[i]}
                   <br />
                   {formatDayLabel(date)}
                 </th>
               ))}
-              <th className="text-center px-3 py-2 text-[11px] font-bold" style={{ color: "var(--color-neutral-500)" }}>
-                Tổng tuần
+              <th className="text-center px-2 md:px-3 py-2 text-[11px] font-bold" style={{ color: "var(--color-neutral-500)", minWidth: 56 }}>
+                Tổng
               </th>
-              <th className="text-center px-3 py-2 text-[11px] font-bold" style={{ color: "var(--color-neutral-500)", minWidth: 130 }}>
+              <th className="text-center px-2 md:px-3 py-2 text-[11px] font-bold" style={{ color: "var(--color-neutral-500)", minWidth: 100 }}>
                 Tối đa/tuần
               </th>
             </tr>
@@ -190,7 +201,10 @@ export function HourTimesheet({
                 const overCap = cap !== null && weekTotal > cap;
                 return (
                   <tr key={project.id} style={{ borderBottom: "1px solid var(--color-neutral-100)" }}>
-                    <td className="px-3 py-2 truncate max-w-[180px]">
+                    <td
+                      className="px-2 md:px-3 py-2 truncate max-w-[130px] md:max-w-[180px]"
+                      style={{ position: "sticky", left: 0, background: "var(--color-panel)", zIndex: 1 }}
+                    >
                       {project.icon} {project.name}
                     </td>
                     {days.map((date) => {
@@ -210,7 +224,7 @@ export function HourTimesheet({
                               type="text"
                               inputMode="decimal"
                               className="input text-center"
-                              style={{ width: 56, padding: "4px 2px" }}
+                              style={{ width: 44, padding: "4px 2px" }}
                               value={editingValue}
                               onChange={(e) => setEditingValue(e.target.value)}
                               onBlur={() => commitCell(project.id, date)}
@@ -227,7 +241,7 @@ export function HourTimesheet({
                           key={date}
                           onClick={() => startEditingCell(project.id, date)}
                           title={breakdown || undefined}
-                          className="px-2 py-2 text-center cursor-pointer"
+                          className="px-1 py-2 text-center cursor-pointer"
                         >
                           {entries.length === 0 ? (
                             <span style={{ color: "var(--color-neutral-300)" }}>–</span>
@@ -241,13 +255,13 @@ export function HourTimesheet({
                                     <div
                                       key={r.id}
                                       style={{
-                                        marginLeft: i === 0 ? 0 : -8,
+                                        marginLeft: i === 0 ? 0 : -7,
                                         borderRadius: "50%",
                                         border: `1.5px solid ${isMe ? "var(--color-accent-500)" : "var(--color-surface)"}`,
                                         zIndex: entries.length - i,
                                       }}
                                     >
-                                      <AttendanceAvatar profile={person} size={18} />
+                                      <AttendanceAvatar profile={person} size={16} />
                                     </div>
                                   ) : null;
                                 })}
@@ -260,8 +274,8 @@ export function HourTimesheet({
                         </td>
                       );
                     })}
-                    <td className="px-3 py-2 text-center font-bold whitespace-nowrap">{weekTotal || "–"}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 md:px-3 py-2 text-center font-bold whitespace-nowrap">{weekTotal || "–"}</td>
+                    <td className="px-2 md:px-3 py-2">
                       <div className="flex flex-col gap-1 items-center">
                         {isHrManager && editingCap === project.id ? (
                           <input
@@ -269,7 +283,7 @@ export function HourTimesheet({
                             type="text"
                             inputMode="decimal"
                             className="input text-center"
-                            style={{ width: 60, padding: "2px 4px" }}
+                            style={{ width: 52, padding: "2px 4px" }}
                             value={capValue}
                             onChange={(e) => setCapValue(e.target.value)}
                             onBlur={() => commitCap(project.id)}
