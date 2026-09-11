@@ -14,6 +14,7 @@ import { MessengerButton } from "@/components/workspace/MessengerButton";
 import { MobileNav } from "@/components/workspace/MobileNav";
 import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
 import { IosInstallHint, PushSetup } from "@/components/workspace/PushSetup";
+import { AutoReloadWatchdog } from "@/components/workspace/AutoReloadWatchdog";
 import { getUnreadCounts } from "@/lib/actions/messages";
 import { checkInIfNeeded } from "@/lib/actions/attendance";
 import { countMyPendingDocuments } from "@/lib/actions/documents";
@@ -103,6 +104,7 @@ export default async function WorkspaceLayout({
 
   return (
     <ChatManagerProvider currentUserId={user.id} initialUnreadCounts={unreadCounts}>
+      <AutoReloadWatchdog />
       <TabNotificationBadge />
       <ThemeSync serverTheme={myProfile.theme} />
       <PushSetup />
