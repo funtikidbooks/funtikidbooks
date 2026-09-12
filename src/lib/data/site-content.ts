@@ -1,5 +1,5 @@
 import "server-only";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getViewer } from "@/lib/supabase/server";
 import type { AccessRole, JobPosting, NewsPost, Project, Review } from "@/lib/types";
 
 export async function getProjects(includeUnpublished = false): Promise<Project[]> {
@@ -136,20 +136,9 @@ export async function getJsonSetting<T>(key: string, fallback: T): Promise<T> {
 export async function getContentEditorRole(): Promise<AccessRole | null> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return null;
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return null;
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("access_role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const role = profile?.access_role as AccessRole | undefined;
-    return role === "director" || role === "admin" ? role : null;
+    const viewer = await getViewer();
+    if (!viewer) return null;
+    return viewer.accessRole === "director" || viewer.accessRole === "admin" ? viewer.accessRole : null;
   } catch {
     return null;
   }

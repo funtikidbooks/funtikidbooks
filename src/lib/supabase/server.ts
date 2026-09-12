@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import type { Database } from "@/lib/types";
+import type { AccessRole, Database } from "@/lib/types";
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -52,4 +52,26 @@ export const requireUser = cache(async () => {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Bạn cần đăng nhập.");
   return { supabase, user };
+});
+
+// Same dedup as requireUser() above, but for the public marketing site's
+// two independent per-request checks that both need to tolerate an
+// anonymous visitor instead of throwing: the layout's header
+// (isAuthenticated/memberHref) and each page's inline-editor-role gate
+// (canEdit). Before this, an anonymous page load paid for the
+// auth.getUser() round trip AND the profiles lookup twice over — once per
+// caller — even though neither caller needs anything the other didn't
+// already fetch.
+export const getViewer = cache(async (): Promise<{ userId: string; accessRole: AccessRole } | null> => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("access_role")
+    .eq("id", user.id)
+    .maybeSingle();
+  return { userId: user.id, accessRole: (profile?.access_role as AccessRole | undefined) ?? "staff" };
 });
