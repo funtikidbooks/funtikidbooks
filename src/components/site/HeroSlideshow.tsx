@@ -9,13 +9,6 @@ import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 
 const ROTATE_MS = 6000;
 
-// Ken Burns-style motion while a slide is on screen — a slow zoom-in with a
-// gentle drift left, held until the crossfade to the next slide. Visitors
-// only (see `canEdit` gate below): a director dragging/zooming the photo
-// needs a still, predictable frame to line the crop up against, not one
-// that's also quietly animating out from under their cursor.
-const KEN_BURNS_CLASS = "fk-kb-zoom-pan-left";
-
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
@@ -58,10 +51,6 @@ export function HeroSlideshow({
   // even though only one is visible — only mount the <img> once a slide has
   // actually been reached, so the rest load lazily as the rotation gets there.
   const [loaded, setLoaded] = useState<Set<number>>(() => new Set([0]));
-  // Bumped every goTo — the active slide's wrapper is keyed on this (see
-  // below) so remounting it restarts the Ken Burns animation each time it
-  // becomes active again, instead of playing once and freezing.
-  const [cycle, setCycle] = useState(0);
 
   // Clamp at render time instead of via an effect — avoids an extra render
   // when a slide is removed and the current index falls out of range.
@@ -75,7 +64,6 @@ export function HeroSlideshow({
   function goTo(i: number) {
     setIndex(i);
     setLoaded((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
-    setCycle((c) => c + 1);
   }
 
   async function savePosition() {
@@ -166,37 +154,22 @@ export function HeroSlideshow({
           const t = transforms[src] ?? DEFAULT_IMAGE_TRANSFORM;
           const isActive = i === safeIndex;
           return (
-            // Stays mounted the whole time (stable key) so this opacity
-            // transition actually has a previous state to animate from —
-            // a freshly-mounted element just appears at its final opacity
-            // instantly, no fade. The Ken Burns re-trigger below needs its
-            // own remountable node instead of reusing this one.
             <div
               key={src}
               className="absolute inset-0 transition-opacity"
               style={{ opacity: isActive ? 1 : 0, transitionDuration: "1200ms" }}
             >
-              {/* Only animates for visitors — an editing director needs a
-                  still frame to line the crop up against. Keyed on `cycle`
-                  (bumped every goTo) so the animation restarts each time
-                  this slide becomes active again, instead of playing once
-                  on mount and sitting frozen at its end state. */}
-              <div
-                key={isActive ? `${src}-${cycle}` : `${src}-static`}
-                className={`absolute inset-0 ${isActive && !canEdit ? KEN_BURNS_CLASS : ""}`}
-              >
-                {loaded.has(i) && (
-                  <Image
-                    src={isSupabaseStorageUrl(src) ? (resizedUrl(src, 1600) ?? src) : src}
-                    alt="Funti Kidbooks Studio"
-                    fill
-                    priority={i === 0}
-                    unoptimized={isSupabaseStorageUrl(src)}
-                    className="object-cover"
-                    style={{ transform: `scale(${t.zoom / 100})`, objectPosition: `${t.posX}% ${t.posY}%`, pointerEvents: "none" }}
-                  />
-                )}
-              </div>
+              {loaded.has(i) && (
+                <Image
+                  src={isSupabaseStorageUrl(src) ? (resizedUrl(src, 1600) ?? src) : src}
+                  alt="Funti Kidbooks Studio"
+                  fill
+                  priority={i === 0}
+                  unoptimized={isSupabaseStorageUrl(src)}
+                  className="object-cover"
+                  style={{ transform: `scale(${t.zoom / 100})`, objectPosition: `${t.posX}% ${t.posY}%`, pointerEvents: "none" }}
+                />
+              )}
             </div>
           );
         })}
