@@ -165,28 +165,38 @@ export function HeroSlideshow({
         {slides.map((src, i) => {
           const t = transforms[src] ?? DEFAULT_IMAGE_TRANSFORM;
           const isActive = i === safeIndex;
-          // Only animates for visitors — an editing director needs a still
-          // frame to line the crop up against, not one drifting on its own.
-          // Keyed on `cycle` (bumped every goTo) so the animation restarts
-          // each time this slide becomes active again, instead of playing
-          // once on mount and then sitting frozen at its end state.
           return (
+            // Stays mounted the whole time (stable key) so this opacity
+            // transition actually has a previous state to animate from —
+            // a freshly-mounted element just appears at its final opacity
+            // instantly, no fade. The Ken Burns re-trigger below needs its
+            // own remountable node instead of reusing this one.
             <div
-              key={isActive ? `${src}-${cycle}` : src}
-              className={`absolute inset-0 transition-opacity ${isActive && !canEdit ? KEN_BURNS_CLASS : ""}`}
+              key={src}
+              className="absolute inset-0 transition-opacity"
               style={{ opacity: isActive ? 1 : 0, transitionDuration: "1200ms" }}
             >
-              {loaded.has(i) && (
-                <Image
-                  src={isSupabaseStorageUrl(src) ? (resizedUrl(src, 1600) ?? src) : src}
-                  alt="Funti Kidbooks Studio"
-                  fill
-                  priority={i === 0}
-                  unoptimized={isSupabaseStorageUrl(src)}
-                  className="object-cover"
-                  style={{ transform: `scale(${t.zoom / 100})`, objectPosition: `${t.posX}% ${t.posY}%`, pointerEvents: "none" }}
-                />
-              )}
+              {/* Only animates for visitors — an editing director needs a
+                  still frame to line the crop up against. Keyed on `cycle`
+                  (bumped every goTo) so the animation restarts each time
+                  this slide becomes active again, instead of playing once
+                  on mount and sitting frozen at its end state. */}
+              <div
+                key={isActive ? `${src}-${cycle}` : `${src}-static`}
+                className={`absolute inset-0 ${isActive && !canEdit ? KEN_BURNS_CLASS : ""}`}
+              >
+                {loaded.has(i) && (
+                  <Image
+                    src={isSupabaseStorageUrl(src) ? (resizedUrl(src, 1600) ?? src) : src}
+                    alt="Funti Kidbooks Studio"
+                    fill
+                    priority={i === 0}
+                    unoptimized={isSupabaseStorageUrl(src)}
+                    className="object-cover"
+                    style={{ transform: `scale(${t.zoom / 100})`, objectPosition: `${t.posX}% ${t.posY}%`, pointerEvents: "none" }}
+                  />
+                )}
+              </div>
             </div>
           );
         })}
