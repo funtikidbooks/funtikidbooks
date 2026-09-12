@@ -1,11 +1,20 @@
 import "server-only";
 import { createClient, getViewer } from "@/lib/supabase/server";
+import { createPublicClient } from "@/lib/supabase/public";
 import type { AccessRole, JobPosting, NewsPost, Project, Review } from "@/lib/types";
 
+// Every function below that can run with `includeUnpublished = false` uses
+// the cookie-free public client, not the cookie-aware one from
+// lib/supabase/server.ts — that's what lets the marketing pages calling
+// them be statically served instead of re-run on every request. Only pass
+// `includeUnpublished = true` from a place that already knows the caller is
+// a signed-in director/admin (currently: the client-triggered actions in
+// lib/actions/editorContent.ts), since that path needs the real session for
+// RLS to release draft rows and necessarily makes its caller dynamic.
 export async function getProjects(includeUnpublished = false): Promise<Project[]> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return [];
   try {
-    const supabase = await createClient();
+    const supabase = includeUnpublished ? await createClient() : createPublicClient();
     let query = supabase.from("projects").select("*").order("position", { ascending: true });
     if (!includeUnpublished) query = query.eq("published", true);
     const { data } = await query;
@@ -24,7 +33,7 @@ export async function getPublishedProjects(): Promise<Project[]> {
 export async function getNewsPosts(includeUnpublished = false): Promise<NewsPost[]> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return [];
   try {
-    const supabase = await createClient();
+    const supabase = includeUnpublished ? await createClient() : createPublicClient();
     let query = supabase.from("news_posts").select("*").order("created_at", { ascending: false });
     if (!includeUnpublished) query = query.eq("published", true);
     const { data } = await query;
@@ -54,7 +63,7 @@ export async function getNewsPostBySlug(slug: string): Promise<NewsPost | null> 
 export async function getJobPostings(includeUnpublished = false): Promise<JobPosting[]> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return [];
   try {
-    const supabase = await createClient();
+    const supabase = includeUnpublished ? await createClient() : createPublicClient();
     let query = supabase.from("job_postings").select("*").order("created_at", { ascending: false });
     if (!includeUnpublished) query = query.eq("published", true);
     const { data } = await query;
@@ -80,7 +89,7 @@ export async function getJobPostingBySlug(slug: string): Promise<JobPosting | nu
 export async function getReviews(includeUnpublished = false): Promise<Review[]> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return [];
   try {
-    const supabase = await createClient();
+    const supabase = includeUnpublished ? await createClient() : createPublicClient();
     let query = supabase.from("reviews").select("*").order("position", { ascending: true });
     if (!includeUnpublished) query = query.eq("published", true);
     const { data } = await query;
@@ -93,7 +102,7 @@ export async function getReviews(includeUnpublished = false): Promise<Review[]> 
 export async function getSiteSettings(keys: string[]): Promise<Record<string, string>> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return {};
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data } = await supabase.from("site_settings").select("key, value").in("key", keys);
     const map: Record<string, string> = {};
     for (const row of data ?? []) map[row.key] = row.value;
@@ -106,7 +115,7 @@ export async function getSiteSettings(keys: string[]): Promise<Record<string, st
 export async function getHeroSlides(key: string, fallback: string[]): Promise<string[]> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return fallback;
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data } = await supabase.from("site_settings").select("value").eq("key", key).maybeSingle();
     if (!data?.value) return fallback;
     const parsed = JSON.parse(data.value);
@@ -122,7 +131,7 @@ export async function getHeroSlides(key: string, fallback: string[]): Promise<st
 export async function getJsonSetting<T>(key: string, fallback: T): Promise<T> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return fallback;
   try {
-    const supabase = await createClient();
+    const supabase = createPublicClient();
     const { data } = await supabase.from("site_settings").select("value").eq("key", key).maybeSingle();
     if (!data?.value) return fallback;
     return JSON.parse(data.value) as T;

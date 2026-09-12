@@ -5,21 +5,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useDict, useLocale } from "@/components/site/LocaleProvider";
+import { useViewer } from "@/components/site/ViewerProvider";
 import { SiteThemeToggle } from "@/components/site/SiteThemeToggle";
 
-export function Header({
-  isAuthenticated,
-  memberHref = "/workspace",
-}: {
-  isAuthenticated: boolean;
-  memberHref?: string;
-}) {
+export function Header() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
   const lastScrollY = useRef(0);
   const openRef = useRef(open);
   const { t } = useDict();
+  const { isAuthenticated, memberHref } = useViewer();
 
   useEffect(() => {
     openRef.current = open;
@@ -218,19 +214,18 @@ export function Header({
 }
 
 function LanguageToggle() {
-  const { locale, setLocale, pending } = useLocale();
+  const { locale, setLocale } = useLocale();
 
   return (
     <div
       className="lang-toggle flex items-center rounded-full text-xs font-bold flex-none"
-      style={{ border: "1.5px solid var(--color-neutral-300)", opacity: pending ? 0.6 : 1 }}
+      style={{ border: "1.5px solid var(--color-neutral-300)" }}
       role="group"
       aria-label="Language"
     >
       <button
         type="button"
         onClick={() => setLocale("vi")}
-        disabled={pending}
         className="lang-toggle-btn"
         style={{
           background: locale === "vi" ? "var(--color-accent-500)" : "transparent",
@@ -242,7 +237,6 @@ function LanguageToggle() {
       <button
         type="button"
         onClick={() => setLocale("en")}
-        disabled={pending}
         className="lang-toggle-btn"
         style={{
           background: locale === "en" ? "var(--color-accent-500)" : "transparent",

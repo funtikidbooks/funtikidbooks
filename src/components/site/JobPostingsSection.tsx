@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useDict } from "@/components/site/LocaleProvider";
@@ -71,6 +71,11 @@ export function JobPostingsSection({ initialPosts, canEdit }: { initialPosts: Jo
   const [posts, setPosts] = useState(initialPosts);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<JobPosting | "new" | null>(null);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPosts(initialPosts);
+  }, [initialPosts]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

@@ -1,10 +1,11 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
-import type { Locale } from "@/lib/i18n";
-import { dictionary } from "@/lib/dictionary";
+import { useDict } from "@/components/site/LocaleProvider";
 
-export function Footer({ locale }: { locale: Locale }) {
-  const t = dictionary[locale];
+export function Footer() {
+  const { t } = useDict();
 
   const COLUMNS = [
     {

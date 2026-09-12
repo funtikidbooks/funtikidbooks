@@ -1,28 +1,36 @@
 "use client";
 
-import { createContext, useContext, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { createContext, useContext, useEffect, useState } from "react";
 import { LOCALE_COOKIE, type Locale } from "@/lib/i18n";
 import { dictionary } from "@/lib/dictionary";
 
 const LocaleContext = createContext<{
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  pending: boolean;
 } | null>(null);
 
-export function LocaleProvider({ initialLocale, children }: { initialLocale: Locale; children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState(initialLocale);
-  const [pending, startTransition] = useTransition();
-  const router = useRouter();
+// Pages no longer read the locale cookie server-side (that's what keeps
+// them static — see lib/getLocale.ts's callers), so every visit first
+// renders "vi" and, if the visitor previously chose "en", swaps to it right
+// after mount once this reads the cookie itself. That one swap is the
+// trade-off for pages that otherwise reload instantly.
+export function LocaleProvider({ children }: { children: React.ReactNode }) {
+  const [locale, setLocaleState] = useState<Locale>("vi");
+
+  useEffect(() => {
+    const match = document.cookie.match(/(?:^|;\s*)funti-locale=([^;]*)/);
+    if (match?.[1] === "en") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLocaleState("en");
+    }
+  }, []);
 
   function setLocale(next: Locale) {
     setLocaleState(next);
     document.cookie = `${LOCALE_COOKIE}=${next}; path=/; max-age=31536000`;
-    startTransition(() => router.refresh());
   }
 
-  return <LocaleContext.Provider value={{ locale, setLocale, pending }}>{children}</LocaleContext.Provider>;
+  return <LocaleContext.Provider value={{ locale, setLocale }}>{children}</LocaleContext.Provider>;
 }
 
 export function useLocale() {

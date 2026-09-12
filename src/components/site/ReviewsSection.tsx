@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Image from "next/image";
 import type { Review } from "@/lib/types";
@@ -26,6 +26,11 @@ export function ReviewsSection({ reviews, canEdit = false }: { reviews: Review[]
   const [items, setItems] = useState(reviews);
   const [editing, setEditing] = useState<Review | "new" | null>(null);
   const { t } = useDict();
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setItems(reviews);
+  }, [reviews]);
 
   if (items.length === 0 && !canEdit) return null;
 

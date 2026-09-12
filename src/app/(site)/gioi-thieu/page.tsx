@@ -1,14 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { AboutHero, type AboutHeroText } from "@/components/site/AboutHero";
-import { AboutTimeline, type TimelineItem } from "@/components/site/AboutTimeline";
-import { AboutTeam, type TeamMember } from "@/components/site/AboutTeam";
-import { CultureImage, DEFAULT_CULTURE_TRANSFORM } from "@/components/site/CultureImage";
-import { CtaBanner } from "@/components/site/CtaBanner";
-import { Reveal } from "@/components/site/Reveal";
-import { getContentEditorRole, getJsonSetting, getSiteSettings } from "@/lib/data/site-content";
-import { getLocale } from "@/lib/getLocale";
-import { dictionary } from "@/lib/dictionary";
+import type { TimelineItem } from "@/components/site/AboutTimeline";
+import type { TeamMember } from "@/components/site/AboutTeam";
+import type { AboutHeroText } from "@/components/site/AboutHero";
+import { DEFAULT_CULTURE_TRANSFORM } from "@/components/site/CultureImage";
+import { getJsonSetting, getSiteSettings } from "@/lib/data/site-content";
+import { AboutPageContent } from "./AboutPageContent";
 
 const PAGE_DESCRIPTION =
   "Funti Kidbooks Studio là xưởng minh hoạ sách thiếu nhi với đội ngũ hoạ sĩ tài năng, chuyên vẽ minh hoạ tay theo phong cách màu nước ấm áp cho sách, storyboard và tài liệu giáo dục.";
@@ -74,74 +70,31 @@ const DEFAULT_TEAM: TeamMember[] = [
   { id: "seed-1", name: "Phúc Trần", role: "CEO Founder", roleEn: "CEO & Founder", bio: null, bioEn: null, photo: null },
 ];
 
+// Shown only until the director fills in real hero copy for this page —
+// not locale-aware since it's a placeholder, matching DEFAULT_TIMELINE/
+// DEFAULT_TEAM above.
+const DEFAULT_HERO_TEXT: AboutHeroText = {
+  headline: "Chúng tôi là Funti Kidbooks Studio",
+  roleLine: "Xưởng minh hoạ sách thiếu nhi",
+  body: "Một đội ngũ hoạ sĩ đam mê kể chuyện qua từng nét vẽ.",
+};
+
 export default async function AboutPage() {
-  const [locale, editorRole, timeline, team, cultureTransform, settings] = await Promise.all([
-    getLocale(),
-    getContentEditorRole(),
+  const [timeline, team, cultureTransform, settings, heroText] = await Promise.all([
     getJsonSetting("gioi-thieu-timeline", DEFAULT_TIMELINE),
     getJsonSetting("gioi-thieu-team", DEFAULT_TEAM),
     getJsonSetting("gioi-thieu-culture-transform", DEFAULT_CULTURE_TRANSFORM),
     getSiteSettings(["gioi-thieu-hero-video", "gioi-thieu-culture-image", "gioi-thieu-culture-opacity"]),
+    getJsonSetting<AboutHeroText>("gioi-thieu-hero-text", DEFAULT_HERO_TEXT),
   ]);
-  const canEdit = editorRole !== null;
-  const t = dictionary[locale];
-  const heroText = await getJsonSetting<AboutHeroText>("gioi-thieu-hero-text", {
-    headline: t.about.title,
-    roleLine: t.about.roleLine,
-    body: t.about.body,
-  });
 
   return (
-    <>
-      <AboutHero
-        kicker={t.about.kicker}
-        text={heroText}
-        stats={t.about.stats}
-        videoSrc={settings["gioi-thieu-hero-video"] ?? null}
-        canEdit={canEdit}
-      />
-
-      <AboutTimeline items={timeline} canEdit={canEdit} />
-
-      <AboutTeam members={team} canEdit={canEdit} />
-
-      {/* Culture band */}
-      <section className="relative py-16" style={{ background: "linear-gradient(135deg, var(--color-accent-2-100), var(--color-accent-100))" }}>
-        <CultureImage
-          imageSrc={settings["gioi-thieu-culture-image"] ?? null}
-          opacityPct={Number(settings["gioi-thieu-culture-opacity"] ?? 35)}
-          transform={cultureTransform}
-          canEdit={canEdit}
-        />
-        <Reveal className="relative z-[1] max-w-[880px] mx-auto px-5 flex flex-col items-center text-center gap-4">
-          <h2 className="text-3xl">{t.about.cultureTitle}</h2>
-          <p className="text-base max-w-[560px]" style={{ color: "var(--color-neutral-700)" }}>
-            {t.about.cultureBody}
-          </p>
-          <Link href="/tuyen-dung" className="btn btn-primary mt-1">
-            {t.about.cultureCta}
-          </Link>
-
-          <div className="flex flex-wrap justify-center gap-4 mt-6">
-            {t.about.cultureValues.map((v) => (
-              <div
-                key={v.label}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-full"
-                style={{ background: "var(--color-panel)", boxShadow: "var(--shadow-sm)" }}
-              >
-                <span className="text-lg leading-none" aria-hidden>
-                  {v.icon}
-                </span>
-                <span className="text-sm font-bold">{v.label}</span>
-              </div>
-            ))}
-          </div>
-        </Reveal>
-      </section>
-
-      <Reveal>
-        <CtaBanner title={t.ctaBanner.title} body={t.ctaBanner.body} ctaLabel={t.ctaBanner.cta} />
-      </Reveal>
-    </>
+    <AboutPageContent
+      timeline={timeline}
+      team={team}
+      cultureTransform={cultureTransform}
+      settings={settings}
+      heroText={heroText}
+    />
   );
 }

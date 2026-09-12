@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
-import { PageHero } from "@/components/site/PageHero";
-import { NewsGrid } from "@/components/site/NewsGrid";
-import { getContentEditorRole, getNewsPosts, getSiteSettings } from "@/lib/data/site-content";
-import { getLocale } from "@/lib/getLocale";
-import { dictionary } from "@/lib/dictionary";
+import { getNewsPosts, getSiteSettings } from "@/lib/data/site-content";
+import { NewsPageContent } from "./NewsPageContent";
 
 const PAGE_DESCRIPTION = "Tin tức, dự án mới và cập nhật từ Funti Kidbooks Studio — xưởng minh hoạ sách thiếu nhi.";
 
@@ -15,30 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function NewsPage() {
-  const [editorRole, locale] = await Promise.all([getContentEditorRole(), getLocale()]);
-  const canEdit = editorRole !== null;
-  const t = dictionary[locale].news;
+  const [posts, settings] = await Promise.all([getNewsPosts(false), getSiteSettings(["hero-tin-tuc"])]);
 
-  const [posts, settings] = await Promise.all([
-    getNewsPosts(canEdit),
-    getSiteSettings(["hero-tin-tuc"]),
-  ]);
-
-  return (
-    <>
-      <PageHero
-        kicker={t.kicker}
-        title={t.title}
-        body={t.body}
-        emoji="📰"
-        heroKey="hero-tin-tuc"
-        imageSrc={settings["hero-tin-tuc"]}
-        canEditImage={canEdit}
-        revalidatePaths={["/tin-tuc"]}
-      />
-      <section className="site-container pb-16">
-        <NewsGrid initialPosts={posts} canEdit={canEdit} />
-      </section>
-    </>
-  );
+  return <NewsPageContent initialPosts={posts} heroImage={settings["hero-tin-tuc"]} />;
 }

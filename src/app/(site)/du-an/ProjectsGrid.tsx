@@ -78,6 +78,13 @@ export function ProjectsGrid({
   const router = useRouter();
   const pathname = usePathname();
   const [items, setItems] = useState(projects);
+  // The page fetches published-only projects to stay static; once a
+  // director/admin is confirmed client-side, the parent re-fetches with
+  // drafts included and passes a new `projects` array here.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setItems(projects);
+  }, [projects]);
   const isRealData = items.length > 0;
   const source = isRealData ? items : FALLBACK_PROJECTS;
 
