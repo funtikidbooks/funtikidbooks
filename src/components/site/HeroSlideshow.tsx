@@ -9,15 +9,12 @@ import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 
 const ROTATE_MS = 6000;
 
-// Random Ken Burns-style motion while a slide is on screen — only for
-// visitors (see `canEdit` gate below): a director dragging/zooming the
-// photo needs a still, predictable frame to line the crop up against, not
-// one that's also quietly animating out from under their cursor.
-const KEN_BURNS_EFFECTS = ["fk-kb-zoom-in", "fk-kb-zoom-out", "fk-kb-pan-left", "fk-kb-pan-right", "fk-kb-pulse"] as const;
-
-function randomKenBurnsEffect(): (typeof KEN_BURNS_EFFECTS)[number] {
-  return KEN_BURNS_EFFECTS[Math.floor(Math.random() * KEN_BURNS_EFFECTS.length)];
-}
+// Ken Burns-style motion while a slide is on screen — a slow zoom-in with a
+// gentle drift left, held until the crossfade to the next slide. Visitors
+// only (see `canEdit` gate below): a director dragging/zooming the photo
+// needs a still, predictable frame to line the crop up against, not one
+// that's also quietly animating out from under their cursor.
+const KEN_BURNS_CLASS = "fk-kb-zoom-pan-left";
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
@@ -61,18 +58,10 @@ export function HeroSlideshow({
   // even though only one is visible — only mount the <img> once a slide has
   // actually been reached, so the rest load lazily as the rotation gets there.
   const [loaded, setLoaded] = useState<Set<number>>(() => new Set([0]));
-  // null on first render (server and client agree — no animation class
-  // yet), then rolled client-side in an effect. Picking a random effect
-  // straight in useState's initializer would run during SSR too, and
-  // Math.random() landing on a different value there than on the client's
-  // own first render is exactly the classic hydration-mismatch trap.
-  const [kenBurnsEffect, setKenBurnsEffect] = useState<string | null>(null);
+  // Bumped every goTo — the active slide's wrapper is keyed on this (see
+  // below) so remounting it restarts the Ken Burns animation each time it
+  // becomes active again, instead of playing once and freezing.
   const [cycle, setCycle] = useState(0);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setKenBurnsEffect(randomKenBurnsEffect());
-  }, []);
 
   // Clamp at render time instead of via an effect — avoids an extra render
   // when a slide is removed and the current index falls out of range.
@@ -86,7 +75,6 @@ export function HeroSlideshow({
   function goTo(i: number) {
     setIndex(i);
     setLoaded((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
-    setKenBurnsEffect(randomKenBurnsEffect());
     setCycle((c) => c + 1);
   }
 
@@ -185,7 +173,7 @@ export function HeroSlideshow({
           return (
             <div
               key={isActive ? `${src}-${cycle}` : src}
-              className={`absolute inset-0 transition-opacity ${isActive && !canEdit && kenBurnsEffect ? kenBurnsEffect : ""}`}
+              className={`absolute inset-0 transition-opacity ${isActive && !canEdit ? KEN_BURNS_CLASS : ""}`}
               style={{ opacity: isActive ? 1 : 0, transitionDuration: "1200ms" }}
             >
               {loaded.has(i) && (
