@@ -14,6 +14,7 @@ import type { HourReport, MeetingChannelPublic, Profile } from "@/lib/types";
 function HourEntryModal({
   projectLabel,
   date,
+  otherEntries,
   initialHours,
   initialNote,
   hasExisting,
@@ -25,6 +26,7 @@ function HourEntryModal({
 }: {
   projectLabel: string;
   date: string;
+  otherEntries: { profile: Profile; hours: number; note: string | null }[];
   initialHours: string;
   initialNote: string;
   hasExisting: boolean;
@@ -54,8 +56,32 @@ function HourEntryModal({
           </p>
         </div>
 
+        {/* Read-only — this is what sếp Phúc/PM actually opens the cell to
+            check: what did everyone else on this project write for that
+            day. The editable form below is only ever your own entry. */}
+        {otherEntries.length > 0 && (
+          <div className="flex flex-col gap-2 p-3 rounded-[8px]" style={{ background: "var(--color-surface)" }}>
+            {otherEntries.map(({ profile, hours: h, note: n }) => (
+              <div key={profile.id} className="flex gap-2">
+                <AttendanceAvatar profile={profile} size={22} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-semibold truncate">{profile.display_name}</span>
+                    <span className="text-sm font-bold flex-none">{h} tiếng</span>
+                  </div>
+                  {n && (
+                    <p className="text-[12px]" style={{ color: "var(--color-neutral-500)" }}>
+                      {n}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="field">
-          <label htmlFor="hr-hours">Số giờ</label>
+          <label htmlFor="hr-hours">{otherEntries.length > 0 ? "Giờ của bạn" : "Số giờ"}</label>
           <input
             id="hr-hours"
             autoFocus
@@ -226,7 +252,12 @@ export function HourTimesheet({
     }
   }
 
-  const editingMine = editingEntry ? reportsFor(editingEntry.project.id, editingEntry.date).find((r) => r.profile_id === currentUserId) : null;
+  const editingEntries = editingEntry ? reportsFor(editingEntry.project.id, editingEntry.date) : [];
+  const editingMine = editingEntries.find((r) => r.profile_id === currentUserId) ?? null;
+  const editingOthers = editingEntries
+    .filter((r) => r.profile_id !== currentUserId)
+    .map((r) => ({ profile: staffById.get(r.profile_id), hours: r.hours, note: r.note }))
+    .filter((e): e is { profile: Profile; hours: number; note: string | null } => !!e.profile);
 
   return (
     <div className="flex-1 flex flex-col p-3 md:p-6 gap-4 md:gap-5 overflow-y-auto">
@@ -414,6 +445,7 @@ export function HourTimesheet({
         <HourEntryModal
           projectLabel={`${editingEntry.project.icon} ${editingEntry.project.name}`}
           date={editingEntry.date}
+          otherEntries={editingOthers}
           initialHours={editingMine ? String(editingMine.hours) : ""}
           initialNote={editingMine?.note ?? ""}
           hasExisting={!!editingMine}
