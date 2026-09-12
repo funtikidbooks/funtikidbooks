@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Modal } from "@/components/ui/Modal";
 import { useChatManager, useLiveProfiles } from "@/components/workspace/ChatManager";
 import { DirectMessagesPanel } from "@/components/workspace/DirectMessagesPanel";
+import { FloatingPopup } from "@/components/workspace/FloatingPopup";
 import type { ForwardableAttachment } from "@/components/workspace/ForwardMessageModal";
 
 // Code-split: each of these only ever renders once its own trigger state
@@ -309,6 +310,70 @@ function Avatar({ profile, size = 28 }: { profile: Pick<Profile, "display_name" 
         (profile?.display_name ?? "?").charAt(0).toUpperCase()
       )}
     </span>
+  );
+}
+
+// Hover/long-press peek from the room list — who created it, how many
+// members, and (per sếp Phúc) whether it's an hourly or milestone project.
+// Member count isn't in the room list payload already, so it's fetched
+// lazily the moment the popup opens rather than for every room up front.
+function RoomInfoPeekPopup({
+  rect,
+  room,
+  profiles,
+  dismissOnBackdrop,
+  onClose,
+}: {
+  rect: DOMRect;
+  room: MeetingChannelPublic;
+  profiles: Profile[];
+  dismissOnBackdrop: boolean;
+  onClose: () => void;
+}) {
+  const [memberCount, setMemberCount] = useState<number | null>(null);
+
+  // Rendered with key={room.id} at the call site, so a fresh instance (and
+  // a fresh `null`) is what mounts when the popup switches to a different
+  // room — no need to reset state here on room.id changing.
+  useEffect(() => {
+    let cancelled = false;
+    listChannelMembers(room.id)
+      .then((members) => {
+        if (!cancelled) setMemberCount(members.length);
+      })
+      .catch(() => {
+        if (!cancelled) setMemberCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [room.id]);
+
+  const owner = profiles.find((p) => p.id === room.created_by);
+
+  return (
+    <FloatingPopup rect={rect} width={260} dismissOnBackdrop={dismissOnBackdrop} onClose={onClose}>
+      <div className="flex items-center gap-2">
+        <span aria-hidden style={{ fontSize: 18 }}>
+          {room.icon}
+        </span>
+        <span className="text-sm font-bold truncate">{room.name}</span>
+      </div>
+      <div className="flex flex-col gap-1.5 text-[13px]">
+        <div className="flex items-center justify-between gap-2">
+          <span style={{ color: "var(--color-neutral-500)" }}>Chủ phòng</span>
+          <span className="font-semibold truncate max-w-[140px]">{room.is_general ? "Chung" : owner?.display_name ?? "—"}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span style={{ color: "var(--color-neutral-500)" }}>Thành viên</span>
+          <span className="font-semibold">{room.is_general ? "Cả công ty" : (memberCount ?? "…")}</span>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span style={{ color: "var(--color-neutral-500)" }}>Loại dự án</span>
+          <span className="font-semibold">{room.billing_type === "hourly" ? "⏱️ Theo giờ" : "🚩 Theo chặng"}</span>
+        </div>
+      </div>
+    </FloatingPopup>
   );
 }
 
@@ -1220,6 +1285,85 @@ export function MeetingHub({
     [channels],
   );
   const [expandedRoomIds, setExpandedRoomIds] = useState<Set<string>>(new Set());
+  // Hover (desktop) / long-press (iPad, phone) on a room in the sidebar —
+  // same pattern as Báo cáo giờ's cell peek popup (see HourTimesheet.tsx):
+  // a short delay before opening, a short grace period before closing so
+  // the cursor can cross into the popup itself, and a suppressed synthetic
+  // click after a touch long-press so it doesn't also open the room.
+  const [roomPeek, setRoomPeek] = useState<{ room: MeetingChannelPublic; rect: DOMRect; via: "hover" | "touch" } | null>(null);
+  const roomHoverTimerRef = useRef<number | null>(null);
+  const roomLongPressTimerRef = useRef<number | null>(null);
+  const roomCloseTimerRef = useRef<number | null>(null);
+  const roomTouchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const roomSuppressClickRef = useRef(false);
+
+  function clearRoomHoverTimer() {
+    if (roomHoverTimerRef.current) {
+      window.clearTimeout(roomHoverTimerRef.current);
+      roomHoverTimerRef.current = null;
+    }
+  }
+  function clearRoomLongPressTimer() {
+    if (roomLongPressTimerRef.current) {
+      window.clearTimeout(roomLongPressTimerRef.current);
+      roomLongPressTimerRef.current = null;
+    }
+  }
+  function scheduleRoomPeekClose() {
+    if (roomCloseTimerRef.current) window.clearTimeout(roomCloseTimerRef.current);
+    roomCloseTimerRef.current = window.setTimeout(() => setRoomPeek(null), 150);
+  }
+  function cancelRoomPeekClose() {
+    if (roomCloseTimerRef.current) {
+      window.clearTimeout(roomCloseTimerRef.current);
+      roomCloseTimerRef.current = null;
+    }
+  }
+  function roomPeekHandlers(room: MeetingChannelPublic) {
+    return {
+      onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+        cancelRoomPeekClose();
+        const rect = e.currentTarget.getBoundingClientRect();
+        clearRoomHoverTimer();
+        roomHoverTimerRef.current = window.setTimeout(() => {
+          cancelRoomPeekClose();
+          setRoomPeek({ room, rect, via: "hover" });
+        }, 300);
+      },
+      onMouseLeave: () => {
+        clearRoomHoverTimer();
+        scheduleRoomPeekClose();
+      },
+      onTouchStart: (e: React.TouchEvent<HTMLElement>) => {
+        const touch = e.touches[0];
+        roomTouchStartRef.current = { x: touch.clientX, y: touch.clientY };
+        const rect = e.currentTarget.getBoundingClientRect();
+        clearRoomLongPressTimer();
+        roomLongPressTimerRef.current = window.setTimeout(() => {
+          roomSuppressClickRef.current = true;
+          setRoomPeek({ room, rect, via: "touch" });
+        }, 450);
+      },
+      onTouchMove: (e: React.TouchEvent<HTMLElement>) => {
+        const start = roomTouchStartRef.current;
+        const touch = e.touches[0];
+        if (start && (Math.abs(touch.clientX - start.x) > 10 || Math.abs(touch.clientY - start.y) > 10)) {
+          clearRoomLongPressTimer();
+        }
+      },
+      onTouchEnd: clearRoomLongPressTimer,
+    };
+  }
+  // Call at the top of a room button's onClick — returns true (and resets
+  // itself) if this click is the synthetic one following a long-press
+  // reveal, which should just be swallowed instead of also opening the room.
+  function consumeSuppressedRoomClick(): boolean {
+    if (roomSuppressClickRef.current) {
+      roomSuppressClickRef.current = false;
+      return true;
+    }
+    return false;
+  }
   const [showBrowse, setShowBrowse] = useState(false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [roomMembers, setRoomMembers] = useState<Profile[]>([]);
@@ -3412,11 +3556,18 @@ export function MeetingHub({
                 )}
                 <button
                   type="button"
-                  onClick={() => selectChannel(r.id)}
+                  onClick={() => {
+                    if (consumeSuppressedRoomClick()) return;
+                    selectChannel(r.id);
+                  }}
+                  {...roomPeekHandlers(r)}
                   className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold flex-1 min-w-0"
                   style={{
                     background: activeId === r.id ? "var(--color-accent-100)" : undefined,
                     color: activeId === r.id ? "var(--color-accent-700)" : "var(--color-text)",
+                    WebkitUserSelect: "none",
+                    userSelect: "none",
+                    WebkitTouchCallout: "none",
                   }}
                 >
                   <span aria-hidden>{r.icon}</span>
@@ -3448,7 +3599,11 @@ export function MeetingHub({
                     <div key={child.id} className="contents">
                       <button
                         type="button"
-                        onClick={() => selectChannel(child.id)}
+                        onClick={() => {
+                          if (consumeSuppressedRoomClick()) return;
+                          selectChannel(child.id);
+                        }}
+                        {...roomPeekHandlers(child)}
                         className="ws-nav-link flex items-center gap-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
                         style={{
                           marginLeft: 26,
@@ -3456,6 +3611,9 @@ export function MeetingHub({
                           paddingRight: 8,
                           background: activeId === child.id ? "var(--color-accent-100)" : undefined,
                           color: activeId === child.id ? "var(--color-accent-700)" : "var(--color-text)",
+                          WebkitUserSelect: "none",
+                          userSelect: "none",
+                          WebkitTouchCallout: "none",
                         }}
                       >
                         <span aria-hidden>{child.icon}</span>
@@ -4340,6 +4498,18 @@ export function MeetingHub({
           displayName={currentUser.display_name}
           onClose={() => setShowVideoCall(false)}
         />
+      )}
+      {roomPeek && (
+        <div onMouseEnter={cancelRoomPeekClose} onMouseLeave={scheduleRoomPeekClose}>
+          <RoomInfoPeekPopup
+            key={roomPeek.room.id}
+            rect={roomPeek.rect}
+            room={roomPeek.room}
+            profiles={profiles}
+            dismissOnBackdrop={roomPeek.via === "touch"}
+            onClose={() => setRoomPeek(null)}
+          />
+        </div>
       )}
       {lightbox && (
         <ImageLightbox url={lightbox.url} filename={lightbox.filename} onClose={() => setLightbox(null)} />
