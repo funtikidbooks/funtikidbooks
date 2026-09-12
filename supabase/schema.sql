@@ -1636,33 +1636,41 @@ create table if not exists public.visitor_messages (
 alter table public.visitor_conversations enable row level security;
 alter table public.visitor_messages enable row level security;
 
+-- Widened from director/admin-only to also include Project Manager (see
+-- is_director_or_pm() above) — Alice Đỗ's chức danh — so the "Chat khách
+-- vãng lai" widget's staff side isn't gated any tighter than the rest of
+-- the can_manage_hr()-equivalent surface.
 drop policy if exists "admin/director can read visitor conversations" on public.visitor_conversations;
-create policy "admin/director can read visitor conversations"
+drop policy if exists "director/PM can read visitor conversations" on public.visitor_conversations;
+create policy "director/PM can read visitor conversations"
   on public.visitor_conversations for select
   to authenticated
-  using (public.current_access_role() in ('director', 'admin'));
+  using (public.current_access_role() = 'admin' or public.is_director_or_pm());
 
 drop policy if exists "admin/director can update visitor conversations" on public.visitor_conversations;
-create policy "admin/director can update visitor conversations"
+drop policy if exists "director/PM can update visitor conversations" on public.visitor_conversations;
+create policy "director/PM can update visitor conversations"
   on public.visitor_conversations for update
   to authenticated
-  using (public.current_access_role() in ('director', 'admin'))
-  with check (public.current_access_role() in ('director', 'admin'));
+  using (public.current_access_role() = 'admin' or public.is_director_or_pm())
+  with check (public.current_access_role() = 'admin' or public.is_director_or_pm());
 
 drop policy if exists "admin/director can read visitor messages" on public.visitor_messages;
-create policy "admin/director can read visitor messages"
+drop policy if exists "director/PM can read visitor messages" on public.visitor_messages;
+create policy "director/PM can read visitor messages"
   on public.visitor_messages for select
   to authenticated
-  using (public.current_access_role() in ('director', 'admin'));
+  using (public.current_access_role() = 'admin' or public.is_director_or_pm());
 
 drop policy if exists "admin/director can send visitor replies" on public.visitor_messages;
-create policy "admin/director can send visitor replies"
+drop policy if exists "director/PM can send visitor replies" on public.visitor_messages;
+create policy "director/PM can send visitor replies"
   on public.visitor_messages for insert
   to authenticated
   with check (
     sender_type = 'staff'
     and sender_id = auth.uid()
-    and public.current_access_role() in ('director', 'admin')
+    and (public.current_access_role() = 'admin' or public.is_director_or_pm())
   );
 
 do $$

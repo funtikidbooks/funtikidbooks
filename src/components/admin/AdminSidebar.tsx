@@ -9,11 +9,13 @@ import { createClient } from "@/lib/supabase/client";
 import { resetThemeOnSignOut } from "@/lib/useTheme";
 import type { AccessRole } from "@/lib/types";
 
+const CHAT_NAV_ITEM = { href: "/quan-tri/chat", label: "Chat khách vãng lai", icon: "💬" };
+
 const NAV = [
   { href: "/quan-tri/du-an", label: "Dự án", icon: "📁" },
   { href: "/quan-tri/danh-gia", label: "Đánh giá khách hàng", icon: "⭐" },
   { href: "/quan-tri/tin-nhan", label: "Tin nhắn khách hàng", icon: "✉️" },
-  { href: "/quan-tri/chat", label: "Chat khách vãng lai", icon: "💬" },
+  CHAT_NAV_ITEM,
 ];
 
 // Also open to staff whose chức danh is exactly "Project Manager" — see
@@ -162,6 +164,26 @@ export function AdminSidebar({
               showDot={item.href === "/quan-tri/bang-luong" && hasPendingPayrollFeedback}
             />
           ))}
+          {/* Director already sees this under QUẢN TRỊ NỘI DUNG (NAV,
+              above) — only add it here for a PM, who never renders that
+              block. See requireStaff() in lib/actions/support-chat.ts.
+              Hand-written like Bảng công việc/Tin tức above instead of
+              through NavLink, which only tolerates being called from a
+              .map(). */}
+          {isProjectManager && !isDirector && (
+            <Link
+              href={CHAT_NAV_ITEM.href}
+              onClick={() => setMobileOpen(false)}
+              className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
+              style={{
+                background: pathname.startsWith(CHAT_NAV_ITEM.href) ? "var(--color-accent-100)" : "transparent",
+                color: pathname.startsWith(CHAT_NAV_ITEM.href) ? "var(--color-accent-700)" : "var(--color-text)",
+              }}
+            >
+              <span aria-hidden>{CHAT_NAV_ITEM.icon}</span>
+              {CHAT_NAV_ITEM.label}
+            </Link>
+          )}
           {isDirector && DIRECTOR_ONLY_NAV.map((item) => <NavLink key={item.href} item={item} />)}
         </>
       )}

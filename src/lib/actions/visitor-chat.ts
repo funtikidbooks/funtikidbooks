@@ -27,14 +27,19 @@ async function requireConversation(conversationId: string, token: string) {
   return { supabase, conversation: data };
 }
 
-// Fires push (to every director/admin device that's granted it) and a
-// fallback email (to every director/admin who has one on file) whenever a
-// visitor sends a message — the widget has no way to page anyone otherwise,
-// so a message left outside office hours would just sit unseen in
-// /quan-tri/chat until someone happened to open it.
+// Fires push (to every device a recipient has granted it on) and a
+// fallback email (to everyone with one on file) whenever a visitor sends a
+// message — the widget has no way to page anyone otherwise, so a message
+// left outside office hours would just sit unseen in /quan-tri/chat until
+// someone happened to open it. Recipients are director/admin plus any
+// Project Manager (Alice Đỗ) — the same tier that can actually open and
+// reply to the chat now (see requireStaff() in support-chat.ts).
 async function notifyStaffOfVisitorMessage(visitorName: string | null, visitorEmail: string | null, content: string) {
   const supabase = createAdminClient();
-  const { data: staff } = await supabase.from("profiles").select("id, email").in("access_role", ["director", "admin"]);
+  const { data: staff } = await supabase
+    .from("profiles")
+    .select("id, email")
+    .or("access_role.eq.director,access_role.eq.admin,role.eq.Project Manager");
   if (!staff || staff.length === 0) return;
 
   const who = visitorName?.trim() || "Khách vãng lai";

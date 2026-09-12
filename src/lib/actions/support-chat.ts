@@ -4,12 +4,18 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
 import type { VisitorConversation, VisitorMessage } from "@/lib/types";
 
+// Director/admin, or a Project Manager (Alice Đỗ's chức danh) — same
+// director-or-PM tier as can_manage_hr()/is_director_or_pm() elsewhere,
+// widened from director/admin-only so a PM can actually open and reply to
+// a customer chat, not just get paged for one.
 async function requireStaff() {
   const { supabase, user } = await requireUser();
 
-  const { data: profile } = await supabase.from("profiles").select("access_role").eq("id", user.id).maybeSingle();
-  if (!profile || profile.access_role === "staff") {
-    throw new Error("Chỉ Admin và Giám đốc mới xem được mục này.");
+  const { data: profile } = await supabase.from("profiles").select("access_role, role").eq("id", user.id).maybeSingle();
+  const allowed =
+    profile?.access_role === "director" || profile?.access_role === "admin" || profile?.role === "Project Manager";
+  if (!allowed) {
+    throw new Error("Chỉ Admin, Giám đốc và Quản lý dự án mới xem được mục này.");
   }
 
   return { supabase, user };
