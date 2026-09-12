@@ -9,6 +9,16 @@ import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
 
 const ROTATE_MS = 6000;
 
+// Random Ken Burns-style motion while a slide is on screen — only for
+// visitors (see `canEdit` gate below): a director dragging/zooming the
+// photo needs a still, predictable frame to line the crop up against, not
+// one that's also quietly animating out from under their cursor.
+const KEN_BURNS_EFFECTS = ["fk-kb-zoom-in", "fk-kb-zoom-out", "fk-kb-pan-left", "fk-kb-pan-right", "fk-kb-pulse"] as const;
+
+function randomKenBurnsEffect(): (typeof KEN_BURNS_EFFECTS)[number] {
+  return KEN_BURNS_EFFECTS[Math.floor(Math.random() * KEN_BURNS_EFFECTS.length)];
+}
+
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
 }
@@ -34,7 +44,15 @@ export function HeroSlideshow({
   const [index, setIndex] = useState(0);
   const [managing, setManaging] = useState(false);
   const [transforms, setTransforms] = useState(initialTransforms);
+  // What's actually persisted — `transforms` is the live/working copy the
+  // director drags and zooms freely; nothing reaches the server until they
+  // explicitly hit "Lưu vị trí" below. A stray touch (scrolling the page
+  // with a thumb that happened to land on the banner) used to get saved
+  // the instant it lifted — now it just sits as an unsaved change they can
+  // discard with "Huỷ" or a reload.
+  const [savedTransforms, setSavedTransforms] = useState(initialTransforms);
   const [dragging, setDragging] = useState(false);
+  const [savingPosition, setSavingPosition] = useState(false);
   const slideBoxRef = useRef<HTMLDivElement>(null);
   const transformsRef = useRef(transforms);
   const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(null);
@@ -43,28 +61,63 @@ export function HeroSlideshow({
   // even though only one is visible — only mount the <img> once a slide has
   // actually been reached, so the rest load lazily as the rotation gets there.
   const [loaded, setLoaded] = useState<Set<number>>(() => new Set([0]));
+  // null on first render (server and client agree — no animation class
+  // yet), then rolled client-side in an effect. Picking a random effect
+  // straight in useState's initializer would run during SSR too, and
+  // Math.random() landing on a different value there than on the client's
+  // own first render is exactly the classic hydration-mismatch trap.
+  const [kenBurnsEffect, setKenBurnsEffect] = useState<string | null>(null);
+  const [cycle, setCycle] = useState(0);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setKenBurnsEffect(randomKenBurnsEffect());
+  }, []);
 
   // Clamp at render time instead of via an effect — avoids an extra render
   // when a slide is removed and the current index falls out of range.
   const safeIndex = Math.min(index, slides.length - 1);
   const activeSrc = slides[safeIndex];
   const activeTransform = transforms[activeSrc] ?? DEFAULT_IMAGE_TRANSFORM;
+  const activeSaved = savedTransforms[activeSrc] ?? DEFAULT_IMAGE_TRANSFORM;
+  const hasUnsavedPosition =
+    activeTransform.posX !== activeSaved.posX || activeTransform.posY !== activeSaved.posY || activeTransform.zoom !== activeSaved.zoom;
 
   function goTo(i: number) {
     setIndex(i);
     setLoaded((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
+    setKenBurnsEffect(randomKenBurnsEffect());
+    setCycle((c) => c + 1);
+  }
+
+  async function savePosition() {
+    setSavingPosition(true);
+    try {
+      await saveJsonSetting(`${settingsKey}-transform`, transformsRef.current, revalidatePaths);
+      setSavedTransforms(transformsRef.current);
+    } catch {
+      // Left as an unsaved change — the Lưu button just stays visible so
+      // they can try again.
+    } finally {
+      setSavingPosition(false);
+    }
+  }
+
+  function cancelPosition() {
+    setTransforms((prev) => ({ ...prev, [activeSrc]: activeSaved }));
   }
 
   // Re-scheduled every time safeIndex changes rather than one continuous
   // setInterval — still fires every ROTATE_MS, but lets goTo read the
   // current index directly instead of needing a stale-closure workaround.
-  // Paused while the director is dragging/zooming the current slide so it
-  // doesn't jump to the next photo mid-adjustment.
+  // Paused while the director is dragging/zooming the current slide, and
+  // while there's an unsaved position change on it, so it doesn't rotate
+  // away before they get to hit "Lưu vị trí".
   useEffect(() => {
-    if (slides.length <= 1 || dragging) return;
+    if (slides.length <= 1 || dragging || hasUnsavedPosition) return;
     const id = setTimeout(() => goTo((safeIndex + 1) % slides.length), ROTATE_MS);
     return () => clearTimeout(id);
-  }, [safeIndex, slides.length, dragging]);
+  }, [safeIndex, slides.length, dragging, hasUnsavedPosition]);
 
   useEffect(() => {
     transformsRef.current = transforms;
@@ -90,7 +143,6 @@ export function HeroSlideshow({
     function handleUp() {
       setDragging(false);
       dragStartRef.current = null;
-      saveJsonSetting(`${settingsKey}-transform`, transformsRef.current, revalidatePaths).catch(() => {});
     }
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
@@ -102,19 +154,12 @@ export function HeroSlideshow({
       window.removeEventListener("touchmove", handleMove);
       window.removeEventListener("touchend", handleUp);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragging, activeSrc]);
 
   function startDrag(x: number, y: number) {
     if (!canEdit) return;
     dragStartRef.current = { x, y, posX: activeTransform.posX, posY: activeTransform.posY };
     setDragging(true);
-  }
-
-  function commitZoom(nextZoom: number) {
-    const next = { ...transformsRef.current, [activeSrc]: { ...activeTransform, zoom: nextZoom } };
-    setTransforms(next);
-    saveJsonSetting(`${settingsKey}-transform`, next, revalidatePaths).catch(() => {});
   }
 
   return (
@@ -131,11 +176,17 @@ export function HeroSlideshow({
       >
         {slides.map((src, i) => {
           const t = transforms[src] ?? DEFAULT_IMAGE_TRANSFORM;
+          const isActive = i === safeIndex;
+          // Only animates for visitors — an editing director needs a still
+          // frame to line the crop up against, not one drifting on its own.
+          // Keyed on `cycle` (bumped every goTo) so the animation restarts
+          // each time this slide becomes active again, instead of playing
+          // once on mount and then sitting frozen at its end state.
           return (
             <div
-              key={src}
-              className="absolute inset-0 transition-opacity"
-              style={{ opacity: i === safeIndex ? 1 : 0, transitionDuration: "1200ms" }}
+              key={isActive ? `${src}-${cycle}` : src}
+              className={`absolute inset-0 transition-opacity ${isActive && !canEdit && kenBurnsEffect ? kenBurnsEffect : ""}`}
+              style={{ opacity: isActive ? 1 : 0, transitionDuration: "1200ms" }}
             >
               {loaded.has(i) && (
                 <Image
@@ -167,12 +218,42 @@ export function HeroSlideshow({
             max={250}
             value={activeTransform.zoom}
             onChange={(e) => setTransforms((prev) => ({ ...prev, [activeSrc]: { ...activeTransform, zoom: Number(e.target.value) } }))}
-            onMouseUp={(e) => commitZoom(Number((e.target as HTMLInputElement).value))}
-            onTouchEnd={(e) => commitZoom(Number((e.target as HTMLInputElement).value))}
             style={{ width: 90 }}
             aria-label="Thu phóng ảnh bìa"
           />
           <span style={{ minWidth: 32, textAlign: "right" }}>{activeTransform.zoom}%</span>
+        </div>
+      )}
+
+      {/* Kéo hoặc thu phóng chỉ đổi cục bộ — không tự lưu nữa, tránh việc lỡ
+          tay chạm/kéo màn hình (đặc biệt trên iPad) làm xê dịch ảnh mà
+          không hay biết. Chỉ khi bấm "Lưu vị trí" mới thật sự ghi vào máy chủ. */}
+      {canEdit && hasUnsavedPosition && (
+        <div
+          className="absolute top-4 flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold"
+          style={{ left: 210, background: "rgba(20,18,17,.6)", color: "#fff", zIndex: 20 }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <span aria-hidden>●</span>
+          <span>Vị trí chưa lưu</span>
+          <button
+            type="button"
+            onClick={cancelPosition}
+            disabled={savingPosition}
+            className="px-2 py-0.5 rounded-full"
+            style={{ background: "rgba(255,255,255,.15)" }}
+          >
+            Huỷ
+          </button>
+          <button
+            type="button"
+            onClick={savePosition}
+            disabled={savingPosition}
+            className="px-2 py-0.5 rounded-full font-bold"
+            style={{ background: "var(--color-accent-500)" }}
+          >
+            {savingPosition ? "Đang lưu…" : "Lưu vị trí"}
+          </button>
         </div>
       )}
 

@@ -587,6 +587,49 @@ h4 {
   }
 }
 
+/* ---------- Homepage hero banner: random Ken Burns per slide ---------- */
+/* HeroSlideshow.tsx picks one of these at random each time a slide becomes
+   active, applied to the slide's wrapper (the <Image> underneath keeps its
+   own director-set zoom/position untouched — this just layers a slow
+   drift on top). Slightly longer than the 6s rotation interval and
+   forwards-filled so it never visibly snaps back before the crossfade. */
+.fk-kb-zoom-in {
+  animation: fk-kb-zoom-in 7s ease-in-out forwards;
+}
+.fk-kb-zoom-out {
+  animation: fk-kb-zoom-out 7s ease-in-out forwards;
+}
+.fk-kb-pan-left {
+  animation: fk-kb-pan-left 7s ease-in-out forwards;
+}
+.fk-kb-pan-right {
+  animation: fk-kb-pan-right 7s ease-in-out forwards;
+}
+.fk-kb-pulse {
+  animation: fk-kb-pulse 7s ease-in-out forwards;
+}
+@keyframes fk-kb-zoom-in {
+  from { transform: scale(1); }
+  to { transform: scale(1.12); }
+}
+@keyframes fk-kb-zoom-out {
+  from { transform: scale(1.12); }
+  to { transform: scale(1); }
+}
+@keyframes fk-kb-pan-left {
+  from { transform: scale(1.1) translateX(2%); }
+  to { transform: scale(1.1) translateX(-2%); }
+}
+@keyframes fk-kb-pan-right {
+  from { transform: scale(1.1) translateX(-2%); }
+  to { transform: scale(1.1) translateX(2%); }
+}
+@keyframes fk-kb-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
 /* ---------- Floating DM chat window on phones ---------- */
 /* ChatWindow.tsx sets right/width inline (offsetRight staggers multiple
    open windows sideways on desktop) — !important is the only way to widen
