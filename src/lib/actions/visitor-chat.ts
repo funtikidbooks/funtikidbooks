@@ -43,11 +43,16 @@ async function notifyStaffOfVisitorMessage(visitorName: string | null, visitorEm
   await Promise.all(
     staff.map((s) =>
       sendPushToUser(s.id, {
-        title: `Tin nhắn mới từ ${who}`,
-        body: preview,
+        // Fixed, unmistakable title — a workspace DM's push shows the
+        // sender's own name as the title (e.g. "Thư"), which this must
+        // never resemble, or it reads as just another coworker ping and
+        // gets swiped away the same way.
+        title: "🔔 Khách hàng nhắn tin mới",
+        body: `${who}: ${preview}`,
         senderId: "visitor-chat",
         url: "/quan-tri/chat",
         tag: "funti-visitor-chat",
+        requireInteraction: true,
       }).catch(() => {}),
     ),
   );

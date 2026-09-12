@@ -91,7 +91,7 @@ export async function sendNewVisitorMessageEmail(input: {
   await transporter.sendMail({
     from: `"Funti Kidbooks Studio" <${process.env.GMAIL_USER}>`,
     to: input.to,
-    subject: `Tin nhắn mới từ ${who} trên web`,
+    subject: `🔔 Khách hàng nhắn tin mới — ${who}`,
     text: `${who}${input.visitorEmail ? ` (${input.visitorEmail})` : ""} vừa nhắn:
 
 "${input.preview}"

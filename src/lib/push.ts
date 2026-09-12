@@ -20,7 +20,17 @@ function ensureConfigured() {
 // including on an iPad where the site was added to the Home Screen.
 export async function sendPushToUser(
   userId: string,
-  payload: { title: string; body: string; senderId: string; url?: string; tag?: string },
+  payload: {
+    title: string;
+    body: string;
+    senderId: string;
+    url?: string;
+    tag?: string;
+    // Android/desktop keep the notification on screen until it's tapped or
+    // dismissed instead of letting it disappear on its own — see sw.js. iOS
+    // ignores this and falls back to its own default behavior regardless.
+    requireInteraction?: boolean;
+  },
 ) {
   if (!ensureConfigured()) return;
 

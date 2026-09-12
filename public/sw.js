@@ -27,6 +27,11 @@ self.addEventListener("push", (event) => {
       icon: "/brand/funti-logo.jpg",
       badge: "/brand/funti-logo.jpg",
       tag: payload.tag || (payload.senderId ? `funti-dm-${payload.senderId}` : "funti-dm"),
+      // Stays on screen until tapped/dismissed instead of disappearing on
+      // its own — used for the "khách hàng nhắn tin" alert so it can't slip
+      // by unnoticed the way a routine DM ping might. Android/desktop only;
+      // iOS ignores this option.
+      requireInteraction: Boolean(payload.requireInteraction),
       data: { senderId: payload.senderId || null, url },
     }),
   );
