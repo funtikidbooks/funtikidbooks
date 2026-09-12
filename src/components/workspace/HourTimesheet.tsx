@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { deleteHourEntry, listWeekHourReports, logHours, setProjectWeeklyCap } from "@/lib/actions/hourReports";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
@@ -139,6 +139,79 @@ function HourEntryModal({
   );
 }
 
+// Read-only "peek" — hover on desktop (mouse has room to spare, so this can
+// be roomy), press-and-hold on iPad/phone (no hover there). Separate from
+// HourEntryModal's edit form: this is purely for a quick look at what's
+// already logged, dismissed by moving the mouse away or tapping outside.
+function CellPeekPopup({
+  rect,
+  projectLabel,
+  date,
+  entries,
+  dismissOnBackdrop,
+  onClose,
+}: {
+  rect: DOMRect;
+  projectLabel: string;
+  date: string;
+  entries: { profile: Profile; hours: number; note: string | null }[];
+  // Touch (long-press) has no "mouse left the cell" signal, so it needs an
+  // explicit tap-outside-to-dismiss backdrop. Hover already closes itself
+  // via onMouseLeave — a backdrop there would sit above the very cell being
+  // hovered and swallow the click meant to open the edit modal.
+  dismissOnBackdrop: boolean;
+  onClose: () => void;
+}) {
+  const width = 300;
+  const margin = 8;
+  const left = Math.min(Math.max(margin, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - margin);
+  const spaceBelow = window.innerHeight - rect.bottom;
+  const opensDown = spaceBelow > 260 || spaceBelow > rect.top;
+
+  return (
+    <>
+      {dismissOnBackdrop && (
+        <div onClick={onClose} onTouchStart={onClose} style={{ position: "fixed", inset: 0, zIndex: 45 }} />
+      )}
+      <div
+        className="card elev-lg flex flex-col gap-3 p-4"
+        style={{
+          position: "fixed",
+          left,
+          width,
+          maxHeight: 320,
+          overflowY: "auto",
+          zIndex: 46,
+          ...(opensDown ? { top: rect.bottom + margin } : { bottom: window.innerHeight - rect.top + margin }),
+        }}
+      >
+        <div>
+          <p className="text-sm font-bold">{projectLabel}</p>
+          <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+            {formatDayLabel(date)}
+          </p>
+        </div>
+        {entries.map(({ profile, hours, note }) => (
+          <div key={profile.id} className="flex gap-2.5">
+            <AttendanceAvatar profile={profile} size={26} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold truncate">{profile.display_name}</span>
+                <span className="text-sm font-bold flex-none">{hours} tiếng</span>
+              </div>
+              {note && (
+                <p className="text-[12px]" style={{ color: "var(--color-neutral-500)" }}>
+                  {note}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 // Upwork-style shared weekly timesheet — every project as a row, Mon–Sun as
 // columns, everyone's hours visible to everyone (this replaced an earlier
 // version that posted hour reports as chat messages: those scrolled away
@@ -172,6 +245,43 @@ export function HourTimesheet({
   const [entryDeleting, setEntryDeleting] = useState(false);
   const [editingCap, setEditingCap] = useState<string | null>(null);
   const [capValue, setCapValue] = useState("");
+  const [peek, setPeek] = useState<{ project: MeetingChannelPublic; date: string; rect: DOMRect; via: "hover" | "touch" } | null>(
+    null,
+  );
+  const hoverTimerRef = useRef<number | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
+
+  function clearHoverTimer() {
+    if (hoverTimerRef.current) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  }
+
+  function clearLongPressTimer() {
+    if (longPressTimerRef.current) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
+  // A short grace period rather than closing the instant the mouse leaves
+  // the cell — otherwise moving the cursor up into the popup itself (to
+  // read a long note, say) would close it before it could be reached.
+  function scheduleClose() {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => setPeek(null), 150);
+  }
+
+  function cancelClose() {
+    if (closeTimerRef.current) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  }
 
   const days = weekDaysOf(weekStart);
   const isCurrentWeek = weekStart === mondayOf(vnToday());
@@ -264,7 +374,7 @@ export function HourTimesheet({
       <div>
         <h1 className="text-xl">Báo cáo giờ</h1>
         <p className="text-sm mt-1" style={{ color: "var(--color-neutral-500)" }}>
-          Bấm vào một ô để nhập giờ và nội dung công việc — mọi người đều thấy avatar ai đã báo giờ. Di chuột vào để xem chi tiết từng người.
+          Bấm vào một ô để nhập giờ và nội dung công việc. Muốn xem nhanh: rê chuột vào ô (máy tính) hoặc bấm giữ (iPad/điện thoại).
         </p>
       </div>
 
@@ -342,20 +452,55 @@ export function HourTimesheet({
                     {days.map((date) => {
                       const entries = reportsFor(project.id, date);
                       const total = entries.reduce((sum, r) => sum + r.hours, 0);
-                      const breakdown = entries
-                        .map((r) => {
-                          const name = staffById.get(r.profile_id)?.display_name ?? "?";
-                          return r.note ? `${name}: ${r.hours}h (${r.note})` : `${name}: ${r.hours}h`;
-                        })
-                        .join("\n");
                       const mine = entries.some((r) => r.profile_id === currentUserId);
+
+                      function showPeek(rect: DOMRect, via: "hover" | "touch") {
+                        if (entries.length === 0) return;
+                        cancelClose();
+                        setPeek({ project, date, rect, via });
+                      }
 
                       return (
                         <td
                           key={date}
-                          onClick={() => setEditingEntry({ project, date })}
-                          title={breakdown || undefined}
+                          onClick={() => {
+                            if (suppressClickRef.current) {
+                              suppressClickRef.current = false;
+                              return;
+                            }
+                            setPeek(null);
+                            setEditingEntry({ project, date });
+                          }}
+                          onMouseEnter={(e) => {
+                            cancelClose();
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            clearHoverTimer();
+                            hoverTimerRef.current = window.setTimeout(() => showPeek(rect, "hover"), 300);
+                          }}
+                          onMouseLeave={() => {
+                            clearHoverTimer();
+                            scheduleClose();
+                          }}
+                          onTouchStart={(e) => {
+                            const touch = e.touches[0];
+                            touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            clearLongPressTimer();
+                            longPressTimerRef.current = window.setTimeout(() => {
+                              suppressClickRef.current = true;
+                              showPeek(rect, "touch");
+                            }, 450);
+                          }}
+                          onTouchMove={(e) => {
+                            const start = touchStartRef.current;
+                            const touch = e.touches[0];
+                            if (start && (Math.abs(touch.clientX - start.x) > 10 || Math.abs(touch.clientY - start.y) > 10)) {
+                              clearLongPressTimer();
+                            }
+                          }}
+                          onTouchEnd={clearLongPressTimer}
                           className="px-1 py-2 text-center cursor-pointer"
+                          style={{ WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none" }}
                         >
                           {entries.length === 0 ? (
                             <span style={{ color: "var(--color-neutral-300)" }}>–</span>
@@ -440,6 +585,21 @@ export function HourTimesheet({
           </tbody>
         </table>
       </div>
+
+      {peek && (
+        <div onMouseEnter={cancelClose} onMouseLeave={scheduleClose}>
+          <CellPeekPopup
+            rect={peek.rect}
+            projectLabel={`${peek.project.icon} ${peek.project.name}`}
+            date={peek.date}
+            entries={reportsFor(peek.project.id, peek.date)
+              .map((r) => ({ profile: staffById.get(r.profile_id), hours: r.hours, note: r.note }))
+              .filter((e): e is { profile: Profile; hours: number; note: string | null } => !!e.profile)}
+            dismissOnBackdrop={peek.via === "touch"}
+            onClose={() => setPeek(null)}
+          />
+        </div>
+      )}
 
       {editingEntry && (
         <HourEntryModal
