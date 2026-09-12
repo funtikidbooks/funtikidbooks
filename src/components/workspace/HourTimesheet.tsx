@@ -7,6 +7,18 @@ import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { WEEKDAYS_SHORT, addDays, formatDayLabel, mondayOf, vnToday, weekDaysOf } from "@/lib/constants/attendance";
 import type { HourReport, MeetingChannelPublic, Profile } from "@/lib/types";
 
+// Decimal hours (as stored) → giờ/phút for the two-field editor below.
+// 1 giờ = 60 phút exactly — phút is always literal minutes, not a second
+// decimal digit, which is what made the old single decimal-hours field
+// easy to mistype ("8.30" means 8h18m, not 8h30m).
+function splitDecimalHours(decimal: string): { h: string; m: string } {
+  const n = Number(decimal.replace(",", "."));
+  if (!Number.isFinite(n) || n <= 0) return { h: "", m: "" };
+  const h = Math.floor(n);
+  const m = Math.round((n - h) * 60);
+  return { h: String(h), m: m === 0 ? "" : String(m) };
+}
+
 // A small modal rather than an inline table-cell input — a note textarea
 // inline would force that one day-column wider across every row in the
 // table. The cell itself stays a bare number; content only shows up here,
@@ -36,7 +48,13 @@ function HourEntryModal({
   onDelete: () => Promise<string | void>;
   onClose: () => void;
 }) {
-  const [hours, setHours] = useState(initialHours);
+  // Split into giờ + phút (phút capped 0–59) instead of one free-text
+  // decimal field — "8.30" typed meaning "8 giờ 30 phút" is actually 8.3h
+  // (18 phút), a mismatch that's easy to not notice. This removes the unit
+  // confusion entirely: a phút value is always literally minutes.
+  const initialSplit = splitDecimalHours(initialHours);
+  const [hoursPart, setHoursPart] = useState(initialSplit.h);
+  const [minutesPart, setMinutesPart] = useState(initialSplit.m);
   const [note, setNote] = useState(initialNote);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +63,13 @@ function HourEntryModal({
       <form
         onSubmit={async (e) => {
           e.preventDefault();
-          setError((await onSave(hours, note)) || null);
+          const h = Number(hoursPart || "0");
+          const m = Number(minutesPart || "0");
+          if (!(m >= 0 && m <= 59)) {
+            setError("Phút chỉ từ 0 đến 59 (1 giờ = 60 phút).");
+            return;
+          }
+          setError((await onSave(String(h + m / 60), note)) || null);
         }}
         className="flex flex-col gap-4 p-6"
       >
@@ -82,16 +106,35 @@ function HourEntryModal({
 
         <div className="field">
           <label htmlFor="hr-hours">{otherEntries.length > 0 ? "Giờ của bạn" : "Số giờ"}</label>
-          <input
-            id="hr-hours"
-            autoFocus
-            type="text"
-            inputMode="decimal"
-            className="input"
-            placeholder="vd. 5.5"
-            value={hours}
-            onChange={(e) => setHours(e.target.value)}
-          />
+          <div className="flex items-center gap-2">
+            <input
+              id="hr-hours"
+              autoFocus
+              type="text"
+              inputMode="numeric"
+              className="input text-center"
+              style={{ width: 64 }}
+              placeholder="0"
+              value={hoursPart}
+              onChange={(e) => setHoursPart(e.target.value.replace(/[^0-9]/g, ""))}
+            />
+            <span className="text-sm font-semibold" style={{ color: "var(--color-neutral-500)" }}>
+              giờ
+            </span>
+            <input
+              id="hr-minutes"
+              type="text"
+              inputMode="numeric"
+              className="input text-center"
+              style={{ width: 64 }}
+              placeholder="0"
+              value={minutesPart}
+              onChange={(e) => setMinutesPart(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
+            />
+            <span className="text-sm font-semibold" style={{ color: "var(--color-neutral-500)" }}>
+              phút
+            </span>
+          </div>
         </div>
 
         <div className="field">
