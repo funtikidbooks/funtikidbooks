@@ -1,17 +1,16 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { getOrCreateDefaultBoard, getBoardData } from "@/lib/data/board";
 import { WorkspaceBoard } from "@/components/workspace/Board";
 
 export const metadata: Metadata = { title: "Bảng công việc" };
 
 export default async function WorkspacePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // requireUser() is cached per request — the layout above already paid
+  // for this auth round trip, so this just reuses it instead of redoing it.
+  const { user } = await requireUser();
 
-  const board = await getOrCreateDefaultBoard(user!.id);
+  const board = await getOrCreateDefaultBoard(user.id);
   const { columns, tasks, profiles, boardLabels } = await getBoardData(board.id);
 
   return (
@@ -21,7 +20,7 @@ export default async function WorkspacePage() {
       initialTasks={tasks}
       profiles={profiles}
       initialBoardLabels={boardLabels}
-      currentUserId={user!.id}
+      currentUserId={user.id}
     />
   );
 }

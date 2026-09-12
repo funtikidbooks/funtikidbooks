@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { getStaffDocument } from "@/lib/actions/documents";
 import { DocumentDetailView } from "@/components/workspace/DocumentDetailView";
 import type { Profile } from "@/lib/types";
@@ -13,11 +13,13 @@ export default async function DocumentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) notFound();
+  let supabase: Awaited<ReturnType<typeof requireUser>>["supabase"];
+  let user: Awaited<ReturnType<typeof requireUser>>["user"];
+  try {
+    ({ supabase, user } = await requireUser());
+  } catch {
+    notFound();
+  }
 
   // getStaffDocument() already comes back null for a document that isn't
   // this user's own and they're not HR — RLS draws that line, this just

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { listPayrollConfirmations, listPayrollForMonth, listPendingPayrollFeedback } from "@/lib/actions/payroll";
 import { PayrollBoard } from "@/components/admin/PayrollBoard";
 import type { Profile } from "@/lib/types";
@@ -8,14 +8,11 @@ import type { Profile } from "@/lib/types";
 export const metadata: Metadata = { title: "Quản trị — Bảng lương" };
 
 export default async function AdminPayrollPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await requireUser();
   const { data: profile } = await supabase
     .from("profiles")
     .select("access_role, role")
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .maybeSingle();
 
   const isDirector = profile?.access_role === "director";

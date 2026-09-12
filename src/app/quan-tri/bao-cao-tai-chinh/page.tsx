@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { getMonthlySalaryTotal, listFinanceEntries } from "@/lib/actions/finance";
 import { addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import { FinancialReportView } from "@/components/admin/FinancialReportView";
@@ -8,11 +8,8 @@ import { FinancialReportView } from "@/components/admin/FinancialReportView";
 export const metadata: Metadata = { title: "Quản trị — Báo cáo tài chính" };
 
 export default async function AdminFinancialReportPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: profile } = await supabase.from("profiles").select("access_role").eq("id", user!.id).maybeSingle();
+  const { supabase, user } = await requireUser();
+  const { data: profile } = await supabase.from("profiles").select("access_role").eq("id", user.id).maybeSingle();
 
   if (profile?.access_role !== "director") {
     redirect("/quan-tri");

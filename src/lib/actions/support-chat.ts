@@ -1,15 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import type { VisitorConversation, VisitorMessage } from "@/lib/types";
 
 async function requireStaff() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
+  const { supabase, user } = await requireUser();
 
   const { data: profile } = await supabase.from("profiles").select("access_role").eq("id", user.id).maybeSingle();
   if (!profile || profile.access_role === "staff") {

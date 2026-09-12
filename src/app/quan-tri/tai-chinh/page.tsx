@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import {
   getMonthlySalaryTotal,
   getYearlySalaryTotals,
@@ -15,11 +15,8 @@ import { FinanceBoard } from "@/components/admin/FinanceBoard";
 export const metadata: Metadata = { title: "Quản trị — Tài chính" };
 
 export default async function AdminFinancePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: profile } = await supabase.from("profiles").select("access_role").eq("id", user!.id).maybeSingle();
+  const { supabase, user } = await requireUser();
+  const { data: profile } = await supabase.from("profiles").select("access_role").eq("id", user.id).maybeSingle();
 
   if (profile?.access_role !== "director") {
     redirect("/quan-tri");

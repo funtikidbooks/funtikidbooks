@@ -2,18 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { randomUUID } from "node:crypto";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendStaffWelcomeEmail } from "@/lib/mail";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { AccessRole, EmploymentType, JobPosting, NewsPost, Profile, Project, Review, StaffBankInfo } from "@/lib/types";
 
 async function requireDirector() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
+  const { supabase, user } = await requireUser();
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -35,11 +31,7 @@ async function requireDirector() {
 // updateAccessRole/updateJobTitle/deleteStaffAccount/createStaffAccount
 // below all still require requireDirector(), not this.
 async function requireDirectorOrPM() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
+  const { supabase, user } = await requireUser();
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -55,11 +47,7 @@ async function requireDirectorOrPM() {
 }
 
 async function requireContentEditor() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
+  const { supabase, user } = await requireUser();
 
   const { data: profile } = await supabase
     .from("profiles")

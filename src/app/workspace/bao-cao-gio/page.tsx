@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { listWeekHourReports } from "@/lib/actions/hourReports";
 import { listChannels } from "@/lib/actions/meetings";
 import { HourTimesheet } from "@/components/workspace/HourTimesheet";
@@ -9,14 +9,11 @@ import type { Profile } from "@/lib/types";
 export const metadata: Metadata = { title: "Báo cáo giờ" };
 
 export default async function HourTimesheetPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await requireUser();
   const { data: profile } = await supabase
     .from("profiles")
     .select("access_role, role")
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .maybeSingle();
   const isHrManager = profile?.access_role === "director" || profile?.role === "Project Manager";
 
@@ -34,7 +31,7 @@ export default async function HourTimesheetPage() {
       initialReports={reports}
       channels={channels}
       staff={(profiles ?? []) as Profile[]}
-      currentUserId={user!.id}
+      currentUserId={user.id}
       isHrManager={isHrManager}
     />
   );

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { getStaffDocument } from "@/lib/actions/documents";
 import { DocumentDraftEditor } from "@/components/admin/DocumentDraftEditor";
 import { DocumentDetailView } from "@/components/workspace/DocumentDetailView";
@@ -14,14 +14,11 @@ export default async function AdminDocumentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await requireUser();
   const { data: profile } = await supabase
     .from("profiles")
     .select("access_role, role")
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .maybeSingle();
 
   if (profile?.access_role !== "director" && profile?.role !== "Project Manager") {
@@ -47,7 +44,7 @@ export default async function AdminDocumentDetailPage({
     <DocumentDetailView
       document={document}
       profile={staffProfile as Profile}
-      currentUserId={user!.id}
+      currentUserId={user.id}
       canManage
       backHref="/quan-tri/hop-dong"
       backLabel="Quay lại Hợp đồng"

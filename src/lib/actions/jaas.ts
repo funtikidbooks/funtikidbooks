@@ -1,7 +1,7 @@
 "use server";
 
 import { SignJWT, importPKCS8 } from "jose";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 
 // JaaS (8x8.vc, Jitsi-as-a-Service) needs a per-call, per-user signed JWT so
 // the first person into a room is trusted as moderator without anyone
@@ -16,11 +16,7 @@ export async function getJaasCallCredentials(): Promise<{ appId: string; jwt: st
   const privateKeyRaw = process.env.JAAS_PRIVATE_KEY;
   if (!appId || !apiKeyId || !privateKeyRaw) return null;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
+  const { supabase, user } = await requireUser();
 
   const { data: profile } = await supabase.from("profiles").select("display_name").eq("id", user.id).single();
 

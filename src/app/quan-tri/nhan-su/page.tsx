@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { listAllProfiles } from "@/lib/actions/admin";
 import { listStaffIdDocuments } from "@/lib/actions/staffId";
 import { StaffRoles } from "./StaffRoles";
@@ -8,14 +8,11 @@ import { StaffRoles } from "./StaffRoles";
 export const metadata: Metadata = { title: "Quản trị — Nhân sự" };
 
 export default async function AdminStaffPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await requireUser();
   const { data: profile } = await supabase
     .from("profiles")
     .select("access_role, role")
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .maybeSingle();
 
   const isDirector = profile?.access_role === "director";
@@ -24,5 +21,5 @@ export default async function AdminStaffPage() {
   }
 
   const [profiles, idDocuments] = await Promise.all([listAllProfiles(), listStaffIdDocuments()]);
-  return <StaffRoles initialProfiles={profiles} currentUserId={user!.id} isDirector={isDirector} initialIdDocuments={idDocuments} />;
+  return <StaffRoles initialProfiles={profiles} currentUserId={user.id} isDirector={isDirector} initialIdDocuments={idDocuments} />;
 }

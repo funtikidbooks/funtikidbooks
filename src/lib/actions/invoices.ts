@@ -1,17 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 import type { Invoice, InvoiceItem, InvoiceStatus } from "@/lib/types";
 
 // Director, or any staff whose chức danh is exactly "Project Manager" —
 // mirrors the can_manage_hr() RLS helper in supabase/schema.sql.
 async function requireHrManager() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
+  const { supabase, user } = await requireUser();
 
   const { data: profile } = await supabase
     .from("profiles")

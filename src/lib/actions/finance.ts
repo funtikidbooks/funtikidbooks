@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import type { FinanceEntry, FinanceEntryType, HomeLoanInstallment, PayrollRecord, PersonalDebt } from "@/lib/types";
 
@@ -8,12 +8,7 @@ import type { FinanceEntry, FinanceEntryType, HomeLoanInstallment, PayrollRecord
 // the whole business's P&L, not one employee's — so it's director-only,
 // full stop. Project Managers get can_manage_hr() elsewhere; not here.
 async function requireDirector() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Bạn cần đăng nhập.");
-
+  const { supabase, user } = await requireUser();
   const { data: profile } = await supabase.from("profiles").select("access_role").eq("id", user.id).maybeSingle();
   if (profile?.access_role !== "director") throw new Error("Bạn không có quyền này.");
   return { supabase, user };

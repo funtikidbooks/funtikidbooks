@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { getPayrollById } from "@/lib/actions/payroll";
 import { PayrollPrintView } from "@/components/admin/PayrollPrintView";
 import type { Profile } from "@/lib/types";
@@ -13,14 +13,11 @@ export default async function AdminPayrollDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { supabase, user } = await requireUser();
   const { data: profile } = await supabase
     .from("profiles")
     .select("access_role, role")
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .maybeSingle();
 
   if (profile?.access_role !== "director" && profile?.role !== "Project Manager") {

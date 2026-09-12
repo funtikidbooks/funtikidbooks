@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireUser } from "@/lib/supabase/server";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { listPendingPayrollFeedbackIds } from "@/lib/actions/payroll";
 
@@ -8,12 +8,16 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  // Goes through the shared, per-request-cached requireUser() (see its own
+  // comment in lib/supabase/server.ts) instead of calling auth.getUser()
+  // directly — every page under /quan-tri used to redo this same auth
+  // round trip on top of this layout's, and listPendingPayrollFeedbackIds()
+  // below reuses it too.
+  let supabase: Awaited<ReturnType<typeof requireUser>>["supabase"];
+  let user: Awaited<ReturnType<typeof requireUser>>["user"];
+  try {
+    ({ supabase, user } = await requireUser());
+  } catch {
     redirect("/dang-nhap?next=/quan-tri");
   }
 
