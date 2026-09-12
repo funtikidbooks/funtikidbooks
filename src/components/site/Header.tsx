@@ -326,9 +326,20 @@ function ServicesNavDropdown({ compact, submenu }: { compact: boolean; submenu: 
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onClick={handleClick}
-        style={{ WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none" }}
+        style={{ WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
       >
         {t.nav.services}
+        <span
+          aria-hidden
+          style={{
+            display: "inline-block",
+            fontSize: 10,
+            transition: "transform 0.2s ease",
+            transform: show ? "rotate(180deg)" : "rotate(0deg)",
+          }}
+        >
+          ▾
+        </span>
       </Link>
       {show && (
         <div
