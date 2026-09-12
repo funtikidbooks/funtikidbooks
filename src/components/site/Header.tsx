@@ -48,6 +48,8 @@ export function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Full flat list — only the mobile drawer (plenty of vertical room, no
+  // hover concept) still shows all 8 this way.
   const NAV_ITEMS = [
     { href: "/", label: t.nav.home },
     { href: "/dich-vu", label: t.nav.services },
@@ -57,6 +59,23 @@ export function Header() {
     { href: "/tin-tuc", label: t.nav.news },
     { href: "/tuyen-dung", label: t.nav.careers },
     { href: "/lien-he", label: t.nav.contact },
+  ];
+
+  // The two horizontal-bar tiers (2xl and the 1024-1535px compact one)
+  // fold Quy trình/Giới thiệu/Tin tức/Tuyển dụng into a "Dịch vụ" hover/
+  // long-press flyout instead — per sếp Phúc, cuts the bar from 8 words
+  // down to 4 so it stops fighting for width at every breakpoint.
+  const PRIMARY_NAV_ITEMS = [
+    { href: "/", label: t.nav.home },
+    { href: "/dich-vu", label: t.nav.services },
+    { href: "/du-an", label: t.nav.projects },
+    { href: "/lien-he", label: t.nav.contact },
+  ];
+  const SERVICES_SUBMENU = [
+    { href: "/quy-trinh", label: t.nav.process },
+    { href: "/gioi-thieu", label: t.nav.about },
+    { href: "/tin-tuc", label: t.nav.news },
+    { href: "/tuyen-dung", label: t.nav.careers },
   ];
 
   return (
@@ -97,7 +116,10 @@ export function Header() {
             2xl and the compact tier below now covers the whole
             1024-1535px range instead of stopping at 1279px. */}
         <nav className="hidden 2xl:flex items-center gap-1">
-          {NAV_ITEMS.map((item) => {
+          {PRIMARY_NAV_ITEMS.map((item) => {
+            if (item.href === "/dich-vu") {
+              return <ServicesNavDropdown key={item.href} compact={false} submenu={SERVICES_SUBMENU} />;
+            }
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
               <Link
@@ -114,6 +136,9 @@ export function Header() {
         <div className="hidden 2xl:flex items-center gap-3 flex-none">
           <SiteThemeToggle />
           <LanguageToggle />
+          <Link href="/cong-viec" className="fk-navlink text-center">
+            {t.nav.clientPortal}
+          </Link>
           {isAuthenticated ? (
             <Link href={memberHref} className="btn btn-primary btn-sm text-center" style={{ minWidth: 210 }}>
               {t.nav.workspace}
@@ -138,7 +163,10 @@ export function Header() {
             words + logo + toggles + an action link into a phone or
             portrait-tablet width. */}
         <nav className="hidden lg:flex 2xl:hidden items-center gap-0.5">
-          {NAV_ITEMS.map((item) => {
+          {PRIMARY_NAV_ITEMS.map((item) => {
+            if (item.href === "/dich-vu") {
+              return <ServicesNavDropdown key={item.href} compact submenu={SERVICES_SUBMENU} />;
+            }
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
               <Link
@@ -155,6 +183,9 @@ export function Header() {
         <div className="hidden lg:flex 2xl:hidden items-center gap-2 flex-none">
           <SiteThemeToggle />
           <LanguageToggle />
+          <Link href="/cong-viec" className="fk-navlink fk-navlink-compact text-center" title={t.nav.clientPortal}>
+            💼
+          </Link>
           {isAuthenticated ? (
             <Link href={memberHref} className="btn btn-primary btn-sm text-center">
               {t.nav.workspace}
@@ -213,6 +244,113 @@ export function Header() {
         </div>
       )}
     </header>
+  );
+}
+
+// "Dịch vụ" doubles as a category trigger for Quy trình/Giới thiệu/Tin tức/
+// Tuyển dụng — hover opens it on desktop, long-press on touch (same timing
+// as the workspace's other hover/long-press peek popups: 300ms to show,
+// 150ms close-grace so the cursor can cross into the panel, 450ms
+// long-press with a 10px move-cancel and a suppressed synthetic click so a
+// long-press doesn't also navigate). A quick tap/click still goes straight
+// to /dich-vu.
+function ServicesNavDropdown({ compact, submenu }: { compact: boolean; submenu: { href: string; label: string }[] }) {
+  const pathname = usePathname();
+  const { t } = useDict();
+  const [show, setShow] = useState(false);
+  const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressClickRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  function clearShowAndCloseTimers() {
+    if (showTimer.current) clearTimeout(showTimer.current);
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+  }
+
+  function handleMouseEnter() {
+    clearShowAndCloseTimers();
+    showTimer.current = setTimeout(() => setShow(true), 300);
+  }
+
+  function handleMouseLeave() {
+    clearShowAndCloseTimers();
+    closeTimer.current = setTimeout(() => setShow(false), 150);
+  }
+
+  function handleTouchStart(e: React.TouchEvent) {
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    longPressTimer.current = setTimeout(() => {
+      setShow(true);
+      suppressClickRef.current = true;
+    }, 450);
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (!touchStartRef.current || !longPressTimer.current) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+    if (Math.sqrt(dx * dx + dy * dy) > 10) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }
+
+  function handleTouchEnd() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }
+
+  function handleClick(e: React.MouseEvent) {
+    if (suppressClickRef.current) {
+      e.preventDefault();
+      suppressClickRef.current = false;
+    }
+  }
+
+  useEffect(() => clearShowAndCloseTimers, []);
+
+  const active = pathname.startsWith("/dich-vu") || submenu.some((item) => pathname.startsWith(item.href));
+
+  return (
+    <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+      <Link
+        href="/dich-vu"
+        className={`fk-navlink${compact ? " fk-navlink-compact" : ""}${active ? " fk-navlink-active" : ""}`}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={handleClick}
+        style={{ WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none" }}
+      >
+        {t.nav.services}
+      </Link>
+      {show && (
+        <div
+          className="card elev-lg absolute flex flex-col gap-0.5"
+          style={{ top: "100%", left: 0, marginTop: 6, minWidth: 170, padding: 6, zIndex: 50 }}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
+          {submenu.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="fk-navlink"
+              style={{ justifyContent: "flex-start" }}
+              onClick={() => setShow(false)}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
