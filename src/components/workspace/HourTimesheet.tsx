@@ -12,7 +12,7 @@ import type { HourReport, MeetingChannelPublic, Profile } from "@/lib/types";
 // supabase/migrations/hour_reports.sql), so this is pure formatting, no
 // rounding ever happens here.
 function formatHM(hours: number, minutes: number): string {
-  return minutes === 0 ? `${hours}` : `${hours}.${String(minutes).padStart(2, "0")}p`;
+  return minutes === 0 ? `${hours}h` : `${hours}.${String(minutes).padStart(2, "0")}p`;
 }
 
 // Sums a list of exact (hours, minutes) pairs by adding whole minutes
@@ -190,33 +190,29 @@ function HourEntryModal({
 // be roomy), press-and-hold on iPad/phone (no hover there). Separate from
 // HourEntryModal's edit form: this is purely for a quick look at what's
 // already logged, dismissed by moving the mouse away or tapping outside.
-function CellPeekPopup({
+// Shared shell for both CellPeekPopup and TodayInfoPopup below — positions
+// itself off the anchor rect (opening whichever of up/down has room),
+// grows out of that rect with the same zoom-in used everywhere else in
+// this file, and only renders a dismiss backdrop for the touch/long-press
+// path (hover already closes itself via onMouseLeave — a backdrop there
+// would sit above the very anchor being hovered and swallow its click).
+function FloatingPopup({
   rect,
-  projectLabel,
-  date,
-  entries,
+  width = 300,
   dismissOnBackdrop,
   onClose,
+  children,
 }: {
   rect: DOMRect;
-  projectLabel: string;
-  date: string;
-  entries: { profile: Profile; hours: number; minutes: number; note: string | null }[];
-  // Touch (long-press) has no "mouse left the cell" signal, so it needs an
-  // explicit tap-outside-to-dismiss backdrop. Hover already closes itself
-  // via onMouseLeave — a backdrop there would sit above the very cell being
-  // hovered and swallow the click meant to open the edit modal.
+  width?: number;
   dismissOnBackdrop: boolean;
   onClose: () => void;
+  children: React.ReactNode;
 }) {
-  const width = 300;
   const margin = 8;
   const left = Math.min(Math.max(margin, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - margin);
   const spaceBelow = window.innerHeight - rect.bottom;
   const opensDown = spaceBelow > 260 || spaceBelow > rect.top;
-  // Grows out of the cell that opened it rather than just fading in from
-  // nowhere — the transform-origin tracks where that cell actually sits
-  // relative to the popup's own box.
   const originX = `${Math.min(100, Math.max(0, (((rect.left + rect.width / 2 - left) / width) * 100)))}%`;
   const originY = opensDown ? "0%" : "100%";
 
@@ -240,30 +236,76 @@ function CellPeekPopup({
           ["--popup-origin-y" as string]: originY,
         }}
       >
-        <div>
-          <p className="text-sm font-bold">{projectLabel}</p>
-          <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-            {formatDayLabel(date)}
-          </p>
-        </div>
-        {entries.map(({ profile, hours, minutes, note }) => (
-          <div key={profile.id} className="flex gap-2.5">
-            <AttendanceAvatar profile={profile} size={26} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-sm font-semibold truncate">{profile.display_name}</span>
-                <span className="text-sm font-bold flex-none">{formatHM(hours, minutes)}</span>
-              </div>
-              {note && (
-                <p className="text-[12px]" style={{ color: "var(--color-neutral-500)" }}>
-                  {note}
-                </p>
-              )}
-            </div>
-          </div>
-        ))}
+        {children}
       </div>
     </>
+  );
+}
+
+function CellPeekPopup({
+  rect,
+  projectLabel,
+  date,
+  entries,
+  dismissOnBackdrop,
+  onClose,
+}: {
+  rect: DOMRect;
+  projectLabel: string;
+  date: string;
+  entries: { profile: Profile; hours: number; minutes: number; note: string | null }[];
+  dismissOnBackdrop: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <FloatingPopup rect={rect} dismissOnBackdrop={dismissOnBackdrop} onClose={onClose}>
+      <div>
+        <p className="text-sm font-bold">{projectLabel}</p>
+        <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+          {formatDayLabel(date)}
+        </p>
+      </div>
+      {entries.map(({ profile, hours, minutes, note }) => (
+        <div key={profile.id} className="flex gap-2.5">
+          <AttendanceAvatar profile={profile} size={26} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-semibold truncate">{profile.display_name}</span>
+              <span className="text-sm font-bold flex-none">{formatHM(hours, minutes)}</span>
+            </div>
+            {note && (
+              <p className="text-[12px]" style={{ color: "var(--color-neutral-500)" }}>
+                {note}
+              </p>
+            )}
+          </div>
+        </div>
+      ))}
+    </FloatingPopup>
+  );
+}
+
+// Same hover/long-press pattern as a day cell, opened from the "today"
+// column header instead — just tells you which day is still in progress,
+// same as Upwork's own "This day is in progress" hint on its timesheet.
+function TodayInfoPopup({
+  rect,
+  date,
+  dismissOnBackdrop,
+  onClose,
+}: {
+  rect: DOMRect;
+  date: string;
+  dismissOnBackdrop: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <FloatingPopup rect={rect} width={240} dismissOnBackdrop={dismissOnBackdrop} onClose={onClose}>
+      <p className="text-sm font-bold">Hôm nay — {formatDayLabel(date)}</p>
+      <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+        Ngày đang diễn ra — giờ có thể còn thay đổi trong hôm nay.
+      </p>
+    </FloatingPopup>
   );
 }
 
@@ -300,7 +342,9 @@ export function HourTimesheet({
   const [entryDeleting, setEntryDeleting] = useState(false);
   const [editingCap, setEditingCap] = useState<string | null>(null);
   const [capValue, setCapValue] = useState("");
-  const [peek, setPeek] = useState<{ project: MeetingChannelPublic; date: string; rect: DOMRect; via: "hover" | "touch" } | null>(
+  // project: null means this is the "today" column-header info popup
+  // rather than a specific project/day cell's entries.
+  const [peek, setPeek] = useState<{ project: MeetingChannelPublic | null; date: string; rect: DOMRect; via: "hover" | "touch" } | null>(
     null,
   );
   const hoverTimerRef = useRef<number | null>(null);
@@ -339,7 +383,8 @@ export function HourTimesheet({
   }
 
   const days = weekDaysOf(weekStart);
-  const isCurrentWeek = weekStart === mondayOf(vnToday());
+  const today = vnToday();
+  const isCurrentWeek = weekStart === mondayOf(today);
   const staffById = useMemo(() => new Map(staff.map((p) => [p.id, p])), [staff]);
   const projects = useMemo(
     () => channels.filter((c) => !c.is_general && !c.is_food_room && c.billing_type === "hourly"),
@@ -465,17 +510,67 @@ export function HourTimesheet({
               >
                 Dự án
               </th>
-              {days.map((date, i) => (
-                <th
-                  key={date}
-                  className="text-center px-1 md:px-2 py-2 text-[11px] font-bold"
-                  style={{ color: "var(--color-neutral-500)", minWidth: 48 }}
-                >
-                  {WEEKDAYS_SHORT[i]}
-                  <br />
-                  {formatDayLabel(date)}
-                </th>
-              ))}
+              {days.map((date, i) => {
+                const isToday = date === today;
+                return (
+                  <th
+                    key={date}
+                    onClick={() => {
+                      if (suppressClickRef.current) {
+                        suppressClickRef.current = false;
+                        return;
+                      }
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isToday) return;
+                      cancelClose();
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      clearHoverTimer();
+                      hoverTimerRef.current = window.setTimeout(() => {
+                        cancelClose();
+                        setPeek({ project: null, date, rect, via: "hover" });
+                      }, 300);
+                    }}
+                    onMouseLeave={() => {
+                      clearHoverTimer();
+                      scheduleClose();
+                    }}
+                    onTouchStart={(e) => {
+                      if (!isToday) return;
+                      const touch = e.touches[0];
+                      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      clearLongPressTimer();
+                      longPressTimerRef.current = window.setTimeout(() => {
+                        suppressClickRef.current = true;
+                        setPeek({ project: null, date, rect, via: "touch" });
+                      }, 450);
+                    }}
+                    onTouchMove={(e) => {
+                      const start = touchStartRef.current;
+                      const touch = e.touches[0];
+                      if (start && (Math.abs(touch.clientX - start.x) > 10 || Math.abs(touch.clientY - start.y) > 10)) {
+                        clearLongPressTimer();
+                      }
+                    }}
+                    onTouchEnd={clearLongPressTimer}
+                    className="text-center px-1 md:px-2 py-2 text-[11px] font-bold"
+                    style={{
+                      color: isToday ? "var(--color-accent-700)" : "var(--color-neutral-500)",
+                      minWidth: 48,
+                      background: isToday ? "var(--color-accent-100)" : undefined,
+                      cursor: isToday ? "pointer" : undefined,
+                      WebkitUserSelect: "none",
+                      userSelect: "none",
+                      WebkitTouchCallout: "none",
+                    }}
+                  >
+                    {WEEKDAYS_SHORT[i]}
+                    <br />
+                    {formatDayLabel(date)}
+                  </th>
+                );
+              })}
               <th className="text-center px-2 md:px-3 py-2 text-[11px] font-bold" style={{ color: "var(--color-neutral-500)", minWidth: 56 }}>
                 Tổng
               </th>
@@ -558,7 +653,12 @@ export function HourTimesheet({
                           }}
                           onTouchEnd={clearLongPressTimer}
                           className="px-1 py-2 text-center cursor-pointer"
-                          style={{ WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none" }}
+                          style={{
+                            WebkitUserSelect: "none",
+                            userSelect: "none",
+                            WebkitTouchCallout: "none",
+                            background: date === today ? "var(--color-accent-100)" : undefined,
+                          }}
                         >
                           {entries.length === 0 ? (
                             <span style={{ color: "var(--color-neutral-300)" }}>–</span>
@@ -648,16 +748,20 @@ export function HourTimesheet({
 
       {peek && (
         <div onMouseEnter={cancelClose} onMouseLeave={scheduleClose}>
-          <CellPeekPopup
-            rect={peek.rect}
-            projectLabel={`${peek.project.icon} ${peek.project.name}`}
-            date={peek.date}
-            entries={reportsFor(peek.project.id, peek.date)
-              .map((r) => ({ profile: staffById.get(r.profile_id), hours: r.hours, minutes: r.minutes, note: r.note }))
-              .filter((e): e is { profile: Profile; hours: number; minutes: number; note: string | null } => !!e.profile)}
-            dismissOnBackdrop={peek.via === "touch"}
-            onClose={() => setPeek(null)}
-          />
+          {peek.project ? (
+            <CellPeekPopup
+              rect={peek.rect}
+              projectLabel={`${peek.project.icon} ${peek.project.name}`}
+              date={peek.date}
+              entries={reportsFor(peek.project.id, peek.date)
+                .map((r) => ({ profile: staffById.get(r.profile_id), hours: r.hours, minutes: r.minutes, note: r.note }))
+                .filter((e): e is { profile: Profile; hours: number; minutes: number; note: string | null } => !!e.profile)}
+              dismissOnBackdrop={peek.via === "touch"}
+              onClose={() => setPeek(null)}
+            />
+          ) : (
+            <TodayInfoPopup rect={peek.rect} date={peek.date} dismissOnBackdrop={peek.via === "touch"} onClose={() => setPeek(null)} />
+          )}
         </div>
       )}
 
