@@ -162,7 +162,18 @@ export function ChatInbox({ initialConversations }: { initialConversations: Visi
         ) : (
           <>
             <div className="flex items-center justify-between gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-              <span className="font-bold text-sm">{labelFor(active)}</span>
+              <span className="flex items-baseline gap-2 min-w-0">
+                <span className="font-bold text-sm flex-none">{labelFor(active)}</span>
+                {active.visitor_email && (
+                  <a
+                    href={`mailto:${active.visitor_email}`}
+                    className="text-[12px] truncate"
+                    style={{ color: "var(--color-neutral-500)" }}
+                  >
+                    {active.visitor_email}
+                  </a>
+                )}
+              </span>
               {active.status === "open" && (
                 <button type="button" className="btn btn-ghost btn-sm" onClick={handleClose}>
                   Đóng trò chuyện

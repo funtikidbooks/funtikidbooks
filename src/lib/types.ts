@@ -31,6 +31,7 @@ export type CalendarEvent = {
 export type VisitorConversation = {
   id: string;
   visitor_name: string | null;
+  visitor_email: string | null;
   status: "open" | "closed";
   unread: boolean;
   created_at: string;

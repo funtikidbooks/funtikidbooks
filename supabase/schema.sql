@@ -1616,11 +1616,13 @@ create table if not exists public.visitor_conversations (
   id uuid primary key default gen_random_uuid(),
   visitor_token uuid not null default gen_random_uuid(),
   visitor_name text,
+  visitor_email text,
   status text not null default 'open' check (status in ('open', 'closed')),
   unread boolean not null default true,
   created_at timestamptz not null default now(),
   last_message_at timestamptz not null default now()
 );
+alter table public.visitor_conversations add column if not exists visitor_email text;
 
 create table if not exists public.visitor_messages (
   id uuid primary key default gen_random_uuid(),

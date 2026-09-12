@@ -71,6 +71,47 @@ Funti Kidbooks Studio`,
   });
 }
 
+// Fallback for the "chat with us" widget's push notification — push only
+// reaches a device that already granted permission, so this covers the
+// case where no director/admin has one set up (or it's silently expired)
+// and a customer message would otherwise go unseen until someone happens
+// to open /quan-tri/chat.
+export async function sendNewVisitorMessageEmail(input: {
+  to: string;
+  visitorName: string | null;
+  visitorEmail: string | null;
+  preview: string;
+}) {
+  const transporter = getTransporter();
+  if (!transporter) return;
+
+  const chatUrl = "https://funtikidbooks.com/quan-tri/chat";
+  const who = input.visitorName?.trim() || "Khách vãng lai";
+
+  await transporter.sendMail({
+    from: `"Funti Kidbooks Studio" <${process.env.GMAIL_USER}>`,
+    to: input.to,
+    subject: `Tin nhắn mới từ ${who} trên web`,
+    text: `${who}${input.visitorEmail ? ` (${input.visitorEmail})` : ""} vừa nhắn:
+
+"${input.preview}"
+
+Trả lời tại: ${chatUrl}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #2b2622;">
+        <h2 style="margin-bottom: 4px;">Tin nhắn mới từ ${who}</h2>
+        ${input.visitorEmail ? `<p style="color: #78776f; margin-top: 0;">Email khách: ${input.visitorEmail}</p>` : ""}
+        <p style="background: #f4f1ea; border-radius: 8px; padding: 12px 14px; white-space: pre-wrap;">${input.preview}</p>
+        <p>
+          <a href="${chatUrl}" style="display: inline-block; background: #e8674a; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold;">
+            Trả lời ngay
+          </a>
+        </p>
+      </div>
+    `,
+  });
+}
+
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
 }

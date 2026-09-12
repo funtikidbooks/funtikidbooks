@@ -26,6 +26,7 @@ export function SupportChatWidget() {
   );
   const [messages, setMessages] = useState<VisitorMessage[]>([]);
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +65,7 @@ export function SupportChatWidget() {
 
     try {
       if (!conversationId || !token) {
-        const result = await startVisitorConversation(name, trimmed);
+        const result = await startVisitorConversation(name, email, trimmed);
         localStorage.setItem(STORAGE_ID_KEY, result.conversationId);
         localStorage.setItem(STORAGE_TOKEN_KEY, result.token);
         setConversationId(result.conversationId);
@@ -154,13 +155,23 @@ export function SupportChatWidget() {
               </p>
             )}
             {!conversationId && (
-              <input
-                className="input"
-                style={{ margin: "8px 8px 0", width: "calc(100% - 16px)", padding: "6px 10px", fontSize: 13 }}
-                placeholder="Tên của bạn (không bắt buộc)"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
+              <div className="flex flex-col gap-1.5" style={{ margin: "8px 8px 0" }}>
+                <input
+                  className="input"
+                  style={{ padding: "6px 10px", fontSize: 13 }}
+                  placeholder="Tên của bạn (không bắt buộc)"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+                <input
+                  type="email"
+                  className="input"
+                  style={{ padding: "6px 10px", fontSize: 13 }}
+                  placeholder="Email (không bắt buộc)"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
             )}
             <form onSubmit={handleSend} className="flex items-center gap-1.5 p-2">
               <input

@@ -1,6 +1,9 @@
 "use server";
 
+import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendPushToUser } from "@/lib/push";
+import { sendNewVisitorMessageEmail } from "@/lib/mail";
 import type { VisitorMessage } from "@/lib/types";
 
 // Public, unauthenticated actions for the site-wide "Chat với chúng tôi"
@@ -24,17 +27,55 @@ async function requireConversation(conversationId: string, token: string) {
   return { supabase, conversation: data };
 }
 
+// Fires push (to every director/admin device that's granted it) and a
+// fallback email (to every director/admin who has one on file) whenever a
+// visitor sends a message — the widget has no way to page anyone otherwise,
+// so a message left outside office hours would just sit unseen in
+// /quan-tri/chat until someone happened to open it.
+async function notifyStaffOfVisitorMessage(visitorName: string | null, visitorEmail: string | null, content: string) {
+  const supabase = createAdminClient();
+  const { data: staff } = await supabase.from("profiles").select("id, email").in("access_role", ["director", "admin"]);
+  if (!staff || staff.length === 0) return;
+
+  const who = visitorName?.trim() || "Khách vãng lai";
+  const preview = content.length > 140 ? `${content.slice(0, 140)}…` : content;
+
+  await Promise.all(
+    staff.map((s) =>
+      sendPushToUser(s.id, {
+        title: `Tin nhắn mới từ ${who}`,
+        body: preview,
+        senderId: "visitor-chat",
+        url: "/quan-tri/chat",
+        tag: "funti-visitor-chat",
+      }).catch(() => {}),
+    ),
+  );
+
+  await Promise.all(
+    staff.map((s) =>
+      s.email
+        ? sendNewVisitorMessageEmail({ to: s.email, visitorName, visitorEmail, preview }).catch(() => {})
+        : Promise.resolve(),
+    ),
+  );
+}
+
 export async function startVisitorConversation(
   visitorName: string | undefined,
+  visitorEmail: string | undefined,
   firstMessage: string,
 ): Promise<{ conversationId: string; token: string; message: VisitorMessage }> {
   const content = firstMessage.trim();
   if (!content) throw new Error("Vui lòng nhập nội dung tin nhắn.");
 
+  const name = visitorName?.trim() || null;
+  const email = visitorEmail?.trim() || null;
+
   const supabase = createAdminClient();
   const { data: conversation, error: convError } = await supabase
     .from("visitor_conversations")
-    .insert({ visitor_name: visitorName?.trim() || null })
+    .insert({ visitor_name: name, visitor_email: email })
     .select("id, visitor_token")
     .single();
 
@@ -47,6 +88,8 @@ export async function startVisitorConversation(
     .single();
 
   if (msgError || !message) throw new Error("Không thể gửi tin nhắn. Vui lòng thử lại.");
+
+  after(() => notifyStaffOfVisitorMessage(name, email, content).catch(() => {}));
 
   return { conversationId: conversation.id, token: conversation.visitor_token, message: message as VisitorMessage };
 }
@@ -64,10 +107,20 @@ export async function sendVisitorMessage(conversationId: string, token: string, 
 
   if (error || !data) throw new Error("Không thể gửi tin nhắn. Vui lòng thử lại.");
 
-  await supabase
+  const { data: updatedConversation } = await supabase
     .from("visitor_conversations")
     .update({ unread: true, last_message_at: new Date().toISOString() })
-    .eq("id", conversationId);
+    .eq("id", conversationId)
+    .select("visitor_name, visitor_email")
+    .single();
+
+  after(() =>
+    notifyStaffOfVisitorMessage(
+      updatedConversation?.visitor_name ?? null,
+      updatedConversation?.visitor_email ?? null,
+      trimmed,
+    ).catch(() => {}),
+  );
 
   return data as VisitorMessage;
 }
