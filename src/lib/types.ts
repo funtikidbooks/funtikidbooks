@@ -357,7 +357,11 @@ export type HourReport = {
   profile_id: string;
   project_channel_id: string | null;
   work_date: string;
+  // Whole giờ (0–24) + whole phút (0–59) — not a decimal hour count, which
+  // can't represent something like 6h40p exactly (6.6667 rounds to a
+  // meaningless "6.7" in a numeric(4,1) column).
   hours: number;
+  minutes: number;
   note: string | null;
   created_at: string;
 };

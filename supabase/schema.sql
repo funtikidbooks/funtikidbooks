@@ -2711,13 +2711,16 @@ create policy "hr can manage document library storage"
 -- of maintaining a separate "projects" master list. One row per (person,
 -- project, day); logHours() upserts against the unique index below so
 -- re-entering a day updates it in place instead of piling up duplicates.
+-- hours/minutes are whole integers (24h/60p) rather than a single decimal
+-- hour count — a decimal can't represent something like 6h40p exactly
+-- (6.6667 rounds to a meaningless "6.7" in a numeric(4,1) column).
 -- ---------------------------------------------------------------------------
 create table if not exists public.hour_reports (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references public.profiles (id) on delete cascade,
   project_channel_id uuid references public.meeting_channels (id) on delete set null,
   work_date date not null,
-  hours numeric(4,1) not null check (hours > 0 and hours <= 24),
+  hours numeric(4,1) not null default 0,
   note text,
   created_at timestamptz not null default now()
 );
@@ -2727,6 +2730,22 @@ create table if not exists public.hour_reports (
 alter table public.hour_reports drop column if exists message_id;
 alter table public.hour_reports drop column if exists reviewed_at;
 alter table public.hour_reports drop column if exists reviewed_by;
+
+-- Backfilled from whatever the old decimal hours column held before it
+-- gets truncated to a whole number below, so pre-existing rows keep their
+-- closest giờ/phút equivalent instead of silently losing the fraction.
+alter table public.hour_reports add column if not exists minutes integer not null default 0;
+update public.hour_reports set minutes = round((hours - floor(hours)) * 60)::integer where minutes = 0 and hours <> floor(hours);
+alter table public.hour_reports alter column hours type integer using floor(hours)::integer;
+alter table public.hour_reports alter column hours set default 0;
+
+alter table public.hour_reports drop constraint if exists hour_reports_hours_check;
+alter table public.hour_reports drop constraint if exists hour_reports_minutes_check;
+alter table public.hour_reports drop constraint if exists hour_reports_total_check;
+alter table public.hour_reports add constraint hour_reports_hours_check check (hours >= 0 and hours <= 24);
+alter table public.hour_reports add constraint hour_reports_minutes_check check (minutes >= 0 and minutes <= 59);
+alter table public.hour_reports add constraint hour_reports_total_check
+  check (hours * 60 + minutes > 0 and hours * 60 + minutes <= 1440);
 
 create unique index if not exists hour_reports_person_project_day_idx
   on public.hour_reports (profile_id, project_channel_id, work_date);

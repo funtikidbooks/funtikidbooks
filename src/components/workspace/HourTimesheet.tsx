@@ -7,16 +7,20 @@ import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
 import { WEEKDAYS_SHORT, addDays, formatDayLabel, mondayOf, vnToday, weekDaysOf } from "@/lib/constants/attendance";
 import type { HourReport, MeetingChannelPublic, Profile } from "@/lib/types";
 
-// Decimal hours (as stored) → giờ/phút for the two-field editor below.
-// 1 giờ = 60 phút exactly — phút is always literal minutes, not a second
-// decimal digit, which is what made the old single decimal-hours field
-// easy to mistype ("8.30" means 8h18m, not 8h30m).
-function splitDecimalHours(decimal: string): { h: string; m: string } {
-  const n = Number(decimal.replace(",", "."));
-  if (!Number.isFinite(n) || n <= 0) return { h: "", m: "" };
-  const h = Math.floor(n);
-  const m = Math.round((n - h) * 60);
-  return { h: String(h), m: m === 0 ? "" : String(m) };
+// Whole giờ + whole phút (24h/60p, standard time units) — never a decimal
+// hour count. hour_reports itself stores exact integers now (see
+// supabase/migrations/hour_reports.sql), so this is pure formatting, no
+// rounding ever happens here.
+function formatHM(hours: number, minutes: number): string {
+  return minutes === 0 ? `${hours}h` : `${hours}h${String(minutes).padStart(2, "0")}p`;
+}
+
+// Sums a list of exact (hours, minutes) pairs by adding whole minutes
+// together and carrying the overflow into hours — the only way to combine
+// several people's time for one cell/week without ever touching a decimal.
+function sumHM(entries: { hours: number; minutes: number }[]): { hours: number; minutes: number } {
+  const totalMinutes = entries.reduce((sum, e) => sum + e.hours * 60 + e.minutes, 0);
+  return { hours: Math.floor(totalMinutes / 60), minutes: totalMinutes % 60 };
 }
 
 // A small modal rather than an inline table-cell input — a note textarea
@@ -28,6 +32,7 @@ function HourEntryModal({
   date,
   otherEntries,
   initialHours,
+  initialMinutes,
   initialNote,
   hasExisting,
   saving,
@@ -38,23 +43,22 @@ function HourEntryModal({
 }: {
   projectLabel: string;
   date: string;
-  otherEntries: { profile: Profile; hours: number; note: string | null }[];
-  initialHours: string;
+  otherEntries: { profile: Profile; hours: number; minutes: number; note: string | null }[];
+  initialHours: number;
+  initialMinutes: number;
   initialNote: string;
   hasExisting: boolean;
   saving: boolean;
   deleting: boolean;
-  onSave: (hours: string, note: string) => Promise<string | void>;
+  onSave: (hours: number, minutes: number, note: string) => Promise<string | void>;
   onDelete: () => Promise<string | void>;
   onClose: () => void;
 }) {
-  // Split into giờ + phút (phút capped 0–59) instead of one free-text
-  // decimal field — "8.30" typed meaning "8 giờ 30 phút" is actually 8.3h
-  // (18 phút), a mismatch that's easy to not notice. This removes the unit
-  // confusion entirely: a phút value is always literally minutes.
-  const initialSplit = splitDecimalHours(initialHours);
-  const [hoursPart, setHoursPart] = useState(initialSplit.h);
-  const [minutesPart, setMinutesPart] = useState(initialSplit.m);
+  // Giờ + phút as two plain integer fields (phút capped 0–59) — no decimal
+  // anywhere in the input path, so there's no "8.30 nghĩa là gì" ambiguity
+  // to begin with.
+  const [hoursPart, setHoursPart] = useState(initialHours > 0 ? String(initialHours) : "");
+  const [minutesPart, setMinutesPart] = useState(initialMinutes > 0 ? String(initialMinutes) : "");
   const [note, setNote] = useState(initialNote);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,7 +73,7 @@ function HourEntryModal({
             setError("Phút chỉ từ 0 đến 59 (1 giờ = 60 phút).");
             return;
           }
-          setError((await onSave(String(h + m / 60), note)) || null);
+          setError((await onSave(h, m, note)) || null);
         }}
         className="flex flex-col gap-4 p-6"
       >
@@ -85,13 +89,13 @@ function HourEntryModal({
             day. The editable form below is only ever your own entry. */}
         {otherEntries.length > 0 && (
           <div className="flex flex-col gap-2 p-3 rounded-[8px]" style={{ background: "var(--color-surface)" }}>
-            {otherEntries.map(({ profile, hours: h, note: n }) => (
+            {otherEntries.map(({ profile, hours: h, minutes: m, note: n }) => (
               <div key={profile.id} className="flex gap-2">
                 <AttendanceAvatar profile={profile} size={22} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline justify-between gap-2">
                     <span className="text-sm font-semibold truncate">{profile.display_name}</span>
-                    <span className="text-sm font-bold flex-none">{h} tiếng</span>
+                    <span className="text-sm font-bold flex-none">{formatHM(h, m)}</span>
                   </div>
                   {n && (
                     <p className="text-[12px]" style={{ color: "var(--color-neutral-500)" }}>
@@ -197,7 +201,7 @@ function CellPeekPopup({
   rect: DOMRect;
   projectLabel: string;
   date: string;
-  entries: { profile: Profile; hours: number; note: string | null }[];
+  entries: { profile: Profile; hours: number; minutes: number; note: string | null }[];
   // Touch (long-press) has no "mouse left the cell" signal, so it needs an
   // explicit tap-outside-to-dismiss backdrop. Hover already closes itself
   // via onMouseLeave — a backdrop there would sit above the very cell being
@@ -242,13 +246,13 @@ function CellPeekPopup({
             {formatDayLabel(date)}
           </p>
         </div>
-        {entries.map(({ profile, hours, note }) => (
+        {entries.map(({ profile, hours, minutes, note }) => (
           <div key={profile.id} className="flex gap-2.5">
             <AttendanceAvatar profile={profile} size={26} />
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-sm font-semibold truncate">{profile.display_name}</span>
-                <span className="text-sm font-bold flex-none">{hours} tiếng</span>
+                <span className="text-sm font-bold flex-none">{formatHM(hours, minutes)}</span>
               </div>
               {note && (
                 <p className="text-[12px]" style={{ color: "var(--color-neutral-500)" }}>
@@ -359,19 +363,20 @@ export function HourTimesheet({
   }
 
   function weekTotalFor(channelId: string) {
-    return reports.filter((r) => r.project_channel_id === channelId).reduce((sum, r) => sum + r.hours, 0);
+    return sumHM(reports.filter((r) => r.project_channel_id === channelId));
   }
 
-  async function saveEntry(hours: string, note: string): Promise<string | void> {
+  async function saveEntry(hours: number, minutes: number, note: string): Promise<string | void> {
     if (!editingEntry) return;
     const { project, date } = editingEntry;
     const mine = reportsFor(project.id, date).find((r) => r.profile_id === currentUserId);
-    const parsed = Number(hours.replace(",", "."));
-    if (!(parsed > 0 && parsed <= 24)) return "Nhập số giờ hợp lệ (0 – 24).";
+    if (!(hours >= 0 && hours <= 24)) return "Nhập số giờ hợp lệ (0 – 24).";
+    if (!(minutes >= 0 && minutes <= 59)) return "Nhập số phút hợp lệ (0 – 59).";
+    if (hours * 60 + minutes <= 0) return "Nhập số giờ hợp lệ.";
 
     setEntrySaving(true);
     try {
-      const saved = await logHours({ projectChannelId: project.id, workDate: date, hours: parsed, note });
+      const saved = await logHours({ projectChannelId: project.id, workDate: date, hours, minutes, note });
       setReports((prev) => (mine ? prev.map((r) => (r.id === mine.id ? saved : r)) : [...prev, saved]));
       setEditingEntry(null);
     } catch (err) {
@@ -417,8 +422,8 @@ export function HourTimesheet({
   const editingMine = editingEntries.find((r) => r.profile_id === currentUserId) ?? null;
   const editingOthers = editingEntries
     .filter((r) => r.profile_id !== currentUserId)
-    .map((r) => ({ profile: staffById.get(r.profile_id), hours: r.hours, note: r.note }))
-    .filter((e): e is { profile: Profile; hours: number; note: string | null } => !!e.profile);
+    .map((r) => ({ profile: staffById.get(r.profile_id), hours: r.hours, minutes: r.minutes, note: r.note }))
+    .filter((e): e is { profile: Profile; hours: number; minutes: number; note: string | null } => !!e.profile);
 
   return (
     <div className="flex-1 flex flex-col p-3 md:p-6 gap-4 md:gap-5 overflow-y-auto">
@@ -489,9 +494,11 @@ export function HourTimesheet({
             ) : (
               projects.map((project) => {
                 const weekTotal = weekTotalFor(project.id);
+                const weekTotalMinutes = weekTotal.hours * 60 + weekTotal.minutes;
                 const cap = caps[project.id] ?? null;
-                const pct = cap ? Math.min(100, (weekTotal / cap) * 100) : 0;
-                const overCap = cap !== null && weekTotal > cap;
+                const capMinutes = cap ? Math.round(cap * 60) : 0;
+                const pct = capMinutes ? Math.min(100, (weekTotalMinutes / capMinutes) * 100) : 0;
+                const overCap = cap !== null && weekTotalMinutes > capMinutes;
                 return (
                   <tr key={project.id} style={{ borderBottom: "1px solid var(--color-neutral-100)" }}>
                     <td
@@ -502,7 +509,7 @@ export function HourTimesheet({
                     </td>
                     {days.map((date) => {
                       const entries = reportsFor(project.id, date);
-                      const total = entries.reduce((sum, r) => sum + r.hours, 0);
+                      const total = sumHM(entries);
                       const mine = entries.some((r) => r.profile_id === currentUserId);
 
                       function showPeek(rect: DOMRect, via: "hover" | "touch") {
@@ -577,14 +584,16 @@ export function HourTimesheet({
                                 })}
                               </div>
                               <span className="text-xs" style={{ fontWeight: mine ? 700 : 400 }}>
-                                {total}
+                                {formatHM(total.hours, total.minutes)}
                               </span>
                             </div>
                           )}
                         </td>
                       );
                     })}
-                    <td className="px-2 md:px-3 py-2 text-center font-bold whitespace-nowrap">{weekTotal || "–"}</td>
+                    <td className="px-2 md:px-3 py-2 text-center font-bold whitespace-nowrap">
+                      {weekTotalMinutes ? formatHM(weekTotal.hours, weekTotal.minutes) : "–"}
+                    </td>
                     <td className="px-2 md:px-3 py-2">
                       <div className="flex flex-col gap-1 items-center">
                         {isHrManager && editingCap === project.id ? (
@@ -644,8 +653,8 @@ export function HourTimesheet({
             projectLabel={`${peek.project.icon} ${peek.project.name}`}
             date={peek.date}
             entries={reportsFor(peek.project.id, peek.date)
-              .map((r) => ({ profile: staffById.get(r.profile_id), hours: r.hours, note: r.note }))
-              .filter((e): e is { profile: Profile; hours: number; note: string | null } => !!e.profile)}
+              .map((r) => ({ profile: staffById.get(r.profile_id), hours: r.hours, minutes: r.minutes, note: r.note }))
+              .filter((e): e is { profile: Profile; hours: number; minutes: number; note: string | null } => !!e.profile)}
             dismissOnBackdrop={peek.via === "touch"}
             onClose={() => setPeek(null)}
           />
@@ -657,7 +666,8 @@ export function HourTimesheet({
           projectLabel={`${editingEntry.project.icon} ${editingEntry.project.name}`}
           date={editingEntry.date}
           otherEntries={editingOthers}
-          initialHours={editingMine ? String(editingMine.hours) : ""}
+          initialHours={editingMine?.hours ?? 0}
+          initialMinutes={editingMine?.minutes ?? 0}
           initialNote={editingMine?.note ?? ""}
           hasExisting={!!editingMine}
           saving={entrySaving}
