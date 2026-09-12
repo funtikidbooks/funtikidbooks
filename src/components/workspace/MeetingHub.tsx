@@ -352,7 +352,7 @@ function RoomInfoPeekPopup({
   const owner = profiles.find((p) => p.id === room.created_by);
 
   return (
-    <FloatingPopup rect={rect} width={260} dismissOnBackdrop={dismissOnBackdrop} onClose={onClose}>
+    <FloatingPopup rect={rect} width={260} placement="side" dismissOnBackdrop={dismissOnBackdrop} onClose={onClose}>
       <div className="flex items-center gap-2">
         <span aria-hidden style={{ fontSize: 18 }}>
           {room.icon}
