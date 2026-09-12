@@ -112,6 +112,80 @@ Trả lời tại: ${chatUrl}`,
   });
 }
 
+// "Công việc" client portal (src/app/(site)/cong-viec) — mostly
+// international clients, so unlike everything else in this file this one is
+// in English.
+export async function sendClientReplyEmail(input: { to: string; clientName: string | null; preview: string }) {
+  const transporter = getTransporter();
+  if (!transporter) return;
+
+  const portalUrl = "https://funtikidbooks.com/cong-viec";
+  const name = input.clientName?.trim() || "there";
+
+  await transporter.sendMail({
+    from: `"Funti Kidbooks Studio" <${process.env.GMAIL_USER}>`,
+    to: input.to,
+    subject: "You have a new reply from Funti Kidbooks Studio",
+    text: `Hi ${name},
+
+We've replied to your project on Funti Kidbooks Studio:
+
+"${input.preview}"
+
+View it here: ${portalUrl}
+
+Best,
+Funti Kidbooks Studio`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #2b2622;">
+        <h2 style="margin-bottom: 4px;">Hi ${name},</h2>
+        <p>We've replied to your project on <strong>Funti Kidbooks Studio</strong>:</p>
+        <p style="background: #f4f1ea; border-radius: 8px; padding: 12px 14px; white-space: pre-wrap;">${input.preview}</p>
+        <p>
+          <a href="${portalUrl}" style="display: inline-block; background: #e8674a; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold;">
+            View reply
+          </a>
+        </p>
+        <p style="margin-top: 24px;">Best,<br />Funti Kidbooks Studio</p>
+      </div>
+    `,
+  });
+}
+
+// Fallback for staff (director/PM) when a client submits a new project brief
+// or sends a follow-up message — same reasoning as
+// sendNewVisitorMessageEmail, just for the signed-in client portal instead
+// of the anonymous widget.
+export async function sendNewClientMessageEmail(input: { to: string; clientName: string | null; preview: string }) {
+  const transporter = getTransporter();
+  if (!transporter) return;
+
+  const inboxUrl = "https://funtikidbooks.com/workspace/khach-hang";
+  const who = input.clientName?.trim() || "Một khách hàng";
+
+  await transporter.sendMail({
+    from: `"Funti Kidbooks Studio" <${process.env.GMAIL_USER}>`,
+    to: input.to,
+    subject: `🔔 Khách hàng nhắn tin mới — ${who}`,
+    text: `${who} vừa nhắn trong Công việc:
+
+"${input.preview}"
+
+Trả lời tại: ${inboxUrl}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #2b2622;">
+        <h2 style="margin-bottom: 4px;">Tin nhắn mới từ ${who}</h2>
+        <p style="background: #f4f1ea; border-radius: 8px; padding: 12px 14px; white-space: pre-wrap;">${input.preview}</p>
+        <p>
+          <a href="${inboxUrl}" style="display: inline-block; background: #e8674a; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold;">
+            Trả lời ngay
+          </a>
+        </p>
+      </div>
+    `,
+  });
+}
+
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
 }

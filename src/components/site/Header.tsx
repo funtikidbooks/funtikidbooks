@@ -203,6 +203,9 @@ export function Header() {
                 {t.nav.member}
               </Link>
             )}
+            <Link href="/cong-viec" className="btn btn-ghost btn-block" onClick={() => setOpen(false)}>
+              {t.nav.clientPortal}
+            </Link>
             <Link href="/lien-he" className="btn btn-secondary btn-block">
               {t.nav.contactCta}
             </Link>

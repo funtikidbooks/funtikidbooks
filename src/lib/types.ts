@@ -47,6 +47,40 @@ export type VisitorMessage = {
   created_at: string;
 };
 
+export type ClientType = "individual" | "business";
+
+export type ClientProfile = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  country: string | null;
+  avatar_url: string | null;
+  client_type: ClientType;
+  created_at: string;
+};
+
+export type ClientProject = {
+  id: string;
+  client_id: string;
+  description: string;
+  image_urls: string[];
+  status: "open" | "closed";
+  created_at: string;
+  last_message_at: string;
+};
+
+export type ClientMessage = {
+  id: string;
+  project_id: string;
+  sender_type: "client" | "staff";
+  sender_id: string | null;
+  content: string;
+  image_urls: string[];
+  read_by_client: boolean;
+  read_by_staff: boolean;
+  created_at: string;
+};
+
 export type FontAsset = {
   id: string;
   name: string;
@@ -1125,6 +1159,24 @@ export type Database = {
         Row: VisitorMessage;
         Insert: Partial<VisitorMessage> & { conversation_id: string; sender_type: string; content: string };
         Update: Partial<VisitorMessage>;
+        Relationships: [];
+      };
+      clients: {
+        Row: ClientProfile;
+        Insert: Partial<ClientProfile> & { id: string; email: string };
+        Update: Partial<ClientProfile>;
+        Relationships: [];
+      };
+      client_projects: {
+        Row: ClientProject;
+        Insert: Partial<ClientProject> & { client_id: string; description: string };
+        Update: Partial<ClientProject>;
+        Relationships: [];
+      };
+      client_messages: {
+        Row: ClientMessage;
+        Insert: Partial<ClientMessage> & { project_id: string; sender_type: string; content: string };
+        Update: Partial<ClientMessage>;
         Relationships: [];
       };
     };

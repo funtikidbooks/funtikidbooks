@@ -18,6 +18,7 @@ import { AutoReloadWatchdog } from "@/components/workspace/AutoReloadWatchdog";
 import { getUnreadCounts } from "@/lib/actions/messages";
 import { checkInIfNeeded } from "@/lib/actions/attendance";
 import { countMyPendingDocuments } from "@/lib/actions/documents";
+import { getUnreadClientMessageCount } from "@/lib/actions/clientPortal";
 import type { Profile } from "@/lib/types";
 
 // The workspace is an internal tool used mostly through the installed
@@ -101,6 +102,7 @@ export default async function WorkspaceLayout({
   // (this icon and MobileNav's were both director-only), so they had no
   // way to discover the URL themselves.
   const canOpenAdmin = myProfile.access_role === "director" || myProfile.role === "Project Manager";
+  const initialClientUnreadCount = canOpenAdmin ? await getUnreadClientMessageCount().catch(() => 0) : 0;
 
   return (
     <ChatManagerProvider currentUserId={user.id} initialUnreadCounts={unreadCounts}>
@@ -125,10 +127,12 @@ export default async function WorkspaceLayout({
               displayName: myProfile.display_name,
               email: myProfile.email,
               accessRole: myProfile.access_role,
+              jobTitle: myProfile.role,
             }}
             currentUserId={user.id}
             profiles={(allProfiles ?? []) as Profile[]}
             pendingDocumentCount={pendingDocumentCount}
+            initialClientUnreadCount={initialClientUnreadCount}
           />
           <div className="flex-1 flex flex-col min-w-0">
             <div className="no-print flex-none flex items-center justify-between gap-2 px-4 py-2" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>

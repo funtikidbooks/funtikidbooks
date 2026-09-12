@@ -31,6 +31,7 @@ export function Footer() {
         { href: "/quy-trinh", label: t.nav.process },
         { href: "/du-an", label: t.nav.projects },
         { href: "/lien-he", label: t.nav.contact },
+        { href: "/cong-viec", label: t.nav.clientPortal },
       ],
     },
   ];

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -9,7 +10,10 @@ import { ThemeToggle } from "@/components/workspace/ThemeToggle";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { resetThemeOnSignOut } from "@/lib/useTheme";
 import { STANDALONE_ALLOWED_HREFS, useShowsIphoneAppNav } from "@/lib/useIsStandalone";
+import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/lib/types";
+
+const CLIENT_PROJECTS_NAV_ITEM = { href: "/workspace/khach-hang", label: "Khách hàng", icon: "🧑‍💼", enabled: true };
 
 const NAV = [
   { href: "/workspace", label: "Bảng công việc", icon: "📊", enabled: true },
@@ -36,11 +40,13 @@ export function Sidebar({
   currentUserId,
   profiles,
   pendingDocumentCount = 0,
+  initialClientUnreadCount = 0,
 }: {
-  user: { displayName: string; email: string; accessRole: "director" | "admin" | "staff" };
+  user: { displayName: string; email: string; accessRole: "director" | "admin" | "staff"; jobTitle: string | null };
   currentUserId: string;
   profiles: Profile[];
   pendingDocumentCount?: number;
+  initialClientUnreadCount?: number;
 }) {
   const pathname = usePathname();
   const { totalUnreadCount } = useChatManager();
@@ -50,6 +56,39 @@ export function Sidebar({
   const visibleInternalNav = showsIphoneAppNav
     ? INTERNAL_NAV.filter((item) => STANDALONE_ALLOWED_HREFS.has(item.href))
     : INTERNAL_NAV;
+
+  const isDirector = user.accessRole === "director";
+  const isProjectManager = user.jobTitle === "Project Manager";
+  const canOpenClientProjects = isDirector || user.accessRole === "admin" || isProjectManager;
+
+  // Live-updates the same way AdminSidebar's payroll-feedback dot does —
+  // lights up the moment a client message lands, not just on next page load.
+  const [clientUnreadCount, setClientUnreadCount] = useState(initialClientUnreadCount);
+  useEffect(() => {
+    if (!canOpenClientProjects) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel("sidebar-client-messages-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "client_messages" }, (payload) => {
+        const row = payload.new as { sender_type: string };
+        if (row.sender_type === "client") setClientUnreadCount((prev) => prev + 1);
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [canOpenClientProjects]);
+
+  // Optimistic clear: opening the section is treated as "seen" the same way
+  // the badge disappears the moment ChatInbox-style panels are opened
+  // elsewhere in the app, without wiring a shared read-state store just for
+  // this counter.
+  useEffect(() => {
+    if (pathname.startsWith(CLIENT_PROJECTS_NAV_ITEM.href)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setClientUnreadCount(0);
+    }
+  }, [pathname]);
 
   function NavLink(item: (typeof NAV)[number]) {
     const active = item.enabled && pathname === item.href;
@@ -89,6 +128,14 @@ export function Sidebar({
             {pendingDocumentCount > 9 ? "9+" : pendingDocumentCount}
           </span>
         )}
+        {item.href === CLIENT_PROJECTS_NAV_ITEM.href && clientUnreadCount > 0 && (
+          <span
+            className="flex items-center justify-center rounded-full font-bold flex-none"
+            style={{ minWidth: 17, height: 17, padding: "0 4px", fontSize: 10, background: "var(--status-red)", color: "#fff" }}
+          >
+            {clientUnreadCount > 9 ? "9+" : clientUnreadCount}
+          </span>
+        )}
         {!item.enabled && <span className="ml-auto text-[9px] tag tag-neutral">SẮP RA MẮT</span>}
       </Link>
     );
@@ -118,6 +165,7 @@ export function Sidebar({
           KHÔNG GIAN LÀM VIỆC
         </div>
         {visibleNav.map((item) => NavLink(item))}
+        {canOpenClientProjects && NavLink(CLIENT_PROJECTS_NAV_ITEM)}
 
         {visibleInternalNav.length > 0 && (
           <>
