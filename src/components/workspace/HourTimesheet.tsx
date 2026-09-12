@@ -12,7 +12,7 @@ import type { HourReport, MeetingChannelPublic, Profile } from "@/lib/types";
 // supabase/migrations/hour_reports.sql), so this is pure formatting, no
 // rounding ever happens here.
 function formatHM(hours: number, minutes: number): string {
-  return minutes === 0 ? `${hours}h` : `${hours}h${String(minutes).padStart(2, "0")}p`;
+  return minutes === 0 ? `${hours}` : `${hours}.${String(minutes).padStart(2, "0")}p`;
 }
 
 // Sums a list of exact (hours, minutes) pairs by adding whole minutes
