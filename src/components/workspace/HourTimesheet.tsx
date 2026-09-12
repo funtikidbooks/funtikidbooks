@@ -167,6 +167,11 @@ function CellPeekPopup({
   const left = Math.min(Math.max(margin, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - margin);
   const spaceBelow = window.innerHeight - rect.bottom;
   const opensDown = spaceBelow > 260 || spaceBelow > rect.top;
+  // Grows out of the cell that opened it rather than just fading in from
+  // nowhere — the transform-origin tracks where that cell actually sits
+  // relative to the popup's own box.
+  const originX = `${Math.min(100, Math.max(0, (((rect.left + rect.width / 2 - left) / width) * 100)))}%`;
+  const originY = opensDown ? "0%" : "100%";
 
   return (
     <>
@@ -174,15 +179,18 @@ function CellPeekPopup({
         <div onClick={onClose} onTouchStart={onClose} style={{ position: "fixed", inset: 0, zIndex: 45 }} />
       )}
       <div
-        className="card elev-lg flex flex-col gap-3 p-4"
+        className="card elev-lg flex flex-col gap-3 p-4 fk-popup-in"
         style={{
           position: "fixed",
           left,
+          top: opensDown ? rect.bottom + margin : undefined,
+          bottom: opensDown ? undefined : window.innerHeight - rect.top + margin,
           width,
           maxHeight: 320,
           overflowY: "auto",
           zIndex: 46,
-          ...(opensDown ? { top: rect.bottom + margin } : { bottom: window.innerHeight - rect.top + margin }),
+          ["--popup-origin-x" as string]: originX,
+          ["--popup-origin-y" as string]: originY,
         }}
       >
         <div>

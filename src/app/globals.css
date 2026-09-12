@@ -569,6 +569,24 @@ h4 {
   }
 }
 
+/* Báo cáo giờ's hover/long-press cell preview — grows from the cell it was
+   opened from rather than just fading in, so it reads as "this popped out
+   of that cell" instead of appearing from nowhere. */
+.fk-popup-in {
+  transform-origin: var(--popup-origin-x, 50%) var(--popup-origin-y, 0%);
+  animation: fk-popup-in 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes fk-popup-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.35);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* ---------- Floating DM chat window on phones ---------- */
 /* ChatWindow.tsx sets right/width inline (offsetRight staggers multiple
    open windows sideways on desktop) — !important is the only way to widen
