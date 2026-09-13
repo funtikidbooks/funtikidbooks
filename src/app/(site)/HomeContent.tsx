@@ -41,7 +41,7 @@ export function HomeContent({
         transforms={heroTransforms}
         canEdit={canEdit}
         revalidatePaths={["/"]}
-        overlay="linear-gradient(180deg, rgba(20,18,17,.55) 0%, rgba(20,18,17,.3) 45%, rgba(20,18,17,.65) 100%)"
+        overlay="linear-gradient(180deg, rgba(20,18,17,.5) 0%, rgba(20,18,17,.2) 30%, rgba(20,18,17,.72) 52%, rgba(20,18,17,.9) 100%)"
       >
         <Reveal x={0} y={-20}>
           <h1 className="text-[32px] leading-[1.25] sm:text-[44px]">

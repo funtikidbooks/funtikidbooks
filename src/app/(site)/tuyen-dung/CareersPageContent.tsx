@@ -34,7 +34,7 @@ export function CareersPageContent({
         transforms={heroTransforms}
         canEdit={canEdit}
         revalidatePaths={["/tuyen-dung"]}
-        overlay="linear-gradient(180deg, rgba(20,18,17,.6) 0%, rgba(20,18,17,.35) 45%, rgba(20,18,17,.7) 100%)"
+        overlay="linear-gradient(180deg, rgba(20,18,17,.55) 0%, rgba(20,18,17,.28) 38%, rgba(20,18,17,.6) 62%, rgba(20,18,17,.88) 100%)"
       >
         <div className="text-xs font-bold tracking-[0.14em]" style={{ color: "#ff9f6e" }}>
           {t.kicker}

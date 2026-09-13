@@ -228,7 +228,12 @@ export function HeroSlideshow({
         </div>
       )}
 
-      <div className="relative h-full max-w-[760px] mx-auto flex flex-col items-center justify-center text-center gap-5 px-5 text-white">
+      {/* Text sits low in the frame (per sếp Phúc's reference) rather than
+          dead-center — pb-16 clears the slideshow dots pinned at bottom:28
+          below, and this is also where the overlay gradient above is at its
+          darkest, so it stays the most readable spot regardless of which
+          photo is behind it. */}
+      <div className="relative h-full max-w-[760px] mx-auto flex flex-col items-center justify-end text-center gap-5 px-5 pb-16 text-white">
         {children}
 
         {slides.length > 1 && (
