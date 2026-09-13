@@ -445,11 +445,103 @@ export function HourTimesheet({
         )}
       </div>
 
+      {/* Phone: a real HTML table with 10 columns has no room to breathe
+          under ~420px — it either runs off-screen sideways or crushes every
+          cell down to an unreadable sliver. Below md this switches to one
+          card per project with a 7-column CSS grid (fr units, never a fixed
+          per-cell width), so it always fits the screen with no horizontal
+          scroll, and a tap goes straight to the entry form instead of a
+          hover/long-press peek that has no good answer on a small screen. */}
+      <div className="md:hidden flex flex-col gap-3" style={{ opacity: loading ? 0.6 : 1 }}>
+        {projects.length === 0 ? (
+          <p className="card p-4 text-sm text-center" style={{ color: "var(--color-neutral-500)" }}>
+            Chưa có dự án nào được đánh dấu &quot;Theo giờ&quot; — vào phòng họp, mở &quot;Thông tin phòng&quot; để chọn.
+          </p>
+        ) : (
+          projects.map((project) => {
+            const weekTotal = weekTotalFor(project.id);
+            const weekTotalMinutes = weekTotal.hours * 60 + weekTotal.minutes;
+            const cap = caps[project.id] ?? null;
+            const capMinutes = cap ? Math.round(cap * 60) : 0;
+            const pct = capMinutes ? Math.min(100, (weekTotalMinutes / capMinutes) * 100) : 0;
+            const overCap = cap !== null && weekTotalMinutes > capMinutes;
+            return (
+              <div key={project.id} className="card p-3 flex flex-col gap-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-bold truncate">
+                    {project.icon} {project.name}
+                  </span>
+                  <span className="text-sm font-bold flex-none">
+                    {weekTotalMinutes ? formatHM(weekTotal.hours, weekTotal.minutes) : "–"}
+                  </span>
+                </div>
+
+                {cap !== null && (
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-full overflow-hidden flex-1" style={{ height: 6, background: "var(--color-neutral-100)" }}>
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${pct}%`,
+                          background: overCap ? "var(--status-red)" : "var(--status-green)",
+                          transition: "width 0.4s ease",
+                        }}
+                      />
+                    </div>
+                    <span className="text-[11px] font-semibold flex-none" style={{ color: "var(--color-neutral-500)" }}>
+                      {cap}h/tuần
+                    </span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-7 gap-1">
+                  {days.map((date, i) => {
+                    const entries = reportsFor(project.id, date);
+                    const total = sumHM(entries);
+                    const mine = entries.some((r) => r.profile_id === currentUserId);
+                    const isToday = date === today;
+                    return (
+                      <button
+                        key={date}
+                        type="button"
+                        onClick={() => setEditingEntry({ project, date })}
+                        className="flex flex-col items-center gap-0.5 py-1.5 rounded-[8px]"
+                        style={{
+                          background: isToday ? "var(--color-accent-100)" : "var(--color-surface)",
+                          WebkitUserSelect: "none",
+                          userSelect: "none",
+                        }}
+                      >
+                        <span
+                          className="text-[10px] font-bold"
+                          style={{ color: isToday ? "var(--color-accent-700)" : "var(--color-neutral-500)" }}
+                        >
+                          {WEEKDAYS_SHORT[i]}
+                        </span>
+                        <span
+                          className="text-[11px]"
+                          style={{
+                            fontWeight: mine ? 700 : 400,
+                            color: entries.length === 0 ? "var(--color-neutral-300)" : "var(--color-text)",
+                          }}
+                        >
+                          {entries.length === 0 ? "–" : formatHM(total.hours, total.minutes)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
       {/* Dự án column stays pinned (position: sticky) while the rest of the
-          table scrolls horizontally underneath it — on iPad/phone this is
-          the difference between always knowing which row you're on and
-          having to scroll back left every time to check. */}
-      <div style={{ opacity: loading ? 0.6 : 1 }} className="card overflow-x-auto">
+          table scrolls horizontally underneath it — this tablet/desktop
+          table stays exactly as it was; only phones (md:hidden above) get
+          the card layout. */}
+      <div style={{ opacity: loading ? 0.6 : 1 }} className="card overflow-x-auto hidden md:block">
         <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
