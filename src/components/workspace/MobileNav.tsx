@@ -31,13 +31,12 @@ const MORE_NAV = [
 // The installed iPhone app trades the "4 most-used + everything else behind
 // Thêm" tradeoff for just the sections the director actually wants on the
 // home screen. iPad keeps the regular nav even when installed the same way
-// (see useShowsIphoneAppNav). Danh bạ (Thành viên) sits right next to Trò
-// chuyện — per sếp Phúc, staff mostly reach for the phone just to chat, so
-// finding someone to message needs to be as fast as the chat tab itself,
-// not buried in Thêm.
+// (see useShowsIphoneAppNav). Danh bạ (Thành viên) as its own primary tab
+// turned out redundant — Trò chuyện already opens straight into that same
+// member list (tap someone there to start the DM) before a conversation is
+// picked, so per sếp Phúc it's dropped back out again.
 const PRIMARY_NAV_IPHONE_APP = [
   { href: "/workspace/hop", label: "Trò chuyện", icon: "💬" },
-  { href: "/workspace/thanh-vien", label: "Danh bạ", icon: "📇" },
   { href: "/workspace/bao-cao-gio", label: "Báo cáo giờ", icon: "⏱️" },
 ];
 
