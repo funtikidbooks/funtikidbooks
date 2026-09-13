@@ -611,18 +611,28 @@ h4 {
 }
 
 /* Hero slideshow Ken Burns: eases OUT from a slight zoom to the director's
-   actual saved framing (scale 1), never past it — so motion only ever
-   reveals more of the photo than the static crop would, never hides more
-   of it. `linear` (not ease-out) spreads the change evenly across the
-   whole 6s ROTATE_MS instead of front-loading it into the first second,
-   which was why it read as "not moving" — most of an ease-out curve's
-   change happens right at the start, then barely creeps for the rest. */
+   actual saved framing (scale 1, translateX 0), never past it — so motion
+   only ever reveals more of the photo than the static crop would, never
+   hides more of it. `linear` (not ease-out) spreads the change evenly
+   across the whole 6s ROTATE_MS instead of front-loading it into the
+   first second, which was why it originally read as "not moving" — most
+   of an ease-out curve's change happens right at the start, then barely
+   creeps for the rest.
+   translateX rides along in the SAME transform as the zoom (rather than
+   panning object-position on the <img>) specifically because its %
+   argument is relative to this wrapper's own box — a fixed, known
+   quantity — where object-position's usable range instead depends on how
+   much slack object-fit:cover happens to leave on that axis for a given
+   photo's aspect ratio, which for these ~4:3 photos in a much wider
+   banner turned out to be ~zero horizontally. --fk-pan-start (±3%, sign
+   alternating slide to slide) is comfortably inside the margin the 1.12
+   zoom creates, so panning never exposes an edge. */
 @keyframes hero-kenburns {
   from {
-    transform: scale(1.12);
+    transform: scale(1.12) translateX(var(--fk-pan-start, 0%));
   }
   to {
-    transform: scale(1);
+    transform: scale(1) translateX(0%);
   }
 }
 .hero-kenburns {
@@ -631,30 +641,6 @@ h4 {
 }
 @media (prefers-reduced-motion: reduce) {
   .hero-kenburns {
-    animation: none;
-  }
-}
-
-/* Horizontal pan companion to hero-kenburns above, on the <img> itself
-   rather than a wrapper — sliding object-position (not translateX) never
-   exposes blank edges the way moving the whole element would, since
-   object-fit:cover always keeps the frame fully covered regardless of
-   which point of the source is centered. --fk-pan-from/--fk-pan-to are
-   set per-slide inline (HeroSlideshow.tsx), alternating direction so
-   consecutive slides don't all pan the same way. */
-@keyframes hero-pan {
-  from {
-    object-position: var(--fk-pan-from);
-  }
-  to {
-    object-position: var(--fk-pan-to);
-  }
-}
-.hero-pan {
-  animation: hero-pan 6s linear forwards;
-}
-@media (prefers-reduced-motion: reduce) {
-  .hero-pan {
     animation: none;
   }
 }
