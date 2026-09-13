@@ -213,7 +213,9 @@ export function Sidebar({
                 aria-hidden
                 style={{
                   display: "inline-block",
-                  fontSize: 10,
+                  fontSize: 16,
+                  lineHeight: 1,
+                  color: "var(--color-accent-500)",
                   transition: "transform 0.2s ease",
                   transform: internalCollapsed ? "rotate(0deg)" : "rotate(180deg)",
                 }}
