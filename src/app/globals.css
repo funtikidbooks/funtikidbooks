@@ -610,6 +610,29 @@ h4 {
   }
 }
 
+/* Hero slideshow Ken Burns: eases OUT from a slight zoom to the director's
+   actual saved framing (scale 1), never past it — so motion only ever
+   reveals more of the photo than the static crop would, never hides more
+   of it. Duration is a touch under HeroSlideshow's 6s ROTATE_MS so it's
+   fully settled before the next slide starts crossfading in. */
+@keyframes hero-kenburns {
+  from {
+    transform: scale(1.06);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+.hero-kenburns {
+  animation: hero-kenburns 5.8s ease-out forwards;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-kenburns {
+    animation: none;
+  }
+}
+
 /* ---------- Floating DM chat window on phones ---------- */
 /* ChatWindow.tsx sets right/width inline (offsetRight staggers multiple
    open windows sideways on desktop) — !important is the only way to widen

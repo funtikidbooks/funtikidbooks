@@ -32,6 +32,11 @@ export function HeroSlideshow({
 }) {
   const [slides, setSlides] = useState(images);
   const [index, setIndex] = useState(0);
+  // Bumped every time a slide becomes active — used only to key the Ken
+  // Burns wrapper below so its animation restarts on each fresh activation,
+  // without remounting the outer crossfade div (which must keep a stable
+  // `key={src}` or the opacity transition itself would restart too).
+  const [tick, setTick] = useState(0);
   const [managing, setManaging] = useState(false);
   const [transforms, setTransforms] = useState(initialTransforms);
   // What's actually persisted — `transforms` is the live/working copy the
@@ -63,6 +68,7 @@ export function HeroSlideshow({
 
   function goTo(i: number) {
     setIndex(i);
+    setTick((t) => t + 1);
     setLoaded((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
   }
 
@@ -160,15 +166,21 @@ export function HeroSlideshow({
               style={{ opacity: isActive ? 1 : 0, transitionDuration: "1200ms" }}
             >
               {loaded.has(i) && (
-                <Image
-                  src={isSupabaseStorageUrl(src) ? (resizedUrl(src, 1600) ?? src) : src}
-                  alt="Funti Kidbooks Studio"
-                  fill
-                  priority={i === 0}
-                  unoptimized={isSupabaseStorageUrl(src)}
-                  className="object-cover"
-                  style={{ transform: `scale(${t.zoom / 100})`, objectPosition: `${t.posX}% ${t.posY}%`, pointerEvents: "none" }}
-                />
+                // Keyed so it remounts (restarting the CSS animation) only
+                // when THIS slide freshly becomes active — the outer div
+                // above keeps its stable `key={src}` so the opacity
+                // crossfade itself never restarts.
+                <div key={isActive ? `kb-${tick}` : "kb-idle"} className={`absolute inset-0${isActive ? " hero-kenburns" : ""}`}>
+                  <Image
+                    src={isSupabaseStorageUrl(src) ? (resizedUrl(src, 1600) ?? src) : src}
+                    alt="Funti Kidbooks Studio"
+                    fill
+                    priority={i === 0}
+                    unoptimized={isSupabaseStorageUrl(src)}
+                    className="object-cover"
+                    style={{ transform: `scale(${t.zoom / 100})`, objectPosition: `${t.posX}% ${t.posY}%`, pointerEvents: "none" }}
+                  />
+                </div>
               )}
             </div>
           );
