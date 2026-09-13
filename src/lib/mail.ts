@@ -75,7 +75,7 @@ Funti Kidbooks Studio`,
 // reaches a device that already granted permission, so this covers the
 // case where no director/admin has one set up (or it's silently expired)
 // and a customer message would otherwise go unseen until someone happens
-// to open /quan-tri/chat.
+// to open the Khách hàng inbox.
 export async function sendNewVisitorMessageEmail(input: {
   to: string;
   visitorName: string | null;
@@ -85,7 +85,7 @@ export async function sendNewVisitorMessageEmail(input: {
   const transporter = getTransporter();
   if (!transporter) return;
 
-  const chatUrl = "https://funtikidbooks.com/quan-tri/chat";
+  const chatUrl = "https://funtikidbooks.com/workspace/khach-hang";
   const who = input.visitorName?.trim() || "Khách vãng lai";
 
   await transporter.sendMail({

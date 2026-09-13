@@ -43,7 +43,7 @@ export async function getVisitorConversationMessages(conversationId: string): Pr
 export async function markVisitorConversationRead(conversationId: string) {
   const { supabase } = await requireStaff();
   await supabase.from("visitor_conversations").update({ unread: false }).eq("id", conversationId);
-  revalidatePath("/quan-tri/chat");
+  revalidatePath("/workspace/khach-hang");
 }
 
 export async function sendStaffReply(conversationId: string, content: string): Promise<VisitorMessage> {
@@ -64,12 +64,12 @@ export async function sendStaffReply(conversationId: string, content: string): P
     .update({ unread: false, last_message_at: new Date().toISOString() })
     .eq("id", conversationId);
 
-  revalidatePath("/quan-tri/chat");
+  revalidatePath("/workspace/khach-hang");
   return data as VisitorMessage;
 }
 
 export async function closeVisitorConversation(conversationId: string) {
   const { supabase } = await requireStaff();
   await supabase.from("visitor_conversations").update({ status: "closed" }).eq("id", conversationId);
-  revalidatePath("/quan-tri/chat");
+  revalidatePath("/workspace/khach-hang");
 }

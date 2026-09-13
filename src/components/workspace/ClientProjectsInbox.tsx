@@ -7,9 +7,38 @@ import {
   markProjectReadByStaff,
   sendStaffReplyToClient,
 } from "@/lib/actions/clientPortal";
-import type { ClientMessage, ClientProfile, ClientProject } from "@/lib/types";
+import {
+  closeVisitorConversation,
+  getVisitorConversationMessages,
+  markVisitorConversationRead,
+  sendStaffReply,
+} from "@/lib/actions/support-chat";
+import type { ClientMessage, ClientProfile, ClientProject, VisitorConversation, VisitorMessage } from "@/lib/types";
 
 type ProjectWithClient = ClientProject & { client: ClientProfile | null };
+
+// One inbox, two sources: a signed-in client's project (Công việc) and an
+// anonymous site visitor's message (the "Chat với Funti Kidbooks" widget) —
+// director/PM used to check /workspace/khach-hang and /quan-tri/chat
+// separately for these; everything below normalizes both into one rail,
+// one thread view, one reply box, so there's only one place to check.
+type ActiveRef = { kind: "client"; id: string } | { kind: "visitor"; id: string };
+
+type NormalizedMessage = {
+  id: string;
+  fromCustomer: boolean;
+  content: string;
+  imageUrls: string[];
+  createdAt: string;
+};
+
+function fromClientMessage(m: ClientMessage): NormalizedMessage {
+  return { id: m.id, fromCustomer: m.sender_type === "client", content: m.content, imageUrls: m.image_urls, createdAt: m.created_at };
+}
+
+function fromVisitorMessage(m: VisitorMessage): NormalizedMessage {
+  return { id: m.id, fromCustomer: m.sender_type === "visitor", content: m.content, imageUrls: [], createdAt: m.created_at };
+}
 
 function formatTime(iso: string) {
   return new Intl.DateTimeFormat("vi-VN", {
@@ -21,68 +50,112 @@ function formatTime(iso: string) {
   }).format(new Date(iso));
 }
 
-function labelFor(p: ProjectWithClient) {
+function labelForProject(p: ProjectWithClient) {
   return p.client?.display_name?.trim() || p.client?.email || `Khách #${p.id.slice(0, 4)}`;
 }
 
-export function ClientProjectsInbox({ initialProjects }: { initialProjects: ProjectWithClient[] }) {
+function labelForVisitor(c: VisitorConversation) {
+  return c.visitor_name?.trim() || `Khách #${c.id.slice(0, 4)}`;
+}
+
+export function ClientProjectsInbox({
+  initialProjects,
+  initialVisitorConversations,
+}: {
+  initialProjects: ProjectWithClient[];
+  initialVisitorConversations: VisitorConversation[];
+}) {
   const [projects, setProjects] = useState(initialProjects);
-  const [activeId, setActiveId] = useState<string | null>(initialProjects[0]?.id ?? null);
-  const [messages, setMessages] = useState<ClientMessage[]>([]);
-  const [unreadByProject, setUnreadByProject] = useState<Record<string, boolean>>(() => {
-    const map: Record<string, boolean> = {};
-    for (const p of initialProjects) map[p.id] = true; // refined below once messages load
-    return map;
+  const [visitorConvos, setVisitorConvos] = useState(initialVisitorConversations);
+  const [unreadByProject, setUnreadByProject] = useState<Record<string, boolean>>({});
+  const [active, setActive] = useState<ActiveRef | null>(() => {
+    if (initialProjects[0]) return { kind: "client", id: initialProjects[0].id };
+    if (initialVisitorConversations[0]) return { kind: "visitor", id: initialVisitorConversations[0].id };
+    return null;
   });
+  const [messages, setMessages] = useState<NormalizedMessage[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const active = useMemo(() => projects.find((p) => p.id === activeId) ?? null, [projects, activeId]);
+  const activeProject = useMemo(
+    () => (active?.kind === "client" ? (projects.find((p) => p.id === active.id) ?? null) : null),
+    [active, projects],
+  );
+  const activeVisitor = useMemo(
+    () => (active?.kind === "visitor" ? (visitorConvos.find((c) => c.id === active.id) ?? null) : null),
+    [active, visitorConvos],
+  );
 
-  const activeIdRef = useRef(activeId);
-  useEffect(() => {
-    activeIdRef.current = activeId;
-  }, [activeId]);
+  // Sorted purely for the rail — the two source arrays each keep their own
+  // shape/state untouched.
+  const items = useMemo(() => {
+    const clientItems = projects.map((p) => ({ kind: "client" as const, id: p.id, lastMessageAt: p.last_message_at }));
+    const visitorItems = visitorConvos.map((c) => ({ kind: "visitor" as const, id: c.id, lastMessageAt: c.last_message_at }));
+    return [...clientItems, ...visitorItems].sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
+  }, [projects, visitorConvos]);
 
+  const activeRef = useRef(active);
   useEffect(() => {
-    if (!activeId) return;
+    activeRef.current = active;
+  }, [active]);
+
+  // Load the thread + clear unread whenever the selected item changes.
+  useEffect(() => {
+    if (!active) return;
     let cancelled = false;
-    getClientProjectMessagesForStaff(activeId).then((msgs) => {
-      if (cancelled) return;
-      setMessages(msgs);
-      const hasUnread = msgs.some((m) => m.sender_type === "client" && !m.read_by_staff);
-      if (hasUnread) {
-        markProjectReadByStaff(activeId).then(() => {
-          setUnreadByProject((prev) => ({ ...prev, [activeId]: false }));
-        });
-      } else {
-        setUnreadByProject((prev) => ({ ...prev, [activeId]: false }));
-      }
-    });
+    if (active.kind === "client") {
+      getClientProjectMessagesForStaff(active.id).then((msgs) => {
+        if (cancelled) return;
+        setMessages(msgs.map(fromClientMessage));
+        const hasUnread = msgs.some((m) => m.sender_type === "client" && !m.read_by_staff);
+        if (hasUnread) markProjectReadByStaff(active.id);
+        setUnreadByProject((prev) => ({ ...prev, [active.id]: false }));
+      });
+    } else {
+      getVisitorConversationMessages(active.id).then((msgs) => {
+        if (cancelled) return;
+        setMessages(msgs.map(fromVisitorMessage));
+      });
+      markVisitorConversationRead(active.id);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setVisitorConvos((prev) => prev.map((c) => (c.id === active.id ? { ...c, unread: false } : c)));
+    }
     return () => {
       cancelled = true;
     };
-  }, [activeId]);
+  }, [active]);
 
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel("client-messages-inbox")
+      .channel("customer-inbox-live")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "client_messages" }, (payload) => {
         const row = payload.new as ClientMessage;
         setProjects((prev) =>
-          prev
-            .map((p) => (p.id === row.project_id ? { ...p, last_message_at: row.created_at } : p))
-            .sort((a, b) => b.last_message_at.localeCompare(a.last_message_at)),
+          prev.map((p) => (p.id === row.project_id ? { ...p, last_message_at: row.created_at } : p)),
         );
-        if (row.sender_type === "client" && row.project_id !== activeIdRef.current) {
+        const isActive = activeRef.current?.kind === "client" && activeRef.current.id === row.project_id;
+        if (row.sender_type === "client" && !isActive) {
           setUnreadByProject((prev) => ({ ...prev, [row.project_id]: true }));
         }
-        setMessages((prev) => {
-          if (row.project_id !== activeIdRef.current) return prev;
-          return prev.some((m) => m.id === row.id) ? prev : [...prev, row];
-        });
+        if (isActive) {
+          setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, fromClientMessage(row)]));
+        }
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "visitor_messages" }, (payload) => {
+        const row = payload.new as VisitorMessage;
+        const isActive = activeRef.current?.kind === "visitor" && activeRef.current.id === row.conversation_id;
+        setVisitorConvos((prev) =>
+          prev.map((c) =>
+            c.id === row.conversation_id
+              ? { ...c, last_message_at: row.created_at, unread: row.sender_type === "visitor" && !isActive }
+              : c,
+          ),
+        );
+        if (isActive) {
+          setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, fromVisitorMessage(row)]));
+        }
       })
       .subscribe();
 
@@ -97,11 +170,17 @@ export function ClientProjectsInbox({ initialProjects }: { initialProjects: Proj
     setSending(true);
     setError(null);
     try {
-      const sent = await sendStaffReplyToClient(active.id, text.trim());
-      setMessages((prev) => [...prev, sent]);
-      setProjects((prev) =>
-        prev.map((p) => (p.id === active.id ? { ...p, last_message_at: sent.created_at } : p)),
-      );
+      if (active.kind === "client") {
+        const sent = await sendStaffReplyToClient(active.id, text.trim());
+        setMessages((prev) => [...prev, fromClientMessage(sent)]);
+        setProjects((prev) => prev.map((p) => (p.id === active.id ? { ...p, last_message_at: sent.created_at } : p)));
+      } else {
+        const sent = await sendStaffReply(active.id, text.trim());
+        setMessages((prev) => [...prev, fromVisitorMessage(sent)]);
+        setVisitorConvos((prev) =>
+          prev.map((c) => (c.id === active.id ? { ...c, last_message_at: sent.created_at } : c)),
+        );
+      }
       setText("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
@@ -110,146 +189,217 @@ export function ClientProjectsInbox({ initialProjects }: { initialProjects: Proj
     }
   }
 
+  async function handleCloseVisitor() {
+    if (!activeVisitor) return;
+    if (!confirm(`Đóng cuộc trò chuyện với ${labelForVisitor(activeVisitor)}?`)) return;
+    await closeVisitorConversation(activeVisitor.id);
+    setVisitorConvos((prev) => prev.map((c) => (c.id === activeVisitor.id ? { ...c, status: "closed" } : c)));
+  }
+
   return (
     <div className="flex-1 flex min-h-0">
       <div className="w-[300px] flex-none overflow-y-auto" style={{ borderRight: "1px solid var(--color-neutral-200)" }}>
-        {projects.length === 0 ? (
+        {items.length === 0 ? (
           <p className="p-4 text-sm" style={{ color: "var(--color-neutral-500)" }}>
-            Chưa có khách hàng nào gửi dự án.
+            Chưa có khách hàng nào nhắn tin.
           </p>
         ) : (
-          projects.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setActiveId(p.id)}
-              className="w-full flex items-center gap-2 px-3 py-3 text-left"
-              style={{
-                background: p.id === activeId ? "var(--color-accent-100)" : undefined,
-                borderBottom: "1px solid var(--color-neutral-200)",
-                opacity: p.status === "closed" ? 0.55 : 1,
-              }}
-            >
-              <span
-                className="flex items-center justify-center rounded-full text-xs font-bold flex-none overflow-hidden"
-                style={{ width: 32, height: 32, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+          items.map((item) => {
+            if (item.kind === "client") {
+              const p = projects.find((x) => x.id === item.id);
+              if (!p) return null;
+              const unread = unreadByProject[p.id];
+              const isActive = active?.kind === "client" && active.id === p.id;
+              return (
+                <button
+                  key={`client-${p.id}`}
+                  type="button"
+                  onClick={() => setActive({ kind: "client", id: p.id })}
+                  className="w-full flex items-center gap-2 px-3 py-3 text-left"
+                  style={{
+                    background: isActive ? "var(--color-accent-100)" : undefined,
+                    borderBottom: "1px solid var(--color-neutral-200)",
+                    opacity: p.status === "closed" ? 0.55 : 1,
+                  }}
+                >
+                  <span
+                    className="flex items-center justify-center rounded-full text-xs font-bold flex-none overflow-hidden"
+                    style={{ width: 32, height: 32, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+                  >
+                    {p.client?.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.client.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      labelForProject(p).charAt(0).toUpperCase()
+                    )}
+                  </span>
+                  <span className="flex flex-col min-w-0 flex-1">
+                    <span className="text-[13px] font-bold truncate" style={{ fontWeight: unread ? 800 : 700 }}>
+                      {labelForProject(p)}
+                    </span>
+                    <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
+                      {p.client?.country ? `${p.client.country} · ` : ""}
+                      {p.description}
+                    </span>
+                  </span>
+                  {unread && <span className="rounded-full flex-none" style={{ width: 9, height: 9, background: "var(--status-red)" }} />}
+                </button>
+              );
+            }
+
+            const c = visitorConvos.find((x) => x.id === item.id);
+            if (!c) return null;
+            const isActive = active?.kind === "visitor" && active.id === c.id;
+            return (
+              <button
+                key={`visitor-${c.id}`}
+                type="button"
+                onClick={() => setActive({ kind: "visitor", id: c.id })}
+                className="w-full flex items-center gap-2 px-3 py-3 text-left"
+                style={{
+                  background: isActive ? "var(--color-accent-100)" : undefined,
+                  borderBottom: "1px solid var(--color-neutral-200)",
+                  opacity: c.status === "closed" ? 0.55 : 1,
+                }}
               >
-                {p.client?.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.client.avatar_url} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  labelFor(p).charAt(0).toUpperCase()
-                )}
-              </span>
-              <span className="flex flex-col min-w-0 flex-1">
-                <span className="text-[13px] font-bold truncate" style={{ fontWeight: unreadByProject[p.id] ? 800 : 700 }}>
-                  {labelFor(p)}
+                <span
+                  className="flex items-center justify-center rounded-full text-xs font-bold flex-none"
+                  style={{ width: 32, height: 32, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+                >
+                  {labelForVisitor(c).charAt(0).toUpperCase()}
                 </span>
-                <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
-                  {p.client?.country ? `${p.client.country} · ` : ""}
-                  {p.description}
+                <span className="flex flex-col min-w-0 flex-1">
+                  <span className="text-[13px] font-bold truncate" style={{ fontWeight: c.unread ? 800 : 700 }}>
+                    {labelForVisitor(c)}
+                  </span>
+                  <span className="text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
+                    Khách vãng lai · chat trên web
+                  </span>
                 </span>
-              </span>
-              {unreadByProject[p.id] && (
-                <span className="rounded-full flex-none" style={{ width: 9, height: 9, background: "var(--status-red)" }} />
-              )}
-            </button>
-          ))
+                {c.unread && <span className="rounded-full flex-none" style={{ width: 9, height: 9, background: "var(--status-red)" }} />}
+              </button>
+            );
+          })
         )}
       </div>
 
       <div className="flex-1 flex flex-col min-h-0">
-        {!active ? (
+        {!activeProject && !activeVisitor ? (
           <div className="flex-1 flex items-center justify-center text-sm" style={{ color: "var(--color-neutral-500)" }}>
-            Chọn một dự án để xem
+            Chọn một cuộc trò chuyện để xem
           </div>
         ) : (
           <>
-            {/* Consolidated client profile snapshot — per sếp Phúc, customer
-                info should read clearly in one place instead of scattered
-                bits, since the same client can have several projects (each
-                its own rail row) and this is the one spot that always shows
-                who's actually behind whichever one is open. */}
-            <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-              <span
-                className="flex items-center justify-center rounded-full text-sm font-bold overflow-hidden flex-none"
-                style={{ width: 40, height: 40, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
-              >
-                {active.client?.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={active.client.avatar_url} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  labelFor(active).charAt(0).toUpperCase()
-                )}
-              </span>
-              <div className="flex flex-col min-w-0 flex-1">
-                <span className="flex items-baseline gap-2 min-w-0">
-                  <span className="font-bold text-sm truncate">{labelFor(active)}</span>
-                  {active.client?.client_type && (
-                    <span className="tag tag-neutral text-[10px] flex-none">
-                      {active.client.client_type === "business" ? "B2B" : "Cá nhân"}
+            {/* Consolidated client/visitor profile snapshot — per sếp Phúc,
+                customer info should read clearly in one place instead of
+                scattered bits, whether it's a signed-in client (several
+                projects can share one identity) or an anonymous visitor. */}
+            <div className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+              {activeProject ? (
+                <>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span
+                      className="flex items-center justify-center rounded-full text-sm font-bold overflow-hidden flex-none"
+                      style={{ width: 40, height: 40, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+                    >
+                      {activeProject.client?.avatar_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={activeProject.client.avatar_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        labelForProject(activeProject).charAt(0).toUpperCase()
+                      )}
                     </span>
-                  )}
-                </span>
-                <span className="flex flex-wrap items-center gap-x-2.5 text-[12px]" style={{ color: "var(--color-neutral-500)" }}>
-                  {active.client?.email && (
-                    <a href={`mailto:${active.client.email}`} className="truncate" style={{ color: "inherit" }}>
-                      {active.client.email}
-                    </a>
-                  )}
-                  {active.client?.country && <span>{active.client.country}</span>}
-                  <span>
-                    {projects.filter((p) => p.client_id === active.client_id).length} dự án đã gửi
-                  </span>
-                </span>
-              </div>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="flex items-baseline gap-2 min-w-0">
+                        <span className="font-bold text-sm truncate">{labelForProject(activeProject)}</span>
+                        {activeProject.client?.client_type && (
+                          <span className="tag tag-neutral text-[10px] flex-none">
+                            {activeProject.client.client_type === "business" ? "B2B" : "Cá nhân"}
+                          </span>
+                        )}
+                      </span>
+                      <span className="flex flex-wrap items-center gap-x-2.5 text-[12px]" style={{ color: "var(--color-neutral-500)" }}>
+                        {activeProject.client?.email && (
+                          <a href={`mailto:${activeProject.client.email}`} className="truncate" style={{ color: "inherit" }}>
+                            {activeProject.client.email}
+                          </a>
+                        )}
+                        {activeProject.client?.country && <span>{activeProject.client.country}</span>}
+                        <span>{projects.filter((p) => p.client_id === activeProject.client_id).length} dự án đã gửi</span>
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                activeVisitor && (
+                  <>
+                    <span className="flex items-baseline gap-2 min-w-0">
+                      <span className="font-bold text-sm flex-none">{labelForVisitor(activeVisitor)}</span>
+                      <span className="tag tag-neutral text-[10px] flex-none">Khách vãng lai</span>
+                      {activeVisitor.visitor_email && (
+                        <a
+                          href={`mailto:${activeVisitor.visitor_email}`}
+                          className="text-[12px] truncate"
+                          style={{ color: "var(--color-neutral-500)" }}
+                        >
+                          {activeVisitor.visitor_email}
+                        </a>
+                      )}
+                    </span>
+                    {activeVisitor.status === "open" && (
+                      <button type="button" className="btn btn-ghost btn-sm flex-none" onClick={handleCloseVisitor}>
+                        Đóng trò chuyện
+                      </button>
+                    )}
+                  </>
+                )
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
-              <div className="flex flex-col items-start gap-1">
-                <div className="rounded-[12px] px-3 py-2 text-sm max-w-[70%]" style={{ background: "var(--color-surface)" }}>
-                  {active.description}
-                </div>
-                {active.image_urls.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {active.image_urls.map((url) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img key={url} src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
-                    ))}
+              {activeProject && (
+                <div className="flex flex-col items-start gap-1">
+                  <div className="rounded-[12px] px-3 py-2 text-sm max-w-[70%]" style={{ background: "var(--color-surface)" }}>
+                    {activeProject.description}
                   </div>
-                )}
-                <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
-                  {formatTime(active.created_at)}
-                </span>
-              </div>
-
-              {messages.map((m) => {
-                const fromClient = m.sender_type === "client";
-                return (
-                  <div key={m.id} className={`flex flex-col gap-1 ${fromClient ? "items-start" : "items-end"}`}>
-                    <div
-                      className="rounded-[12px] px-3 py-1.5 text-[13px] max-w-[70%] whitespace-pre-wrap break-words"
-                      style={{
-                        background: fromClient ? "var(--color-surface)" : "var(--color-accent-500)",
-                        color: fromClient ? "var(--color-text)" : "#fff",
-                      }}
-                    >
-                      {m.content}
+                  {activeProject.image_urls.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {activeProject.image_urls.map((url) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={url} src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
+                      ))}
                     </div>
-                    {m.image_urls.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {m.image_urls.map((url) => (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img key={url} src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
-                        ))}
-                      </div>
-                    )}
-                    <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
-                      {formatTime(m.created_at)}
-                    </span>
+                  )}
+                  <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
+                    {formatTime(activeProject.created_at)}
+                  </span>
+                </div>
+              )}
+
+              {messages.map((m) => (
+                <div key={m.id} className={`flex flex-col gap-1 ${m.fromCustomer ? "items-start" : "items-end"}`}>
+                  <div
+                    className="rounded-[12px] px-3 py-1.5 text-[13px] max-w-[70%] whitespace-pre-wrap break-words"
+                    style={{
+                      background: m.fromCustomer ? "var(--color-surface)" : "var(--color-accent-500)",
+                      color: m.fromCustomer ? "var(--color-text)" : "#fff",
+                    }}
+                  >
+                    {m.content}
                   </div>
-                );
-              })}
+                  {m.imageUrls.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {m.imageUrls.map((url) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={url} src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
+                      ))}
+                    </div>
+                  )}
+                  <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
+                    {formatTime(m.createdAt)}
+                  </span>
+                </div>
+              ))}
             </div>
 
             <div className="flex-none p-3" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
@@ -264,8 +414,13 @@ export function ClientProjectsInbox({ initialProjects }: { initialProjects: Proj
                   placeholder="Trả lời khách…"
                   value={text}
                   onChange={(e) => setText(e.target.value)}
+                  disabled={activeVisitor?.status === "closed"}
                 />
-                <button type="submit" disabled={sending || !text.trim()} className="btn btn-primary btn-sm flex-none">
+                <button
+                  type="submit"
+                  disabled={sending || !text.trim() || activeVisitor?.status === "closed"}
+                  className="btn btn-primary btn-sm flex-none"
+                >
                   Gửi
                 </button>
               </form>

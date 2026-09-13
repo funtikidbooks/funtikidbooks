@@ -30,7 +30,7 @@ async function requireConversation(conversationId: string, token: string) {
 // Fires push (to every device a recipient has granted it on) and a
 // fallback email (to everyone with one on file) whenever a visitor sends a
 // message — the widget has no way to page anyone otherwise, so a message
-// left outside office hours would just sit unseen in /quan-tri/chat until
+// left outside office hours would just sit unseen in Khách hàng until
 // someone happened to open it. Recipients are director/admin plus any
 // Project Manager (Alice Đỗ) — the same tier that can actually open and
 // reply to the chat now (see requireStaff() in support-chat.ts).
@@ -55,7 +55,7 @@ async function notifyStaffOfVisitorMessage(visitorName: string | null, visitorEm
         title: "🔔 Khách hàng nhắn tin mới",
         body: `${who}: ${preview}`,
         senderId: "visitor-chat",
-        url: "/quan-tri/chat",
+        url: "/workspace/khach-hang",
         tag: "funti-visitor-chat",
         requireInteraction: true,
       }).catch(() => {}),

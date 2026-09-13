@@ -9,7 +9,11 @@ import { createClient } from "@/lib/supabase/client";
 import { resetThemeOnSignOut } from "@/lib/useTheme";
 import type { AccessRole } from "@/lib/types";
 
-const CHAT_NAV_ITEM = { href: "/quan-tri/chat", label: "Chat khách vãng lai", icon: "💬" };
+// Points into the workspace now — Khách hàng consolidates this with the
+// Công việc client-project inbox, so there's one place to check instead of
+// two. See src/app/quan-tri/chat/page.tsx for the redirect covering any
+// old bookmark to the previous location.
+const CHAT_NAV_ITEM = { href: "/workspace/khach-hang", label: "Khách hàng", icon: "💬" };
 
 const NAV = [
   { href: "/quan-tri/du-an", label: "Dự án", icon: "📁" },
