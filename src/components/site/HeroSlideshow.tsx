@@ -170,22 +170,36 @@ export function HeroSlideshow({
         {slides.map((src, i) => {
           const t = transforms[src] ?? DEFAULT_IMAGE_TRANSFORM;
           const isActive = i === safeIndex;
-          // Alternate pan direction slide-to-slide (left→right, then
-          // right→left, ...) purely by position in the list — deterministic,
-          // not random. Panning is a translateX on the WRAPPER (not
-          // object-position on the image): object-position's usable range
-          // depends on how much slack object-fit:cover leaves on that axis,
-          // which turned out to be ~zero horizontally for these photos (a
-          // ~4:3 photo covering a much wider banner fills the width exactly
-          // and only has vertical slack) — so a horizontal object-position
-          // pan was invisible. translateX-of-the-already-zoomed-wrapper has
-          // no such dependency: the hero-kenburns zoom (1.15 → 1) always
-          // creates real horizontal overscan to pan within, regardless of
-          // the source photo's own aspect ratio. panAmt stays well under
-          // that zoom's margin so no edge is ever exposed.
+          // Alternate both zoom direction (in vs out) and pan direction
+          // (left→right vs right→left) slide-to-slide, purely by position
+          // in the list — deterministic, not random. Panning is a
+          // translateX on the WRAPPER (not object-position on the image):
+          // object-position's usable range depends on how much slack
+          // object-fit:cover leaves on that axis, which turned out to be
+          // ~zero horizontally for these photos (a ~4:3 photo covering a
+          // much wider banner fills the width exactly and only has
+          // vertical slack) — so a horizontal object-position pan was
+          // invisible. translateX-of-the-already-zoomed-wrapper has no
+          // such dependency: zooming always creates real horizontal
+          // overscan to pan within, regardless of the source photo's own
+          // aspect ratio — AS LONG AS the pan offset is 0 exactly when
+          // scale is 1 (no overscan yet) and only reaches its full ±panAmt
+          // once scale has reached 1.15 (max overscan), scaling together
+          // in lockstep. That's why pan is expressed as "value at rest"
+          // vs "value at full zoom" below rather than a fixed from/to —
+          // for a zoom-OUT slide the zoomed end is where it STARTS, for a
+          // zoom-IN slide the zoomed end is where it FINISHES, and the
+          // pan has to track whichever one that is or it'd expose an edge
+          // during the low-scale portion.
           const panAmt = 4;
+          const zoomOut = i % 2 === 0;
           const panLtr = i % 2 === 0;
-          const panStart = panLtr ? -panAmt : panAmt;
+          const panAtRest = 0;
+          const panAtZoomed = panLtr ? -panAmt : panAmt;
+          const scaleFrom = zoomOut ? 1.15 : 1;
+          const scaleTo = zoomOut ? 1 : 1.15;
+          const panFrom = zoomOut ? panAtZoomed : panAtRest;
+          const panTo = zoomOut ? panAtRest : panAtZoomed;
           return (
             <div
               key={src}
@@ -205,7 +219,14 @@ export function HeroSlideshow({
                 <div
                   key={`kb-${activationAt[src] ?? 0}`}
                   className="absolute inset-0 hero-kenburns"
-                  style={{ "--fk-pan-start": `${panStart}%` } as React.CSSProperties}
+                  style={
+                    {
+                      "--fk-scale-from": scaleFrom,
+                      "--fk-scale-to": scaleTo,
+                      "--fk-pan-from": `${panFrom}%`,
+                      "--fk-pan-to": `${panTo}%`,
+                    } as React.CSSProperties
+                  }
                 >
                   <Image
                     src={isSupabaseStorageUrl(src) ? (resizedUrl(src, 1600) ?? src) : src}
