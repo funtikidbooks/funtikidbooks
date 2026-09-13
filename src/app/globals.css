@@ -614,29 +614,35 @@ h4 {
    actual saved framing (scale 1, translateX 0), never past it — so motion
    only ever reveals more of the photo than the static crop would, never
    hides more of it. `linear` (not ease-out) spreads the change evenly
-   across the whole 6s ROTATE_MS instead of front-loading it into the
-   first second, which was why it originally read as "not moving" — most
-   of an ease-out curve's change happens right at the start, then barely
-   creeps for the rest.
+   instead of front-loading it into the first second, which was why it
+   originally read as "not moving" — most of an ease-out curve's change
+   happens right at the start, then barely creeps for the rest.
+   Duration (9s) is deliberately LONGER than HeroSlideshow's 6s
+   ROTATE_MS, so the slide always rotates away mid-motion rather than
+   sitting fully settled for a beat first — sếp Phúc flagged that the
+   settle-then-cut looked unnatural. It's fine that a slide's own
+   animation never reaches its "fully revealed" end state before the
+   crossfade takes it away — it still reveals strictly more than the
+   static crop at every moment along the way, which was the actual goal.
    translateX rides along in the SAME transform as the zoom (rather than
    panning object-position on the <img>) specifically because its %
    argument is relative to this wrapper's own box — a fixed, known
    quantity — where object-position's usable range instead depends on how
    much slack object-fit:cover happens to leave on that axis for a given
    photo's aspect ratio, which for these ~4:3 photos in a much wider
-   banner turned out to be ~zero horizontally. --fk-pan-start (±3%, sign
-   alternating slide to slide) is comfortably inside the margin the 1.12
+   banner turned out to be ~zero horizontally. --fk-pan-start (±4%, sign
+   alternating slide to slide) is comfortably inside the margin the 1.15
    zoom creates, so panning never exposes an edge. */
 @keyframes hero-kenburns {
   from {
-    transform: scale(1.12) translateX(var(--fk-pan-start, 0%));
+    transform: scale(1.15) translateX(var(--fk-pan-start, 0%));
   }
   to {
     transform: scale(1) translateX(0%);
   }
 }
 .hero-kenburns {
-  animation: hero-kenburns 6s linear forwards;
+  animation: hero-kenburns 9s linear forwards;
   will-change: transform;
 }
 @media (prefers-reduced-motion: reduce) {

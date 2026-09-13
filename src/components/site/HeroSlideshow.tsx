@@ -168,11 +168,11 @@ export function HeroSlideshow({
           // ~4:3 photo covering a much wider banner fills the width exactly
           // and only has vertical slack) — so a horizontal object-position
           // pan was invisible. translateX-of-the-already-zoomed-wrapper has
-          // no such dependency: the hero-kenburns zoom (1.12 → 1) always
+          // no such dependency: the hero-kenburns zoom (1.15 → 1) always
           // creates real horizontal overscan to pan within, regardless of
           // the source photo's own aspect ratio. panAmt stays well under
           // that zoom's margin so no edge is ever exposed.
-          const panAmt = 3;
+          const panAmt = 4;
           const panLtr = i % 2 === 0;
           const panStart = panLtr ? -panAmt : panAmt;
           return (
