@@ -31,12 +31,14 @@ const MORE_NAV = [
 // The installed iPhone app trades the "4 most-used + everything else behind
 // Thêm" tradeoff for just the sections the director actually wants on the
 // home screen. iPad keeps the regular nav even when installed the same way
-// (see useShowsIphoneAppNav). Danh bạ (Thành viên) as its own primary tab
-// turned out redundant — Trò chuyện already opens straight into that same
-// member list (tap someone there to start the DM) before a conversation is
-// picked, so per sếp Phúc it's dropped back out again.
+// (see useShowsIphoneAppNav). Danh bạ isn't its own page — per sếp Phúc it
+// just needs to land straight on the DM rail (?tab=dm, no specific peer;
+// see MeetingHub.tsx), the same member-picker "Trò chuyện" itself shows
+// once someone taps into DMs by hand. "Trò chuyện" still opens wherever you
+// last were (a room or a conversation); Danh bạ always jumps to that picker.
 const PRIMARY_NAV_IPHONE_APP = [
   { href: "/workspace/hop", label: "Trò chuyện", icon: "💬" },
+  { href: "/workspace/hop?tab=dm", label: "Danh bạ", icon: "📇" },
   { href: "/workspace/bao-cao-gio", label: "Báo cáo giờ", icon: "⏱️" },
 ];
 

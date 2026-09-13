@@ -165,20 +165,44 @@ export function ClientProjectsInbox({ initialProjects }: { initialProjects: Proj
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-              <span className="flex items-baseline gap-2 min-w-0">
-                <span className="font-bold text-sm flex-none">{labelFor(active)}</span>
-                {active.client?.email && (
-                  <a href={`mailto:${active.client.email}`} className="text-[12px] truncate" style={{ color: "var(--color-neutral-500)" }}>
-                    {active.client.email}
-                  </a>
-                )}
-                {active.client?.client_type && (
-                  <span className="tag tag-neutral text-[10px] flex-none">
-                    {active.client.client_type === "business" ? "B2B" : "Cá nhân"}
-                  </span>
+            {/* Consolidated client profile snapshot — per sếp Phúc, customer
+                info should read clearly in one place instead of scattered
+                bits, since the same client can have several projects (each
+                its own rail row) and this is the one spot that always shows
+                who's actually behind whichever one is open. */}
+            <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+              <span
+                className="flex items-center justify-center rounded-full text-sm font-bold overflow-hidden flex-none"
+                style={{ width: 40, height: 40, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+              >
+                {active.client?.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={active.client.avatar_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  labelFor(active).charAt(0).toUpperCase()
                 )}
               </span>
+              <div className="flex flex-col min-w-0 flex-1">
+                <span className="flex items-baseline gap-2 min-w-0">
+                  <span className="font-bold text-sm truncate">{labelFor(active)}</span>
+                  {active.client?.client_type && (
+                    <span className="tag tag-neutral text-[10px] flex-none">
+                      {active.client.client_type === "business" ? "B2B" : "Cá nhân"}
+                    </span>
+                  )}
+                </span>
+                <span className="flex flex-wrap items-center gap-x-2.5 text-[12px]" style={{ color: "var(--color-neutral-500)" }}>
+                  {active.client?.email && (
+                    <a href={`mailto:${active.client.email}`} className="truncate" style={{ color: "inherit" }}>
+                      {active.client.email}
+                    </a>
+                  )}
+                  {active.client?.country && <span>{active.client.country}</span>}
+                  <span>
+                    {projects.filter((p) => p.client_id === active.client_id).length} dự án đã gửi
+                  </span>
+                </span>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
