@@ -148,9 +148,6 @@ export function Header() {
               {t.nav.member}
             </Link>
           )}
-          <Link href="/lien-he" className="btn btn-secondary btn-sm" style={{ minWidth: 200 }}>
-            {t.nav.contactCta}
-          </Link>
         </div>
 
         {/* 1024-1535px (iPad landscape up through common 13"-14" laptop
