@@ -15,6 +15,8 @@ import type { Profile } from "@/lib/types";
 
 const CLIENT_PROJECTS_NAV_ITEM = { href: "/workspace/khach-hang", label: "Khách hàng", icon: "🧑‍💼", enabled: true };
 
+const INTERNAL_NAV_COLLAPSED_KEY = "funti-ws-internal-nav-collapsed";
+
 const NAV = [
   { href: "/workspace", label: "Bảng công việc", icon: "📊", enabled: true },
   { href: "/workspace/hop", label: "Trò chuyện & họp", icon: "💬", enabled: true },
@@ -60,6 +62,35 @@ export function Sidebar({
   const isDirector = user.accessRole === "director";
   const isProjectManager = user.jobTitle === "Project Manager";
   const canOpenClientProjects = isDirector || user.accessRole === "admin" || isProjectManager;
+
+  // Collapsed by default (matches the server-rendered-vs-first-client-render
+  // requirement — both start from the same value), then a post-mount effect
+  // reads the real per-device preference from localStorage, same pattern as
+  // the liked-projects flag elsewhere in this app.
+  const [internalCollapsed, setInternalCollapsed] = useState(true);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(INTERNAL_NAV_COLLAPSED_KEY);
+      if (stored !== null) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setInternalCollapsed(stored === "1");
+      }
+    } catch {
+      // localStorage unavailable (private mode, etc.) — stays collapsed.
+    }
+  }, []);
+
+  function toggleInternalNav() {
+    setInternalCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(INTERNAL_NAV_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        // Ignore — nothing to persist to.
+      }
+      return next;
+    });
+  }
 
   // Live-updates the same way AdminSidebar's payroll-feedback dot does —
   // lights up the moment a client message lands, not just on next page load.
@@ -170,13 +201,37 @@ export function Sidebar({
         {visibleInternalNav.length > 0 && (
           <>
             <div className="mt-2 mb-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }} />
-            <div
-              className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1"
+            <button
+              type="button"
+              onClick={toggleInternalNav}
+              className="flex items-center justify-between px-2 mb-1"
               style={{ color: "var(--color-neutral-500)" }}
+              aria-expanded={!internalCollapsed}
             >
-              NỘI BỘ
+              <span className="text-[11px] font-bold tracking-[0.08em]">NỘI BỘ</span>
+              <span
+                aria-hidden
+                style={{
+                  display: "inline-block",
+                  fontSize: 10,
+                  transition: "transform 0.2s ease",
+                  transform: internalCollapsed ? "rotate(0deg)" : "rotate(180deg)",
+                }}
+              >
+                ▾
+              </span>
+            </button>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateRows: internalCollapsed ? "0fr" : "1fr",
+                transition: "grid-template-rows 0.25s ease",
+              }}
+            >
+              <div className="flex flex-col gap-1" style={{ overflow: "hidden", minHeight: 0 }}>
+                {visibleInternalNav.map((item) => NavLink(item))}
+              </div>
             </div>
-            {visibleInternalNav.map((item) => NavLink(item))}
           </>
         )}
       </div>
