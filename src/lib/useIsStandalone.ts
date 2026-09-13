@@ -10,6 +10,7 @@ import { useSyncExternalStore } from "react";
 export const STANDALONE_ALLOWED_HREFS = new Set([
   "/workspace",
   "/workspace/hop",
+  "/workspace/thanh-vien",
   "/workspace/lich",
   "/workspace/cham-cong",
 ]);
