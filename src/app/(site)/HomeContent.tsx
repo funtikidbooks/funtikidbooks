@@ -2,14 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import localFont from "next/font/local";
 import { CtaBanner } from "@/components/site/CtaBanner";
 import { Reveal } from "@/components/site/Reveal";
 import { VideoTeaser } from "@/components/site/VideoTeaser";
 import { ProjectCarousel } from "@/components/site/ProjectCarousel";
 import { PartnersMarquee } from "@/components/site/PartnersMarquee";
 import { HeroSlideshow } from "@/components/site/HeroSlideshow";
-import { FitText } from "@/components/site/FitText";
 import { ServicesGrid } from "@/components/site/ServicesGrid";
 import { useDict } from "@/components/site/LocaleProvider";
 import { useViewer } from "@/components/site/ViewerProvider";
@@ -17,10 +15,6 @@ import type { ImageTransform } from "@/components/site/EditableImage";
 import type { Project } from "@/lib/types";
 
 const HERO_KEY = "hero-trang-chu";
-
-// Used only for the "FUNTIKIDBOOKS" wordmark in the hero banner — not the
-// site-wide heading font, so it's declared locally rather than in layout.tsx.
-const wordmarkFont = localFont({ src: "../fonts/1FTV-VIP-Original-Fish.otf" });
 
 export function HomeContent({
   projects,
@@ -49,38 +43,21 @@ export function HomeContent({
         revalidatePaths={["/"]}
         overlay="linear-gradient(180deg, rgba(20,18,17,.55) 0%, rgba(20,18,17,.3) 45%, rgba(20,18,17,.65) 100%)"
       >
-        <div style={{ opacity: 0.8 }}>
-          <Reveal x={0} y={-30}>
-            <FitText
-              text="Funtikidbooks"
-              className={`${wordmarkFont.className} text-[88px] sm:text-[128px] tracking-tight leading-none`}
-            />
-          </Reveal>
-          <h1 className="text-[32px] leading-[1.25] sm:text-[44px] mt-6">
+        <Reveal x={0} y={-20}>
+          <h1 className="text-[32px] leading-[1.25] sm:text-[44px]">
             {t.home.heroTitle[0]}
             <br />
             {t.home.heroTitle[1]}
           </h1>
-        </div>
-        <p className="text-base leading-relaxed max-w-[560px]" style={{ color: "rgba(255,255,255,.9)" }}>
+        </Reveal>
+        <p className="text-base leading-relaxed max-w-[520px]" style={{ color: "rgba(255,255,255,.9)" }}>
           {t.home.heroBody}
         </p>
-        <div className="flex flex-wrap justify-center gap-3 mt-2">
-          <Reveal x={-48} y={0} delay={150}>
-            <Link href="/lien-he" className="btn btn-primary">
-              {t.home.heroCta1}
-            </Link>
-          </Reveal>
-          <Reveal x={48} y={0} delay={250}>
-            <Link
-              href="/du-an"
-              className="btn"
-              style={{ background: "rgba(255,255,255,.1)", color: "#fff", border: "1.5px solid rgba(255,255,255,.6)" }}
-            >
-              {t.home.heroCta2}
-            </Link>
-          </Reveal>
-        </div>
+        <Reveal y={0} delay={150}>
+          <Link href="/lien-he" className="btn btn-primary mt-2">
+            {t.home.heroCta1}
+          </Link>
+        </Reveal>
       </HeroSlideshow>
 
       <Reveal>
