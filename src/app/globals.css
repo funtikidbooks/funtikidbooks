@@ -587,6 +587,29 @@ h4 {
   }
 }
 
+/* Danh bạ (Thành viên, phone list) pushes into a DM conversation like an
+   iOS nav stack — used only on the deep-linked entrance itself (see
+   deepLinkedIn in DirectMessagesPanel.tsx), not on every peer switch made
+   from inside an already-open panel. */
+.ws-slide-in-right {
+  animation: ws-slide-in-right 0.28s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@keyframes ws-slide-in-right {
+  0% {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ws-slide-in-right {
+    animation: none;
+  }
+}
+
 /* ---------- Floating DM chat window on phones ---------- */
 /* ChatWindow.tsx sets right/width inline (offsetRight staggers multiple
    open windows sideways on desktop) — !important is the only way to widen

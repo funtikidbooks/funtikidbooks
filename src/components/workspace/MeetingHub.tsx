@@ -1148,6 +1148,10 @@ export function MeetingHub({
   // Reading it post-mount instead means the first client render still
   // matches the server, and this effect nudges it over right after.
   const [initialDmPeerId, setInitialDmPeerId] = useState<string | null>(null);
+  // Danh bạ's phone icon links here with ?dm=<peerId>&call=1 — same deep
+  // link as a push notification's ?dm=, plus this flag so the call starts
+  // itself instead of just opening the conversation.
+  const [initialAutoCall, setInitialAutoCall] = useState(false);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const dm = params.get("dm");
@@ -1161,6 +1165,9 @@ export function MeetingHub({
     if (dm) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setInitialDmPeerId(dm);
+      if (params.get("call") === "1") {
+        setInitialAutoCall(true);
+      }
       setActiveId(DM_TAB_ID);
     } else if (room && initialChannels.some((c) => c.id === room)) {
       setActiveId(room);
@@ -1188,6 +1195,7 @@ export function MeetingHub({
       const room = params.get("room");
       if (dm) {
         setInitialDmPeerId(dm);
+        setInitialAutoCall(params.get("call") === "1");
         setActiveId(DM_TAB_ID);
       } else if (room && initialChannels.some((c) => c.id === room)) {
         setActiveId(room);
@@ -3654,6 +3662,7 @@ export function MeetingHub({
             profiles={profiles}
             onOpenRoomList={() => setShowRoomListMobile(true)}
             initialPeerId={initialDmPeerId}
+            autoStartCall={initialAutoCall}
             label={dmTabLabel}
           />
         ) : !activeChannel ? (

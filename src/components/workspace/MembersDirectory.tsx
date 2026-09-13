@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { usePresence } from "@/lib/usePresence";
 import { updateJoinedAt } from "@/lib/actions/admin";
@@ -65,6 +66,7 @@ export function MembersDirectory({
   canManage: boolean;
   initialBankInfo: StaffBankInfo[];
 }) {
+  const router = useRouter();
   const [items, setItems] = useState(profiles);
   const [active, setActive] = useState(ALL);
   const [showCreate, setShowCreate] = useState(false);
@@ -174,7 +176,70 @@ export function MembersDirectory({
         ))}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {/* Phone: Danh bạ's whole point is "find someone and start talking to
+          them right now" — the desktop card grid below (bank info, join-date
+          editing) is an HR/admin tool, not that. A plain tap-to-chat list
+          with a call button on the trailing edge, one row per person. */}
+      <div className="sm:hidden flex flex-col gap-2">
+        {filtered.map((p) => {
+          const online = onlineIds.has(p.id);
+          return (
+            <div key={p.id} className="card elev-sm flex items-center gap-1 pr-2">
+              <button
+                type="button"
+                onClick={() => router.push(`/workspace/hop?dm=${p.id}`)}
+                className="flex items-center gap-3 flex-1 min-w-0 text-left p-3"
+              >
+                <span className="relative flex-none">
+                  <span
+                    className="flex items-center justify-center rounded-full text-sm font-bold overflow-hidden"
+                    style={{ width: 44, height: 44, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+                  >
+                    {p.avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={thumbnailUrl(p.avatar_url, 88)} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      p.display_name.charAt(0).toUpperCase()
+                    )}
+                  </span>
+                  <span
+                    className="absolute rounded-full"
+                    style={{
+                      width: 10,
+                      height: 10,
+                      right: 0,
+                      bottom: 0,
+                      background: online ? "var(--status-green)" : "var(--color-neutral-400)",
+                      border: "2px solid var(--color-panel)",
+                    }}
+                  />
+                </span>
+                <span className="flex flex-col min-w-0">
+                  <span className="text-sm font-bold truncate flex items-center gap-1">
+                    {p.display_name}
+                    {p.access_role === "director" && <span aria-label="Giám đốc">👑</span>}
+                  </span>
+                  <span className="text-xs truncate" style={{ color: "var(--color-neutral-500)" }}>
+                    {p.role ?? "Chưa có chức danh"}
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => router.push(`/workspace/hop?dm=${p.id}&call=1`)}
+                aria-label={`Gọi ${p.display_name}`}
+                title="Gọi video"
+                className="btn-icon flex-none"
+                style={{ width: 38, height: 38 }}
+              >
+                📞
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="hidden sm:grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {filtered.map((p) => {
           const online = onlineIds.has(p.id);
           return (

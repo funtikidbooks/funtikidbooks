@@ -49,12 +49,14 @@ export function DirectMessagesPanel({
   profiles: profilesProp,
   onOpenRoomList,
   initialPeerId,
+  autoStartCall,
   label,
 }: {
   currentUser: Pick<Profile, "id" | "display_name">;
   profiles: Profile[];
   onOpenRoomList: () => void;
   initialPeerId?: string | null;
+  autoStartCall?: boolean;
   label: string;
 }) {
   const { unreadCounts, recentSenderOrder, clearDmUnread, setActiveDmPeer } = useChatManager();
@@ -63,6 +65,13 @@ export function DirectMessagesPanel({
   const profiles = useLiveProfiles(profilesProp);
   const onlineIds = usePresence(currentUser.id);
   const [selectedPeerId, setSelectedPeerId] = useState<string | null>(initialPeerId ?? null);
+  // Captured once at mount, not re-derived — Danh bạ's "tap a name/call icon"
+  // links here with ?dm=<id>, and every one of those taps is a fresh
+  // navigation into this page (it always comes from a different route), so
+  // this is true for exactly the entrances that should slide in. Switching
+  // peers later by clicking around inside this already-open panel must not
+  // replay it.
+  const [deepLinkedIn] = useState(() => !!initialPeerId);
   // Derived rather than stored — selectedPeerId is the only thing that
   // actually needs to survive across renders; looking the profile up fresh
   // each time means a live name/avatar edit shows up here immediately too,
@@ -90,6 +99,12 @@ export function DirectMessagesPanel({
   // the click that first mounted it — later clicks need this effect to move
   // `selectedPeerId` over too, or the panel just silently keeps showing
   // whichever conversation was already open.
+  const [showVideoCall, setShowVideoCall] = useState(false);
+  // Guards the auto-call below to firing at most once per deep-linked peer —
+  // this effect can legitimately re-run for the same initialPeerId if
+  // clearDmUnread's identity changes, which must never silently reopen a
+  // call the person already closed.
+  const autoCalledPeerRef = useRef<string | null>(null);
   useEffect(() => {
     if (!initialPeerId) return;
     clearDmUnread(initialPeerId);
@@ -98,9 +113,14 @@ export function DirectMessagesPanel({
     // effect — not state needlessly mirrored from other React state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedPeerId(initialPeerId);
-  }, [initialPeerId, clearDmUnread]);
+    // Danh bạ's phone icon links here with ?call=1 so tapping it opens the
+    // conversation and starts the call in one step instead of two.
+    if (autoStartCall && autoCalledPeerRef.current !== initialPeerId) {
+      autoCalledPeerRef.current = initialPeerId;
+      setShowVideoCall(true);
+    }
+  }, [initialPeerId, autoStartCall, clearDmUnread]);
   const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
-  const [showVideoCall, setShowVideoCall] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<DirectMessageSearchResult[]>([]);
@@ -213,7 +233,9 @@ export function DirectMessagesPanel({
 
   return (
     <div className="flex flex-1 min-h-0">
-      <div className={`${selectedPeer ? "flex" : "hidden"} sm:flex flex-1 flex-col min-w-0`}>
+      <div
+        className={`${selectedPeer ? "flex" : "hidden"} sm:flex flex-1 flex-col min-w-0${deepLinkedIn ? " ws-slide-in-right" : ""}`}
+      >
         {!selectedPeer ? (
           <div className="flex-1 flex items-center justify-center text-sm text-center px-4" style={{ color: "var(--color-neutral-500)" }}>
             Chọn một thành viên bên phải để bắt đầu trò chuyện riêng.
