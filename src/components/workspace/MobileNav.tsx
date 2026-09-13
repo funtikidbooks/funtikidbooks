@@ -30,19 +30,20 @@ const MORE_NAV = [
 
 // The installed iPhone app trades the "4 most-used + everything else behind
 // Thêm" tradeoff for just the sections the director actually wants on the
-// home screen — Chấm công and Báo cáo giờ move up to primary tabs, Thành
-// viên and the other MORE_NAV sections drop out of the nav entirely. iPad
-// keeps the regular nav even when installed the same way (see
-// useShowsIphoneAppNav). Bảng công việc itself moved to "Thêm" below, per
-// sếp Phúc — same 5 primary slots either way.
+// home screen. iPad keeps the regular nav even when installed the same way
+// (see useShowsIphoneAppNav). Per sếp Phúc, only Trò chuyện and Báo cáo giờ
+// stay primary now — Bảng công việc, Lịch, and Chấm công all moved to
+// "Thêm" below.
 const PRIMARY_NAV_IPHONE_APP = [
   { href: "/workspace/hop", label: "Trò chuyện", icon: "💬" },
   { href: "/workspace/bao-cao-gio", label: "Báo cáo giờ", icon: "⏱️" },
+];
+
+const MORE_NAV_IPHONE_APP = [
+  { href: "/workspace", label: "Bảng công việc", icon: "📊" },
   { href: "/workspace/lich", label: "Lịch", icon: "📅" },
   { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐" },
 ];
-
-const MORE_NAV_IPHONE_APP = [{ href: "/workspace", label: "Bảng công việc", icon: "📊" }];
 
 export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
   const pathname = usePathname();
