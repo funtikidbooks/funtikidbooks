@@ -613,22 +613,48 @@ h4 {
 /* Hero slideshow Ken Burns: eases OUT from a slight zoom to the director's
    actual saved framing (scale 1), never past it — so motion only ever
    reveals more of the photo than the static crop would, never hides more
-   of it. Duration is a touch under HeroSlideshow's 6s ROTATE_MS so it's
-   fully settled before the next slide starts crossfading in. */
+   of it. `linear` (not ease-out) spreads the change evenly across the
+   whole 6s ROTATE_MS instead of front-loading it into the first second,
+   which was why it read as "not moving" — most of an ease-out curve's
+   change happens right at the start, then barely creeps for the rest. */
 @keyframes hero-kenburns {
   from {
-    transform: scale(1.06);
+    transform: scale(1.12);
   }
   to {
     transform: scale(1);
   }
 }
 .hero-kenburns {
-  animation: hero-kenburns 5.8s ease-out forwards;
+  animation: hero-kenburns 6s linear forwards;
   will-change: transform;
 }
 @media (prefers-reduced-motion: reduce) {
   .hero-kenburns {
+    animation: none;
+  }
+}
+
+/* Horizontal pan companion to hero-kenburns above, on the <img> itself
+   rather than a wrapper — sliding object-position (not translateX) never
+   exposes blank edges the way moving the whole element would, since
+   object-fit:cover always keeps the frame fully covered regardless of
+   which point of the source is centered. --fk-pan-from/--fk-pan-to are
+   set per-slide inline (HeroSlideshow.tsx), alternating direction so
+   consecutive slides don't all pan the same way. */
+@keyframes hero-pan {
+  from {
+    object-position: var(--fk-pan-from);
+  }
+  to {
+    object-position: var(--fk-pan-to);
+  }
+}
+.hero-pan {
+  animation: hero-pan 6s linear forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-pan {
     animation: none;
   }
 }

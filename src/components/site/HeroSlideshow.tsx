@@ -159,6 +159,17 @@ export function HeroSlideshow({
         {slides.map((src, i) => {
           const t = transforms[src] ?? DEFAULT_IMAGE_TRANSFORM;
           const isActive = i === safeIndex;
+          // Alternate pan direction slide-to-slide (left→right, then
+          // right→left, ...) purely by position in the list — deterministic,
+          // not random, so it doesn't need to be remembered between
+          // rotations. object-position (not translateX) is what actually
+          // pans: since the image is object-fit:cover-scaled, sliding which
+          // point of the source aligns with the frame never exposes blank
+          // edges the way translating the whole element would.
+          const panAmt = 5;
+          const panLtr = i % 2 === 0;
+          const panFromX = clamp(t.posX - (panLtr ? panAmt : -panAmt), 0, 100);
+          const panToX = clamp(t.posX + (panLtr ? panAmt : -panAmt), 0, 100);
           return (
             <div
               key={src}
@@ -166,7 +177,7 @@ export function HeroSlideshow({
               style={{ opacity: isActive ? 1 : 0, transitionDuration: "1200ms" }}
             >
               {loaded.has(i) && (
-                // Keyed so it remounts (restarting the CSS animation) only
+                // Keyed so it remounts (restarting the CSS animations) only
                 // when THIS slide freshly becomes active — the outer div
                 // above keeps its stable `key={src}` so the opacity
                 // crossfade itself never restarts.
@@ -177,8 +188,16 @@ export function HeroSlideshow({
                     fill
                     priority={i === 0}
                     unoptimized={isSupabaseStorageUrl(src)}
-                    className="object-cover"
-                    style={{ transform: `scale(${t.zoom / 100})`, objectPosition: `${t.posX}% ${t.posY}%`, pointerEvents: "none" }}
+                    className={`object-cover${isActive ? " hero-pan" : ""}`}
+                    style={
+                      {
+                        transform: `scale(${t.zoom / 100})`,
+                        objectPosition: `${t.posX}% ${t.posY}%`,
+                        pointerEvents: "none",
+                        "--fk-pan-from": `${panFromX}% ${t.posY}%`,
+                        "--fk-pan-to": `${panToX}% ${t.posY}%`,
+                      } as React.CSSProperties
+                    }
                   />
                 </div>
               )}
