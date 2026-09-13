@@ -32,11 +32,16 @@ export function HeroSlideshow({
 }) {
   const [slides, setSlides] = useState(images);
   const [index, setIndex] = useState(0);
-  // Bumped every time a slide becomes active — used only to key the Ken
-  // Burns wrapper below so its animation restarts on each fresh activation,
-  // without remounting the outer crossfade div (which must keep a stable
-  // `key={src}` or the opacity transition itself would restart too).
-  const [tick, setTick] = useState(0);
+  // Bumped per-slide (keyed by src, not index — stable across reordering)
+  // only at the moment that slide BECOMES active. Used solely to key the
+  // Ken Burns wrapper below so its animation restarts on a fresh
+  // activation, while staying stable for the rest of that slide's life —
+  // including while it's fading OUT after being replaced. It used to key
+  // off active-vs-not, which unmounted (and CSS-snapped back to no
+  // transform) the outgoing slide the instant it stopped being active,
+  // causing a visible jerk right at the crossfade; now the outgoing slide
+  // just keeps animating smoothly underneath the fade.
+  const [activationAt, setActivationAt] = useState<Record<string, number>>({});
   const [managing, setManaging] = useState(false);
   const [transforms, setTransforms] = useState(initialTransforms);
   // What's actually persisted — `transforms` is the live/working copy the
@@ -68,7 +73,7 @@ export function HeroSlideshow({
 
   function goTo(i: number) {
     setIndex(i);
-    setTick((t) => t + 1);
+    setActivationAt((prev) => ({ ...prev, [slides[i]]: (prev[slides[i]] ?? 0) + 1 }));
     setLoaded((prev) => (prev.has(i) ? prev : new Set(prev).add(i)));
   }
 
@@ -99,6 +104,12 @@ export function HeroSlideshow({
     if (slides.length <= 1 || dragging || hasUnsavedPosition) return;
     const id = setTimeout(() => goTo((safeIndex + 1) % slides.length), ROTATE_MS);
     return () => clearTimeout(id);
+    // goTo intentionally omitted: it's a plain function recreated every
+    // render, and listing it would re-run this effect (and reschedule the
+    // rotation timer) on every render instead of only when the values
+    // below actually change. It always reads the latest `slides` at call
+    // time via closure regardless.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [safeIndex, slides.length, dragging, hasUnsavedPosition]);
 
   useEffect(() => {
@@ -182,13 +193,18 @@ export function HeroSlideshow({
               style={{ opacity: isActive ? 1 : 0, transitionDuration: "1200ms" }}
             >
               {loaded.has(i) && (
-                // Keyed so it remounts (restarting the CSS animation) only
-                // when THIS slide freshly becomes active — the outer div
-                // above keeps its stable `key={src}` so the opacity
-                // crossfade itself never restarts.
+                // Keyed by this slide's own last-activation count — stable
+                // for its whole lifetime (active AND fading out afterward),
+                // only remounting (restarting the animation) the next time
+                // it's reactivated. The class is unconditional so the
+                // outgoing slide keeps animating smoothly underneath the
+                // opacity crossfade instead of snapping back to a static
+                // frame the instant it stops being active. The outer div
+                // above keeps its own stable `key={src}` so the crossfade
+                // itself never restarts either.
                 <div
-                  key={isActive ? `kb-${tick}` : "kb-idle"}
-                  className={`absolute inset-0${isActive ? " hero-kenburns" : ""}`}
+                  key={`kb-${activationAt[src] ?? 0}`}
+                  className="absolute inset-0 hero-kenburns"
                   style={{ "--fk-pan-start": `${panStart}%` } as React.CSSProperties}
                 >
                   <Image
