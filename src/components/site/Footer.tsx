@@ -31,7 +31,6 @@ export function Footer() {
         { href: "/quy-trinh", label: t.nav.process },
         { href: "/du-an", label: t.nav.projects },
         { href: "/lien-he", label: t.nav.contact },
-        { href: "/cong-viec", label: t.nav.clientPortal },
       ],
     },
   ];
@@ -59,7 +58,7 @@ export function Footer() {
           </p>
         </div>
 
-        {COLUMNS.map((col) => (
+        {COLUMNS.map((col, colIndex) => (
           <div key={col.title} className="flex flex-col gap-2">
             <h3 className="text-sm font-bold tracking-wide" style={{ color: "#fff" }}>{col.title}</h3>
             {col.links.map((link, i) => (
@@ -72,6 +71,14 @@ export function Footer() {
                 {link.label}
               </Link>
             ))}
+            {/* Phone already has this in the header's hamburger menu — kept
+                out of the footer there per sếp Phúc, shown from sm/tablet
+                up where the footer is the only place it lives. */}
+            {colIndex === COLUMNS.length - 1 && (
+              <Link href="/cong-viec" className="text-sm hidden sm:inline" style={{ color: "#c8c7c1" }}>
+                {t.nav.clientPortal}
+              </Link>
+            )}
           </div>
         ))}
 
