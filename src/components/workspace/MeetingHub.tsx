@@ -1156,11 +1156,7 @@ export function MeetingHub({
     const params = new URLSearchParams(window.location.search);
     const dm = params.get("dm");
     const room = params.get("room");
-    // Danh bạ's tab links here with ?tab=dm (no specific peer) — just land
-    // on the DM rail so tapping a name there opens the chat, same picker
-    // this already shows once you click "Trò chuyện riêng" by hand.
-    const wantsDmTab = params.get("tab") === "dm";
-    if (!dm && !room && !wantsDmTab) return;
+    if (!dm && !room) return;
     // set-state-in-effect normally flags this as a smell because it usually
     // means state is being needlessly mirrored from other React state — but
     // here it's genuinely synchronizing with an external system (the URL a
@@ -1175,8 +1171,6 @@ export function MeetingHub({
       setActiveId(DM_TAB_ID);
     } else if (room && initialChannels.some((c) => c.id === room)) {
       setActiveId(room);
-    } else if (wantsDmTab) {
-      setActiveId(DM_TAB_ID);
     }
     // Deliberately only runs once, off the URL the notification click
     // landed on — not meant to react to later in-app room switches.
