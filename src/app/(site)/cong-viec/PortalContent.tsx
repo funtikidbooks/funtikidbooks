@@ -14,6 +14,7 @@ import {
   uploadClientAvatar,
   uploadClientProjectImage,
 } from "@/lib/actions/clientPortal";
+import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import type { ClientMessage, ClientProfile, ClientProject, ClientType } from "@/lib/types";
 
 type Stage = "loading" | "signed-out" | "sent-link" | "needs-profile" | "ready";
@@ -519,6 +520,7 @@ function ProjectThread({
   const [text, setText] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -565,7 +567,7 @@ function ProjectThread({
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!text.trim() || sending) return;
+    if ((!text.trim() && images.length === 0) || sending) return;
     setSending(true);
     onError(null);
     try {
@@ -597,8 +599,10 @@ function ProjectThread({
           {project.image_urls.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {project.image_urls.map((url) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={url} src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
+                <button key={url} type="button" onClick={() => setLightboxUrl(url)} className="flex-none">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
+                </button>
               ))}
             </div>
           )}
@@ -611,20 +615,24 @@ function ProjectThread({
           const mine = m.sender_type === "client";
           return (
             <div key={m.id} className={`flex flex-col gap-1 ${mine ? "items-start" : "items-end"}`}>
-              <div
-                className="rounded-[12px] px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap break-words"
-                style={{
-                  background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
-                  color: mine ? "#fff" : "var(--color-text)",
-                }}
-              >
-                {m.content}
-              </div>
+              {m.content && (
+                <div
+                  className="rounded-[12px] px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap break-words"
+                  style={{
+                    background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
+                    color: mine ? "#fff" : "var(--color-text)",
+                  }}
+                >
+                  {m.content}
+                </div>
+              )}
               {m.image_urls.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {m.image_urls.map((url) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img key={url} src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
+                    <button key={url} type="button" onClick={() => setLightboxUrl(url)} className="flex-none">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
+                    </button>
                   ))}
                 </div>
               )}
@@ -645,11 +653,13 @@ function ProjectThread({
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
-          <button type="submit" disabled={sending || !text.trim()} className="btn btn-primary btn-sm flex-none">
+          <button type="submit" disabled={sending || (!text.trim() && images.length === 0)} className="btn btn-primary btn-sm flex-none">
             Send
           </button>
         </form>
       </div>
+
+      {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
     </div>
   );
 }

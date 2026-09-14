@@ -191,7 +191,7 @@ export async function sendClientMessage(
   imageUrls: string[] = [],
 ): Promise<ClientMessage> {
   const trimmed = content.trim();
-  if (!trimmed) throw new Error("Please enter a message.");
+  if (!trimmed && imageUrls.length === 0) throw new Error("Please enter a message or attach an image.");
 
   const supabase = await createClient();
   const {
@@ -222,7 +222,8 @@ export async function sendClientMessage(
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", projectId);
 
-  after(() => notifyStaffOfClientMessage(client?.display_name ?? null, trimmed).catch(() => {}));
+  const notifyPreview = trimmed || (imageUrls.length > 1 ? `📷 Đã gửi ${imageUrls.length} ảnh` : "📷 Đã gửi ảnh");
+  after(() => notifyStaffOfClientMessage(client?.display_name ?? null, notifyPreview).catch(() => {}));
 
   return data as ClientMessage;
 }

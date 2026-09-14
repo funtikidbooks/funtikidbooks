@@ -13,6 +13,7 @@ import {
   markVisitorConversationRead,
   sendStaffReply,
 } from "@/lib/actions/support-chat";
+import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import type { ClientMessage, ClientProfile, ClientProject, VisitorConversation, VisitorMessage } from "@/lib/types";
 
 type ProjectWithClient = ClientProject & { client: ClientProfile | null };
@@ -77,6 +78,7 @@ export function ClientProjectsInbox({
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const activeProject = useMemo(
     () => (active?.kind === "client" ? (projects.find((p) => p.id === active.id) ?? null) : null),
@@ -365,8 +367,10 @@ export function ClientProjectsInbox({
                   {activeProject.image_urls.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {activeProject.image_urls.map((url) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img key={url} src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
+                        <button key={url} type="button" onClick={() => setLightboxUrl(url)} className="flex-none">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
+                        </button>
                       ))}
                     </div>
                   )}
@@ -378,20 +382,24 @@ export function ClientProjectsInbox({
 
               {messages.map((m) => (
                 <div key={m.id} className={`flex flex-col gap-1 ${m.fromCustomer ? "items-start" : "items-end"}`}>
-                  <div
-                    className="rounded-[12px] px-3 py-1.5 text-[13px] max-w-[70%] whitespace-pre-wrap break-words"
-                    style={{
-                      background: m.fromCustomer ? "var(--color-surface)" : "var(--color-accent-500)",
-                      color: m.fromCustomer ? "var(--color-text)" : "#fff",
-                    }}
-                  >
-                    {m.content}
-                  </div>
+                  {m.content && (
+                    <div
+                      className="rounded-[12px] px-3 py-1.5 text-[13px] max-w-[70%] whitespace-pre-wrap break-words"
+                      style={{
+                        background: m.fromCustomer ? "var(--color-surface)" : "var(--color-accent-500)",
+                        color: m.fromCustomer ? "var(--color-text)" : "#fff",
+                      }}
+                    >
+                      {m.content}
+                    </div>
+                  )}
                   {m.imageUrls.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {m.imageUrls.map((url) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img key={url} src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
+                        <button key={url} type="button" onClick={() => setLightboxUrl(url)} className="flex-none">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
+                        </button>
                       ))}
                     </div>
                   )}
@@ -428,6 +436,8 @@ export function ClientProjectsInbox({
           </>
         )}
       </div>
+
+      {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
     </div>
   );
 }
