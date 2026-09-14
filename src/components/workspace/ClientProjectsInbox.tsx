@@ -6,6 +6,7 @@ import {
   getClientProjectMessagesForStaff,
   markProjectReadByStaff,
   sendStaffReplyToClient,
+  uploadStaffReplyImage,
 } from "@/lib/actions/clientPortal";
 import {
   closeVisitorConversation,
@@ -76,6 +77,11 @@ export function ClientProjectsInbox({
   });
   const [messages, setMessages] = useState<NormalizedMessage[]>([]);
   const [text, setText] = useState("");
+  // Client-project messages only — visitor_messages has no image_urls
+  // column, so the picker below is hidden entirely for a visitor thread.
+  const [replyImages, setReplyImages] = useState<string[]>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const replyFileRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -166,16 +172,40 @@ export function ClientProjectsInbox({
     };
   }, []);
 
+  async function handleReplyFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setUploadingImage(true);
+    setError(null);
+    try {
+      const uploaded = await Promise.all(
+        files.map(async (file) => {
+          const formData = new FormData();
+          formData.set("file", file);
+          return uploadStaffReplyImage(formData);
+        }),
+      );
+      setReplyImages((prev) => [...prev, ...uploaded]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể tải ảnh lên");
+    } finally {
+      setUploadingImage(false);
+      if (replyFileRef.current) replyFileRef.current.value = "";
+    }
+  }
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
-    if (!active || !text.trim() || sending) return;
+    const hasImages = active?.kind === "client" && replyImages.length > 0;
+    if (!active || (!text.trim() && !hasImages) || sending) return;
     setSending(true);
     setError(null);
     try {
       if (active.kind === "client") {
-        const sent = await sendStaffReplyToClient(active.id, text.trim());
+        const sent = await sendStaffReplyToClient(active.id, text.trim(), replyImages);
         setMessages((prev) => [...prev, fromClientMessage(sent)]);
         setProjects((prev) => prev.map((p) => (p.id === active.id ? { ...p, last_message_at: sent.created_at } : p)));
+        setReplyImages([]);
       } else {
         const sent = await sendStaffReply(active.id, text.trim());
         setMessages((prev) => [...prev, fromVisitorMessage(sent)]);
@@ -410,11 +440,49 @@ export function ClientProjectsInbox({
               ))}
             </div>
 
-            <div className="flex-none p-3" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+            <div className="flex-none p-3 flex flex-col gap-2" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
               {error && (
-                <p className="text-[12px] font-semibold mb-1.5" style={{ color: "var(--status-red)" }}>
+                <p className="text-[12px] font-semibold" style={{ color: "var(--status-red)" }}>
                   {error}
                 </p>
+              )}
+              {active?.kind === "client" && (
+                <div className="flex flex-wrap gap-1.5">
+                  {replyImages.map((url) => (
+                    <div key={url} className="relative rounded-[8px] overflow-hidden flex-none" style={{ width: 48, height: 48 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setReplyImages((prev) => prev.filter((u) => u !== url))}
+                        className="absolute flex items-center justify-center rounded-full"
+                        style={{ top: 2, right: 2, width: 16, height: 16, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 9 }}
+                        aria-label="Bỏ ảnh"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => replyFileRef.current?.click()}
+                    disabled={uploadingImage}
+                    className="flex items-center justify-center rounded-[8px] flex-none"
+                    style={{ width: 48, height: 48, border: "1.5px dashed var(--color-neutral-300)", color: "var(--color-neutral-500)", fontSize: 16 }}
+                    aria-label="Đính kèm ảnh"
+                    title="Đính kèm ảnh"
+                  >
+                    {uploadingImage ? "…" : "📎"}
+                  </button>
+                  <input
+                    ref={replyFileRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={handleReplyFiles}
+                  />
+                </div>
               )}
               <form onSubmit={handleSend} className="flex items-center gap-2">
                 <input
@@ -426,7 +494,7 @@ export function ClientProjectsInbox({
                 />
                 <button
                   type="submit"
-                  disabled={sending || !text.trim() || activeVisitor?.status === "closed"}
+                  disabled={sending || (!text.trim() && replyImages.length === 0) || activeVisitor?.status === "closed"}
                   className="btn btn-primary btn-sm flex-none"
                 >
                   Gửi

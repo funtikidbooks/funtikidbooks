@@ -283,9 +283,32 @@ export async function getClientProjectMessagesForStaff(projectId: string): Promi
   return (data ?? []) as ClientMessage[];
 }
 
-export async function sendStaffReplyToClient(projectId: string, content: string): Promise<ClientMessage> {
+// Same bucket the client's own ImagePicker uploads to (cong-viec/PortalContent.tsx)
+// — its "authenticated can upload client files" storage policy covers any
+// Supabase-authenticated user, staff included, not just rows in `clients`.
+export async function uploadStaffReplyImage(formData: FormData): Promise<string> {
+  const { supabase, user } = await requireClientManager();
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) throw new Error("Thiếu tệp ảnh.");
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF hoặc WEBP.");
+  if (file.size > MAX_IMAGE_SIZE) throw new Error("Ảnh vượt quá 20MB.");
+
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+  const storagePath = `staff-replies/${user.id}/${randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("client-uploads")
+    .upload(storagePath, file, { contentType: file.type });
+  if (uploadError) throw new Error("Không thể tải ảnh lên.");
+
+  const { data } = supabase.storage.from("client-uploads").getPublicUrl(storagePath);
+  return data.publicUrl;
+}
+
+export async function sendStaffReplyToClient(projectId: string, content: string, imageUrls: string[] = []): Promise<ClientMessage> {
   const trimmed = content.trim();
-  if (!trimmed) throw new Error("Vui lòng nhập nội dung tin nhắn.");
+  if (!trimmed && imageUrls.length === 0) throw new Error("Vui lòng nhập nội dung hoặc đính kèm ảnh.");
   const { supabase, user } = await requireClientManager();
 
   const { data, error } = await supabase
@@ -295,6 +318,7 @@ export async function sendStaffReplyToClient(projectId: string, content: string)
       sender_type: "staff",
       sender_id: user.id,
       content: trimmed,
+      image_urls: imageUrls,
       read_by_staff: true,
       read_by_client: false,
     })
@@ -312,7 +336,8 @@ export async function sendStaffReplyToClient(projectId: string, content: string)
 
   const client = (project as unknown as { client: ClientProfile | null } | null)?.client ?? null;
   if (client?.email) {
-    const preview = trimmed.length > 140 ? `${trimmed.slice(0, 140)}…` : trimmed;
+    const preview =
+      trimmed.length > 140 ? `${trimmed.slice(0, 140)}…` : trimmed || (imageUrls.length > 1 ? `📷 Sent ${imageUrls.length} images` : "📷 Sent an image");
     after(() =>
       sendClientReplyEmail({ to: client.email, clientName: client.display_name, preview }).catch(() => {}),
     );
