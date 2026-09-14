@@ -4246,7 +4246,7 @@ export function MeetingHub({
                 channelName={activeChannel.name}
                 hasPassword={activeChannel.has_password}
                 billingType={activeChannel.billing_type}
-                isOwner={activeChannel.created_by === currentUser.id || isDirector}
+                isOwner={activeChannel.created_by === currentUser.id || isDirectorOrPm}
                 ownerId={activeChannel.created_by}
                 ownerName={
                   activeChannel.is_general
