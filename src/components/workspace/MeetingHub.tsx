@@ -1057,19 +1057,16 @@ function RoomInfoDropdown({
                   )}
                 </span>
                 <span className="flex-1 min-w-0">
-                  <span className="flex items-center gap-1.5">
-                    <span className="text-[13px] font-semibold truncate">{p.display_name}</span>
-                    {p.id === ownerId && (
-                      <span className="flex-none text-[10px] font-bold" style={{ color: "var(--status-blue)" }}>
-                        Chủ phòng
-                      </span>
-                    )}
-                  </span>
+                  <span className="block text-[13px] font-semibold truncate">{p.display_name}</span>
                   <span className="block text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
                     {p.role ?? ""}
                   </span>
                 </span>
-                {isMember ? (
+                {p.id === ownerId ? (
+                  <span className="flex-none text-[11px] font-bold" style={{ color: "var(--status-blue)" }}>
+                    Chủ phòng
+                  </span>
+                ) : isMember ? (
                   <span className="flex items-center gap-1 flex-none text-[11px] font-bold" style={{ color: "var(--status-green)" }}>
                     <span aria-hidden>✓</span> Đã vào phòng
                   </span>
