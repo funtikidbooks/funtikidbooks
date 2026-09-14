@@ -198,9 +198,10 @@ export async function leaveChannel(channelId: string) {
 }
 
 // Lets the room's creator kick someone out (the "mời ra" swipe action). The
-// "staff or room owner can remove memberships" RLS policy is what actually
-// enforces "caller must be that member, a director, or this room's creator"
-// — a non-owner calling this just silently affects zero rows.
+// "staff, director/PM, or room owner can remove memberships" RLS policy is
+// what actually enforces "caller must be that member, a director/PM, or
+// this room's creator" — a non-owner calling this just silently affects
+// zero rows.
 export async function removeChannelMember(channelId: string, profileId: string) {
   const { supabase } = await requireUser();
   const { error } = await supabase.from("meeting_channel_members").delete().eq("channel_id", channelId).eq("profile_id", profileId);
@@ -236,11 +237,12 @@ export async function addChannelMember(channelId: string, profileId: string) {
   revalidatePath("/workspace/hop");
 }
 
-// Rename and/or set/change/remove the room password. The "creator or
-// director can update channels" RLS policy on meeting_channels is the real
-// gate here (the UI only ever shows this to the creator, matching how
-// "Xoá phòng" is already gated) — this just turns a plain-text password
-// into a hash before it touches the row, same as createChannel().
+// Rename and/or set/change/remove the room password. The "creator,
+// director, or PM can update channels" RLS policy on meeting_channels is
+// the real gate here (the UI shows this to the creator and to any
+// director/PM, unlike "Xoá phòng" which is creator-only) — this just turns
+// a plain-text password into a hash before it touches the row, same as
+// createChannel().
 export async function updateChannel(
   channelId: string,
   input: { name?: string; password?: string | null; billingType?: "hourly" | "milestone" },

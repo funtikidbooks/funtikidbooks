@@ -1949,17 +1949,17 @@ create policy "staff can create channels"
   to authenticated
   with check (created_by = auth.uid());
 
--- A room's own creator (or a director) can always rename/lock it — plus, as
--- a special case, a Project Manager can rename specifically "Chung"
--- (is_general), since that room has no meaningful "creator" for the
--- ordinary rule to apply to.
+-- A room's own creator, a director, or a Project Manager can always
+-- rename/lock/retype any room — a PM manages rooms the same as a director
+-- regardless of who created them, not just "Chung"/food rooms.
 drop policy if exists "creator or director can update channels" on public.meeting_channels;
 drop policy if exists "creator, director, or PM (for Chung) can update channels" on public.meeting_channels;
-create policy "creator, director, or PM (for Chung/food room) can update channels"
+drop policy if exists "creator, director, or PM (for Chung/food room) can update channels" on public.meeting_channels;
+create policy "creator, director, or PM can update channels"
   on public.meeting_channels for update
   to authenticated
-  using (created_by = auth.uid() or public.current_access_role() = 'director' or ((is_general or is_food_room) and public.is_director_or_pm()))
-  with check (created_by = auth.uid() or public.current_access_role() = 'director' or ((is_general or is_food_room) and public.is_director_or_pm()));
+  using (created_by = auth.uid() or public.is_director_or_pm())
+  with check (created_by = auth.uid() or public.is_director_or_pm());
 
 drop policy if exists "creator or director can delete channels" on public.meeting_channels;
 create policy "creator or director can delete channels"
@@ -2037,18 +2037,19 @@ create policy "member can mark their own membership seen"
   using (profile_id = auth.uid())
   with check (profile_id = auth.uid());
 
--- The room creator can also remove *other* people's memberships (the "mời
--- ra" swipe action in the room-info panel) — checked against
--- meeting_channels directly rather than meeting_channel_members, so it
--- doesn't hit the same self-reference recursion the select policy works
+-- The room creator, a director, or a PM can also remove *other* people's
+-- memberships (the "mời ra" swipe action in the room-info panel) — checked
+-- against meeting_channels directly rather than meeting_channel_members, so
+-- it doesn't hit the same self-reference recursion the select policy works
 -- around above.
 drop policy if exists "staff can leave channels themselves" on public.meeting_channel_members;
-create policy "staff or room owner can remove memberships"
+drop policy if exists "staff or room owner can remove memberships" on public.meeting_channel_members;
+create policy "staff, director/PM, or room owner can remove memberships"
   on public.meeting_channel_members for delete
   to authenticated
   using (
     profile_id = auth.uid()
-    or public.current_access_role() = 'director'
+    or public.is_director_or_pm()
     or exists (
       select 1 from public.meeting_channels c
       where c.id = meeting_channel_members.channel_id and c.created_by = auth.uid()
