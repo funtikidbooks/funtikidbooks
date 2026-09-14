@@ -1399,7 +1399,12 @@ export function DirectConversation({
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*,application/pdf"
+            // No `accept` filter: it used to be "image/*,application/pdf",
+            // which doesn't just prioritize those types in the OS picker —
+            // it hides everything else (a .docx couldn't even be selected).
+            // The message bubble already renders any attachment generically
+            // (📄 filename) when it isn't an image, so there's nothing
+            // type-specific left to fix.
             multiple
             className="hidden"
             onChange={(e) => {
