@@ -167,7 +167,10 @@ export async function getMonthAttendance(profileId: string, monthStartInput?: st
 // manual "Số ngày đi làm" override in that modal still wins until the next
 // attendance edit — this only recomputes the number payroll actually uses.
 // No-ops silently if no payroll row or no rate is set yet — nothing to
-// keep in sync in that case.
+// keep in sync in that case. Also no-ops if that payslip has a
+// fixed_amount ("lương cứng tháng này") set — the whole point of that
+// override is paying a flat amount regardless of attendance, so this must
+// never overwrite it just because a cell got edited.
 async function syncPayrollForAttendanceChange(
   supabase: Awaited<ReturnType<typeof createClient>>,
   profileId: string,
@@ -177,11 +180,11 @@ async function syncPayrollForAttendanceChange(
 
   const { data: record } = await supabase
     .from("payroll_records")
-    .select("id")
+    .select("id, fixed_amount")
     .eq("profile_id", profileId)
     .eq("month", month)
     .maybeSingle();
-  if (!record) return;
+  if (!record || record.fixed_amount !== null) return;
 
   const [{ data: salary }, { data: entries }] = await Promise.all([
     supabase.from("staff_salary").select("monthly_salary, standard_work_days").eq("profile_id", profileId).maybeSingle(),

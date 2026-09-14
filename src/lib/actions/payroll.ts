@@ -45,6 +45,7 @@ export async function upsertPayroll(input: {
   month: string;
   baseSalary: number;
   workDays: number | null;
+  fixedAmount: number | null;
   items: PayrollItem[];
   status: PayrollStatus;
   note?: string;
@@ -60,6 +61,7 @@ export async function upsertPayroll(input: {
         month,
         base_salary: input.baseSalary,
         work_days: input.workDays,
+        fixed_amount: input.fixedAmount,
         items: input.items,
         status: input.status,
         note: input.note?.trim() || null,

@@ -102,7 +102,9 @@ export function PayrollPrintView({ record, profile }: { record: PayrollRecord; p
           <tbody>
             <tr style={{ borderBottom: "1px solid #e5e0d8" }}>
               <td className="py-2">
-                Lương theo ngày công{record.work_days !== null && ` (${record.work_days} ngày)`}
+                {record.fixed_amount !== null
+                  ? "Lương cứng tháng này"
+                  : `Lương theo ngày công${record.work_days !== null ? ` (${record.work_days} ngày)` : ""}`}
               </td>
               <td className="py-2 text-right">{formatVnd(record.base_salary)}</td>
             </tr>

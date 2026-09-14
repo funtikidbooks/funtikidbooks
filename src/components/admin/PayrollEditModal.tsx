@@ -48,6 +48,7 @@ export function PayrollEditModal({
   onSaved: (record: PayrollRecord) => void;
 }) {
   const [workDays, setWorkDays] = useState<number | "">(record?.work_days ?? "");
+  const [fixedAmount, setFixedAmount] = useState<number | "">(record?.fixed_amount ?? "");
   const [items, setItems] = useState<ItemDraft[]>(record ? itemsToDraft(record.items) : []);
   const [status, setStatus] = useState<PayrollStatus>(record?.status ?? "draft");
   const [note, setNote] = useState(record?.note ?? "");
@@ -209,10 +210,15 @@ export function PayrollEditModal({
     }
   }
 
-  // Base pay is derived, not typed — lương/ngày × số ngày đi làm — so it
-  // can never silently drift from what the director actually entered for
-  // rate and days.
-  const computedBase = useMemo(() => dailyRate * (Number(workDays) || 0), [dailyRate, workDays]);
+  // Base pay is derived, not typed directly — either lương/ngày × số ngày
+  // đi làm, or, when "Lương cứng tháng này" has a value, that flat number
+  // outright — so it can never silently drift from what the director
+  // actually entered.
+  const hasFixedAmount = fixedAmount !== "" && Number(fixedAmount) > 0;
+  const computedBase = useMemo(
+    () => (hasFixedAmount ? Number(fixedAmount) : dailyRate * (Number(workDays) || 0)),
+    [hasFixedAmount, fixedAmount, dailyRate, workDays],
+  );
 
   const total = useMemo(() => {
     const itemsTotal = items.reduce((sum, it) => {
@@ -249,6 +255,7 @@ export function PayrollEditModal({
         month,
         baseSalary: computedBase,
         workDays: workDays === "" ? null : Number(workDays),
+        fixedAmount: hasFixedAmount ? Number(fixedAmount) : null,
         items: cleanItems,
         status,
         note,
@@ -449,9 +456,21 @@ export function PayrollEditModal({
 
           <div className="card p-3 flex flex-col gap-2" style={{ background: "var(--color-accent-2-100)" }}>
             <span className="text-xs font-bold" style={{ color: "var(--color-accent-2-800)" }}>
-              LƯƠNG THEO NGÀY CÔNG
+              LƯƠNG THÁNG NÀY
             </span>
-            <div className="field" style={{ maxWidth: 170 }}>
+            <div className="field" style={{ maxWidth: 220 }}>
+              <label className="text-[11px]">Lương cứng tháng này (khỏi cần chấm công)</label>
+              <input
+                type="number"
+                min={0}
+                className="input"
+                style={{ padding: "5px 8px", fontSize: 12 }}
+                placeholder="Để trống để tính theo ngày công"
+                value={fixedAmount}
+                onChange={(e) => setFixedAmount(e.target.value === "" ? "" : Number(e.target.value))}
+              />
+            </div>
+            <div className="field" style={{ maxWidth: 170, opacity: hasFixedAmount ? 0.5 : 1 }}>
               <label className="text-[11px]">Số ngày đi làm trong tháng</label>
               <input
                 type="number"
@@ -460,6 +479,7 @@ export function PayrollEditModal({
                 className="input"
                 style={{ padding: "5px 8px", fontSize: 12 }}
                 value={workDays}
+                disabled={hasFixedAmount}
                 onChange={(e) => {
                   setWorkDaysTouched(true);
                   setWorkDays(e.target.value === "" ? "" : Number(e.target.value));
@@ -467,8 +487,16 @@ export function PayrollEditModal({
               />
             </div>
             <span className="text-sm" style={{ color: "var(--color-accent-2-800)" }}>
-              {formatVnd(dailyRate)} × {Number(workDays) || 0} ngày ={" "}
-              <strong className="text-base">{formatVnd(computedBase)}</strong>
+              {hasFixedAmount ? (
+                <>
+                  Lương cứng: <strong className="text-base">{formatVnd(computedBase)}</strong>
+                </>
+              ) : (
+                <>
+                  {formatVnd(dailyRate)} × {Number(workDays) || 0} ngày ={" "}
+                  <strong className="text-base">{formatVnd(computedBase)}</strong>
+                </>
+              )}
             </span>
           </div>
 

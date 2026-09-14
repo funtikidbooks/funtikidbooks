@@ -416,6 +416,9 @@ export type PayrollRecord = {
   // Actual days worked that base_salary was computed from (rate/standard
   // days × work_days) — null on records saved before this field existed.
   work_days: number | null;
+  // Flat override for base_salary ("lương cứng tháng này") — when set,
+  // base_salary is exactly this number regardless of work_days/attendance.
+  fixed_amount: number | null;
   items: PayrollItem[];
   note: string | null;
   status: PayrollStatus;

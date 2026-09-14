@@ -926,6 +926,16 @@ create table if not exists public.payroll_records (
 -- before this existed just don't show a day count on their payslip.
 alter table public.payroll_records add column if not exists work_days numeric;
 
+-- Lets a director/PM type one flat number for a payslip's base pay that
+-- overrides the usual rate × ngày công calculation entirely, for staff
+-- paid a guaranteed monthly amount regardless of attendance ("lương cứng
+-- tháng này, khỏi cần chấm công"). Nullable — most records still compute
+-- base_salary from work_days as before; syncPayrollForAttendanceChange
+-- (see attendance.ts) skips recomputing base_salary/work_days whenever
+-- this is set, so a later attendance edit that month can't silently
+-- overwrite the override.
+alter table public.payroll_records add column if not exists fixed_amount numeric;
+
 alter table public.payroll_records enable row level security;
 
 drop policy if exists "director can manage payroll" on public.payroll_records;

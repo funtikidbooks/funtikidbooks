@@ -182,7 +182,9 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
               <div className="flex flex-col gap-1 text-sm" style={{ paddingTop: salary ? 0 : 12 }}>
                 <div className="flex justify-between gap-3">
                   <span style={{ color: "var(--color-neutral-500)" }}>
-                    Lương theo ngày công{record.work_days !== null && ` (${record.work_days} ngày)`}
+                    {record.fixed_amount !== null
+                      ? "Lương cứng tháng này"
+                      : `Lương theo ngày công${record.work_days !== null ? ` (${record.work_days} ngày)` : ""}`}
                   </span>
                   <span className="flex-none">{formatVnd(record.base_salary)}</span>
                 </div>
