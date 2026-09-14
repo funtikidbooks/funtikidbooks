@@ -742,6 +742,7 @@ function RoomInfoDropdown({
   hasPassword,
   billingType,
   isOwner,
+  ownerId,
   ownerName,
   profiles,
   onClose,
@@ -754,6 +755,7 @@ function RoomInfoDropdown({
   hasPassword: boolean;
   billingType: "hourly" | "milestone";
   isOwner: boolean;
+  ownerId: string | null;
   ownerName: string;
   profiles: Profile[];
   onClose: () => void;
@@ -1055,7 +1057,14 @@ function RoomInfoDropdown({
                   )}
                 </span>
                 <span className="flex-1 min-w-0">
-                  <span className="block text-[13px] font-semibold truncate">{p.display_name}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-[13px] font-semibold truncate">{p.display_name}</span>
+                    {p.id === ownerId && (
+                      <span className="flex-none text-[10px] font-bold" style={{ color: "var(--status-blue)" }}>
+                        Chủ phòng
+                      </span>
+                    )}
+                  </span>
                   <span className="block text-[11px] truncate" style={{ color: "var(--color-neutral-500)" }}>
                     {p.role ?? ""}
                   </span>
@@ -4215,6 +4224,7 @@ export function MeetingHub({
                 hasPassword={activeChannel.has_password}
                 billingType={activeChannel.billing_type}
                 isOwner={activeChannel.created_by === currentUser.id || isDirector}
+                ownerId={activeChannel.created_by}
                 ownerName={
                   activeChannel.is_general
                     ? "Chung"
