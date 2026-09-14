@@ -742,6 +742,7 @@ function RoomInfoDropdown({
   hasPassword,
   billingType,
   isOwner,
+  ownerName,
   profiles,
   onClose,
   onUpdated,
@@ -753,6 +754,7 @@ function RoomInfoDropdown({
   hasPassword: boolean;
   billingType: "hourly" | "milestone";
   isOwner: boolean;
+  ownerName: string;
   profiles: Profile[];
   onClose: () => void;
   onUpdated: (patch: { name?: string; has_password?: boolean; billing_type?: "hourly" | "milestone" }) => void;
@@ -917,6 +919,11 @@ function RoomInfoDropdown({
       </div>
 
       <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
+        <div className="flex items-center justify-between gap-2 text-[13px]">
+          <span style={{ color: "var(--color-neutral-500)" }}>Chủ phòng</span>
+          <span className="font-semibold truncate max-w-[160px]">{ownerName}</span>
+        </div>
+
         {isOwner && (
           <form onSubmit={saveSettings} className="flex flex-col gap-2 pb-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
             <div className="field">
@@ -4208,6 +4215,13 @@ export function MeetingHub({
                 hasPassword={activeChannel.has_password}
                 billingType={activeChannel.billing_type}
                 isOwner={activeChannel.created_by === currentUser.id || isDirector}
+                ownerName={
+                  activeChannel.is_general
+                    ? "Chung"
+                    : activeChannel.created_by === currentUser.id
+                      ? currentUser.display_name
+                      : (profiles.find((p) => p.id === activeChannel.created_by)?.display_name ?? "—")
+                }
                 profiles={profiles.filter((p) => p.id !== currentUser.id)}
                 onClose={() => setShowAddMember(false)}
                 onUpdated={(patch) => handleChannelUpdated(activeChannel.id, patch)}
