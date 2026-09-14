@@ -1281,6 +1281,12 @@ export function MeetingHub({
   const [reactions, setReactions] = useState<MeetingReaction[]>(initialReactions);
   const [reads, setReads] = useState<MeetingChannelRead[]>(initialReads);
   const [text, setText] = useState("");
+  // Which row is highlighted in the @-mention dropdown — moved by
+  // PageUp/PageDown (and the arrow keys) in the composer's onKeyDown below,
+  // confirmed with Enter. Reset to the top whenever the @-query text
+  // changes, so it doesn't point past the end once filtering shrinks the
+  // list.
+  const [mentionIndex, setMentionIndex] = useState(0);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   // Temp (client-generated) ids currently in flight or that failed — drives
   // the "Đang gửi…" / "Gửi lỗi" footer on an optimistic bubble. See
@@ -1801,6 +1807,26 @@ export function MeetingHub({
       .filter((p) => p.display_name.toLowerCase().includes(q))
       .sort((a, b) => a.display_name.localeCompare(b.display_name));
   }, [mentionQuery, profiles, displayedRoomMembers]);
+
+  // Single source of truth for both the dropdown's rendering and its
+  // keyboard navigation, so "row 2 in the list" always means the same
+  // thing to both — the special "Tất cả mọi người" row (when offered)
+  // always sits at index 0, ahead of the real profiles.
+  const mentionItems = useMemo<(Profile | "all")[]>(
+    () => (showAllMentionOption ? ["all" as const, ...mentionCandidates] : [...mentionCandidates]),
+    [showAllMentionOption, mentionCandidates],
+  );
+
+  // Adjusted during render rather than via a useEffect (React's own
+  // recommended pattern for "reset state when an input changes") — avoids
+  // an extra commit-then-rerun-effect round trip just to zero the index
+  // back out before the dropdown repaints with its narrowed rows.
+  const mentionResetKey = `${activeId}:${mentionQuery}`;
+  const [lastMentionResetKey, setLastMentionResetKey] = useState(mentionResetKey);
+  if (mentionResetKey !== lastMentionResetKey) {
+    setLastMentionResetKey(mentionResetKey);
+    setMentionIndex(0);
+  }
 
   useEffect(() => {
     messageIdsRef.current = new Set(messages.map((m) => m.id));
@@ -4293,37 +4319,48 @@ export function MeetingHub({
             )}
 
             <div className="flex-none" style={{ borderTop: "1px solid var(--color-neutral-200)", position: "relative" }}>
-              {(mentionCandidates.length > 0 || showAllMentionOption) && (
+              {mentionItems.length > 0 && (
                 <div
                   className="card elev-lg flex flex-col p-1.5 overflow-y-auto"
                   style={{ position: "absolute", bottom: "100%", left: 12, marginBottom: 6, width: 220, maxHeight: 260, zIndex: 10 }}
                 >
-                  {showAllMentionOption && (
-                    <button
-                      type="button"
-                      onClick={pickAllMention}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-[8px] text-left text-[13px] font-semibold ws-nav-link"
-                    >
-                      <span
-                        className="flex items-center justify-center rounded-full font-bold flex-none"
-                        style={{ width: 22, height: 22, fontSize: 11, background: "var(--status-red)", color: "#fff" }}
+                  {mentionItems.map((item, i) => {
+                    const selected = i === mentionIndex;
+                    const rowStyle = { background: selected ? "var(--color-accent-100)" : undefined };
+                    if (item === "all") {
+                      return (
+                        <button
+                          key="all"
+                          type="button"
+                          onClick={pickAllMention}
+                          onMouseEnter={() => setMentionIndex(i)}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-[8px] text-left text-[13px] font-semibold ws-nav-link"
+                          style={rowStyle}
+                        >
+                          <span
+                            className="flex items-center justify-center rounded-full font-bold flex-none"
+                            style={{ width: 22, height: 22, fontSize: 11, background: "var(--status-red)", color: "#fff" }}
+                          >
+                            📢
+                          </span>
+                          Tất cả mọi người
+                        </button>
+                      );
+                    }
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => pickMention(item)}
+                        onMouseEnter={() => setMentionIndex(i)}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-[8px] text-left text-[13px] font-semibold ws-nav-link"
+                        style={rowStyle}
                       >
-                        📢
-                      </span>
-                      Tất cả mọi người
-                    </button>
-                  )}
-                  {mentionCandidates.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => pickMention(p)}
-                      className="flex items-center gap-2 px-2 py-1.5 rounded-[8px] text-left text-[13px] font-semibold ws-nav-link"
-                    >
-                      <Avatar profile={p} size={22} />
-                      {p.display_name}
-                    </button>
-                  ))}
+                        <Avatar profile={item} size={22} />
+                        {item.display_name}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
               {showEmojiPicker && (
@@ -4499,6 +4536,33 @@ export function MeetingHub({
                   onChange={(e) => setText(e.target.value)}
                   onPaste={handlePaste}
                   onKeyDown={(e) => {
+                    // While the @-mention dropdown is open, PageUp/PageDown
+                    // (and the arrow keys, for anyone who reaches for those
+                    // instead) move the highlighted row, and Enter confirms
+                    // it rather than sending the message.
+                    if (mentionItems.length > 0) {
+                      if (e.key === "PageDown" || e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setMentionIndex((i) => (i + 1) % mentionItems.length);
+                        return;
+                      }
+                      if (e.key === "PageUp" || e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setMentionIndex((i) => (i - 1 + mentionItems.length) % mentionItems.length);
+                        return;
+                      }
+                      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        // Clamped rather than trusting mentionIndex outright —
+                        // it's reset to 0 on every mentionQuery change via a
+                        // separate effect, which runs one tick after the
+                        // render that already shrank mentionItems.
+                        const picked = mentionItems[Math.min(mentionIndex, mentionItems.length - 1)];
+                        if (picked === "all") pickAllMention();
+                        else pickMention(picked);
+                        return;
+                      }
+                    }
                     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                       e.preventDefault();
                       composerFormRef.current?.requestSubmit();
