@@ -769,14 +769,6 @@ function RoomInfoDropdown({
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  // Swipe-left-to-reveal "Mời ra" (kick), like iOS Mail's swipe actions —
-  // tracked as a per-row horizontal offset so only the row being dragged
-  // moves, and Pointer Events (not touch-only) so this also works by
-  // click-dragging with a mouse.
-  const KICK_REVEAL_WIDTH = 84;
-  const [swipeOffsets, setSwipeOffsets] = useState<Record<string, number>>({});
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const dragRef = useRef<{ id: string; startX: number; baseOffset: number } | null>(null);
 
   const [nameInput, setNameInput] = useState(channelName);
   const [passwordEnabled, setPasswordEnabled] = useState(hasPassword);
@@ -867,7 +859,6 @@ function RoomInfoDropdown({
         next.delete(profileId);
         return next;
       });
-      setSwipeOffsets((prev) => ({ ...prev, [profileId]: 0 }));
       onMemberRemoved(profileId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
@@ -876,24 +867,14 @@ function RoomInfoDropdown({
     }
   }
 
-  function handleSwipeStart(e: React.PointerEvent, id: string) {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { id, startX: e.clientX, baseOffset: swipeOffsets[id] ?? 0 };
-    setDraggingId(id);
-  }
-
-  function handleSwipeMove(e: React.PointerEvent, id: string) {
-    const drag = dragRef.current;
-    if (!drag || drag.id !== id) return;
-    const next = Math.min(0, Math.max(-KICK_REVEAL_WIDTH, drag.baseOffset + (e.clientX - drag.startX)));
-    setSwipeOffsets((prev) => ({ ...prev, [id]: next }));
-  }
-
-  function handleSwipeEnd(id: string) {
-    if (dragRef.current?.id !== id) return;
-    dragRef.current = null;
-    setDraggingId(null);
-    setSwipeOffsets((prev) => ({ ...prev, [id]: (prev[id] ?? 0) < -KICK_REVEAL_WIDTH / 2 ? -KICK_REVEAL_WIDTH : 0 }));
+  // A plain confirm-then-tap button — a prior swipe-to-reveal version (like
+  // iOS Mail) turned out unreliable on iPad: a real swipe kept snapping
+  // back to closed instead of catching, so the "Mời ra" button was
+  // unreachable there. This is slower for a mouse user doing many kicks in
+  // a row, but it always works, on any input device.
+  function handleKickClick(p: Profile) {
+    if (!confirm(`Mời ${p.display_name} ra khỏi phòng?`)) return;
+    removeMember(p.id);
   }
 
   return (
@@ -1019,32 +1000,10 @@ function RoomInfoDropdown({
           <div className="flex flex-col gap-1">
           {rows.map((p) => {
             const isMember = memberIds.has(p.id);
-            const canKick = isMember && isOwner;
-            const offset = swipeOffsets[p.id] ?? 0;
-            const row = (
-              <div
-                className="flex items-center gap-2 px-1.5 py-1.5 rounded-[8px]"
-                style={{
-                  background: "var(--color-surface)",
-                  // Without an explicit position, this row is a static
-                  // element and the "Mời ra" button behind it — despite
-                  // coming first in the DOM — is `position: absolute`, so it
-                  // paints on top regardless of swipe state. Making the row
-                  // itself positioned (and later in the DOM) puts it back on
-                  // top at rest, fully covering the button until a swipe
-                  // physically moves the row's box out of the way.
-                  position: canKick ? "relative" : undefined,
-                  transform: canKick && offset !== 0 ? `translateX(${offset}px)` : undefined,
-                  transition: draggingId === p.id ? "none" : "transform 0.2s ease",
-                  touchAction: canKick ? "pan-y" : undefined,
-                  cursor: canKick ? "grab" : undefined,
-                }}
-                onPointerDown={canKick ? (e) => handleSwipeStart(e, p.id) : undefined}
-                onPointerMove={canKick ? (e) => handleSwipeMove(e, p.id) : undefined}
-                onPointerUp={canKick ? () => handleSwipeEnd(p.id) : undefined}
-                onPointerCancel={canKick ? () => handleSwipeEnd(p.id) : undefined}
-                onClick={canKick && offset !== 0 ? () => setSwipeOffsets((prev) => ({ ...prev, [p.id]: 0 })) : undefined}
-              >
+            // Never offer to kick the room's own owner.
+            const canKick = isMember && isOwner && p.id !== ownerId;
+            return (
+              <div key={p.id} className="flex items-center gap-2 px-1.5 py-1.5 rounded-[8px]" style={{ background: "var(--color-surface)" }}>
                 <span
                   className="flex items-center justify-center rounded-full text-[11px] font-bold overflow-hidden flex-none"
                   style={{ width: 28, height: 28, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
@@ -1067,8 +1026,21 @@ function RoomInfoDropdown({
                     Chủ phòng
                   </span>
                 ) : isMember ? (
-                  <span className="flex items-center gap-1 flex-none text-[11px] font-bold" style={{ color: "var(--status-green)" }}>
-                    <span aria-hidden>✓</span> Đã vào phòng
+                  <span className="flex items-center gap-2 flex-none">
+                    <span className="flex items-center gap-1 text-[11px] font-bold" style={{ color: "var(--status-green)" }}>
+                      <span aria-hidden>✓</span> Đã vào phòng
+                    </span>
+                    {canKick && (
+                      <button
+                        type="button"
+                        onClick={() => handleKickClick(p)}
+                        disabled={removingId === p.id}
+                        className="flex-none text-[11px] font-bold"
+                        style={{ color: "var(--status-red)" }}
+                      >
+                        {removingId === p.id ? "…" : "Mời ra"}
+                      </button>
+                    )}
                   </span>
                 ) : (
                   <button
@@ -1081,25 +1053,6 @@ function RoomInfoDropdown({
                     {addingId === p.id ? "Đang thêm…" : "+ Thêm"}
                   </button>
                 )}
-              </div>
-            );
-
-            if (!canKick) return <div key={p.id}>{row}</div>;
-
-            return (
-              <div key={p.id} className="relative overflow-hidden rounded-[8px]">
-                <div className="absolute inset-y-0 right-0 flex items-stretch">
-                  <button
-                    type="button"
-                    onClick={() => removeMember(p.id)}
-                    disabled={removingId === p.id}
-                    className="text-[12px] font-bold text-white"
-                    style={{ width: KICK_REVEAL_WIDTH, background: "var(--status-red)", border: "none" }}
-                  >
-                    {removingId === p.id ? "…" : "Mời ra"}
-                  </button>
-                </div>
-                {row}
               </div>
             );
           })}
