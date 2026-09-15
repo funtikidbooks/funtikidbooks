@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/supabase/server";
 import { MeetingHub } from "@/components/workspace/MeetingHub";
-import { getDmTabLabel, getRoomSync, listChannels } from "@/lib/actions/meetings";
+import { getDmTabLabel, getGeneralChannelId, getRoomSync, listChannels } from "@/lib/actions/meetings";
 import type { Profile } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Trò chuyện & họp" };
@@ -13,12 +13,17 @@ export default async function MeetingPage() {
   // instead of re-verifying the JWT against Supabase's auth server again.
   const { supabase, user } = await requireUser();
 
-  const [channels, { data: profiles }, dmTabLabel] = await Promise.all([
+  // getGeneralChannelId runs in this SAME batch — not chained after
+  // listChannels() just to read its is_general id off the result — so
+  // getRoomSync below only ever waits on one extra round trip, not two.
+  // See getGeneralChannelId's own comment for why that mattered.
+  const [channels, { data: profiles }, dmTabLabel, generalChannelId] = await Promise.all([
     listChannels(),
     supabase
       .from("profiles")
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at"),
     getDmTabLabel().catch(() => "Riêng"),
+    getGeneralChannelId().catch(() => null),
   ]);
 
   const me = (profiles ?? []).find((p) => p.id === user?.id);
@@ -31,8 +36,9 @@ export default async function MeetingPage() {
   // of an empty list while the client makes its own round trip — the client
   // still re-syncs on mount, but as a cheap delta off this data rather than
   // a full fetch from nothing. Failure here just means MeetingHub falls back
-  // to fetching everything itself, same as before this existed.
-  const generalRoomId = channels.find((c) => c.is_general)?.id ?? channels[0]?.id ?? null;
+  // to fetching everything itself, same as before this existed. Falls back
+  // to channels[0] only if getGeneralChannelId itself failed/returned null.
+  const generalRoomId = generalChannelId ?? channels.find((c) => c.is_general)?.id ?? channels[0]?.id ?? null;
   const initialRoomSync = generalRoomId ? await getRoomSync(generalRoomId).catch(() => null) : null;
 
   return (

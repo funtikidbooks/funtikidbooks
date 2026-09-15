@@ -32,6 +32,20 @@ function verifyPassword(password: string, stored: string) {
   return timingSafeEqual(candidate, expected);
 }
 
+// A minimal, single-column lookup so the room page (workspace/hop/page.tsx)
+// can find which room to pre-fetch messages for in the SAME Promise.all as
+// listChannels()/profiles/dmTabLabel, instead of waiting for the full
+// listChannels() result first just to read one id off it. That sequential
+// wait — fetch the channel list, then only start fetching messages once it
+// lands — was adding a full extra network round trip to every fresh visit
+// to the room page, on top of workspace/layout.tsx's own data fetching,
+// which is what made opening "Trò chuyện & họp" feel slow to load.
+export async function getGeneralChannelId(): Promise<string | null> {
+  const { supabase } = await requireUser();
+  const { data } = await supabase.from("meeting_channels").select("id").eq("is_general", true).limit(1).maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
 export async function listChannels(): Promise<MeetingChannelPublic[]> {
   const { supabase, user } = await requireUser();
   const [channelsResult, membershipsResult] = await Promise.all([
