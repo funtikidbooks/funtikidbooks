@@ -890,16 +890,3 @@ export async function getChannelReads(channelId: string): Promise<MeetingChannel
   const { data } = await supabase.from("meeting_channel_reads").select("*").eq("channel_id", channelId);
   return (data ?? []) as MeetingChannelRead[];
 }
-
-export async function markChannelRead(channelId: string, lastMessageId: string) {
-  const { supabase, user } = await requireUser();
-  await supabase.from("meeting_channel_reads").upsert(
-    {
-      channel_id: channelId,
-      profile_id: user.id,
-      last_read_message_id: lastMessageId,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "channel_id,profile_id" },
-  );
-}

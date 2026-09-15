@@ -41,7 +41,6 @@ import {
   leaveChannel,
   listChannelMembers,
   listChannels,
-  markChannelRead,
   markRoomSeen,
   recallMeetingMessage,
   removeChannelMember,
@@ -142,6 +141,54 @@ const MAX_LOADED_MESSAGES = 200;
 const MAX_EXPANDED_MESSAGES = 2000;
 function capMessages(list: MeetingMessage[], limit: number) {
   return list.length > limit ? list.slice(list.length - limit) : list;
+}
+
+// Writes the read-position directly to Supabase's REST endpoint with
+// `keepalive: true`, instead of going through markChannelRead (a Next.js
+// Server Action) via a plain fire-and-forget fetch. A staff member reading
+// a room and immediately switching away or backgrounding the tab — a
+// completely normal glance-and-go pattern — raced against that plain
+// fetch actually reaching the server; Safari in particular aborts an
+// in-flight request that isn't `keepalive` the moment the page navigates
+// or backgrounds, well before Chrome would. The mark-as-read call would
+// simply never land, so the room stayed "unread" forever from the
+// server's point of view even though the person had genuinely read it —
+// confirmed as the remaining cause after the cross-room read-marker race
+// (see the effect below) was already fixed and staff kept seeing this on
+// Safari specifically. `keepalive` fetches are explicitly designed to
+// survive page unload, which a Server Action's own internal fetch call
+// gives no way to opt into. Same RLS as before either way — Postgres
+// enforces "staff can mark their own read receipt" off the JWT itself,
+// not off which client issued the request.
+async function markChannelReadKeepAlive(channelId: string, lastMessageId: string) {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) return;
+  const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/meeting_channel_reads?on_conflict=channel_id,profile_id`;
+  try {
+    await fetch(url, {
+      method: "POST",
+      keepalive: true,
+      headers: {
+        "Content-Type": "application/json",
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        Authorization: `Bearer ${session.access_token}`,
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify({
+        channel_id: channelId,
+        profile_id: session.user.id,
+        last_read_message_id: lastMessageId,
+        updated_at: new Date().toISOString(),
+      }),
+    });
+  } catch {
+    // Best-effort, same as the plain fetch this replaced — a dropped
+    // connection here just means the next message (or the next room
+    // visit) retries it.
+  }
 }
 
 // A thrown business-logic error (file too big, not a room member, etc.) is
@@ -2184,7 +2231,7 @@ export function MeetingHub({
     if (lastMessage.channel_id !== activeId) return;
     if (lastMarkedReadIdRef.current === lastMessage.id) return;
     lastMarkedReadIdRef.current = lastMessage.id;
-    markChannelRead(activeId, lastMessage.id).catch(() => {});
+    markChannelReadKeepAlive(activeId, lastMessage.id);
   }, [activeId, messages]);
 
   useEffect(() => {
