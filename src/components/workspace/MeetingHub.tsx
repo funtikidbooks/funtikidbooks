@@ -2162,9 +2162,26 @@ export function MeetingHub({
   // open, same as Messenger updating your read position live. No local
   // state to update here: the "seen by" row under a message only ever
   // shows other people, never yourself, so this is pure fire-and-forget.
+  //
+  // The `lastMessage.channel_id !== activeId` guard is load-bearing, not
+  // defensive fluff: right after switching rooms, this effect can run in
+  // the SAME commit as the activeId change, before `messages` has actually
+  // been replaced with the new room's data — it's still holding the
+  // PREVIOUS room's array for that one render. The reset-on-room-switch
+  // effect above (lastMarkedReadIdRef.current = null) runs first in that
+  // same commit, which used to strip away the only thing stopping this
+  // effect from then calling markChannelRead(newRoomId, oldRoomsLastMsgId)
+  // — silently writing one room's read position onto a completely
+  // different room. Confirmed live in production data: 16 accounts had a
+  // meeting_channel_reads row whose last_read_message_id belonged to
+  // another channel entirely, which is exactly what fed wrong/"stuck"
+  // unread badges — different per person because it depended on their own
+  // room-switching timing. Checking the message's own channel_id makes
+  // this self-verifying instead of trusting the array matches activeId.
   useEffect(() => {
     if (!activeId || activeId === DM_TAB_ID || messages.length === 0) return;
     const lastMessage = messages[messages.length - 1];
+    if (lastMessage.channel_id !== activeId) return;
     if (lastMarkedReadIdRef.current === lastMessage.id) return;
     lastMarkedReadIdRef.current = lastMessage.id;
     markChannelRead(activeId, lastMessage.id).catch(() => {});
