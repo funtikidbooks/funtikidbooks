@@ -826,34 +826,48 @@ export async function getUnreadMeetingCounts(): Promise<Record<string, number>> 
   );
   if (channelIds.length === 0) return {};
 
-  const [{ data: reads }, { data: messages }] = await Promise.all([
-    supabase
-      .from("meeting_channel_reads")
-      .select("channel_id, last_read_message_id")
-      .eq("profile_id", user.id)
-      .in("channel_id", channelIds),
-    supabase
-      .from("meeting_messages")
-      .select("id, channel_id, sender_id, created_at")
-      .in("channel_id", channelIds)
-      .order("created_at", { ascending: false })
-      .limit(500),
-  ]);
+  const { data: reads } = await supabase
+    .from("meeting_channel_reads")
+    .select("channel_id, last_read_message_id")
+    .eq("profile_id", user.id)
+    .in("channel_id", channelIds);
 
-  const lastReadIdByChannel = new Map(
-    (reads ?? []).map((r) => [r.channel_id as string, r.last_read_message_id as string | null]),
+  // The read message's own created_at, fetched directly by id rather than
+  // pulled from a capped "recent messages" query — a global top-N across
+  // every room the two-query version used to run used to let a quiet
+  // room's last-read message fall out of that window once busier rooms
+  // pushed past it, which made this treat the whole room as never-read
+  // again even though the director had definitely opened it. A direct
+  // by-id lookup has no such window to fall out of.
+  const readMessageIds = (reads ?? [])
+    .map((r) => r.last_read_message_id as string | null)
+    .filter((id): id is string => !!id);
+  const { data: readMessages } =
+    readMessageIds.length > 0
+      ? await supabase.from("meeting_messages").select("id, created_at").in("id", readMessageIds)
+      : { data: [] };
+  const readCreatedAtById = new Map((readMessages ?? []).map((m) => [m.id as string, m.created_at as string]));
+  const lastReadAtByChannel = new Map(
+    (reads ?? []).map((r) => [
+      r.channel_id as string,
+      r.last_read_message_id ? readCreatedAtById.get(r.last_read_message_id as string) : undefined,
+    ]),
   );
-  const msgById = new Map((messages ?? []).map((m) => [m.id as string, m]));
 
   const counts: Record<string, number> = {};
-  for (const m of messages ?? []) {
-    if (m.sender_id === user.id) continue;
-    const lastReadId = lastReadIdByChannel.get(m.channel_id as string);
-    const lastReadMsg = lastReadId ? msgById.get(lastReadId as string) : undefined;
-    if (!lastReadMsg || new Date(m.created_at as string) > new Date(lastReadMsg.created_at as string)) {
-      counts[m.channel_id as string] = (counts[m.channel_id as string] ?? 0) + 1;
-    }
-  }
+  await Promise.all(
+    channelIds.map(async (channelId) => {
+      let query = supabase
+        .from("meeting_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("channel_id", channelId)
+        .neq("sender_id", user.id);
+      const lastReadAt = lastReadAtByChannel.get(channelId);
+      if (lastReadAt) query = query.gt("created_at", lastReadAt);
+      const { count } = await query;
+      if (count) counts[channelId] = count;
+    }),
+  );
   return counts;
 }
 
