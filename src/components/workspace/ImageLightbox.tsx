@@ -29,7 +29,7 @@ export function ImageLightbox({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 fk-lightbox-backdrop-in"
       style={{ background: "rgba(10,9,8,.9)" }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -48,7 +48,7 @@ export function ImageLightbox({
       <img
         src={url}
         alt={filename ?? ""}
-        className="rounded-[8px]"
+        className="rounded-[8px] fk-lightbox-image-in"
         style={{ maxWidth: "100%", maxHeight: "85vh", objectFit: "contain" }}
         onClick={(e) => e.stopPropagation()}
       />

@@ -173,44 +173,23 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
 // quality on faith. Purely decorative (no click-through) — the goal is
 // "yes, this is the team I want", not a detour into browsing /du-an.
 function ShowcaseStrip({ images }: { images: string[] }) {
-  // Click toggles that one image between its normal size and ~2x, right in
-  // place — a CSS transform (not width/height) so it's smooth and GPU-
-  // accelerated instead of janky, and z-index so it pops visually above its
-  // neighbors instead of being covered by them mid-grow. No modal, no new
-  // tab: sếp Phúc was explicit that a full-page/lightbox takeover isn't
-  // what he wanted here, just the image itself growing and shrinking back.
-  const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
+  // Same ImageLightbox used for chat images elsewhere on this page — a
+  // dimmed full-screen layer with the photo large in the middle, not the
+  // image growing in place among its neighbors (tried that first; sếp
+  // Phúc wanted the "extra layer over everything" look instead).
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   return (
-    <div className="flex gap-2 overflow-x-auto" style={{ paddingBlock: 24 }}>
-      {images.map((url) => {
-        const isZoomed = url === zoomedUrl;
-        return (
-          <button
-            key={url}
-            type="button"
-            onClick={() => setZoomedUrl(isZoomed ? null : url)}
-            aria-label={isZoomed ? "Shrink image" : "Enlarge image"}
-            className="rounded-[10px] overflow-hidden flex-none"
-            style={{
-              width: 130,
-              height: 130,
-              padding: 0,
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              position: "relative",
-              zIndex: isZoomed ? 10 : 1,
-              transform: isZoomed ? "scale(1.9)" : "scale(1)",
-              transition: "transform 0.35s cubic-bezier(0.2, 0.8, 0.3, 1)",
-              boxShadow: isZoomed ? "var(--shadow-lg)" : undefined,
-            }}
-          >
+    <>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {images.map((url) => (
+          <button key={url} type="button" onClick={() => setLightboxUrl(url)} className="rounded-[10px] overflow-hidden flex-none">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt="" className="w-full h-full object-cover" style={{ pointerEvents: "none" }} />
+            <img src={url} alt="" className="object-cover" style={{ width: 130, height: 130 }} />
           </button>
-        );
-      })}
-    </div>
+        ))}
+      </div>
+      {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+    </>
   );
 }
 

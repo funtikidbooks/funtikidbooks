@@ -651,6 +651,42 @@ h4 {
   }
 }
 
+/* ImageLightbox — a plain instant pop-in read as jarring, especially for
+   the showcase strip on cong-viec (sếp Phúc's own words: "nhớ có animation
+   zoom nhìn mượt"). Backdrop fades, image fades in AND scales up slightly
+   from 0.9 — the "zoom" is subtle on purpose, a full bounce-in on a photo
+   people are trying to actually look at reads as gimmicky. */
+@keyframes fk-lightbox-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fk-lightbox-backdrop-in {
+  animation: fk-lightbox-backdrop-in 0.2s ease-out;
+}
+@keyframes fk-lightbox-image-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.fk-lightbox-image-in {
+  animation: fk-lightbox-image-in 0.25s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fk-lightbox-backdrop-in,
+  .fk-lightbox-image-in {
+    animation: none;
+  }
+}
+
 /* ---------- Floating DM chat window on phones ---------- */
 /* ChatWindow.tsx sets right/width inline (offsetRight staggers multiple
    open windows sideways on desktop) — !important is the only way to widen
