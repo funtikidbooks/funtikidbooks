@@ -100,7 +100,7 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
 
   return (
     <section className="site-container py-14" style={{ maxWidth: 720 }}>
-      <div className="flex items-center justify-between gap-3 mb-8">
+      <div className={`flex items-center gap-3 mb-8 ${stage === "ready" ? "justify-between" : "justify-center"}`}>
         <h1 className="text-3xl">Work With Funti</h1>
         {stage === "ready" && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={handleSignOut}>
@@ -121,7 +121,7 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
 
       {stage === "signed-out" && (
         <div className="flex flex-col gap-7">
-          <div>
+          <div className="text-center">
             <p className="text-xl font-bold mb-1">Have a story to tell?</p>
             <p style={{ color: "var(--color-neutral-600)" }}>
               Let&apos;s bring it to life together — tell us what you&apos;re dreaming up, and our illustrators take
