@@ -60,7 +60,7 @@ export function PortalContent() {
   return (
     <section className="site-container py-14" style={{ maxWidth: 720 }}>
       <div className="flex items-center justify-between gap-3 mb-8">
-        <h1 className="text-3xl">My Projects</h1>
+        <h1 className="text-3xl">Work With Funti</h1>
         {stage === "ready" && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={handleSignOut}>
             Sign out

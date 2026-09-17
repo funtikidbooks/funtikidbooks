@@ -131,14 +131,16 @@ export function Header() {
               </Link>
             );
           })}
+          {/* Sits right next to "Liên hệ" per sếp Phúc — was over in the
+              toolbar group below, away from the rest of the nav. */}
+          <Link href="/cong-viec" className={`fk-navlink${pathname.startsWith("/cong-viec") ? " fk-navlink-active" : ""}`}>
+            {t.nav.clientPortal}
+          </Link>
         </nav>
 
         <div className="hidden 2xl:flex items-center gap-3 flex-none">
           <SiteThemeToggle />
           <LanguageToggle />
-          <Link href="/cong-viec" className="fk-navlink text-center">
-            {t.nav.clientPortal}
-          </Link>
           {isAuthenticated ? (
             <Link href={memberHref} className="btn btn-primary btn-sm text-center" style={{ minWidth: 210 }}>
               {t.nav.workspace}
@@ -175,14 +177,21 @@ export function Header() {
               </Link>
             );
           })}
+          {/* Icon-only here (not the full label) to stay within this
+              tier's tighter width budget — same reasoning as dropping the
+              separate CTA below. Sits right next to "Liên hệ" per sếp Phúc. */}
+          <Link
+            href="/cong-viec"
+            className={`fk-navlink fk-navlink-compact text-center${pathname.startsWith("/cong-viec") ? " fk-navlink-active" : ""}`}
+            title={t.nav.clientPortal}
+          >
+            💼
+          </Link>
         </nav>
 
         <div className="hidden lg:flex 2xl:hidden items-center gap-2 flex-none">
           <SiteThemeToggle />
           <LanguageToggle />
-          <Link href="/cong-viec" className="fk-navlink fk-navlink-compact text-center" title={t.nav.clientPortal}>
-            💼
-          </Link>
           {isAuthenticated ? (
             <Link href={memberHref} className="btn btn-primary btn-sm text-center">
               {t.nav.workspace}
