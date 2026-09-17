@@ -14,6 +14,7 @@ import {
   uploadClientProjectImage,
 } from "@/lib/actions/clientPortal";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
+import { PortalChatWidget } from "./PortalChatWidget";
 import type { ClientMessage, ClientProfile, ClientProject } from "@/lib/types";
 
 type Stage = "loading" | "signed-out" | "sent-link" | "needs-profile" | "ready";
@@ -129,7 +130,12 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
             </p>
           </div>
           {showcaseImages.length > 0 && <ShowcaseStrip images={showcaseImages} />}
-          <StartForm onSent={() => setStage("sent-link")} onError={setError} />
+          <div className="flex flex-col lg:flex-row gap-4 justify-center items-center">
+            <StartForm onSent={() => setStage("sent-link")} onError={setError} />
+            <div className="w-full lg:max-w-[380px]">
+              <PortalChatWidget />
+            </div>
+          </div>
           <HowItWorks />
         </div>
       )}
@@ -314,7 +320,7 @@ function StartForm({ onSent, onError }: { onSent: () => void; onError: (msg: str
   }
 
   return (
-    <div className="card elev-sm p-6 max-w-[460px] mx-auto">
+    <div className="card elev-sm p-6 max-w-[460px] w-full">
       <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
         Tell us about your project and we&apos;ll send you a sign-in link — no password needed. You can attach
         reference images once you&apos;re signed in.
