@@ -940,6 +940,24 @@ select.input:focus {
   animation: fk-marquee-scroll 100s linear infinite;
 }
 
+/* Work With Funti's showcase strip — same loop as .fk-marquee above, but the
+   duration comes from an inline animationDuration set in ShowcaseStrip
+   (scaled to the image count) so the drift speed stays "từ từ" no matter how
+   many projects are published, instead of speeding up as the pool grows. */
+.fk-image-marquee {
+  animation-name: fk-marquee-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.fk-image-marquee:hover {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fk-image-marquee {
+    animation: none;
+  }
+}
+
 @keyframes fk-typing-dot {
   0%,
   60%,

@@ -99,7 +99,7 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
   }
 
   return (
-    <section className="site-container py-14" style={{ maxWidth: 720 }}>
+    <section className="site-container py-14" style={{ maxWidth: 880 }}>
       <div className={`flex items-center gap-3 mb-8 ${stage === "ready" ? "justify-between" : "justify-center"}`}>
         <h1 className="text-3xl">Work With Funti</h1>
         {stage === "ready" && (
@@ -135,7 +135,7 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
       )}
 
       {stage === "sent-link" && (
-        <div className="card elev-sm p-6 max-w-[420px]">
+        <div className="card elev-sm p-6 max-w-[420px] mx-auto">
           <p className="font-bold mb-1">Check your email 📩</p>
           <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
             We&apos;ve sent you a sign-in link. Open it on this device to continue — we&apos;ll set up your project automatically.
@@ -172,21 +172,80 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
 // same curated order, so a first-time visitor isn't taking the studio's
 // quality on faith. Purely decorative (no click-through) — the goal is
 // "yes, this is the team I want", not a detour into browsing /du-an.
+function shuffleImages(images: string[]): string[] {
+  const result = images.slice();
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+// Slow, continuous right-to-left drift through every project's cover AND
+// gallery images — "cho họ chiêm ngưỡng, từ từ thôi". Same loop technique as
+// the homepage's PartnersMarquee (duplicate the row, animate 0 → -50%), and
+// the same dimmed-overlay ImageLightbox used for chat images elsewhere on
+// this page for the click-to-zoom.
 function ShowcaseStrip({ images }: { images: string[] }) {
-  // Same ImageLightbox used for chat images elsewhere on this page — a
-  // dimmed full-screen layer with the photo large in the middle, not the
-  // image growing in place among its neighbors (tried that first; sếp
-  // Phúc wanted the "extra layer over everything" look instead).
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // Shuffled once per visit, client-side — this page is statically
+  // generated, so a server-side shuffle would freeze one order for every
+  // visitor instead of feeling fresh each time.
+  const [shuffled] = useState(() => shuffleImages(images));
+  const [reducedMotion, setReducedMotion] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+
+  useEffect(() => {
+    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => setReducedMotion(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  if (reducedMotion) {
+    return (
+      <>
+        <div className="flex gap-3 overflow-x-auto pb-1">
+          {shuffled.map((url) => (
+            <button key={url} type="button" onClick={() => setLightboxUrl(url)} className="rounded-[10px] overflow-hidden flex-none">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt="" className="object-cover block" style={{ width: 160, height: 160 }} />
+            </button>
+          ))}
+        </div>
+        {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
+      </>
+    );
+  }
+
+  // Duplicated so the track can travel from 0 to -50% and land back on an
+  // identical frame — the loop is seamless because the two halves match.
+  const loop = [...shuffled, ...shuffled];
+  // Speed (px/s) stays roughly constant regardless of pool size — without
+  // this, a studio with many more projects would see the same strip fly by
+  // much faster instead of staying "từ từ".
+  const durationSeconds = Math.max(40, shuffled.length * 5);
+
   return (
     <>
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {images.map((url) => (
-          <button key={url} type="button" onClick={() => setLightboxUrl(url)} className="rounded-[10px] overflow-hidden flex-none">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={url} alt="" className="object-cover" style={{ width: 130, height: 130 }} />
-          </button>
-        ))}
+      <div
+        className="overflow-hidden"
+        style={{
+          width: "100vw",
+          marginLeft: "calc(50% - 50vw)",
+          maskImage: "linear-gradient(90deg, transparent, black 6%, black 94%, transparent)",
+          WebkitMaskImage: "linear-gradient(90deg, transparent, black 6%, black 94%, transparent)",
+        }}
+      >
+        <div className="flex gap-3 w-max fk-image-marquee" style={{ animationDuration: `${durationSeconds}s` }}>
+          {loop.map((url, i) => (
+            <button key={url + i} type="button" onClick={() => setLightboxUrl(url)} className="rounded-[10px] overflow-hidden flex-none">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={url} alt="" className="object-cover block" style={{ width: 160, height: 160 }} />
+            </button>
+          ))}
+        </div>
       </div>
       {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
     </>
@@ -255,7 +314,7 @@ function StartForm({ onSent, onError }: { onSent: () => void; onError: (msg: str
   }
 
   return (
-    <div className="card elev-sm p-6 max-w-[460px]">
+    <div className="card elev-sm p-6 max-w-[460px] mx-auto">
       <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
         Tell us about your project and we&apos;ll send you a sign-in link — no password needed. You can attach
         reference images once you&apos;re signed in.
@@ -333,7 +392,7 @@ function CompleteSignUp({
 
   if (autoRunning) {
     return (
-      <div className="card elev-sm p-6 max-w-[420px]">
+      <div className="card elev-sm p-6 max-w-[420px] mx-auto">
         <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
           Setting up your project…
         </p>
@@ -342,7 +401,7 @@ function CompleteSignUp({
   }
 
   return (
-    <div className="card elev-sm p-6 max-w-[420px]">
+    <div className="card elev-sm p-6 max-w-[420px] mx-auto">
       {autoFailed && (
         <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
           We couldn&apos;t finish setting that up automatically — let&apos;s try again.
