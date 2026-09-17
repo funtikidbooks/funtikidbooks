@@ -4,6 +4,7 @@ export const dictionary = {
   vi: {
     nav: {
       home: "Trang chủ",
+      explore: "Khám phá",
       services: "Dịch vụ",
       process: "Quy trình",
       projects: "Dự án",
@@ -345,6 +346,7 @@ export const dictionary = {
   en: {
     nav: {
       home: "Home",
+      explore: "Explore",
       services: "Services",
       process: "Process",
       projects: "Projects",

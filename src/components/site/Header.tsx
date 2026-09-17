@@ -72,6 +72,7 @@ export function Header() {
     { href: "/lien-he", label: t.nav.contact },
   ];
   const SERVICES_SUBMENU = [
+    { href: "/dich-vu", label: t.nav.services },
     { href: "/quy-trinh", label: t.nav.process },
     { href: "/gioi-thieu", label: t.nav.about },
     { href: "/tin-tuc", label: t.nav.news },
@@ -118,7 +119,7 @@ export function Header() {
         <nav className="hidden 2xl:flex items-center gap-1">
           {PRIMARY_NAV_ITEMS.map((item) => {
             if (item.href === "/dich-vu") {
-              return <ServicesNavDropdown key={item.href} compact={false} submenu={SERVICES_SUBMENU} />;
+              return <ExploreNavDropdown key={item.href} compact={false} submenu={SERVICES_SUBMENU} />;
             }
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
@@ -164,7 +165,7 @@ export function Header() {
         <nav className="hidden lg:flex 2xl:hidden items-center gap-0.5">
           {PRIMARY_NAV_ITEMS.map((item) => {
             if (item.href === "/dich-vu") {
-              return <ServicesNavDropdown key={item.href} compact submenu={SERVICES_SUBMENU} />;
+              return <ExploreNavDropdown key={item.href} compact submenu={SERVICES_SUBMENU} />;
             }
             const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
             return (
@@ -260,14 +261,18 @@ export function Header() {
 // long-press with a 10px move-cancel and a suppressed synthetic click so a
 // long-press doesn't also navigate). A quick tap/click still goes straight
 // to /dich-vu.
-function ServicesNavDropdown({ compact, submenu }: { compact: boolean; submenu: { href: string; label: string }[] }) {
+// Pure category trigger, not a page of its own — "Khám phá" has no
+// /kham-pha route to send a click to, unlike the old "Dịch vụ" trigger it
+// replaced (which doubled as a real link to /dich-vu, now just one of the
+// items inside this menu). Hover (desktop) or long-press (touch) is the
+// only way in; a plain click/tap does nothing, on purpose, per sếp Phúc.
+function ExploreNavDropdown({ compact, submenu }: { compact: boolean; submenu: { href: string; label: string }[] }) {
   const pathname = usePathname();
   const { t } = useDict();
   const [show, setShow] = useState(false);
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const suppressClickRef = useRef(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   function clearShowAndCloseTimers() {
@@ -288,10 +293,7 @@ function ServicesNavDropdown({ compact, submenu }: { compact: boolean; submenu: 
   function handleTouchStart(e: React.TouchEvent) {
     const touch = e.touches[0];
     touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-    longPressTimer.current = setTimeout(() => {
-      setShow(true);
-      suppressClickRef.current = true;
-    }, 450);
+    longPressTimer.current = setTimeout(() => setShow(true), 450);
   }
 
   function handleTouchMove(e: React.TouchEvent) {
@@ -312,29 +314,21 @@ function ServicesNavDropdown({ compact, submenu }: { compact: boolean; submenu: 
     }
   }
 
-  function handleClick(e: React.MouseEvent) {
-    if (suppressClickRef.current) {
-      e.preventDefault();
-      suppressClickRef.current = false;
-    }
-  }
-
   useEffect(() => clearShowAndCloseTimers, []);
 
-  const active = pathname.startsWith("/dich-vu") || submenu.some((item) => pathname.startsWith(item.href));
+  const active = submenu.some((item) => pathname.startsWith(item.href));
 
   return (
     <div className="relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
-      <Link
-        href="/dich-vu"
+      <button
+        type="button"
         className={`fk-navlink${compact ? " fk-navlink-compact" : ""}${active ? " fk-navlink-active" : ""}`}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onClick={handleClick}
         style={{ WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none", display: "inline-flex", alignItems: "center", gap: 4 }}
       >
-        {t.nav.services}
+        {t.nav.explore}
         <span
           aria-hidden
           style={{
@@ -346,7 +340,7 @@ function ServicesNavDropdown({ compact, submenu }: { compact: boolean; submenu: 
         >
           ▾
         </span>
-      </Link>
+      </button>
       {show && (
         <div
           className="card elev-lg absolute flex flex-col gap-0.5"
