@@ -83,8 +83,14 @@ export function PortalChatWidget() {
     sendMessage(input);
   }
 
+  // Once every canned question has been asked, offer the full set again
+  // instead of leaving the visitor with an empty menu.
+  const askedQuestions = new Set(messages.filter((m) => m.role === "user").map((m) => m.content));
+  const remainingSuggestions = FAQ.filter((entry) => !askedQuestions.has(entry.question));
+  const suggestionChips = remainingSuggestions.length > 0 ? remainingSuggestions : FAQ;
+
   return (
-    <div className="card elev-sm flex flex-col" style={{ height: 460 }}>
+    <div className="card elev-sm flex flex-col" style={{ height: 600 }}>
       <div className="flex-none flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
         <span aria-hidden>💬</span>
         <div className="flex flex-col">
@@ -97,24 +103,9 @@ export function PortalChatWidget() {
 
       <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
         {messages.length === 0 && (
-          <div className="flex flex-col gap-2">
-            <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
-              Chào sếp 👋 Bấm một câu bên dưới, hoặc gõ câu hỏi về dịch vụ, quy trình, giá của Funti nhé.
-            </p>
-            <div className="flex flex-col gap-1.5 items-start">
-              {FAQ.map((entry) => (
-                <button
-                  key={entry.question}
-                  type="button"
-                  onClick={() => sendMessage(entry.question)}
-                  className="rounded-full px-3 py-1.5 text-xs text-left"
-                  style={{ border: "1px solid var(--color-neutral-300)", color: "var(--color-neutral-700)" }}
-                >
-                  {entry.question}
-                </button>
-              ))}
-            </div>
-          </div>
+          <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
+            Chào sếp 👋 Bấm một câu bên dưới, hoặc gõ câu hỏi về dịch vụ, quy trình, giá của Funti nhé.
+          </p>
         )}
 
         {messages.map((m, i) => (
@@ -130,6 +121,25 @@ export function PortalChatWidget() {
             </div>
           </div>
         ))}
+
+        {/* Suggestion chips stay available after every reply, not just on
+            the empty state — a visitor should be able to keep picking
+            instead of hitting a dead end once one question is answered. */}
+        {!thinking && (
+          <div className="flex flex-col gap-1.5 items-start">
+            {suggestionChips.map((entry) => (
+              <button
+                key={entry.question}
+                type="button"
+                onClick={() => sendMessage(entry.question)}
+                className="rounded-full px-3 py-1.5 text-xs text-left"
+                style={{ border: "1px solid var(--color-neutral-300)", color: "var(--color-neutral-700)" }}
+              >
+                {entry.question}
+              </button>
+            ))}
+          </div>
+        )}
 
         {thinking && (
           <div className="flex items-start">

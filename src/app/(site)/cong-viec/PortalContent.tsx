@@ -100,7 +100,7 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
   }
 
   return (
-    <section className="site-container py-14" style={{ maxWidth: 880 }}>
+    <section className="site-container py-14" style={{ maxWidth: 1040 }}>
       <div className={`flex items-center gap-3 mb-8 ${stage === "ready" ? "justify-between" : "justify-center"}`}>
         <h1 className="text-3xl">Work With Funti</h1>
         {stage === "ready" && (
@@ -132,7 +132,7 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
           {showcaseImages.length > 0 && <ShowcaseStrip images={showcaseImages} />}
           <div className="flex flex-col lg:flex-row gap-4 justify-center items-center">
             <StartForm onSent={() => setStage("sent-link")} onError={setError} />
-            <div className="w-full lg:max-w-[380px]">
+            <div className="w-full lg:max-w-[480px]">
               <PortalChatWidget />
             </div>
           </div>
