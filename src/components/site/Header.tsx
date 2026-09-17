@@ -178,15 +178,14 @@ export function Header() {
               </Link>
             );
           })}
-          {/* Icon-only here (not the full label) to stay within this
-              tier's tighter width budget — same reasoning as dropping the
-              separate CTA below. Sits right next to "Liên hệ" per sếp Phúc. */}
+          {/* Sits right next to "Liên hệ" per sếp Phúc — kept as the full
+              label (not an icon) since he wants "Work With Funti" legible
+              at this tier too, not shortened to a briefcase glyph. */}
           <Link
             href="/cong-viec"
-            className={`fk-navlink fk-navlink-compact text-center${pathname.startsWith("/cong-viec") ? " fk-navlink-active" : ""}`}
-            title={t.nav.clientPortal}
+            className={`fk-navlink fk-navlink-compact${pathname.startsWith("/cong-viec") ? " fk-navlink-active" : ""}`}
           >
-            💼
+            {t.nav.clientPortal}
           </Link>
         </nav>
 
