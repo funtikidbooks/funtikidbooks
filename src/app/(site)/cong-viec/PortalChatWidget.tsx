@@ -27,7 +27,7 @@ const FAQ: FaqEntry[] = [
     question: "Bảng giá và thời gian thế nào?",
     keywords: ["gia", "bao nhieu tien", "chi phi", "thoi gian", "bao lau", "price", "cost"],
     answer:
-      "Funti không có bảng giá cố định — giá được báo riêng theo số trang, độ phức tạp và phạm vi dự án (đối tác lâu dài có ưu đãi tốt hơn). Một cuốn sách tranh 24-32 trang thường mất khoảng 4-8 tuần, với 2-3 vòng chỉnh sửa mỗi giai đoạn. Sếp điền mô tả dự án ở form bên cạnh để nhận báo giá cụ thể nhé!",
+      "Funti không có bảng giá cố định — giá được báo riêng theo số trang, độ phức tạp và phạm vi dự án (đối tác lâu dài có ưu đãi tốt hơn). Một cuốn sách tranh 24-32 trang thường mất khoảng 4-8 tuần, với 2-3 vòng chỉnh sửa mỗi giai đoạn. Bạn điền mô tả dự án ở form bên cạnh để nhận báo giá cụ thể nhé!",
   },
   {
     question: "Liên hệ studio bằng cách nào?",
@@ -38,7 +38,7 @@ const FAQ: FaqEntry[] = [
 ];
 
 const FALLBACK_ANSWER =
-  "Câu này mình chưa có câu trả lời dựng sẵn — sếp điền mô tả dự án ở form bên cạnh giúp mình nhé, đội ngũ Funti sẽ phản hồi trực tiếp trong 1-2 ngày làm việc!";
+  "Câu này mình chưa có câu trả lời dựng sẵn — bạn điền mô tả dự án ở form bên cạnh giúp mình nhé, đội ngũ Funti sẽ phản hồi trực tiếp trong 1-2 ngày làm việc!";
 
 function normalize(s: string): string {
   return s
@@ -104,7 +104,7 @@ export function PortalChatWidget() {
       <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
         {messages.length === 0 && (
           <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
-            Chào sếp 👋 Bấm một câu bên dưới, hoặc gõ câu hỏi về dịch vụ, quy trình, giá của Funti nhé.
+            Chào bạn 👋 Bấm một câu bên dưới, hoặc gõ câu hỏi về dịch vụ, quy trình, giá của Funti nhé.
           </p>
         )}
 
