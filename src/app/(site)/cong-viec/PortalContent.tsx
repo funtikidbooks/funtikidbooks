@@ -15,6 +15,7 @@ import {
 } from "@/lib/actions/clientPortal";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import { PortalChatWidget } from "./PortalChatWidget";
+import { useDict } from "@/components/site/LocaleProvider";
 import type { ClientMessage, ClientProfile, ClientProject } from "@/lib/types";
 
 type Stage = "loading" | "signed-out" | "sent-link" | "needs-profile" | "ready";
@@ -66,6 +67,7 @@ function formatTime(iso: string) {
 }
 
 export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string[] }) {
+  const { t } = useDict();
   const [stage, setStage] = useState<Stage>("loading");
   const [profile, setProfile] = useState<ClientProfile | null>(null);
   // Set when CompleteSignUp auto-creates a project from the staged draft —
@@ -105,7 +107,7 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
         <h1 className="text-3xl">Work With Funti</h1>
         {stage === "ready" && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={handleSignOut}>
-            Sign out
+            {t.portal.signOut}
           </button>
         )}
       </div>
@@ -117,22 +119,19 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
       )}
 
       {stage === "loading" && (
-        <p style={{ color: "var(--color-neutral-500)" }}>Loading…</p>
+        <p style={{ color: "var(--color-neutral-500)" }}>{t.portal.loading}</p>
       )}
 
       {stage === "signed-out" && (
         <div className="flex flex-col gap-7">
           <div className="text-center">
-            <p className="text-xl font-bold mb-1">Have a story to tell?</p>
-            <p style={{ color: "var(--color-neutral-600)" }}>
-              Let&apos;s bring it to life together — tell us what you&apos;re dreaming up, and our illustrators take
-              it from there.
-            </p>
+            <p className="text-xl font-bold mb-1">{t.portal.heroTitle}</p>
+            <p style={{ color: "var(--color-neutral-600)" }}>{t.portal.heroBody}</p>
           </div>
           {showcaseImages.length > 0 && <ShowcaseStrip images={showcaseImages} />}
           <div className="flex flex-col lg:flex-row gap-4 justify-center items-center">
             <StartForm onSent={() => setStage("sent-link")} onError={setError} />
-            <div className="w-full lg:max-w-[480px]">
+            <div className="w-full lg:max-w-[360px]">
               <PortalChatWidget />
             </div>
           </div>
@@ -142,9 +141,9 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
 
       {stage === "sent-link" && (
         <div className="card elev-sm p-6 max-w-[420px] mx-auto">
-          <p className="font-bold mb-1">Check your email 📩</p>
+          <p className="font-bold mb-1">{t.portal.checkEmailTitle}</p>
           <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
-            We&apos;ve sent you a sign-in link. Open it on this device to continue — we&apos;ll set up your project automatically.
+            {t.portal.checkEmailBody}
           </p>
         </div>
       )}
@@ -258,20 +257,15 @@ function ShowcaseStrip({ images }: { images: string[] }) {
   );
 }
 
-const HOW_IT_WORKS = [
-  { emoji: "💬", title: "Tell us about it", body: "Share your story, characters, and style — takes two minutes." },
-  { emoji: "📩", title: "We reply within 24h", body: "A real person on our team reads every brief personally." },
-  { emoji: "🎨", title: "We bring it to life", body: "Sketches, revisions, and finished art, all in one thread." },
-];
-
 // Sets expectations right where the anxiety actually is — "I just described
 // my project to a form, now what?" A brief without this reads like sending
 // something into a black hole, which is exactly the moment someone abandons
 // the page instead of hitting submit.
 function HowItWorks() {
+  const { t } = useDict();
   return (
     <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-      {HOW_IT_WORKS.map((step, i) => (
+      {t.portal.howItWorks.map((step, i) => (
         <div key={step.title} className="flex flex-col gap-1">
           <span className="text-2xl" aria-hidden>
             {step.emoji}
@@ -289,6 +283,7 @@ function HowItWorks() {
 }
 
 function StartForm({ onSent, onError }: { onSent: () => void; onError: (msg: string | null) => void }) {
+  const { t } = useDict();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [description, setDescription] = useState("");
@@ -313,7 +308,7 @@ function StartForm({ onSent, onError }: { onSent: () => void; onError: (msg: str
       if (error) throw error;
       onSent();
     } catch {
-      onError("Could not send the sign-in link. Please try again.");
+      onError(t.portal.sendLinkError);
     } finally {
       setSending(false);
     }
@@ -322,11 +317,16 @@ function StartForm({ onSent, onError }: { onSent: () => void; onError: (msg: str
   return (
     <div className="card elev-sm p-6 max-w-[460px] w-full">
       <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
-        Tell us about your project and we&apos;ll send you a sign-in link — no password needed. You can attach
-        reference images once you&apos;re signed in.
+        {t.portal.startFormIntro}
       </p>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <input required className="input" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
+        <input
+          required
+          className="input"
+          placeholder={t.portal.namePlaceholder}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
         <input
           type="email"
           required
@@ -339,12 +339,12 @@ function StartForm({ onSent, onError }: { onSent: () => void; onError: (msg: str
           required
           className="input"
           style={{ minHeight: 110, resize: "vertical" }}
-          placeholder="Tell us about the book, characters, style, timeline…"
+          placeholder={t.portal.descriptionPlaceholder}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
         <button type="submit" disabled={sending} className="btn btn-primary">
-          {sending ? "Sending…" : "Send sign-in link"}
+          {sending ? t.portal.sending : t.portal.sendLink}
         </button>
       </form>
     </div>
@@ -364,6 +364,7 @@ function CompleteSignUp({
   onDone: (profile: ClientProfile, project: ClientProject | null) => void;
   onError: (msg: string | null) => void;
 }) {
+  const { t } = useDict();
   const [draft] = useState(() => loadPortalDraft());
   const [autoRunning, setAutoRunning] = useState(!!draft);
   const [autoFailed, setAutoFailed] = useState(false);
@@ -385,7 +386,7 @@ function CompleteSignUp({
         onDone(profile, project);
       } catch (err) {
         if (cancelled) return;
-        onError(err instanceof Error ? err.message : "Could not set up your project.");
+        onError(err instanceof Error ? err.message : t.portal.setupError);
         setAutoRunning(false);
         setAutoFailed(true);
       }
@@ -400,7 +401,7 @@ function CompleteSignUp({
     return (
       <div className="card elev-sm p-6 max-w-[420px] mx-auto">
         <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
-          Setting up your project…
+          {t.portal.settingUp}
         </p>
       </div>
     );
@@ -410,10 +411,10 @@ function CompleteSignUp({
     <div className="card elev-sm p-6 max-w-[420px] mx-auto">
       {autoFailed && (
         <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
-          We couldn&apos;t finish setting that up automatically — let&apos;s try again.
+          {t.portal.autoSetupFailed}
         </p>
       )}
-      <p className="font-bold mb-4">What should we call you?</p>
+      <p className="font-bold mb-4">{t.portal.askName}</p>
       <NameOnlyForm onDone={(p) => onDone(p, null)} onError={onError} />
     </div>
   );
@@ -426,6 +427,7 @@ function NameOnlyForm({
   onDone: (profile: ClientProfile) => void;
   onError: (msg: string | null) => void;
 }) {
+  const { t } = useDict();
   const [displayName, setDisplayName] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -438,7 +440,7 @@ function NameOnlyForm({
       const profile = await registerClientProfile({ displayName, country: "", avatarUrl: null, clientType: "individual" });
       onDone(profile);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Could not save your profile.");
+      onError(err instanceof Error ? err.message : t.portal.saveProfileError);
     } finally {
       setSaving(false);
     }
@@ -446,9 +448,15 @@ function NameOnlyForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <input required className="input" placeholder="Your name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+      <input
+        required
+        className="input"
+        placeholder={t.portal.namePlaceholder}
+        value={displayName}
+        onChange={(e) => setDisplayName(e.target.value)}
+      />
       <button type="submit" disabled={saving} className="btn btn-primary">
-        {saving ? "Saving…" : "Continue"}
+        {saving ? t.portal.saving : t.portal.continueBtn}
       </button>
     </form>
   );
@@ -467,6 +475,7 @@ function ProjectsDashboard({
   onError: (msg: string | null) => void;
   initialActiveProjectId?: string | null;
 }) {
+  const { t } = useDict();
   const [projects, setProjects] = useState<ClientProject[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -525,7 +534,7 @@ function ProjectsDashboard({
         <div className="flex flex-col">
           <span className="font-bold text-sm">{profile.display_name || profile.email}</span>
           <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-            {profile.country} · {profile.client_type === "business" ? "Business" : "Individual"}
+            {profile.country} · {profile.client_type === "business" ? t.portal.business : t.portal.individual}
           </span>
         </div>
         {unreadCount > 0 && (
@@ -540,7 +549,7 @@ function ProjectsDashboard({
 
       {!showNewForm && (
         <button type="button" className="btn btn-primary w-fit" onClick={() => setShowNewForm(true)}>
-          + New project
+          {t.portal.newProject}
         </button>
       )}
 
@@ -554,7 +563,7 @@ function ProjectsDashboard({
       )}
 
       {loadingList ? (
-        <p style={{ color: "var(--color-neutral-500)" }}>Loading…</p>
+        <p style={{ color: "var(--color-neutral-500)" }}>{t.portal.loading}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {projects.map((p) => (
@@ -567,7 +576,7 @@ function ProjectsDashboard({
               <p className="text-sm font-semibold line-clamp-2">{p.description}</p>
               <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
                 {formatDate(p.last_message_at)}
-                {p.status === "closed" ? " · Closed" : ""}
+                {p.status === "closed" ? t.portal.closedSuffix : ""}
               </span>
             </button>
           ))}
@@ -586,6 +595,7 @@ function ImagePicker({
   onChange: (urls: string[]) => void;
   onError: (msg: string | null) => void;
 }) {
+  const { t } = useDict();
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -604,7 +614,7 @@ function ImagePicker({
       );
       onChange([...images, ...uploaded]);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Could not upload one of the images.");
+      onError(err instanceof Error ? err.message : t.portal.uploadError);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -634,7 +644,7 @@ function ImagePicker({
         className="flex items-center justify-center rounded-[8px] flex-none text-xs"
         style={{ width: 64, height: 64, border: "1.5px dashed var(--color-neutral-300)", color: "var(--color-neutral-500)" }}
       >
-        {uploading ? "…" : "+ Add"}
+        {uploading ? "…" : t.portal.addImage}
       </button>
       <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
     </div>
@@ -652,6 +662,7 @@ function NewProjectForm({
   canCancel: boolean;
   onError: (msg: string | null) => void;
 }) {
+  const { t } = useDict();
   const [description, setDescription] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -665,7 +676,7 @@ function NewProjectForm({
       const project = await createClientProject(description, images);
       onCreated(project);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Could not submit your project.");
+      onError(err instanceof Error ? err.message : t.portal.submitProjectError);
     } finally {
       setSaving(false);
     }
@@ -673,23 +684,23 @@ function NewProjectForm({
 
   return (
     <form onSubmit={handleSubmit} className="card elev-sm p-5 flex flex-col gap-3">
-      <p className="font-bold text-sm">Describe your project</p>
+      <p className="font-bold text-sm">{t.portal.describeProject}</p>
       <textarea
         required
         className="input"
         style={{ minHeight: 110, resize: "vertical" }}
-        placeholder="Tell us about the book, characters, style, timeline…"
+        placeholder={t.portal.descriptionPlaceholder}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
       />
       <ImagePicker images={images} onChange={setImages} onError={onError} />
       <div className="flex gap-2">
         <button type="submit" disabled={saving} className="btn btn-primary">
-          {saving ? "Submitting…" : "Submit"}
+          {saving ? t.portal.submitting : t.portal.submitBtn}
         </button>
         {canCancel && (
           <button type="button" className="btn btn-ghost" onClick={onCancel}>
-            Cancel
+            {t.portal.cancel}
           </button>
         )}
       </div>
@@ -708,6 +719,7 @@ function ProjectThread({
   onUnreadDelta: (delta: number) => void;
   onError: (msg: string | null) => void;
 }) {
+  const { t } = useDict();
   const [messages, setMessages] = useState<ClientMessage[]>([]);
   const [text, setText] = useState("");
   const [images, setImages] = useState<string[]>([]);
@@ -768,7 +780,7 @@ function ProjectThread({
       setText("");
       setImages([]);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Could not send your message.");
+      onError(err instanceof Error ? err.message : t.portal.sendMessageError);
     } finally {
       setSending(false);
     }
@@ -777,7 +789,7 @@ function ProjectThread({
   return (
     <div className="card elev-sm flex flex-col" style={{ height: 520 }}>
       <div className="flex-none flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-        <button type="button" onClick={onBack} className="btn-icon" aria-label="Back" style={{ width: 30, height: 30 }}>
+        <button type="button" onClick={onBack} className="btn-icon" aria-label={t.portal.back} style={{ width: 30, height: 30 }}>
           ←
         </button>
         <span className="font-bold text-sm truncate">{project.description}</span>
@@ -841,12 +853,12 @@ function ProjectThread({
         <form onSubmit={handleSend} className="flex items-center gap-2">
           <input
             className="input flex-1"
-            placeholder="Type a message…"
+            placeholder={t.portal.typeMessage}
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
           <button type="submit" disabled={sending || (!text.trim() && images.length === 0)} className="btn btn-primary btn-sm flex-none">
-            Send
+            {t.portal.sendBtn}
           </button>
         </form>
       </div>

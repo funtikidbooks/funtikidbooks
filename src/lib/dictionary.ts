@@ -342,6 +342,78 @@ export const dictionary = {
       body: "Hãy cùng Funti Kidbooks Studio biến ý tưởng của bạn thành những câu chuyện tuyệt vời!",
       cta: "Liên hệ ngay →",
     },
+    portal: {
+      signOut: "Đăng xuất",
+      loading: "Đang tải…",
+      heroTitle: "Bạn có câu chuyện muốn kể?",
+      heroBody: "Cùng Funti biến câu chuyện thành hiện thực — kể cho chúng tôi nghe bạn đang ấp ủ điều gì, đội ngũ hoạ sĩ sẽ lo phần còn lại.",
+      checkEmailTitle: "Kiểm tra email của bạn 📩",
+      checkEmailBody: "Funti đã gửi một liên kết đăng nhập cho bạn. Mở email này trên chính thiết bị bạn đang dùng để tiếp tục — dự án của bạn sẽ được tạo tự động.",
+      settingUp: "Đang thiết lập dự án của bạn…",
+      autoSetupFailed: "Funti chưa thiết lập tự động được — thử lại nhé.",
+      askName: "Funti nên gọi bạn là gì?",
+      namePlaceholder: "Tên của bạn",
+      descriptionPlaceholder: "Kể cho Funti nghe về cuốn sách, nhân vật, phong cách, thời gian mong muốn…",
+      startFormIntro: "Kể cho Funti nghe về dự án của bạn, chúng tôi sẽ gửi bạn một liên kết đăng nhập — không cần mật khẩu. Bạn có thể đính kèm hình ảnh tham khảo sau khi đăng nhập.",
+      sending: "Đang gửi…",
+      sendLink: "Gửi liên kết đăng nhập",
+      sendLinkError: "Không gửi được liên kết đăng nhập. Vui lòng thử lại.",
+      saving: "Đang lưu…",
+      continueBtn: "Tiếp tục",
+      saveProfileError: "Không lưu được hồ sơ của bạn.",
+      setupError: "Không thiết lập được dự án của bạn.",
+      howItWorks: [
+        { emoji: "💬", title: "Kể cho Funti nghe", body: "Chia sẻ câu chuyện, nhân vật và phong cách của bạn — chỉ mất hai phút." },
+        { emoji: "📩", title: "Funti phản hồi trong 24h", body: "Một thành viên thật trong đội ngũ sẽ đọc từng yêu cầu." },
+        { emoji: "🎨", title: "Funti hiện thực hoá câu chuyện", body: "Phác thảo, chỉnh sửa, và tác phẩm hoàn chỉnh, tất cả trong một cuộc trò chuyện." },
+      ],
+      business: "Doanh nghiệp",
+      individual: "Cá nhân",
+      newProject: "+ Dự án mới",
+      closedSuffix: " · Đã đóng",
+      addImage: "+ Thêm",
+      uploadError: "Không tải lên được một trong các hình ảnh.",
+      describeProject: "Mô tả dự án của bạn",
+      submitting: "Đang gửi…",
+      submitBtn: "Gửi",
+      cancel: "Huỷ",
+      submitProjectError: "Không gửi được dự án của bạn.",
+      back: "Quay lại",
+      typeMessage: "Nhập tin nhắn…",
+      sendBtn: "Gửi",
+      sendMessageError: "Không gửi được tin nhắn của bạn.",
+      chat: {
+        title: "Hỏi nhanh Funti",
+        subtitle: "Câu hỏi thường gặp — nhân viên sẽ phản hồi trực tiếp qua form",
+        greeting: "Chào bạn 👋 Bấm một câu bên dưới, hoặc gõ câu hỏi về dịch vụ, quy trình, giá của Funti nhé.",
+        inputPlaceholder: "Đặt câu hỏi…",
+        sendButton: "Gửi",
+        fallback:
+          "Câu này mình chưa có câu trả lời dựng sẵn — bạn điền mô tả dự án ở form bên cạnh giúp mình nhé, đội ngũ Funti sẽ phản hồi trực tiếp trong 1-2 ngày làm việc!",
+        faq: [
+          {
+            question: "Studio làm những dịch vụ gì?",
+            answer:
+              "Funti Kidbooks Studio nhận:\n• Minh hoạ sách thiếu nhi (truyện tranh, sách giáo dục, song ngữ)\n• Thiết kế nhân vật\n• Thiết kế layout / dàn trang\n• Thiết kế bìa sách\n• Sản phẩm đi kèm: flashcard, poster, sticker, đồ chơi, quà tặng\n• Mô hình hoá & in 3D\n• Hợp tác B2B với nhà xuất bản / tác giả mở rộng series sách",
+          },
+          {
+            question: "Quy trình làm việc ra sao?",
+            answer:
+              "Quy trình 6 bước của Funti:\n1. Tiếp nhận yêu cầu\n2. Nghiên cứu & ý tưởng\n3. Phác thảo (có phản hồi từ khách)\n4. Minh hoạ & thiết kế đầy đủ\n5. Hoàn thiện, chuẩn in ấn\n6. Bàn giao file + hỗ trợ in ấn/xuất bản",
+          },
+          {
+            question: "Bảng giá và thời gian thế nào?",
+            answer:
+              "Funti không có bảng giá cố định — giá được báo riêng theo số trang, độ phức tạp và phạm vi dự án (đối tác lâu dài có ưu đãi tốt hơn). Một cuốn sách tranh 24-32 trang thường mất khoảng 4-8 tuần, với 2-3 vòng chỉnh sửa mỗi giai đoạn. Bạn điền mô tả dự án ở form bên cạnh để nhận báo giá cụ thể nhé!",
+          },
+          {
+            question: "Liên hệ studio bằng cách nào?",
+            answer:
+              "📧 funtikidbooks.studio@gmail.com\n📞 0978 346 851\n📍 Toà nhà M.O.R.E, 40A-40B Út Tịch, P. Tân Sơn Nhất, Tân Bình, TP.HCM\n🕘 T2-T6: 9:00-18:30, T7: 9:00-12:00",
+          },
+        ],
+      },
+    },
   },
   en: {
     nav: {
@@ -683,6 +755,78 @@ export const dictionary = {
       title: "Have a children's book project or a creative idea?",
       body: "Let's work together with Funti Kidbooks Studio to turn your ideas into wonderful stories!",
       cta: "Contact us →",
+    },
+    portal: {
+      signOut: "Sign out",
+      loading: "Loading…",
+      heroTitle: "Have a story to tell?",
+      heroBody: "Let's bring it to life together — tell us what you're dreaming up, and our illustrators take it from there.",
+      checkEmailTitle: "Check your email 📩",
+      checkEmailBody: "We've sent you a sign-in link. Open it on this device to continue — we'll set up your project automatically.",
+      settingUp: "Setting up your project…",
+      autoSetupFailed: "We couldn't finish setting that up automatically — let's try again.",
+      askName: "What should we call you?",
+      namePlaceholder: "Your name",
+      descriptionPlaceholder: "Tell us about the book, characters, style, timeline…",
+      startFormIntro: "Tell us about your project and we'll send you a sign-in link — no password needed. You can attach reference images once you're signed in.",
+      sending: "Sending…",
+      sendLink: "Send sign-in link",
+      sendLinkError: "Could not send the sign-in link. Please try again.",
+      saving: "Saving…",
+      continueBtn: "Continue",
+      saveProfileError: "Could not save your profile.",
+      setupError: "Could not set up your project.",
+      howItWorks: [
+        { emoji: "💬", title: "Tell us about it", body: "Share your story, characters, and style — takes two minutes." },
+        { emoji: "📩", title: "We reply within 24h", body: "A real person on our team reads every brief personally." },
+        { emoji: "🎨", title: "We bring it to life", body: "Sketches, revisions, and finished art, all in one thread." },
+      ],
+      business: "Business",
+      individual: "Individual",
+      newProject: "+ New project",
+      closedSuffix: " · Closed",
+      addImage: "+ Add",
+      uploadError: "Could not upload one of the images.",
+      describeProject: "Describe your project",
+      submitting: "Submitting…",
+      submitBtn: "Submit",
+      cancel: "Cancel",
+      submitProjectError: "Could not submit your project.",
+      back: "Back",
+      typeMessage: "Type a message…",
+      sendBtn: "Send",
+      sendMessageError: "Could not send your message.",
+      chat: {
+        title: "Quick questions",
+        subtitle: "Frequently asked — our team follows up directly through the form",
+        greeting: "Hi there 👋 Tap a question below, or type your own about Funti's services, process, or pricing.",
+        inputPlaceholder: "Ask a question…",
+        sendButton: "Send",
+        fallback:
+          "I don't have a ready-made answer for that one — fill in the form next to me with your project, and the Funti team will follow up directly within 1-2 business days!",
+        faq: [
+          {
+            question: "What services does the studio offer?",
+            answer:
+              "Funti Kidbooks Studio does:\n• Children's book illustration (storybooks, educational books, bilingual)\n• Character design\n• Layout / page design\n• Book cover design\n• Companion products: flashcards, posters, stickers, toys, gifts\n• 3D modeling & 3D printing\n• B2B partnerships with publishers/authors scaling a book series",
+          },
+          {
+            question: "What does the process look like?",
+            answer:
+              "Funti's 6-step process:\n1. Intake — your story, goals, audience\n2. Research & concept proposal\n3. Sketches (with your feedback)\n4. Full illustration & design\n5. Finishing, print-ready polish\n6. Delivery + print/publishing support",
+          },
+          {
+            question: "What about pricing and timeline?",
+            answer:
+              "Funti doesn't publish fixed pricing — it's quoted per project based on page count, complexity, and scope (long-term partners get better rates). A 24-32 page picture book typically takes 4-8 weeks, with 2-3 revision rounds per stage. Fill in the form next to me with your project to get a real quote!",
+          },
+          {
+            question: "How do I contact the studio?",
+            answer:
+              "📧 funtikidbooks.studio@gmail.com\n📞 +84 978 346 851\n📍 M.O.R.E Building, 40A-40B Út Tịch, Tân Sơn Nhất Ward, Tân Bình, Ho Chi Minh City\n🕘 Mon-Fri 9:00-18:30, Sat 9:00-12:00",
+          },
+        ],
+      },
     },
   },
 } satisfies Record<Locale, unknown>;
