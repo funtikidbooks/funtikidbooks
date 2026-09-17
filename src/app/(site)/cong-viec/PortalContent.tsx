@@ -64,7 +64,7 @@ function formatTime(iso: string) {
   return new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 }
 
-export function PortalContent() {
+export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string[] }) {
   const [stage, setStage] = useState<Stage>("loading");
   const [profile, setProfile] = useState<ClientProfile | null>(null);
   // Set when CompleteSignUp auto-creates a project from the staged draft —
@@ -119,7 +119,20 @@ export function PortalContent() {
         <p style={{ color: "var(--color-neutral-500)" }}>Loading…</p>
       )}
 
-      {stage === "signed-out" && <StartForm onSent={() => setStage("sent-link")} onError={setError} />}
+      {stage === "signed-out" && (
+        <div className="flex flex-col gap-7">
+          <div>
+            <p className="text-xl font-bold mb-1">Have a story to tell?</p>
+            <p style={{ color: "var(--color-neutral-600)" }}>
+              Let&apos;s bring it to life together — tell us what you&apos;re dreaming up, and our illustrators take
+              it from there.
+            </p>
+          </div>
+          {showcaseImages.length > 0 && <ShowcaseStrip images={showcaseImages} />}
+          <StartForm onSent={() => setStage("sent-link")} onError={setError} />
+          <HowItWorks />
+        </div>
+      )}
 
       {stage === "sent-link" && (
         <div className="card elev-sm p-6 max-w-[420px]">
@@ -151,6 +164,52 @@ export function PortalContent() {
         />
       )}
     </section>
+  );
+}
+
+// A real taste of the work before asking for a brief — reusing the same
+// cover images featured on the homepage's own project showcase, in the
+// same curated order, so a first-time visitor isn't taking the studio's
+// quality on faith. Purely decorative (no click-through) — the goal is
+// "yes, this is the team I want", not a detour into browsing /du-an.
+function ShowcaseStrip({ images }: { images: string[] }) {
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1">
+      {images.map((url) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img key={url} src={url} alt="" className="rounded-[10px] object-cover flex-none" style={{ width: 110, height: 110 }} />
+      ))}
+    </div>
+  );
+}
+
+const HOW_IT_WORKS = [
+  { emoji: "💬", title: "Tell us about it", body: "Share your story, characters, and style — takes two minutes." },
+  { emoji: "📩", title: "We reply within 24h", body: "A real person on our team reads every brief personally." },
+  { emoji: "🎨", title: "We bring it to life", body: "Sketches, revisions, and finished art, all in one thread." },
+];
+
+// Sets expectations right where the anxiety actually is — "I just described
+// my project to a form, now what?" A brief without this reads like sending
+// something into a black hole, which is exactly the moment someone abandons
+// the page instead of hitting submit.
+function HowItWorks() {
+  return (
+    <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+      {HOW_IT_WORKS.map((step, i) => (
+        <div key={step.title} className="flex flex-col gap-1">
+          <span className="text-2xl" aria-hidden>
+            {step.emoji}
+          </span>
+          <span className="font-bold text-sm">
+            {i + 1}. {step.title}
+          </span>
+          <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+            {step.body}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
