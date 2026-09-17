@@ -680,9 +680,39 @@ h4 {
 .fk-lightbox-image-in {
   animation: fk-lightbox-image-in 0.25s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
+/* Reverse of the pair above — CLOSE_ANIMATION_MS in ImageLightbox.tsx
+   holds off the actual unmount until this has had time to play; `forwards`
+   keeps the end frame (invisible, scaled down) instead of snapping back to
+   the resting "in" style for the one frame before that unmount happens. */
+@keyframes fk-lightbox-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.fk-lightbox-backdrop-out {
+  animation: fk-lightbox-backdrop-out 0.2s ease-in forwards;
+}
+@keyframes fk-lightbox-image-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+.fk-lightbox-image-out {
+  animation: fk-lightbox-image-out 0.2s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
 @media (prefers-reduced-motion: reduce) {
   .fk-lightbox-backdrop-in,
-  .fk-lightbox-image-in {
+  .fk-lightbox-image-in,
+  .fk-lightbox-backdrop-out,
+  .fk-lightbox-image-out {
     animation: none;
   }
 }
