@@ -11,13 +11,50 @@ import {
   markProjectReadByClient,
   registerClientProfile,
   sendClientMessage,
-  uploadClientAvatar,
   uploadClientProjectImage,
 } from "@/lib/actions/clientPortal";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
-import type { ClientMessage, ClientProfile, ClientProject, ClientType } from "@/lib/types";
+import type { ClientMessage, ClientProfile, ClientProject } from "@/lib/types";
 
 type Stage = "loading" | "signed-out" | "sent-link" | "needs-profile" | "ready";
+
+// Staged across the magic-link email round trip so a first-time visitor
+// only ever fills in ONE form (name, email, what they need) instead of
+// three separate screens (sign in → tell us about yourself → describe your
+// project) before they can say anything to the studio. Best-effort: if
+// storage is unavailable (private browsing) or they verify on a different
+// device, CompleteSignUp below just falls back to asking for a name.
+const PORTAL_DRAFT_KEY = "funti-portal-draft";
+
+type PortalDraft = { name: string; description: string };
+
+function savePortalDraft(draft: PortalDraft) {
+  try {
+    localStorage.setItem(PORTAL_DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // ignore — CompleteSignUp's fallback form covers this
+  }
+}
+
+function loadPortalDraft(): PortalDraft | null {
+  try {
+    const raw = localStorage.getItem(PORTAL_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PortalDraft>;
+    if (typeof parsed.name === "string" && typeof parsed.description === "string") return parsed as PortalDraft;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPortalDraft() {
+  try {
+    localStorage.removeItem(PORTAL_DRAFT_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(iso));
@@ -30,6 +67,10 @@ function formatTime(iso: string) {
 export function PortalContent() {
   const [stage, setStage] = useState<Stage>("loading");
   const [profile, setProfile] = useState<ClientProfile | null>(null);
+  // Set when CompleteSignUp auto-creates a project from the staged draft —
+  // tells ProjectsDashboard which thread to jump straight into instead of
+  // landing on an empty list right after all that setup.
+  const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,21 +119,22 @@ export function PortalContent() {
         <p style={{ color: "var(--color-neutral-500)" }}>Loading…</p>
       )}
 
-      {stage === "signed-out" && <LoginForm onSent={() => setStage("sent-link")} onError={setError} />}
+      {stage === "signed-out" && <StartForm onSent={() => setStage("sent-link")} onError={setError} />}
 
       {stage === "sent-link" && (
         <div className="card elev-sm p-6 max-w-[420px]">
           <p className="font-bold mb-1">Check your email 📩</p>
           <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
-            We&apos;ve sent you a sign-in link. Open it on this device to continue.
+            We&apos;ve sent you a sign-in link. Open it on this device to continue — we&apos;ll set up your project automatically.
           </p>
         </div>
       )}
 
       {stage === "needs-profile" && (
-        <RegisterForm
-          onDone={(p) => {
+        <CompleteSignUp
+          onDone={(p, project) => {
             setProfile(p);
+            setPendingProjectId(project?.id ?? null);
             setStage("ready");
           }}
           onError={setError}
@@ -100,22 +142,35 @@ export function PortalContent() {
       )}
 
       {stage === "ready" && profile && (
-        <ProjectsDashboard profile={profile} unreadCount={unreadCount} onUnreadChange={setUnreadCount} onError={setError} />
+        <ProjectsDashboard
+          profile={profile}
+          unreadCount={unreadCount}
+          onUnreadChange={setUnreadCount}
+          onError={setError}
+          initialActiveProjectId={pendingProjectId}
+        />
       )}
     </section>
   );
 }
 
-function LoginForm({ onSent, onError }: { onSent: () => void; onError: (msg: string | null) => void }) {
+function StartForm({ onSent, onError }: { onSent: () => void; onError: (msg: string | null) => void }) {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [description, setDescription] = useState("");
   const [sending, setSending] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.trim() || sending) return;
+    if (!name.trim() || !email.trim() || !description.trim() || sending) return;
     setSending(true);
     onError(null);
     try {
+      // Staged before the redirect, not after — signInWithOtp navigates
+      // this tab away once the email link is clicked, so there's no later
+      // point in this flow where writing to localStorage is still
+      // guaranteed to run.
+      savePortalDraft({ name: name.trim(), description: description.trim() });
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
@@ -131,11 +186,13 @@ function LoginForm({ onSent, onError }: { onSent: () => void; onError: (msg: str
   }
 
   return (
-    <div className="card elev-sm p-6 max-w-[420px]">
+    <div className="card elev-sm p-6 max-w-[460px]">
       <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
-        Sign in with your email to submit a project brief and talk with our team — no password needed.
+        Tell us about your project and we&apos;ll send you a sign-in link — no password needed. You can attach
+        reference images once you&apos;re signed in.
       </p>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <input required className="input" placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
         <input
           type="email"
           required
@@ -143,6 +200,14 @@ function LoginForm({ onSent, onError }: { onSent: () => void; onError: (msg: str
           placeholder="you@example.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+        />
+        <textarea
+          required
+          className="input"
+          style={{ minHeight: 110, resize: "vertical" }}
+          placeholder="Tell us about the book, characters, style, timeline…"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
         />
         <button type="submit" disabled={sending} className="btn btn-primary">
           {sending ? "Sending…" : "Send sign-in link"}
@@ -152,12 +217,75 @@ function LoginForm({ onSent, onError }: { onSent: () => void; onError: (msg: str
   );
 }
 
-const CLIENT_TYPES: { value: ClientType; label: string }[] = [
-  { value: "individual", label: "Individual client" },
-  { value: "business", label: "Business (B2B)" },
-];
+// Lands here right after the magic-link click. If StartForm's draft made it
+// into localStorage (same device, storage available), this finishes signup
+// and creates the project from it with no further input — the visitor never
+// re-types anything. Falls back to just asking for a name when there's no
+// draft (a different device, private browsing, or the auto-setup itself
+// failed) so nobody gets stuck with no way to continue.
+function CompleteSignUp({
+  onDone,
+  onError,
+}: {
+  onDone: (profile: ClientProfile, project: ClientProject | null) => void;
+  onError: (msg: string | null) => void;
+}) {
+  const [draft] = useState(() => loadPortalDraft());
+  const [autoRunning, setAutoRunning] = useState(!!draft);
+  const [autoFailed, setAutoFailed] = useState(false);
 
-function RegisterForm({
+  useEffect(() => {
+    if (!draft) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const profile = await registerClientProfile({
+          displayName: draft.name,
+          country: "",
+          avatarUrl: null,
+          clientType: "individual",
+        });
+        const project = await createClientProject(draft.description, []);
+        if (cancelled) return;
+        clearPortalDraft();
+        onDone(profile, project);
+      } catch (err) {
+        if (cancelled) return;
+        onError(err instanceof Error ? err.message : "Could not set up your project.");
+        setAutoRunning(false);
+        setAutoFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft]);
+
+  if (autoRunning) {
+    return (
+      <div className="card elev-sm p-6 max-w-[420px]">
+        <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
+          Setting up your project…
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card elev-sm p-6 max-w-[420px]">
+      {autoFailed && (
+        <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
+          We couldn&apos;t finish setting that up automatically — let&apos;s try again.
+        </p>
+      )}
+      <p className="font-bold mb-4">What should we call you?</p>
+      <NameOnlyForm onDone={(p) => onDone(p, null)} onError={onError} />
+    </div>
+  );
+}
+
+function NameOnlyForm({
   onDone,
   onError,
 }: {
@@ -165,37 +293,15 @@ function RegisterForm({
   onError: (msg: string | null) => void;
 }) {
   const [displayName, setDisplayName] = useState("");
-  const [country, setCountry] = useState("");
-  const [clientType, setClientType] = useState<ClientType>("individual");
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    onError(null);
-    try {
-      const formData = new FormData();
-      formData.set("file", file);
-      const url = await uploadClientAvatar(formData);
-      setAvatarUrl(url);
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Could not upload the image.");
-    } finally {
-      setUploading(false);
-    }
-  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (saving) return;
+    if (!displayName.trim() || saving) return;
     setSaving(true);
     onError(null);
     try {
-      const profile = await registerClientProfile({ displayName, country, avatarUrl, clientType });
+      const profile = await registerClientProfile({ displayName, country: "", avatarUrl: null, clientType: "individual" });
       onDone(profile);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Could not save your profile.");
@@ -205,69 +311,12 @@ function RegisterForm({
   }
 
   return (
-    <div className="card elev-sm p-6 max-w-[460px]">
-      <p className="font-bold mb-4">Tell us a bit about yourself</p>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="flex items-center justify-center rounded-full overflow-hidden flex-none"
-            style={{ width: 56, height: 56, background: "var(--color-accent-100)", border: "1px dashed var(--color-neutral-300)" }}
-          >
-            {avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-                {uploading ? "…" : "Add"}
-              </span>
-            )}
-          </button>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
-          <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-            Profile photo (optional)
-          </span>
-        </div>
-
-        <input
-          required
-          className="input"
-          placeholder="Your name"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-        />
-        <input
-          required
-          className="input"
-          placeholder="Country"
-          value={country}
-          onChange={(e) => setCountry(e.target.value)}
-        />
-
-        <div className="flex gap-2">
-          {CLIENT_TYPES.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => setClientType(t.value)}
-              className="flex-1 text-sm font-semibold rounded-[8px] py-2"
-              style={{
-                border: `1.5px solid ${clientType === t.value ? "var(--color-accent-500)" : "var(--color-neutral-300)"}`,
-                background: clientType === t.value ? "var(--color-accent-100)" : "transparent",
-                color: clientType === t.value ? "var(--color-accent-700)" : "var(--color-text)",
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        <button type="submit" disabled={saving || uploading} className="btn btn-primary">
-          {saving ? "Saving…" : "Continue"}
-        </button>
-      </form>
-    </div>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <input required className="input" placeholder="Your name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+      <button type="submit" disabled={saving} className="btn btn-primary">
+        {saving ? "Saving…" : "Continue"}
+      </button>
+    </form>
   );
 }
 
@@ -276,11 +325,13 @@ function ProjectsDashboard({
   unreadCount,
   onUnreadChange,
   onError,
+  initialActiveProjectId,
 }: {
   profile: ClientProfile;
   unreadCount: number;
   onUnreadChange: (n: number) => void;
   onError: (msg: string | null) => void;
+  initialActiveProjectId?: string | null;
 }) {
   const [projects, setProjects] = useState<ClientProject[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -291,9 +342,16 @@ function ProjectsDashboard({
     listMyProjects().then((list) => {
       setProjects(list);
       setLoadingList(false);
-      if (list.length === 0) setShowNewForm(true);
+      // CompleteSignUp just created this one from the visitor's very first
+      // message — open it directly instead of landing on the list they'd
+      // have to click right back into.
+      if (initialActiveProjectId && list.some((p) => p.id === initialActiveProjectId)) {
+        setActiveId(initialActiveProjectId);
+      } else if (list.length === 0) {
+        setShowNewForm(true);
+      }
     });
-  }, []);
+  }, [initialActiveProjectId]);
 
   const active = projects.find((p) => p.id === activeId) ?? null;
 
