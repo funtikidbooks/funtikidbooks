@@ -1091,11 +1091,12 @@ export function DirectConversation({
                       typeof part === "string" ? (
                         part
                       ) : (
-                        <span key={i} className="inline-flex items-center gap-0.5">
+                        <span key={i} className="inline-flex items-center gap-0.5 max-w-full">
                           <a
                             href={part.url}
                             target="_blank"
                             rel="noreferrer"
+                            className="min-w-0 break-all"
                             style={{ color: mine ? "#fff" : "var(--color-accent-700)", textDecoration: "underline" }}
                           >
                             {part.url}
