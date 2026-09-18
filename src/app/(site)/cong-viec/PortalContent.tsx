@@ -15,6 +15,7 @@ import {
 } from "@/lib/actions/clientPortal";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import { PortalChatWidget } from "./PortalChatWidget";
+import { FuntiWordmark } from "@/components/site/FuntiWordmark";
 import { useDict } from "@/components/site/LocaleProvider";
 import type { ClientMessage, ClientProfile, ClientProject } from "@/lib/types";
 
@@ -104,7 +105,9 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
   return (
     <section className="site-container py-14" style={{ maxWidth: 1040 }}>
       <div className={`flex items-center gap-3 mb-8 ${stage === "ready" ? "justify-between" : "justify-center"}`}>
-        <h1 className="text-3xl">Work With Funti</h1>
+        <h1 className="text-3xl">
+          Work With <FuntiWordmark />
+        </h1>
         {stage === "ready" && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={handleSignOut}>
             {t.portal.signOut}

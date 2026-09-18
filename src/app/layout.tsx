@@ -12,6 +12,14 @@ const headingFont = localFont({
   display: "swap",
 });
 
+// Only for the colored "Funti" wordmark (see FuntiWordmark component) — not
+// a general body/heading typeface.
+const funtiWordmarkFont = localFont({
+  src: "./fonts/Mochido.ttf",
+  variable: "--font-funti-wordmark",
+  display: "swap",
+});
+
 const beVietnamPro = Be_Vietnam_Pro({
   variable: "--font-body",
   subsets: ["latin", "vietnamese"],
@@ -99,7 +107,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       // the workspace's fixed bottom nav drift even after that shell was
       // capped to 100dvh. `100dvh` here tracks the real visible height so
       // nothing downstream gets an inflated floor to scroll into.
-      className={`${headingFont.variable} ${beVietnamPro.variable} h-[100dvh] antialiased`}
+      className={`${headingFont.variable} ${beVietnamPro.variable} ${funtiWordmarkFont.variable} h-[100dvh] antialiased`}
       suppressHydrationWarning
     >
       <head>

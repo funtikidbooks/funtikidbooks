@@ -157,6 +157,7 @@
 
   --font-heading: var(--font-heading);
   --font-body: var(--font-body);
+  --font-funti-wordmark: var(--font-funti-wordmark);
 }
 
 * {
@@ -230,6 +231,24 @@ h4 {
   font-family: var(--font-heading);
   font-weight: 700;
   letter-spacing: -0.01em;
+}
+
+/* Colored "Funti" wordmark (FuntiWordmark component) — exact per-letter
+   colors sampled from the studio's own logo, public/brand/funti-logo.jpg,
+   not theme tokens, so it stays true to the logo in both light and dark
+   mode instead of shifting with the accent palette. */
+.fk-funti-wordmark {
+  font-family: var(--font-funti-wordmark), var(--font-heading);
+  letter-spacing: 0.01em;
+}
+.fk-funti-teal {
+  color: #aee9ef;
+}
+.fk-funti-pink {
+  color: #fcbdc6;
+}
+.fk-funti-orange {
+  color: #ffd07e;
 }
 
 /* ---------- Buttons ---------- */
