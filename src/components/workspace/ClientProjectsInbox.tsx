@@ -230,7 +230,10 @@ export function ClientProjectsInbox({
 
   return (
     <div className="flex-1 flex min-h-0">
-      <div className="w-[300px] flex-none overflow-y-auto" style={{ borderRight: "1px solid var(--color-neutral-200)" }}>
+      <div
+        className={`${active ? "hidden" : "flex"} sm:flex w-full sm:w-[300px] flex-none flex-col overflow-y-auto`}
+        style={{ borderRight: "1px solid var(--color-neutral-200)" }}
+      >
         {items.length === 0 ? (
           <p className="p-4 text-sm" style={{ color: "var(--color-neutral-500)" }}>
             Chưa có khách hàng nào nhắn tin.
@@ -315,7 +318,7 @@ export function ClientProjectsInbox({
         )}
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className={`${active ? "flex" : "hidden"} sm:flex flex-1 flex-col min-h-0`}>
         {!activeProject && !activeVisitor ? (
           <div className="flex-1 flex items-center justify-center text-sm" style={{ color: "var(--color-neutral-500)" }}>
             Chọn một cuộc trò chuyện để xem
@@ -327,8 +330,17 @@ export function ClientProjectsInbox({
                 scattered bits, whether it's a signed-in client (several
                 projects can share one identity) or an anonymous visitor. */}
             <div className="flex items-center justify-between gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-              {activeProject ? (
-                <>
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => setActive(null)}
+                  className="btn-icon sm:hidden flex-none"
+                  style={{ width: 30, height: 30, padding: 0 }}
+                  aria-label="Quay lại danh sách"
+                >
+                  ←
+                </button>
+                {activeProject ? (
                   <div className="flex items-center gap-3 min-w-0">
                     <span
                       className="flex items-center justify-center rounded-full text-sm font-bold overflow-hidden flex-none"
@@ -361,10 +373,8 @@ export function ClientProjectsInbox({
                       </span>
                     </div>
                   </div>
-                </>
-              ) : (
-                activeVisitor && (
-                  <>
+                ) : (
+                  activeVisitor && (
                     <span className="flex items-baseline gap-2 min-w-0">
                       <span className="font-bold text-sm flex-none">{labelForVisitor(activeVisitor)}</span>
                       <span className="tag tag-neutral text-[10px] flex-none">Khách vãng lai</span>
@@ -378,13 +388,13 @@ export function ClientProjectsInbox({
                         </a>
                       )}
                     </span>
-                    {activeVisitor.status === "open" && (
-                      <button type="button" className="btn btn-ghost btn-sm flex-none" onClick={handleCloseVisitor}>
-                        Đóng trò chuyện
-                      </button>
-                    )}
-                  </>
-                )
+                  )
+                )}
+              </div>
+              {activeVisitor?.status === "open" && (
+                <button type="button" className="btn btn-ghost btn-sm flex-none" onClick={handleCloseVisitor}>
+                  Đóng trò chuyện
+                </button>
               )}
             </div>
 
