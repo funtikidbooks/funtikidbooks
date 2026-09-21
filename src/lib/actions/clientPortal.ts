@@ -25,6 +25,20 @@ export async function getPortalState(): Promise<{ loggedIn: boolean; profile: Cl
   } = await supabase.auth.getUser();
   if (!user) return { loggedIn: false, profile: null };
 
+  // The auth.users trigger (handle_new_user) makes every new sign-up a staff
+  // `profiles` row — which put clients into Chấm công and let them open
+  // /workspace. Only Work With Funti sign-ups carry signup_source=client, so
+  // that tag is a safe signal to drop the auto-created staff row here.
+  if (user.user_metadata?.signup_source === "client") {
+    await createAdminClient()
+      .from("profiles")
+      .delete()
+      .eq("id", user.id)
+      .eq("access_role", "staff")
+      .is("role", null)
+      .then(() => {}, () => {});
+  }
+
   const { data } = await supabase.from("clients").select("*").eq("id", user.id).maybeSingle();
   return { loggedIn: true, profile: (data as ClientProfile) ?? null };
 }
