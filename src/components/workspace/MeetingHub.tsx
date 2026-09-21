@@ -47,6 +47,7 @@ import {
   removeReaction,
   searchMeetingMessages,
   notifyMeetingMessageSent,
+  setChannelClosed,
   setDmTabLabel,
   togglePinMessage,
   updateChannel,
@@ -1619,6 +1620,7 @@ export function MeetingHub({
     }
     return map;
   }, [messages]);
+  const [showClosedRooms, setShowClosedRooms] = useState(false);
   const joinedRooms = useMemo(() => channels.filter((c) => c.joined), [channels]);
   // Top-level rooms render in the list as usual; sub-rooms are grouped under
   // their parent instead, shown indented and only while that parent is
@@ -1633,13 +1635,19 @@ export function MeetingHub({
   // mixed into the ordinary PHÒNG HỌP list below the divider.
   const foodRoom = useMemo(() => topLevelJoinedRooms.find((c) => c.is_food_room) ?? null, [topLevelJoinedRooms]);
   const customTopLevelRooms = useMemo(
-    () => topLevelJoinedRooms.filter((c) => !c.is_general && !c.is_food_room),
+    () => topLevelJoinedRooms.filter((c) => !c.is_general && !c.is_food_room && !c.closed_at),
     [topLevelJoinedRooms],
+  );
+  // "Đóng dự án" rooms live in their own collapsed section instead of the
+  // main list — still readable, just out of the way.
+  const closedRooms = useMemo(
+    () => joinedRooms.filter((c) => !c.is_general && !c.is_food_room && !!c.closed_at),
+    [joinedRooms],
   );
   const childRoomsByParent = useMemo(() => {
     const map = new Map<string, MeetingChannelPublic[]>();
     for (const c of joinedRooms) {
-      if (!c.parent_channel_id) continue;
+      if (!c.parent_channel_id || c.closed_at) continue;
       const list = map.get(c.parent_channel_id);
       if (list) list.push(c);
       else map.set(c.parent_channel_id, [c]);
@@ -2545,6 +2553,21 @@ export function MeetingHub({
 
   function handleChannelUpdated(id: string, patch: { name?: string; has_password?: boolean; billing_type?: "hourly" | "milestone" }) {
     setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  }
+
+  async function handleToggleClosed(id: string, closed: boolean) {
+    const room = channels.find((c) => c.id === id);
+    if (!room) return;
+    if (closed && !confirm(`Đóng dự án "${room.name}"? Phòng sẽ chuyển xuống mục "Đã đóng" và chỉ còn xem được, không nhắn thêm được (mở lại bất cứ lúc nào).`)) return;
+    const closedAt = closed ? new Date().toISOString() : null;
+    setError(null);
+    try {
+      await setChannelClosed(id, closed);
+      setChannels((prev) => prev.map((c) => (c.id === id || c.parent_channel_id === id ? { ...c, closed_at: closedAt } : c)));
+      if (closed) setShowClosedRooms(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể đóng dự án");
+    }
   }
 
   function toggleRoomExpanded(id: string) {
@@ -3728,6 +3751,37 @@ export function MeetingHub({
             </div>
             );
           })}
+
+          {closedRooms.length > 0 && (
+            <div className="flex flex-col gap-1 mt-2">
+              <button
+                type="button"
+                onClick={() => setShowClosedRooms((v) => !v)}
+                className="flex items-center gap-1.5 px-1 py-1 text-[11px] font-bold tracking-[0.08em] text-left"
+                style={{ color: "var(--color-neutral-500)" }}
+                aria-expanded={showClosedRooms || closedRooms.some((r) => r.id === activeId)}
+              >
+                <span aria-hidden>{showClosedRooms || closedRooms.some((r) => r.id === activeId) ? "▾" : "▸"}</span>
+                ĐÃ ĐÓNG ({closedRooms.length})
+              </button>
+              {(showClosedRooms || closedRooms.some((r) => r.id === activeId)) &&
+                closedRooms.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => selectChannel(r.id)}
+                    className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
+                    style={{
+                      background: activeId === r.id ? "var(--color-accent-100)" : undefined,
+                      color: activeId === r.id ? "var(--color-accent-700)" : "var(--color-neutral-500)",
+                    }}
+                  >
+                    <span aria-hidden>🔒</span>
+                    <span className="flex-1 truncate">{r.name}</span>
+                  </button>
+                ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -3906,6 +3960,15 @@ export function MeetingHub({
                   <button type="button" onClick={() => handleLeave(activeChannel.id)} className="btn btn-ghost btn-sm">
                     Rời phòng
                   </button>
+                  {(activeChannel.created_by === currentUser.id || isDirectorOrPm) && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleClosed(activeChannel.id, !activeChannel.closed_at)}
+                      className="btn btn-ghost btn-sm"
+                    >
+                      {activeChannel.closed_at ? "Mở lại" : "Đóng dự án"}
+                    </button>
+                  )}
                   {activeChannel.created_by === currentUser.id && (
                     <button type="button" onClick={() => handleDelete(activeChannel.id)} className="btn btn-danger btn-sm">
                       Xoá phòng
@@ -4508,7 +4571,20 @@ export function MeetingHub({
                   )}
                 </div>
               )}
-              <form ref={composerFormRef} onSubmit={handleSend} className="flex items-end gap-2 p-3">
+              {activeChannel.closed_at && (
+                <div
+                  className="flex items-center justify-center gap-2 px-4 py-4 text-[13px] font-semibold text-center"
+                  style={{ color: "var(--color-neutral-600)", background: "var(--color-surface)" }}
+                >
+                  🔒 Dự án đã đóng — chỉ xem lại được.
+                  {(activeChannel.created_by === currentUser.id || isDirectorOrPm) && (
+                    <button type="button" onClick={() => handleToggleClosed(activeChannel.id, false)} className="underline">
+                      Mở lại
+                    </button>
+                  )}
+                </div>
+              )}
+              <form ref={composerFormRef} onSubmit={handleSend} className={`${activeChannel.closed_at ? "hidden" : "flex"} items-end gap-2 p-3`}>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}

@@ -86,6 +86,14 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
 
   const seenAtByChannelId = new Map((memberships ?? []).map((m) => [m.channel_id, m.seen_at]));
 
+  // closed_at is fetched on its own so a database that hasn't run
+  // supabase/meeting_channel_close.sql yet just reads as "nothing closed"
+  // instead of breaking the whole room list.
+  const closedRes = await supabase.from("meeting_channels").select("id, closed_at");
+  const closedAtById = new Map<string, string | null>(
+    closedRes.error ? [] : (closedRes.data ?? []).map((c) => [c.id as string, (c.closed_at as string | null) ?? null]),
+  );
+
   return (channels ?? []).map((c) => {
     const isGeneral = c.is_general as boolean;
     const isFoodRoom = (c.is_food_room as boolean | undefined) ?? false;
@@ -101,6 +109,7 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
       parent_channel_id: (c.parent_channel_id as string | null | undefined) ?? null,
       weekly_hour_cap: (c.weekly_hour_cap as number | null | undefined) ?? null,
       billing_type: ((c.billing_type as "hourly" | "milestone" | undefined) ?? "hourly") as "hourly" | "milestone",
+      closed_at: closedAtById.get(c.id as string) ?? null,
       has_password: !!c.password_hash,
       joined,
       is_new: !isGeneral && !isFoodRoom && joined && seenAtByChannelId.get(c.id as string) == null,
@@ -274,6 +283,19 @@ export async function updateChannel(
   if (input.billingType !== undefined) patch.billing_type = input.billingType;
   const { error } = await supabase.from("meeting_channels").update(patch).eq("id", channelId);
   if (error) throw new Error("Không thể cập nhật phòng");
+  revalidatePath("/workspace/hop");
+}
+
+// Closing a room closes its sub-rooms with it — a finished project has no
+// live sub-rooms left. Same who-can-do-it as editing a room (RLS: creator,
+// director, or PM).
+export async function setChannelClosed(channelId: string, closed: boolean) {
+  const { supabase } = await requireUser();
+  const { error } = await supabase
+    .from("meeting_channels")
+    .update({ closed_at: closed ? new Date().toISOString() : null })
+    .or(`id.eq.${channelId},parent_channel_id.eq.${channelId}`);
+  if (error) throw new Error("Không thể đóng/mở lại dự án — cần chạy file SQL meeting_channel_close.sql trong Supabase trước.");
   revalidatePath("/workspace/hop");
 }
 
@@ -779,13 +801,16 @@ export async function getUnreadMeetingCounts(): Promise<Record<string, number>> 
       ...(generalChannels ?? []).map((c) => c.id as string),
     ]),
   );
-  if (channelIds.length === 0) return {};
+  const { data: closedRows } = await supabase.from("meeting_channels").select("id").not("closed_at", "is", null);
+  const closedIds = new Set((closedRows ?? []).map((c) => c.id as string));
+  const openChannelIds = channelIds.filter((id) => !closedIds.has(id));
+  if (openChannelIds.length === 0) return {};
 
   const { data: reads } = await supabase
     .from("meeting_channel_reads")
     .select("channel_id, last_read_message_id")
     .eq("profile_id", user.id)
-    .in("channel_id", channelIds);
+    .in("channel_id", openChannelIds);
 
   // The read message's own created_at, fetched directly by id rather than
   // pulled from a capped "recent messages" query — a global top-N across
@@ -811,7 +836,7 @@ export async function getUnreadMeetingCounts(): Promise<Record<string, number>> 
 
   const counts: Record<string, number> = {};
   await Promise.all(
-    channelIds.map(async (channelId) => {
+    openChannelIds.map(async (channelId) => {
       let query = supabase
         .from("meeting_messages")
         .select("id", { count: "exact", head: true })

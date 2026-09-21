@@ -157,6 +157,8 @@ export type MeetingChannel = {
   // "theo giờ" vs "theo chặng" (milestone/fixed-price per phase) — only
   // 'hourly' rooms show up as a row on the "Báo cáo giờ" timesheet.
   billing_type: "hourly" | "milestone";
+  // Set by "Đóng dự án" — see supabase/meeting_channel_close.sql. null = open.
+  closed_at?: string | null;
 };
 
 // What the client actually receives for a channel — password_hash is never
