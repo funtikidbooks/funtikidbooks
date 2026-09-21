@@ -82,19 +82,11 @@ export default async function WorkspaceLayout({
     redirect("/quan-tri");
   }
 
-  const myProfile: Profile = profile ?? {
-    id: user.id,
-    email: user.email ?? "",
-    display_name: user.email ?? "Thành viên",
-    avatar_url: null,
-    role: null,
-    joined_at: null,
-    phone: null,
-    address: null,
-    access_role: "staff",
-    theme: null,
-    created_at: new Date().toISOString(),
-  };
+  // No staff profile means a client signed in through Work With Funti
+  // (handle_new_user() skips them) — the workspace is staff-only.
+  if (!profile) redirect("/cong-viec");
+
+  const myProfile: Profile = profile;
 
   // Same "director or exact chức danh 'Project Manager'" rule as
   // can_manage_hr() in schema.sql — a PM can already see the HR/finance

@@ -306,7 +306,10 @@ function StartForm({ onSent, onError }: { onSent: () => void; onError: (msg: str
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: { emailRedirectTo: `${window.location.origin}/cong-viec` },
+        // signup_source lets handle_new_user() (supabase/schema.sql) skip
+        // creating a staff `profiles` row for a client — otherwise every
+        // client sign-in showed up in Chấm công and could open /workspace.
+        options: { emailRedirectTo: `${window.location.origin}/cong-viec`, data: { signup_source: "client" } },
       });
       if (error) throw error;
       onSent();
