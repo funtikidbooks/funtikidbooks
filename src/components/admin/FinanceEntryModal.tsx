@@ -17,7 +17,7 @@ const TYPE_LABELS: Record<FinanceEntryType, string> = {
 const CATEGORY_SUGGESTIONS: Record<FinanceEntryType, string[]> = {
   revenue: ["Doanh thu dự án sách", "Doanh thu thiết kế nhân vật", "Doanh thu dịch vụ khác"],
   fixed_cost: ["Thuê văn phòng", "Phần mềm & công cụ", "Internet & điện thoại", "Bảo hiểm / thuế cố định", "Marketing cố định", "Khấu hao thiết bị"],
-  variable_cost: ["Thuê ngoài / freelancer", "In ấn / nguyên vật liệu", "Hoa hồng", "Phí giao dịch / thanh toán", "Vận chuyển"],
+  variable_cost: ["Lương nhân viên", "Connect Upwork", "Upwork Plus", "Tiền nhà", "Tiền văn phòng", "Phí quản lý", "Thuê ngoài / freelancer", "In ấn / nguyên vật liệu", "Hoa hồng", "Phí giao dịch / thanh toán", "Vận chuyển"],
 };
 
 export function FinanceEntryModal({
@@ -37,6 +37,7 @@ export function FinanceEntryModal({
   const [category, setCategory] = useState(entry?.category ?? "");
   const [amount, setAmount] = useState<number | "">(entry?.amount ?? "");
   const [note, setNote] = useState(entry?.note ?? "");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -108,20 +109,52 @@ export function FinanceEntryModal({
 
           <div className="field">
             <label htmlFor="fe-category">Khoản mục</label>
-            <input
-              id="fe-category"
-              className="input"
-              list="fe-category-suggestions"
-              placeholder="VD: Thuê văn phòng"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              autoFocus
-            />
-            <datalist id="fe-category-suggestions">
-              {CATEGORY_SUGGESTIONS[type].map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+            <div className="relative">
+              <input
+                id="fe-category"
+                className="input"
+                style={{ paddingRight: 44 }}
+                placeholder="VD: Thuê văn phòng"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setShowSuggestions((v) => !v)}
+                className="absolute flex items-center justify-center"
+                style={{ top: 0, right: 0, bottom: 0, width: 44, color: "var(--color-neutral-500)", fontSize: 14 }}
+                aria-label="Chọn khoản mục có sẵn"
+                aria-expanded={showSuggestions}
+              >
+                {showSuggestions ? "▲" : "▼"}
+              </button>
+            </div>
+            {showSuggestions && (
+              <div
+                className="mt-1 rounded-[8px] overflow-y-auto"
+                style={{ maxHeight: 220, border: "1px solid var(--color-neutral-200)", background: "var(--color-surface)" }}
+              >
+                {CATEGORY_SUGGESTIONS[type].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => {
+                      setCategory(c);
+                      setShowSuggestions(false);
+                    }}
+                    className="w-full text-left px-3 py-2.5 text-sm"
+                    style={{
+                      borderBottom: "1px solid var(--color-neutral-100)",
+                      fontWeight: c === category ? 700 : 500,
+                      background: c === category ? "var(--color-accent-100)" : undefined,
+                    }}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="field">
