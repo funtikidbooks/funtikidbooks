@@ -46,7 +46,7 @@ import {
   removeChannelMember,
   removeReaction,
   searchMeetingMessages,
-  sendMeetingMessage,
+  notifyMeetingMessageSent,
   setDmTabLabel,
   togglePinMessage,
   updateChannel,
@@ -2782,11 +2782,12 @@ export function MeetingHub({
         // photo, which is exactly what was failing with an opaque
         // "unexpected response" error. The server action only ever sees the
         // already-uploaded object's small JSON metadata now.
+        const supabase = createClient();
         let attachment: { url: string; filename: string; mime: string; size: number } | null = null;
+        let storagePath: string | null = null;
         if (file) {
-          const supabase = createClient();
           const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
-          const storagePath = `meetings/${channelId}/${crypto.randomUUID()}.${ext}`;
+          storagePath = `meetings/${channelId}/${crypto.randomUUID()}.${ext}`;
           const { error: uploadError } = await supabase.storage
             .from("task-attachments")
             .upload(storagePath, file, { contentType: file.type });
@@ -2794,11 +2795,30 @@ export function MeetingHub({
           const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
           attachment = { url: publicUrlData.publicUrl, filename: file.name, mime: file.type, size: file.size };
         }
-        const sent = await sendMeetingMessage(channelId, content, attachment, replyId);
-        if (sent) {
-          setMessages((prev) => mergeServerMessage(prev, sent, tempId));
-          pendingPayloadsRef.current.delete(tempId);
+        // Inserted directly with the browser client (same RLS as the old
+        // server action, which used the caller's own session too) instead
+        // of via a Server Action: Next runs a client's Server Actions one
+        // at a time, so a send used to sit in line behind any background
+        // room sync still in flight — the "lag / sometimes won't send"
+        // staff reported.
+        const insertRow: Partial<MeetingMessage> & { channel_id: string; sender_id: string } = {
+          channel_id: channelId,
+          sender_id: currentUser.id,
+          content,
+          attachment_url: attachment?.url ?? null,
+          attachment_filename: attachment?.filename ?? null,
+          attachment_mime: attachment?.mime ?? null,
+          attachment_size: attachment?.size ?? null,
+        };
+        if (replyId) insertRow.reply_to_message_id = replyId;
+        const { data: sent, error: insertError } = await supabase.from("meeting_messages").insert(insertRow).select("*").single();
+        if (insertError || !sent) {
+          if (storagePath) await supabase.storage.from("task-attachments").remove([storagePath]).catch(() => {});
+          throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
         }
+        setMessages((prev) => mergeServerMessage(prev, sent as MeetingMessage, tempId));
+        pendingPayloadsRef.current.delete(tempId);
+        notifyMeetingMessageSent(channelId, content, !!attachment).catch(() => {});
       } catch (err) {
         setError(sendErrorMessage(err, "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại."));
         setFailedIds((prev) => new Set(prev).add(tempId));
@@ -2810,7 +2830,7 @@ export function MeetingHub({
         });
       }
     },
-    [mergeServerMessage],
+    [mergeServerMessage, currentUser.id],
   );
 
   // Appears instantly instead of waiting on the send round-trip — matches

@@ -523,72 +523,13 @@ export async function searchMeetingMessages(query: string): Promise<MeetingSearc
   }));
 }
 
-const MAX_SIZE = 50 * 1024 * 1024;
-
-// The file itself is uploaded to Supabase Storage client-side (see
-// MeetingHub's attemptSend) rather than routed through this action as
-// FormData — Vercel caps a serverless function's own request body at 4.5MB
-// regardless of Next.js's own (much larger) bodySizeLimit config, a
-// platform limit no app-level setting can raise. A staff illustration file
-// clears that in one photo — this consistently failed with an opaque
-// "unexpected response" error for any attachment over that line. This
-// action only ever receives the already-uploaded object's metadata, which
-// is JSON-small no matter the file size. The size check below is still
-// worth keeping as a sanity guard even though it now trusts client-reported
-// metadata instead of the real bytes — this is an internal staff tool, not
-// a public upload endpoint. No type allowlist: this is a work chat, staff
-// share whatever file the project needs (.docx, .zip, .psd, …), and a
-// non-image attachment already renders generically as a 📄 download link.
-export async function sendMeetingMessage(
-  channelId: string,
-  content: string,
-  attachment?: { url: string; filename: string; mime: string; size: number } | null,
-  replyToMessageId?: string | null,
-) {
+// The message row itself is now inserted straight from the browser (see
+// MeetingHub's attemptSend) so sending never waits in the Server Action
+// queue behind background syncs — this is only the push-notification half,
+// returning immediately and doing the fan-out in after().
+export async function notifyMeetingMessageSent(channelId: string, content: string, hasAttachment: boolean) {
   const { supabase, user } = await requireUser();
-  const trimmed = content.trim();
-
-  if (attachment) {
-    if (attachment.size > MAX_SIZE) throw new Error("Tệp vượt quá 50MB");
-  }
-
-  if (!trimmed && !attachment) return null;
-
-  // reply_to_message_id is only included when actually replying, so a
-  // director who hasn't re-run supabase/schema.sql yet (adding that
-  // column) can still send ordinary messages without erroring — only the
-  // reply feature itself needs that migration.
-  const insertRow: Partial<MeetingMessage> & { channel_id: string; sender_id: string } = {
-    channel_id: channelId,
-    sender_id: user.id,
-    content: trimmed,
-    attachment_url: attachment?.url ?? null,
-    attachment_filename: attachment?.filename ?? null,
-    attachment_mime: attachment?.mime ?? null,
-    attachment_size: attachment?.size ?? null,
-  };
-  if (replyToMessageId) insertRow.reply_to_message_id = replyToMessageId;
-
-  const { data, error } = await supabase.from("meeting_messages").insert(insertRow).select("*").single();
-
-  if (error || !data) {
-    // The file already made it to storage — don't leave it orphaned just
-    // because the row it was meant to belong to never got created.
-    if (attachment) {
-      const path = storagePathFromPublicUrl(attachment.url, "task-attachments");
-      if (path) await supabase.storage.from("task-attachments").remove([path]).catch(() => {});
-    }
-    throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
-  }
-
-  // Scheduled with after() rather than fired-and-forgotten inline — on
-  // Vercel's serverless runtime, a plain un-awaited promise can get cut off
-  // the moment the response is sent, which showed up to staff as push
-  // notifications arriving late or not at all. after() guarantees this runs
-  // to completion without delaying the response itself.
-  after(() => notifyChannelMembers(supabase, channelId, user.id, trimmed, !!attachment).catch(() => {}));
-
-  return data as MeetingMessage;
+  after(() => notifyChannelMembers(supabase, channelId, user.id, content.trim(), hasAttachment).catch(() => {}));
 }
 
 // Forwards a message someone already has on screen to another room they're
