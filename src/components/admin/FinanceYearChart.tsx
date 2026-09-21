@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { MONTH_LABELS } from "@/lib/constants/attendance";
 
 export type FinanceYearChartRow = {
@@ -39,6 +40,9 @@ const SERIES: { key: "revenue" | "totalCost" | "netProfit"; label: string; color
 ];
 
 export function FinanceYearChart({ rows }: { rows: FinanceYearChartRow[] }) {
+  // Hover on a mouse, tap on touch (iPad/phone have no hover, so the old
+  // native <title> tooltip never showed there).
+  const [active, setActive] = useState<{ monthIndex: number; key: (typeof SERIES)[number]["key"] } | null>(null);
   const withTotals = rows.map((r) => ({
     ...r,
     totalCost: r.fixedCost + r.variableCost + r.salaryTotal,
@@ -63,6 +67,20 @@ export function FinanceYearChart({ rows }: { rows: FinanceYearChartRow[] }) {
     (v, i, arr) => arr.indexOf(v) === i,
   );
 
+  const activeSeries = active ? SERIES.find((s) => s.key === active.key) : null;
+  const activeRow = active ? withTotals.find((r) => r.monthIndex === active.monthIndex) : null;
+  const activeTip =
+    active && activeSeries && activeRow
+      ? {
+          monthIndex: active.monthIndex,
+          label: activeSeries.label,
+          color: activeSeries.color,
+          value: activeRow[active.key],
+          px: x(active.monthIndex),
+          py: y(activeRow[active.key]),
+        }
+      : null;
+
   return (
     <div className="card elev-sm p-4 flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-4">
@@ -74,7 +92,15 @@ export function FinanceYearChart({ rows }: { rows: FinanceYearChartRow[] }) {
         ))}
       </div>
 
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="w-full" style={{ height: "auto" }}>
+      <div className="relative">
+      <svg
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        className="w-full"
+        style={{ height: "auto" }}
+        onPointerDown={(e) => {
+          if (e.target === e.currentTarget) setActive(null);
+        }}
+      >
         {gridValues.map((v) => (
           <g key={v}>
             <line
@@ -102,15 +128,55 @@ export function FinanceYearChart({ rows }: { rows: FinanceYearChartRow[] }) {
           return (
             <g key={s.key}>
               <polyline points={points} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-              {withTotals.map((r) => (
-                <circle key={r.monthIndex} cx={x(r.monthIndex)} cy={y(r[s.key])} r={3} fill={s.color}>
-                  <title>{`${MONTH_LABELS[r.monthIndex]}: ${s.label} ${new Intl.NumberFormat("vi-VN").format(r[s.key])} đ`}</title>
-                </circle>
-              ))}
+              {withTotals.map((r) => {
+                const isActive = active?.monthIndex === r.monthIndex && active.key === s.key;
+                return (
+                  <g key={r.monthIndex}>
+                    <circle cx={x(r.monthIndex)} cy={y(r[s.key])} r={isActive ? 5.5 : 3} fill={s.color} />
+                    <circle
+                      cx={x(r.monthIndex)}
+                      cy={y(r[s.key])}
+                      r={14}
+                      fill="transparent"
+                      style={{ cursor: "pointer" }}
+                      onPointerEnter={(e) => {
+                        if (e.pointerType === "mouse") setActive({ monthIndex: r.monthIndex, key: s.key });
+                      }}
+                      onPointerLeave={(e) => {
+                        if (e.pointerType === "mouse") setActive(null);
+                      }}
+                      onPointerDown={(e) => {
+                        if (e.pointerType === "mouse") return;
+                        setActive((cur) => (cur?.monthIndex === r.monthIndex && cur.key === s.key ? null : { monthIndex: r.monthIndex, key: s.key }));
+                      }}
+                    />
+                  </g>
+                );
+              })}
             </g>
           );
         })}
       </svg>
+      {activeTip && (
+        <div
+          className="absolute pointer-events-none rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold whitespace-nowrap"
+          style={{
+            left: `${Math.min(88, Math.max(12, (activeTip.px / WIDTH) * 100))}%`,
+            top: `${(activeTip.py / HEIGHT) * 100}%`,
+            transform: activeTip.py < 70 ? "translate(-50%, 14px)" : "translate(-50%, calc(-100% - 12px))",
+            background: "var(--color-neutral-900)",
+            color: "#fff",
+            boxShadow: "var(--shadow-md)",
+          }}
+        >
+          <div style={{ opacity: 0.75 }}>{MONTH_LABELS[activeTip.monthIndex]}</div>
+          <div className="flex items-center gap-1.5">
+            <span className="rounded-full flex-none" style={{ width: 8, height: 8, background: activeTip.color }} />
+            {activeTip.label}: {new Intl.NumberFormat("vi-VN").format(activeTip.value)} đ
+          </div>
+        </div>
+      )}
+      </div>
     </div>
   );
 }
