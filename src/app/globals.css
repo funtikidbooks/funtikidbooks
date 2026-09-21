@@ -1002,3 +1002,34 @@ select.input:focus {
   background: var(--color-neutral-300);
   border-radius: 4px;
 }
+
+/* ---------- Crayon paper texture (public pages only) ----------
+   A faint waxy, dry-brush grain over the plain page background. It is a
+   ::before layered *behind* the page content (z-index -1 inside an isolated
+   <main>), so sections that paint their own background or photo cover it and
+   only the white/cream areas show the texture. /textures/crayon.png is used
+   as an alpha mask (640px, shown at 320px for retina) and --fk-crayon-ink
+   picks its colour per theme, so the page stays white, just with grain.
+   To use an artist-drawn tile, replace public/textures/crayon.png with a
+   seamless PNG that has transparency (drawn strokes = opaque) — nothing else
+   needs to change. */
+.fk-crayon {
+  position: relative;
+  isolation: isolate;
+  --fk-crayon-ink: rgba(140, 110, 80, 0.05);
+}
+:root[data-theme="dark"] .fk-crayon {
+  --fk-crayon-ink: rgba(255, 240, 220, 0.03);
+}
+.fk-crayon::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--fk-crayon-ink);
+  -webkit-mask-image: url("/textures/crayon.png");
+  mask-image: url("/textures/crayon.png");
+  -webkit-mask-size: 320px 320px;
+  mask-size: 320px 320px;
+}
