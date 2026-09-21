@@ -1943,7 +1943,22 @@ export function MeetingHub({
   const serverIdsRef = useRef(new Map<string, string>());
   const mergeServerMessage = useCallback(
     (prev: MeetingMessage[], confirmed: MeetingMessage, tempId?: string) => {
-      if (prev.some((m) => m.id === confirmed.id)) return prev;
+      // Our own send, recognised by the row id it was posted with — exact,
+      // unlike the content match below, and it also clears a leftover
+      // "Đang gửi…" bubble when the confirmed row already got in by
+      // another route (realtime echo, resync).
+      const tempForServerId = [...serverIdsRef.current.entries()].find(([, sid]) => sid === confirmed.id)?.[0];
+      const alreadyHas = prev.some((m) => m.id === confirmed.id);
+      if (tempForServerId) {
+        const idx = prev.findIndex((m) => m.id === tempForServerId);
+        if (idx !== -1) {
+          if (alreadyHas) return prev.filter((_, i) => i !== idx);
+          const next = [...prev];
+          next[idx] = confirmed;
+          return next;
+        }
+      }
+      if (alreadyHas) return prev;
       if (tempId) {
         const idx = prev.findIndex((m) => m.id === tempId);
         if (idx !== -1) {
@@ -2072,7 +2087,13 @@ export function MeetingHub({
     const baseMessages = cached ? cached.messages : messagesRef.current;
     const baseReactions = cached ? cached.reactions : reactionsRef.current;
 
-    const messagesAfter = needsFullFetch ? undefined : latestOf(baseMessages.map((m) => m.created_at));
+    // Optimistic ("temp-") bubbles carry this device's own clock, which can
+    // run ahead of the server's — counting them would move the cursor past
+    // real messages (including our own just-sent one), which then never got
+    // fetched and left the bubble stuck on "Đang gửi…" for good.
+    const messagesAfter = needsFullFetch
+      ? undefined
+      : latestOf(baseMessages.filter((m) => !m.id.startsWith("temp-")).map((m) => m.created_at));
     const reactionsAfter = needsFullFetch ? undefined : latestOf(baseReactions.map((r) => r.created_at));
 
     // One combined round trip (see getRoomSync's own comment) instead of
@@ -2184,7 +2205,7 @@ export function MeetingHub({
             roomCacheRef.current.set(room.id, stored);
           }
         }
-        const messagesAfter = base ? latestOf(base.messages.map((m) => m.created_at)) : undefined;
+        const messagesAfter = base ? latestOf(base.messages.filter((m) => !m.id.startsWith("temp-")).map((m) => m.created_at)) : undefined;
         const reactionsAfter = base ? latestOf(base.reactions.map((r) => r.created_at)) : undefined;
         try {
           const {

@@ -293,7 +293,22 @@ export function DirectConversation({
   const serverIdsRef = useRef(new Map<string, string>());
   const mergeServerMessage = useCallback(
     (prev: DirectMessage[], confirmed: DirectMessage, tempId?: string) => {
-      if (prev.some((m) => m.id === confirmed.id)) return prev;
+      // Our own send, recognised by the row id it was posted with — exact,
+      // unlike the content match below, and it also clears a leftover
+      // "Đang gửi…" bubble when the confirmed row already got in by
+      // another route (realtime echo, resync).
+      const tempForServerId = [...serverIdsRef.current.entries()].find(([, sid]) => sid === confirmed.id)?.[0];
+      const alreadyHas = prev.some((m) => m.id === confirmed.id);
+      if (tempForServerId) {
+        const idx = prev.findIndex((m) => m.id === tempForServerId);
+        if (idx !== -1) {
+          if (alreadyHas) return prev.filter((_, i) => i !== idx);
+          const next = [...prev];
+          next[idx] = confirmed;
+          return next;
+        }
+      }
+      if (alreadyHas) return prev;
       if (tempId) {
         const idx = prev.findIndex((m) => m.id === tempId);
         if (idx !== -1) {
@@ -347,7 +362,12 @@ export function DirectConversation({
     const latestOf = (timestamps: string[]) =>
       timestamps.length === 0 ? undefined : timestamps.reduce((max, t) => (t > max ? t : max));
 
-    const messagesAfter = isNewPeer ? undefined : latestOf(messagesRef.current.map((m) => m.created_at));
+    // Skip optimistic ("temp-") bubbles: they carry this device's own clock,
+    // which can run ahead of the server's and push the cursor past real
+    // messages, leaving our just-sent one stuck on "Đang gửi…".
+    const messagesAfter = isNewPeer
+      ? undefined
+      : latestOf(messagesRef.current.filter((m) => !m.id.startsWith("temp-")).map((m) => m.created_at));
     const reactionsAfter = isNewPeer ? undefined : latestOf(reactionsRef.current.map((r) => r.created_at));
 
     getConversation(peer.id, messagesAfter)
