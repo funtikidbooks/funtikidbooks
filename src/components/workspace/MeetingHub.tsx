@@ -3855,7 +3855,7 @@ export function MeetingHub({
         ) : (
           <>
             <div
-              className="flex-none flex items-center gap-2 px-4 py-3"
+              className="flex-none flex flex-wrap items-center gap-2 px-4 py-3"
               style={{ borderBottom: "1px solid var(--color-neutral-200)" }}
             >
               <button
@@ -3868,7 +3868,7 @@ export function MeetingHub({
                 ☰
               </button>
               <span aria-hidden style={{ fontSize: 18 }}>{activeChannel.icon}</span>
-              <span className="flex-1 min-w-0 flex flex-col">
+              <span className="flex-1 min-w-[160px] flex flex-col">
                 {activeChannel.parent_channel_id && (
                   <span className="text-[10px] truncate" style={{ color: "var(--color-neutral-500)" }}>
                     ↳ {channels.find((c) => c.id === activeChannel.parent_channel_id)?.name ?? ""}
@@ -3998,20 +3998,20 @@ export function MeetingHub({
               </button>
               {!activeChannel.is_general && !activeChannel.is_food_room && (
                 <>
-                  <button type="button" onClick={() => handleLeave(activeChannel.id)} className="btn btn-ghost btn-sm">
+                  <button type="button" onClick={() => handleLeave(activeChannel.id)} className="btn btn-ghost btn-sm whitespace-nowrap">
                     Rời phòng
                   </button>
                   {(activeChannel.created_by === currentUser.id || isDirectorOrPm) && (
                     <button
                       type="button"
                       onClick={() => handleToggleClosed(activeChannel.id, !activeChannel.closed_at)}
-                      className="btn btn-ghost btn-sm"
+                      className="btn btn-ghost btn-sm whitespace-nowrap"
                     >
                       {activeChannel.closed_at ? "Mở lại" : "Đóng dự án"}
                     </button>
                   )}
                   {activeChannel.created_by === currentUser.id && (
-                    <button type="button" onClick={() => handleDelete(activeChannel.id)} className="btn btn-danger btn-sm">
+                    <button type="button" onClick={() => handleDelete(activeChannel.id)} className="btn btn-danger btn-sm whitespace-nowrap">
                       Xoá phòng
                     </button>
                   )}
