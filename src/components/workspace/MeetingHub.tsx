@@ -3902,7 +3902,7 @@ export function MeetingHub({
         ) : (
           <>
             <div
-              className="flex-none flex flex-wrap items-center gap-2 px-4 py-3"
+              className="flex-none flex flex-wrap sm:flex-nowrap items-center gap-2 px-4 py-3"
               style={{ borderBottom: "1px solid var(--color-neutral-200)" }}
             >
               <button
@@ -3915,7 +3915,7 @@ export function MeetingHub({
                 ☰
               </button>
               <span aria-hidden style={{ fontSize: 18 }}>{activeChannel.icon}</span>
-              <span className="flex-1 min-w-[160px] flex flex-col">
+              <span className="flex-1 min-w-0 basis-[calc(100%-64px)] sm:basis-0 flex flex-col">
                 {activeChannel.parent_channel_id && (
                   <span className="text-[10px] truncate" style={{ color: "var(--color-neutral-500)" }}>
                     ↳ {channels.find((c) => c.id === activeChannel.parent_channel_id)?.name ?? ""}
@@ -3925,7 +3925,7 @@ export function MeetingHub({
               </span>
               {displayedRoomMembers.length > 0 && (
                 <span
-                  className="hidden sm:flex items-center -space-x-2 flex-none"
+                  className="hidden xl:flex items-center -space-x-2 flex-none"
                   title={displayedRoomMembers.map((m) => m.display_name).join(", ")}
                 >
                   {displayedRoomMembers.slice(0, 5).map((m) => (
