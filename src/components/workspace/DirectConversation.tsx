@@ -10,7 +10,7 @@ import {
   getOlderDirectMessages,
   markDirectMessagesRead,
   removeDirectReaction,
-  sendDirectMessage,
+  notifyDirectMessageSent,
 } from "@/lib/actions/messages";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
@@ -290,6 +290,7 @@ export function DirectConversation({
   // own message back) falls back to matching the oldest still-pending
   // temp bubble with the same content, so the rare case of the realtime
   // event arriving before our own await does doesn't leave a duplicate.
+  const serverIdsRef = useRef(new Map<string, string>());
   const mergeServerMessage = useCallback(
     (prev: DirectMessage[], confirmed: DirectMessage, tempId?: string) => {
       if (prev.some((m) => m.id === confirmed.id)) return prev;
@@ -747,12 +748,13 @@ export function DirectConversation({
         // photo, which is exactly what was failing with an opaque
         // "unexpected response" error. The server action only ever sees the
         // already-uploaded object's small JSON metadata now.
+        const supabase = createClient();
         let attachment: { url: string; filename: string; mime: string; size: number } | null = null;
+        let storagePath: string | null = null;
         if (file) {
-          const supabase = createClient();
           const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
           const conversationKey = [currentUser.id, peer.id].sort().join("-");
-          const storagePath = `dm/${conversationKey}/${crypto.randomUUID()}.${ext}`;
+          storagePath = `dm/${conversationKey}/${crypto.randomUUID()}.${ext}`;
           const { error: uploadError } = await supabase.storage
             .from("task-attachments")
             .upload(storagePath, file, { contentType: file.type });
@@ -760,11 +762,63 @@ export function DirectConversation({
           const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
           attachment = { url: publicUrlData.publicUrl, filename: file.name, mime: file.type, size: file.size };
         }
-        const sent = await sendDirectMessage(peer.id, content, attachment);
-        if (sent) {
-          setMessages((prev) => mergeServerMessage(prev, sent, tempId));
-          pendingPayloadsRef.current.delete(tempId);
+        // Inserted directly with the browser client instead of a Server
+        // Action (which Next runs one at a time, so a send queued behind
+        // background syncs). The row id is fixed per message so a retry
+        // after a lost reply can't post it twice; 3 tries x 10s so a stalled
+        // connection no longer leaves "Đang gửi…" on screen forever.
+        let serverId = serverIdsRef.current.get(tempId);
+        if (!serverId) {
+          serverId = crypto.randomUUID();
+          serverIdsRef.current.set(tempId, serverId);
         }
+        const insertRow = {
+          id: serverId,
+          sender_id: currentUser.id,
+          recipient_id: peer.id,
+          content,
+          attachment_url: attachment?.url ?? null,
+          attachment_filename: attachment?.filename ?? null,
+          attachment_mime: attachment?.mime ?? null,
+          attachment_size: attachment?.size ?? null,
+        };
+        let sent: DirectMessage | null = null;
+        let lastError: { code?: string; message: string } | null = null;
+        for (let attempt = 0; attempt < 3 && !sent; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 1000));
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 10000);
+          try {
+            const res = await supabase.from("direct_messages").insert(insertRow).select("*").abortSignal(controller.signal).single();
+            if (!res.error && res.data) {
+              sent = res.data as DirectMessage;
+              break;
+            }
+            lastError = res.error ?? { message: "no data" };
+            if (lastError.code === "23505") {
+              const existing = await supabase.from("direct_messages").select("*").eq("id", serverId).maybeSingle();
+              if (existing.data) sent = existing.data as DirectMessage;
+              break;
+            }
+            if (lastError.code) break;
+          } catch (err) {
+            lastError = { message: err instanceof Error ? err.message : "network" };
+          } finally {
+            clearTimeout(timer);
+          }
+        }
+        if (!sent) {
+          if (storagePath) await supabase.storage.from("task-attachments").remove([storagePath]).catch(() => {});
+          throw new Error(
+            lastError?.code
+              ? "Không thể gửi tin nhắn"
+              : "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại.",
+          );
+        }
+        setMessages((prev) => mergeServerMessage(prev, sent, tempId));
+        pendingPayloadsRef.current.delete(tempId);
+        serverIdsRef.current.delete(tempId);
+        notifyDirectMessageSent(peer.id, content, !!attachment).catch(() => {});
       } catch (err) {
         setError(sendErrorMessage(err, "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại."));
         setFailedIds((prev) => new Set(prev).add(tempId));

@@ -3,7 +3,6 @@
 import { after } from "next/server";
 import { requireUser } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
-import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { DirectMessage, DirectMessageReaction, DirectMessageSearchResult } from "@/lib/types";
 
 const DM_PAGE_SIZE = 200;
@@ -169,73 +168,22 @@ export async function searchDirectMessages(query: string): Promise<DirectMessage
   }));
 }
 
-const MAX_SIZE = 50 * 1024 * 1024;
 
-// The file itself is uploaded to Supabase Storage client-side (see
-// DirectConversation's attemptSend) rather than routed through this action
-// as FormData — Vercel caps a serverless function's own request body at
-// 4.5MB regardless of Next.js's own (much larger) bodySizeLimit config, a
-// platform limit no app-level setting can raise. A staff illustration file
-// clears that in one photo. This action only ever receives the already-
-// uploaded object's metadata, which is JSON-small no matter the file size.
-// The size check below is still worth keeping as a sanity guard even though
-// it now trusts client-reported metadata instead of the real bytes — this
-// is an internal staff tool, not a public upload endpoint. No type
-// allowlist: this is a work chat, staff share whatever file the project
-// needs (.docx, .zip, .psd, …), and a non-image attachment already renders
-// generically as a 📄 download link.
-export async function sendDirectMessage(
-  recipientId: string,
-  content: string,
-  attachment?: { url: string; filename: string; mime: string; size: number } | null,
-) {
+// The message row itself is inserted straight from the browser (see
+// DirectConversation's attemptSend) so a send never waits in the Server
+// Action queue behind background syncs — this is only the push half.
+export async function notifyDirectMessageSent(recipientId: string, content: string, hasAttachment: boolean) {
   const { supabase, user } = await requireUser();
   const trimmed = content.trim();
-
-  if (attachment) {
-    if (attachment.size > MAX_SIZE) throw new Error("Tệp vượt quá 50MB");
-  }
-
-  if (!trimmed && !attachment) return null;
-
-  const { data, error } = await supabase
-    .from("direct_messages")
-    .insert({
-      sender_id: user.id,
-      recipient_id: recipientId,
-      content: trimmed,
-      attachment_url: attachment?.url ?? null,
-      attachment_filename: attachment?.filename ?? null,
-      attachment_mime: attachment?.mime ?? null,
-      attachment_size: attachment?.size ?? null,
-    })
-    .select("*")
-    .single();
-
-  if (error || !data) {
-    if (attachment) {
-      const path = storagePathFromPublicUrl(attachment.url, "task-attachments");
-      if (path) await supabase.storage.from("task-attachments").remove([path]).catch(() => {});
-    }
-    throw new Error("Không thể gửi tin nhắn");
-  }
-
-  // Scheduled with after() rather than fired-and-forgotten inline — on
-  // Vercel's serverless runtime, a plain un-awaited promise can get cut off
-  // the moment the response is sent, which showed up to staff as push
-  // notifications arriving late or not at all. after() guarantees this runs
-  // to completion without delaying the response itself.
   after(async () => {
     const { data: senderProfile } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
     await sendPushToUser(recipientId, {
       title: senderProfile?.display_name ?? "Tin nhắn mới",
-      body: trimmed || (attachment ? "📎 Đã gửi một tệp đính kèm" : ""),
+      body: trimmed || (hasAttachment ? "📎 Đã gửi một tệp đính kèm" : ""),
       senderId: user.id,
       url: `/workspace/hop?dm=${user.id}`,
     }).catch(() => {});
   });
-
-  return data as DirectMessage;
 }
 
 // Forwards a message someone already has on screen into a 1:1 conversation

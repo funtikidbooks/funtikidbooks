@@ -1940,6 +1940,7 @@ export function MeetingHub({
   // own message back) falls back to matching the oldest still-pending
   // temp bubble with the same content, so the rare case of the realtime
   // event arriving before our own await does doesn't leave a duplicate.
+  const serverIdsRef = useRef(new Map<string, string>());
   const mergeServerMessage = useCallback(
     (prev: MeetingMessage[], confirmed: MeetingMessage, tempId?: string) => {
       if (prev.some((m) => m.id === confirmed.id)) return prev;
@@ -2870,7 +2871,16 @@ export function MeetingHub({
         // at a time, so a send used to sit in line behind any background
         // room sync still in flight — the "lag / sometimes won't send"
         // staff reported.
-        const insertRow: Partial<MeetingMessage> & { channel_id: string; sender_id: string } = {
+        // The row id is chosen here and reused on every retry of this same
+        // message, so a send that reached the server but whose reply got
+        // lost (weak phone signal) can be retried without posting twice.
+        let serverId = serverIdsRef.current.get(tempId);
+        if (!serverId) {
+          serverId = crypto.randomUUID();
+          serverIdsRef.current.set(tempId, serverId);
+        }
+        const insertRow: Partial<MeetingMessage> & { id: string; channel_id: string; sender_id: string } = {
+          id: serverId,
           channel_id: channelId,
           sender_id: currentUser.id,
           content,
@@ -2880,13 +2890,50 @@ export function MeetingHub({
           attachment_size: attachment?.size ?? null,
         };
         if (replyId) insertRow.reply_to_message_id = replyId;
-        const { data: sent, error: insertError } = await supabase.from("meeting_messages").insert(insertRow).select("*").single();
-        if (insertError || !sent) {
-          if (storagePath) await supabase.storage.from("task-attachments").remove([storagePath]).catch(() => {});
-          throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
+        // Up to 3 tries, 10s each, for network-level failures only — a
+        // send used to sit on "Đang gửi…" forever when the connection
+        // stalled, with nothing ever timing it out.
+        let sent: MeetingMessage | null = null;
+        let lastError: { code?: string; message: string } | null = null;
+        for (let attempt = 0; attempt < 3 && !sent; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 1000));
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 10000);
+          try {
+            const res = await supabase
+              .from("meeting_messages")
+              .insert(insertRow)
+              .select("*")
+              .abortSignal(controller.signal)
+              .single();
+            if (!res.error && res.data) {
+              sent = res.data as MeetingMessage;
+              break;
+            }
+            lastError = res.error ?? { message: "no data" };
+            if (lastError.code === "23505") {
+              // An earlier try actually landed — fetch it instead of failing.
+              const existing = await supabase.from("meeting_messages").select("*").eq("id", serverId).maybeSingle();
+              if (existing.data) sent = existing.data as MeetingMessage;
+              break;
+            }
+            // A real rejection (not a member, closed room...) won't improve on retry.
+            if (lastError.code) break;
+          } catch (err) {
+            lastError = { message: err instanceof Error ? err.message : "network" };
+          } finally {
+            clearTimeout(timer);
+          }
         }
-        setMessages((prev) => mergeServerMessage(prev, sent as MeetingMessage, tempId));
+        if (!sent) {
+          if (storagePath) await supabase.storage.from("task-attachments").remove([storagePath]).catch(() => {});
+          if (lastError && /[À-ỹ]/.test(lastError.message)) throw new Error(lastError.message);
+          if (lastError?.code) throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
+          throw new Error("Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại.");
+        }
+        setMessages((prev) => mergeServerMessage(prev, sent, tempId));
         pendingPayloadsRef.current.delete(tempId);
+        serverIdsRef.current.delete(tempId);
         notifyMeetingMessageSent(channelId, content, !!attachment).catch(() => {});
       } catch (err) {
         setError(sendErrorMessage(err, "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại."));
