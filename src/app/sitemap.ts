@@ -3,7 +3,7 @@ import { getJobPostings, getPublishedNewsPosts } from "@/lib/data/site-content";
 
 const SITE_URL = "https://funtikidbooks.com";
 
-const STATIC_PAGES = ["", "dich-vu", "du-an", "gioi-thieu", "lien-he", "quy-trinh", "tin-tuc", "tuyen-dung"];
+const STATIC_PAGES = ["", "dich-vu", "du-an", "gioi-thieu", "lien-he", "quy-trinh", "tin-tuc", "tuyen-dung", "chinh-sach-bao-mat", "dieu-khoan"];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = STATIC_PAGES.map((path) => ({

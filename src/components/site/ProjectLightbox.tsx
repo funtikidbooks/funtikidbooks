@@ -164,7 +164,7 @@ export function ProjectLightbox({
       >
         <Image src="/brand/funti-logo.jpg" alt="" width={32} height={32} className="rounded-full object-cover" />
         <span className="text-sm font-semibold">{t.projects.hirePromo}</span>
-        <Link href="/lien-he" className="btn btn-primary btn-sm">
+        <Link href="/cong-viec" className="btn btn-primary btn-sm">
           {t.projects.hireCta}
         </Link>
       </div>

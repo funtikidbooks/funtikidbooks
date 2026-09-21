@@ -3,8 +3,8 @@ import Link from "next/link";
 export function CtaBanner({
   title = "Bạn có dự án sách thiếu nhi hoặc ý tưởng sáng tạo?",
   body = "Hãy cùng Funti Kidbooks Studio biến ý tưởng của bạn thành những câu chuyện tuyệt vời!",
-  ctaLabel = "Liên hệ ngay →",
-  href = "/lien-he",
+  ctaLabel = "Work With Funti →",
+  href = "/cong-viec",
   secondaryLabel,
   secondaryHref,
 }: {

@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { CtaBanner } from "@/components/site/CtaBanner";
 import { Reveal } from "@/components/site/Reveal";
-import { VideoTeaser } from "@/components/site/VideoTeaser";
 import { ProjectCarousel } from "@/components/site/ProjectCarousel";
 import { PartnersMarquee } from "@/components/site/PartnersMarquee";
 import { HeroSlideshow } from "@/components/site/HeroSlideshow";
@@ -54,15 +53,11 @@ export function HomeContent({
           {t.home.heroBody}
         </p>
         <Reveal y={0} delay={150}>
-          <Link href="/lien-he" className="btn btn-primary mt-2">
+          <Link href="/cong-viec" className="btn btn-primary mt-2">
             {t.home.heroCta1}
           </Link>
         </Reveal>
       </HeroSlideshow>
-
-      <Reveal>
-        <VideoTeaser />
-      </Reveal>
 
       {/* Services */}
       <section className="site-container pt-6 pb-20">

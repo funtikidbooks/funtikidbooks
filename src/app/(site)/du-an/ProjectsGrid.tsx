@@ -196,7 +196,7 @@ export function ProjectsGrid({
           <p className="text-xs" style={{ color: "var(--color-accent-700)" }}>
             {t.projects.promoBody}
           </p>
-          <Link href="/lien-he" className="btn btn-primary btn-sm w-fit mt-1">
+          <Link href="/cong-viec" className="btn btn-primary btn-sm w-fit mt-1">
             {t.projects.promoCta}
           </Link>
         </div>

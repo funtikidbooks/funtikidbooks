@@ -64,8 +64,8 @@ export function AboutHero({
           />
 
           <div className="flex flex-wrap justify-center xl:justify-start gap-3 mt-2">
-            <Link href="/lien-he" className="btn btn-primary">
-              Bắt đầu dự án của bạn →
+            <Link href="/cong-viec" className="btn btn-primary">
+              Work With Funti →
             </Link>
             <Link href="/du-an" className="btn btn-ghost">
               Xem dự án của chúng tôi
@@ -73,9 +73,14 @@ export function AboutHero({
           </div>
         </div>
 
-        <div className="flex-1 w-full max-w-[560px]">
-          <AboutHeroVideo src={videoSrc} canEdit={canEdit} />
-        </div>
+        {/* Hidden from visitors until a real video exists — an empty "coming
+            soon" box reads as an unfinished site. Director/admin still see the
+            upload slot. */}
+        {(videoSrc || canEdit) && (
+          <div className="flex-1 w-full max-w-[560px]">
+            <AboutHeroVideo src={videoSrc} canEdit={canEdit} />
+          </div>
+        )}
       </div>
 
       <div

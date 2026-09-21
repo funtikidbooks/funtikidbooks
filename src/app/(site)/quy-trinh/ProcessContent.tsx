@@ -15,7 +15,7 @@ export function ProcessContent() {
         title={t.process.title}
         body={t.process.body}
         primaryLabel={t.process.ctaPrimary}
-        primaryHref="/lien-he"
+        primaryHref="/cong-viec"
         secondaryLabel={t.process.ctaSecondary}
         secondaryHref="/du-an"
         emoji="🧭"

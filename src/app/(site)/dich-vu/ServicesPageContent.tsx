@@ -64,7 +64,7 @@ export function ServicesPageContent({
         title={t.services.title}
         body={t.services.body}
         primaryLabel={t.services.ctaPrimary}
-        primaryHref="/lien-he"
+        primaryHref="/cong-viec"
         secondaryLabel={t.services.ctaSecondary}
         secondaryHref="/quy-trinh"
         emoji="🎨"

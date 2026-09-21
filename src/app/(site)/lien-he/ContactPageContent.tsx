@@ -91,6 +91,16 @@ export function ContactPageContent({ officeImage }: { officeImage: string | null
             📍 Funtikidbooks
           </span>
         </Reveal>
+        <div className="flex justify-center mt-4">
+          <a
+            href={`https://www.google.com/maps/dir/?api=1&destination=${OFFICE_LAT},${OFFICE_LNG}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-primary btn-sm"
+          >
+            📍 {t.contact.directions}
+          </a>
+        </div>
       </section>
     </>
   );

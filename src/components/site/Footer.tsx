@@ -91,7 +91,7 @@ export function Footer() {
           >
             funtikidbooks.studio@gmail.com
           </a>
-          <Link href="/lien-he" className="btn btn-primary btn-sm w-fit mt-1">
+          <Link href="/cong-viec" className="btn btn-primary btn-sm w-fit mt-1">
             {t.footer.contactBtn}
           </Link>
         </div>
@@ -141,7 +141,15 @@ export function Footer() {
         <span>
           © {new Date().getFullYear()} Funti Kidbooks Studio. {t.footer.copyright}
         </span>
-        <span>{t.footer.businessInfo}</span>
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <Link href="/chinh-sach-bao-mat" className="hover:underline">
+            {t.footer.privacy}
+          </Link>
+          <Link href="/dieu-khoan" className="hover:underline">
+            {t.footer.terms}
+          </Link>
+          <span>{t.footer.businessInfo}</span>
+        </span>
       </div>
     </footer>
   );
