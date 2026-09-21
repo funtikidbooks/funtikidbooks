@@ -29,6 +29,8 @@ import { useCallPresence } from "@/lib/useCallPresence";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 import { vnToday } from "@/lib/constants/attendance";
 import { thumbnailUrl } from "@/lib/imageTransform";
+import { notifyDirectMessageSent } from "@/lib/actions/messages";
+import { addToOutbox, insertWithRetry, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
 import { Emoji } from "@/lib/emoji";
 import {
   addChannelMember,
@@ -1347,9 +1349,12 @@ export function MeetingHub({
     pendingIdsRef.current = pendingIds;
   }, [pendingIds]);
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
-  const pendingPayloadsRef = useRef<Map<string, { content: string; file: File | null; replyId: string | null }>>(
-    new Map(),
-  );
+  const pendingPayloadsRef = useRef<
+    Map<string, { channelId: string; content: string; file: File | null; replyId: string | null }>
+  >(new Map());
+  // Sends that failed only because of the network (not a real rejection) —
+  // re-sent automatically once the connection is back, see the effect below.
+  const networkFailedRef = useRef(new Set<string>());
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [createParentId, setCreateParentId] = useState<string | null>(null);
@@ -2911,48 +2916,25 @@ export function MeetingHub({
           attachment_size: attachment?.size ?? null,
         };
         if (replyId) insertRow.reply_to_message_id = replyId;
-        // Up to 3 tries, 10s each, for network-level failures only — a
-        // send used to sit on "Đang gửi…" forever when the connection
-        // stalled, with nothing ever timing it out.
-        let sent: MeetingMessage | null = null;
-        let lastError: { code?: string; message: string } | null = null;
-        for (let attempt = 0; attempt < 3 && !sent; attempt++) {
-          if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 1000));
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 10000);
-          try {
-            const res = await supabase
-              .from("meeting_messages")
-              .insert(insertRow)
-              .select("*")
-              .abortSignal(controller.signal)
-              .single();
-            if (!res.error && res.data) {
-              sent = res.data as MeetingMessage;
-              break;
-            }
-            lastError = res.error ?? { message: "no data" };
-            if (lastError.code === "23505") {
-              // An earlier try actually landed — fetch it instead of failing.
-              const existing = await supabase.from("meeting_messages").select("*").eq("id", serverId).maybeSingle();
-              if (existing.data) sent = existing.data as MeetingMessage;
-              break;
-            }
-            // A real rejection (not a member, closed room...) won't improve on retry.
-            if (lastError.code) break;
-          } catch (err) {
-            lastError = { message: err instanceof Error ? err.message : "network" };
-          } finally {
-            clearTimeout(timer);
-          }
-        }
+        const res = await insertWithRetry<MeetingMessage>(supabase, "meeting_messages", insertRow);
+        const sent = res.data;
         if (!sent) {
           if (storagePath) await supabase.storage.from("task-attachments").remove([storagePath]).catch(() => {});
-          if (lastError && /[À-ỹ]/.test(lastError.message)) throw new Error(lastError.message);
-          if (lastError?.code) throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
-          throw new Error("Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại.");
+          if (res.code) {
+            // A real rejection (not a member, closed room...) — retrying
+            // won't help, so it leaves the outbox too.
+            removeFromOutbox(serverId);
+            if (res.message && /[À-ỹ]/.test(res.message)) throw new Error(res.message);
+            throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
+          }
+          networkFailedRef.current.add(tempId);
+          throw new Error("Không thể gửi tin nhắn — sẽ tự gửi lại khi có mạng ổn định.");
         }
-        setMessages((prev) => mergeServerMessage(prev, sent, tempId));
+        removeFromOutbox(serverId);
+        networkFailedRef.current.delete(tempId);
+        if (activeIdRef.current === channelId) {
+          setMessages((prev) => mergeServerMessage(prev, sent, tempId));
+        }
         pendingPayloadsRef.current.delete(tempId);
         serverIdsRef.current.delete(tempId);
         notifyMeetingMessageSent(channelId, content, !!attachment).catch(() => {});
@@ -3008,7 +2990,14 @@ export function MeetingHub({
         pinned_by: null,
         created_at: new Date().toISOString(),
       };
-      pendingPayloadsRef.current.set(tempId, { content: trimmed, file, replyId });
+      pendingPayloadsRef.current.set(tempId, { channelId, content: trimmed, file, replyId });
+      if (!file) {
+        // Text-only: also kept in localStorage so an unsent message survives
+        // the app being closed or reloaded before the network came back.
+        const serverId = crypto.randomUUID();
+        serverIdsRef.current.set(tempId, serverId);
+        addToOutbox({ kind: "meeting", tempId, serverId, channelId, content: trimmed, replyId });
+      }
       setMessages((prev) => capMessagesForRoom([...prev, optimistic]));
       attemptSend(channelId, tempId, trimmed, file, replyId);
       return;
@@ -3052,7 +3041,7 @@ export function MeetingHub({
     );
     (async () => {
       for (const entry of entries) {
-        pendingPayloadsRef.current.set(entry.tempId, { content: entry.content, file: entry.file, replyId: entry.replyId });
+        pendingPayloadsRef.current.set(entry.tempId, { channelId, content: entry.content, file: entry.file, replyId: entry.replyId });
         await attemptSend(channelId, entry.tempId, entry.content, entry.file, entry.replyId);
       }
     })();
@@ -3060,13 +3049,94 @@ export function MeetingHub({
 
   const retrySend = useCallback(
     (tempId: string) => {
-      if (!activeId) return;
       const payload = pendingPayloadsRef.current.get(tempId);
       if (!payload) return;
-      attemptSend(activeId, tempId, payload.content, payload.file, payload.replyId);
+      networkFailedRef.current.delete(tempId);
+      attemptSend(payload.channelId, tempId, payload.content, payload.file, payload.replyId);
     },
-    [activeId, attemptSend],
+    [attemptSend],
   );
+
+  // Once the connection is stable again, re-send whatever failed only
+  // because of the network — on the browser's "online" event, when the app
+  // comes back to the foreground, and on a light timer while anything is
+  // waiting. Sequential and oldest-first so order is kept; the fixed row id
+  // makes a repeat harmless even if an earlier try had actually landed.
+  const flushingRef = useRef(false);
+  useEffect(() => {
+    async function flush() {
+      if (flushingRef.current || networkFailedRef.current.size === 0 || !navigator.onLine) return;
+      flushingRef.current = true;
+      try {
+        for (const tempId of [...networkFailedRef.current]) {
+          if (pendingIdsRef.current.has(tempId)) continue;
+          const payload = pendingPayloadsRef.current.get(tempId);
+          networkFailedRef.current.delete(tempId);
+          if (!payload) continue;
+          await attemptSend(payload.channelId, tempId, payload.content, payload.file, payload.replyId);
+        }
+      } finally {
+        flushingRef.current = false;
+      }
+    }
+    function onVisible() {
+      if (document.visibilityState === "visible") flush();
+    }
+    window.addEventListener("online", flush);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = setInterval(flush, 8000);
+    return () => {
+      window.removeEventListener("online", flush);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(interval);
+    };
+  }, [attemptSend]);
+
+  // Messages left in the outbox by a previous session (app closed or killed
+  // before they were confirmed) are re-sent silently on start; the confirmed
+  // row then shows up like any other new message.
+  useEffect(() => {
+    const supabase = createClient();
+    (async () => {
+      for (const entry of loadOutbox()) {
+        if (entry.kind === "meeting") {
+          const row: Record<string, unknown> & { id: string } = {
+            id: entry.serverId,
+            channel_id: entry.channelId,
+            sender_id: currentUser.id,
+            content: entry.content,
+          };
+          if (entry.replyId) row.reply_to_message_id = entry.replyId;
+          const res = await insertWithRetry<MeetingMessage>(supabase, "meeting_messages", row);
+          if (res.data) {
+            removeFromOutbox(entry.serverId);
+            notifyMeetingMessageSent(entry.channelId, entry.content, false).catch(() => {});
+            if (activeIdRef.current === entry.channelId) {
+              const confirmed = res.data;
+              setMessages((prev) => mergeServerMessage(prev, confirmed));
+            }
+          } else if (res.code) {
+            removeFromOutbox(entry.serverId);
+          }
+        } else if (entry.senderId === currentUser.id) {
+          const res = await insertWithRetry(supabase, "direct_messages", {
+            id: entry.serverId,
+            sender_id: entry.senderId,
+            recipient_id: entry.recipientId,
+            content: entry.content,
+          });
+          if (res.data) {
+            removeFromOutbox(entry.serverId);
+            notifyDirectMessageSent(entry.recipientId, entry.content, false).catch(() => {});
+          } else if (res.code) {
+            removeFromOutbox(entry.serverId);
+          }
+        }
+      }
+    })();
+    // Once per app start — mergeServerMessage etc. are read fresh inside.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* Wrapped in useMemo — this block used to be plain inline JSX,
                   which meant React rebuilt and diffed every visible message

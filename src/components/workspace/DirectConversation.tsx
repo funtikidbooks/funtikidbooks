@@ -13,6 +13,7 @@ import {
   notifyDirectMessageSent,
 } from "@/lib/actions/messages";
 import { thumbnailUrl } from "@/lib/imageTransform";
+import { addToOutbox, insertWithRetry, removeFromOutbox } from "@/lib/chatOutbox";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 import { Emoji } from "@/lib/emoji";
 import { vnToday } from "@/lib/constants/attendance";
@@ -175,6 +176,8 @@ export function DirectConversation({
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const pendingPayloadsRef = useRef<Map<string, { content: string; file: File | null }>>(new Map());
+  // Network-only failures, re-sent automatically once the connection is back.
+  const networkFailedRef = useRef(new Set<string>());
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [peerTyping, setPeerTyping] = useState(false);
@@ -802,39 +805,19 @@ export function DirectConversation({
           attachment_mime: attachment?.mime ?? null,
           attachment_size: attachment?.size ?? null,
         };
-        let sent: DirectMessage | null = null;
-        let lastError: { code?: string; message: string } | null = null;
-        for (let attempt = 0; attempt < 3 && !sent; attempt++) {
-          if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 1000));
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 10000);
-          try {
-            const res = await supabase.from("direct_messages").insert(insertRow).select("*").abortSignal(controller.signal).single();
-            if (!res.error && res.data) {
-              sent = res.data as DirectMessage;
-              break;
-            }
-            lastError = res.error ?? { message: "no data" };
-            if (lastError.code === "23505") {
-              const existing = await supabase.from("direct_messages").select("*").eq("id", serverId).maybeSingle();
-              if (existing.data) sent = existing.data as DirectMessage;
-              break;
-            }
-            if (lastError.code) break;
-          } catch (err) {
-            lastError = { message: err instanceof Error ? err.message : "network" };
-          } finally {
-            clearTimeout(timer);
-          }
-        }
+        const res = await insertWithRetry<DirectMessage>(supabase, "direct_messages", insertRow);
+        const sent = res.data;
         if (!sent) {
           if (storagePath) await supabase.storage.from("task-attachments").remove([storagePath]).catch(() => {});
-          throw new Error(
-            lastError?.code
-              ? "Không thể gửi tin nhắn"
-              : "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại.",
-          );
+          if (res.code) {
+            removeFromOutbox(serverId);
+            throw new Error("Không thể gửi tin nhắn");
+          }
+          networkFailedRef.current.add(tempId);
+          throw new Error("Không thể gửi tin nhắn — sẽ tự gửi lại khi có mạng ổn định.");
         }
+        removeFromOutbox(serverId);
+        networkFailedRef.current.delete(tempId);
         setMessages((prev) => mergeServerMessage(prev, sent, tempId));
         pendingPayloadsRef.current.delete(tempId);
         serverIdsRef.current.delete(tempId);
@@ -885,6 +868,13 @@ export function DirectConversation({
         read_at: null,
       };
       pendingPayloadsRef.current.set(tempId, { content: trimmed, file });
+      if (!file) {
+        // Text-only: also kept in localStorage so an unsent message survives
+        // the app being closed or reloaded before the network came back.
+        const serverId = crypto.randomUUID();
+        serverIdsRef.current.set(tempId, serverId);
+        addToOutbox({ kind: "dm", tempId, serverId, recipientId: peer.id, senderId: currentUser.id, content: trimmed });
+      }
       setMessages((prev) => capMessagesForRoom([...prev, optimistic]));
       attemptSend(tempId, trimmed, file);
       return;
@@ -932,10 +922,44 @@ export function DirectConversation({
     (tempId: string) => {
       const payload = pendingPayloadsRef.current.get(tempId);
       if (!payload) return;
+      networkFailedRef.current.delete(tempId);
       attemptSend(tempId, payload.content, payload.file);
     },
     [attemptSend],
   );
+
+  // Re-send whatever failed only because of the network once the connection
+  // is back: on the browser's "online" event, when the app returns to the
+  // foreground, and on a light timer while anything is waiting. Oldest
+  // first; the fixed row id makes a repeat harmless.
+  const flushingRef = useRef(false);
+  useEffect(() => {
+    async function flush() {
+      if (flushingRef.current || networkFailedRef.current.size === 0 || !navigator.onLine) return;
+      flushingRef.current = true;
+      try {
+        for (const tempId of [...networkFailedRef.current]) {
+          const payload = pendingPayloadsRef.current.get(tempId);
+          networkFailedRef.current.delete(tempId);
+          if (!payload) continue;
+          await attemptSend(tempId, payload.content, payload.file);
+        }
+      } finally {
+        flushingRef.current = false;
+      }
+    }
+    function onVisible() {
+      if (document.visibilityState === "visible") flush();
+    }
+    window.addEventListener("online", flush);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = setInterval(flush, 8000);
+    return () => {
+      window.removeEventListener("online", flush);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(interval);
+    };
+  }, [attemptSend]);
 
   // Messenger-style: only the LAST of my messages the peer has actually
   // seen gets the "Đã xem" label, not every read message — walk from the
