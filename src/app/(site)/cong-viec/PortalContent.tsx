@@ -14,7 +14,6 @@ import {
   uploadClientProjectImage,
 } from "@/lib/actions/clientPortal";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
-import { PortalChatWidget } from "./PortalChatWidget";
 import { FuntiWordmark } from "@/components/site/FuntiWordmark";
 import { useDict } from "@/components/site/LocaleProvider";
 import type { ClientMessage, ClientProfile, ClientProject } from "@/lib/types";
@@ -132,11 +131,8 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
             <p style={{ color: "var(--color-neutral-600)" }}>{t.portal.heroBody}</p>
           </div>
           {showcaseImages.length > 0 && <ShowcaseStrip images={showcaseImages} />}
-          <div className="flex flex-col lg:flex-row gap-4 justify-center items-center">
+          <div className="flex justify-center">
             <StartForm onSent={() => setStage("sent-link")} onError={setError} />
-            <div className="w-full lg:max-w-[360px]">
-              <PortalChatWidget />
-            </div>
           </div>
           <HowItWorks />
         </div>
