@@ -31,11 +31,7 @@ const LAYERS = [
 
 export function HeroLogoIntro() {
   return (
-    <div className="relative flex-none" style={{ width: 112, height: 112 }} aria-hidden>
-      <div
-        className="fk-logo-intro-stage-bg absolute rounded-full"
-        style={{ inset: "4%", background: "rgba(255,255,255,.14)" }}
-      />
+    <div className="relative flex-none" style={{ width: 224, height: 224 }} aria-hidden>
       <div
         className="fk-logo-intro-ring absolute rounded-full"
         style={{ left: "50%", top: "46%", width: "40%", height: "40%", border: "2.5px solid rgba(245,167,66,.55)", transform: "translate(-50%,-50%)" }}
