@@ -104,14 +104,16 @@ export async function claimVisitorConversation(conversationId: string, token: st
     .order("created_at", { ascending: true });
   if (!visitorMessages || visitorMessages.length === 0) return null;
 
-  const firstMessage = visitorMessages.find((m) => m.sender_type === "visitor");
-  const description = firstMessage?.content?.slice(0, 4000) || "Cuộc trò chuyện từ Work With Funti";
-
+  // A fixed label, never the first visitor message's own text/images — every
+  // visitor_messages row (including that first one) is copied into
+  // client_messages below as its own regular chat bubble, and ProjectThread
+  // always renders description+image_urls as an extra bubble ahead of that
+  // list, so reusing the first message's content here would show it twice.
   const { data: project, error: projectError } = await supabase
     .from("client_projects")
     .insert({
       client_id: user.id,
-      description,
+      description: "Cuộc trò chuyện từ Work With Funti",
       image_urls: [],
       created_at: conversation.created_at,
       last_message_at: new Date().toISOString(),
@@ -129,7 +131,8 @@ export async function claimVisitorConversation(conversationId: string, token: st
     sender_type: (m.sender_type === "visitor" ? "client" : "staff") as "client" | "staff",
     sender_id: m.sender_type === "visitor" ? user.id : null,
     content: m.content,
-    image_urls: [],
+    image_urls: m.image_urls ?? [],
+    file_attachments: m.file_attachments ?? [],
     // Both sides already saw this conversation happen in real time (the
     // visitor widget itself, and staff's Khách hàng inbox) — marking it
     // read on both sides avoids a false "unread" badge the instant this

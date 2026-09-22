@@ -3,10 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
-import { startVisitorConversation, sendVisitorMessage, getVisitorMessages } from "@/lib/actions/visitor-chat";
+import {
+  startVisitorConversation,
+  sendVisitorMessage,
+  getVisitorMessages,
+  uploadVisitorImage,
+  uploadVisitorFile,
+} from "@/lib/actions/visitor-chat";
 import { useDict } from "@/components/site/LocaleProvider";
 import { visitorTypingChannelName, TYPING_IDLE_MS, TYPING_BROADCAST_THROTTLE_MS } from "@/lib/visitorTyping";
-import type { VisitorMessage } from "@/lib/types";
+import { AttachmentGallery } from "@/components/ui/AttachmentGallery";
+import type { FileAttachment, VisitorMessage } from "@/lib/types";
 
 // Same localStorage keys as the floating "Chat với chúng tôi" widget
 // (SupportChatWidget.tsx) — a visitor who chats here and later clicks the
@@ -16,6 +23,7 @@ import type { VisitorMessage } from "@/lib/types";
 export const GUEST_CHAT_ID_KEY = "funti-visitor-conversation-id";
 export const GUEST_CHAT_TOKEN_KEY = "funti-visitor-token";
 const POLL_MS = 4000;
+const MAX_PENDING_ATTACHMENTS = 10;
 
 function formatTime(iso: string) {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
@@ -66,10 +74,17 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
   const [email, setEmail] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
   const [staffTyping, setStaffTyping] = useState(false);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<FileAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const typingChannelRef = useRef<RealtimeChannel | null>(null);
   const staffTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentAtRef = useRef(0);
+  const attachMenuRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!conversationId || !token) return;
@@ -125,25 +140,83 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages.length]);
 
+  // Closes the attach popover on any click outside it — it has no backdrop
+  // of its own (unlike ImageLightbox), so this is what makes it feel
+  // dismissible the way a native menu would.
+  useEffect(() => {
+    if (!attachMenuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target as Node)) setAttachMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [attachMenuOpen]);
+
+  async function handlePickImages(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []).slice(0, MAX_PENDING_ATTACHMENTS);
+    if (files.length === 0) return;
+    setUploading(true);
+    setChatError(null);
+    try {
+      const uploaded = await Promise.all(
+        files.map(async (file) => {
+          const formData = new FormData();
+          formData.set("file", file);
+          return uploadVisitorImage(formData, conversationId ?? undefined, token ?? undefined);
+        }),
+      );
+      setPendingImages((prev) => [...prev, ...uploaded].slice(0, MAX_PENDING_ATTACHMENTS));
+    } catch (err) {
+      setChatError(err instanceof Error ? err.message : t.portal.guestChatSendError);
+    } finally {
+      setUploading(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  }
+
+  async function handlePickFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []).slice(0, MAX_PENDING_ATTACHMENTS);
+    if (files.length === 0) return;
+    setUploading(true);
+    setChatError(null);
+    try {
+      const uploaded = await Promise.all(
+        files.map(async (file) => {
+          const formData = new FormData();
+          formData.set("file", file);
+          return uploadVisitorFile(formData, conversationId ?? undefined, token ?? undefined);
+        }),
+      );
+      setPendingFiles((prev) => [...prev, ...uploaded].slice(0, MAX_PENDING_ATTACHMENTS));
+    } catch (err) {
+      setChatError(err instanceof Error ? err.message : t.portal.guestChatSendError);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = text.trim();
-    if (!trimmed || sending) return;
+    if ((!trimmed && pendingImages.length === 0 && pendingFiles.length === 0) || sending || uploading) return;
     setSending(true);
     setChatError(null);
     try {
       if (!conversationId || !token) {
-        const result = await startVisitorConversation(undefined, undefined, trimmed);
+        const result = await startVisitorConversation(undefined, undefined, trimmed, pendingImages, pendingFiles);
         localStorage.setItem(GUEST_CHAT_ID_KEY, result.conversationId);
         localStorage.setItem(GUEST_CHAT_TOKEN_KEY, result.token);
         setConversationId(result.conversationId);
         setToken(result.token);
         setMessages([result.message]);
       } else {
-        const sent = await sendVisitorMessage(conversationId, token, trimmed);
+        const sent = await sendVisitorMessage(conversationId, token, trimmed, pendingImages, pendingFiles);
         setMessages((prev) => [...prev, sent]);
       }
       setText("");
+      setPendingImages([]);
+      setPendingFiles([]);
     } catch (err) {
       setChatError(err instanceof Error ? err.message : t.portal.guestChatSendError);
     } finally {
@@ -172,6 +245,8 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
       setLoggingIn(false);
     }
   }
+
+  const hasPending = pendingImages.length > 0 || pendingFiles.length > 0;
 
   return (
     <div className="card elev-lg flex flex-col sm:flex-row w-full" style={{ height: 560 }}>
@@ -205,16 +280,19 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
           {messages.map((m) => {
             const mine = m.sender_type === "visitor";
             return (
-              <div key={m.id} className={`flex flex-col gap-1 ${mine ? "items-end" : "items-start"}`}>
-                <div
-                  className="rounded-[12px] px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap break-words"
-                  style={{
-                    background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
-                    color: mine ? "#fff" : "var(--color-text)",
-                  }}
-                >
-                  {m.content}
-                </div>
+              <div key={m.id} className={`flex flex-col gap-1.5 ${mine ? "items-end" : "items-start"}`}>
+                {m.content && (
+                  <div
+                    className="rounded-[12px] px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap break-words"
+                    style={{
+                      background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
+                      color: mine ? "#fff" : "var(--color-text)",
+                    }}
+                  >
+                    {m.content}
+                  </div>
+                )}
+                <AttachmentGallery imageUrls={m.image_urls} fileAttachments={m.file_attachments} />
                 <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
                   {formatTime(m.created_at)}
                 </span>
@@ -234,7 +312,100 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
               {chatError}
             </p>
           )}
+          {hasPending && (
+            <div className="flex flex-wrap gap-1.5">
+              {pendingImages.map((url) => (
+                <div key={url} className="relative rounded-[8px] overflow-hidden flex-none" style={{ width: 48, height: 48 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setPendingImages((prev) => prev.filter((u) => u !== url))}
+                    aria-label={t.portal.guestChatRemoveAttachment}
+                    className="absolute flex items-center justify-center rounded-full"
+                    style={{ top: 2, right: 2, width: 16, height: 16, background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 9 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {pendingFiles.map((f) => (
+                <div
+                  key={f.url}
+                  className="relative flex items-center gap-1.5 rounded-[8px] pl-2.5 pr-6 py-1.5 text-[12px] font-semibold flex-none"
+                  style={{ background: "var(--color-surface)" }}
+                >
+                  📄 {f.name}
+                  <button
+                    type="button"
+                    onClick={() => setPendingFiles((prev) => prev.filter((x) => x.url !== f.url))}
+                    aria-label={t.portal.guestChatRemoveAttachment}
+                    className="absolute flex items-center justify-center rounded-full"
+                    style={{ top: "50%", right: 4, transform: "translateY(-50%)", width: 16, height: 16, background: "rgba(0,0,0,.15)", fontSize: 9 }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <form onSubmit={handleSend} className="flex items-center gap-2">
+            <div ref={attachMenuRef} className="relative flex-none">
+              <button
+                type="button"
+                onClick={() => setAttachMenuOpen((v) => !v)}
+                disabled={uploading}
+                aria-label={t.portal.guestChatAttachLabel}
+                title={t.portal.guestChatAttachLabel}
+                className="btn-icon flex-none"
+                style={{ width: 36, height: 36 }}
+              >
+                {uploading ? "…" : "📎"}
+              </button>
+              {attachMenuOpen && (
+                <div
+                  className="fk-popup-in card elev-lg absolute flex flex-col p-1.5 gap-0.5"
+                  style={{ bottom: "calc(100% + 8px)", left: 0, width: 160, transformOrigin: "0% 100%" }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAttachMenuOpen(false);
+                      imageInputRef.current?.click();
+                    }}
+                    className="flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-sm font-semibold text-left"
+                  >
+                    🖼️ {t.portal.guestChatAttachImages}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAttachMenuOpen(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="flex items-center gap-2 rounded-[8px] px-2.5 py-2 text-sm font-semibold text-left"
+                  >
+                    📄 {t.portal.guestChatAttachFiles}
+                  </button>
+                </div>
+              )}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                multiple
+                className="hidden"
+                onChange={handlePickImages}
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.zip"
+                multiple
+                className="hidden"
+                onChange={handlePickFiles}
+              />
+            </div>
             <input
               className="input flex-1"
               placeholder={t.portal.guestChatPlaceholder}
@@ -244,7 +415,11 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
                 notifyTyping();
               }}
             />
-            <button type="submit" disabled={sending || !text.trim()} className="btn btn-primary btn-sm flex-none">
+            <button
+              type="submit"
+              disabled={sending || uploading || (!text.trim() && !hasPending)}
+              className="btn btn-primary btn-sm flex-none"
+            >
               {t.portal.guestChatSendBtn}
             </button>
           </form>

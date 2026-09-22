@@ -43,12 +43,19 @@ export type VisitorConversation = {
   claimed_by_client_id?: string | null;
 };
 
+// A non-image attachment (Word, Excel, PDF, …) — keeps its original
+// filename, unlike an image_urls entry, since the storage path itself is a
+// random uuid.
+export type FileAttachment = { url: string; name: string; size: number };
+
 export type VisitorMessage = {
   id: string;
   conversation_id: string;
   sender_type: "visitor" | "staff";
   sender_id: string | null;
   content: string;
+  image_urls: string[];
+  file_attachments: FileAttachment[];
   created_at: string;
 };
 
@@ -81,6 +88,7 @@ export type ClientMessage = {
   sender_id: string | null;
   content: string;
   image_urls: string[];
+  file_attachments: FileAttachment[];
   read_by_client: boolean;
   read_by_staff: boolean;
   created_at: string;

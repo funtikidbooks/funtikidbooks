@@ -1,10 +1,11 @@
 "use server";
 
 import { after } from "next/server";
+import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPushToUser } from "@/lib/push";
 import { sendNewVisitorMessageEmail } from "@/lib/mail";
-import type { VisitorMessage } from "@/lib/types";
+import type { FileAttachment, VisitorMessage } from "@/lib/types";
 
 // Public, unauthenticated actions for the site-wide "Chat với chúng tôi"
 // widget — any visitor can call these without logging in. There's no
@@ -12,6 +13,22 @@ import type { VisitorMessage } from "@/lib/types";
 // service-role client and gate access themselves: every call after
 // startVisitorConversation requires the exact `token` that call returned,
 // which only this one visitor's browser (via localStorage) ever sees.
+
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
+const ALLOWED_FILE_TYPES = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "text/csv",
+  "text/plain",
+  "application/zip",
+]);
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 async function requireConversation(conversationId: string, token: string) {
   const supabase = createAdminClient();
@@ -25,6 +42,25 @@ async function requireConversation(conversationId: string, token: string) {
     throw new Error("Không tìm thấy cuộc trò chuyện.");
   }
   return { supabase, conversation: data };
+}
+
+// Attachments can be picked (and uploaded) before the first message is ever
+// sent — there's no conversationId/token yet at that point, same as
+// startVisitorConversation itself needing none. Once a conversation exists,
+// though, an upload must prove it belongs to that same browser, or anyone
+// could guess another visitor's conversationId and drop files into their
+// thread.
+async function resolveUploadScope(conversationId?: string, token?: string) {
+  const supabase = createAdminClient();
+  if (!conversationId && !token) return supabase;
+  if (!conversationId || !token) throw new Error("Không tìm thấy cuộc trò chuyện.");
+  const { data } = await supabase
+    .from("visitor_conversations")
+    .select("visitor_token")
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (!data || data.visitor_token !== token) throw new Error("Không tìm thấy cuộc trò chuyện.");
+  return supabase;
 }
 
 // Fires push (to every device a recipient has granted it on) and a
@@ -71,13 +107,64 @@ async function notifyStaffOfVisitorMessage(visitorName: string | null, visitorEm
   );
 }
 
+function attachmentPreview(trimmed: string, imageUrls: string[], fileAttachments: FileAttachment[]): string {
+  if (trimmed) return trimmed;
+  if (imageUrls.length > 0) return imageUrls.length > 1 ? `📷 Đã gửi ${imageUrls.length} ảnh` : "📷 Đã gửi ảnh";
+  if (fileAttachments.length > 0) return `📄 ${fileAttachments[0].name}`;
+  return "";
+}
+
+export async function uploadVisitorImage(formData: FormData, conversationId?: string, token?: string): Promise<string> {
+  const supabase = await resolveUploadScope(conversationId, token);
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) throw new Error("Thiếu tệp ảnh.");
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF hoặc WEBP.");
+  if (file.size > MAX_IMAGE_SIZE) throw new Error("Ảnh vượt quá 20MB.");
+
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+  const storagePath = `visitor-uploads/${conversationId ?? "new"}/${randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("client-uploads")
+    .upload(storagePath, file, { contentType: file.type });
+  if (uploadError) throw new Error("Không thể tải ảnh lên.");
+
+  const { data } = supabase.storage.from("client-uploads").getPublicUrl(storagePath);
+  return data.publicUrl;
+}
+
+export async function uploadVisitorFile(formData: FormData, conversationId?: string, token?: string): Promise<FileAttachment> {
+  const supabase = await resolveUploadScope(conversationId, token);
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) throw new Error("Thiếu tệp đính kèm.");
+  if (!ALLOWED_FILE_TYPES.has(file.type)) throw new Error("Định dạng tệp này chưa được hỗ trợ.");
+  if (file.size > MAX_FILE_SIZE) throw new Error("Tệp vượt quá 20MB.");
+
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
+  const storagePath = `visitor-uploads/${conversationId ?? "new"}/${randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("client-uploads")
+    .upload(storagePath, file, { contentType: file.type });
+  if (uploadError) throw new Error("Không thể tải tệp lên.");
+
+  const { data } = supabase.storage.from("client-uploads").getPublicUrl(storagePath);
+  return { url: data.publicUrl, name: file.name, size: file.size };
+}
+
 export async function startVisitorConversation(
   visitorName: string | undefined,
   visitorEmail: string | undefined,
   firstMessage: string,
+  imageUrls: string[] = [],
+  fileAttachments: FileAttachment[] = [],
 ): Promise<{ conversationId: string; token: string; message: VisitorMessage }> {
   const content = firstMessage.trim();
-  if (!content) throw new Error("Vui lòng nhập nội dung tin nhắn.");
+  if (!content && imageUrls.length === 0 && fileAttachments.length === 0) {
+    throw new Error("Vui lòng nhập nội dung hoặc đính kèm ảnh/tệp.");
+  }
 
   const name = visitorName?.trim() || null;
   const email = visitorEmail?.trim() || null;
@@ -93,25 +180,33 @@ export async function startVisitorConversation(
 
   const { data: message, error: msgError } = await supabase
     .from("visitor_messages")
-    .insert({ conversation_id: conversation.id, sender_type: "visitor", content })
+    .insert({ conversation_id: conversation.id, sender_type: "visitor", content, image_urls: imageUrls, file_attachments: fileAttachments })
     .select("*")
     .single();
 
   if (msgError || !message) throw new Error("Không thể gửi tin nhắn. Vui lòng thử lại.");
 
-  after(() => notifyStaffOfVisitorMessage(name, email, content).catch(() => {}));
+  after(() => notifyStaffOfVisitorMessage(name, email, attachmentPreview(content, imageUrls, fileAttachments)).catch(() => {}));
 
   return { conversationId: conversation.id, token: conversation.visitor_token, message: message as VisitorMessage };
 }
 
-export async function sendVisitorMessage(conversationId: string, token: string, content: string): Promise<VisitorMessage> {
+export async function sendVisitorMessage(
+  conversationId: string,
+  token: string,
+  content: string,
+  imageUrls: string[] = [],
+  fileAttachments: FileAttachment[] = [],
+): Promise<VisitorMessage> {
   const trimmed = content.trim();
-  if (!trimmed) throw new Error("Vui lòng nhập nội dung tin nhắn.");
+  if (!trimmed && imageUrls.length === 0 && fileAttachments.length === 0) {
+    throw new Error("Vui lòng nhập nội dung hoặc đính kèm ảnh/tệp.");
+  }
   const { supabase } = await requireConversation(conversationId, token);
 
   const { data, error } = await supabase
     .from("visitor_messages")
-    .insert({ conversation_id: conversationId, sender_type: "visitor", content: trimmed })
+    .insert({ conversation_id: conversationId, sender_type: "visitor", content: trimmed, image_urls: imageUrls, file_attachments: fileAttachments })
     .select("*")
     .single();
 
@@ -128,7 +223,7 @@ export async function sendVisitorMessage(conversationId: string, token: string, 
     notifyStaffOfVisitorMessage(
       updatedConversation?.visitor_name ?? null,
       updatedConversation?.visitor_email ?? null,
-      trimmed,
+      attachmentPreview(trimmed, imageUrls, fileAttachments),
     ).catch(() => {}),
   );
 

@@ -15,6 +15,7 @@ import {
   uploadClientProjectImage,
 } from "@/lib/actions/clientPortal";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
+import { AttachmentGallery } from "@/components/ui/AttachmentGallery";
 import { FuntiWordmark } from "@/components/site/FuntiWordmark";
 import { useDict } from "@/components/site/LocaleProvider";
 import { GuestChatPanel, GUEST_CHAT_ID_KEY, GUEST_CHAT_TOKEN_KEY } from "./GuestChatPanel";
@@ -589,7 +590,6 @@ function ProjectThread({
   const [text, setText] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -665,16 +665,7 @@ function ProjectThread({
           <div className="rounded-[12px] px-3 py-2 text-sm max-w-[85%]" style={{ background: "var(--color-accent-500)", color: "#fff" }}>
             {project.description}
           </div>
-          {project.image_urls.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {project.image_urls.map((url) => (
-                <button key={url} type="button" onClick={() => setLightboxUrl(url)} className="flex-none">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
-                </button>
-              ))}
-            </div>
-          )}
+          <AttachmentGallery imageUrls={project.image_urls} fileAttachments={[]} />
           <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
             {formatDate(project.created_at)}
           </span>
@@ -695,16 +686,7 @@ function ProjectThread({
                   {m.content}
                 </div>
               )}
-              {m.image_urls.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {m.image_urls.map((url) => (
-                    <button key={url} type="button" onClick={() => setLightboxUrl(url)} className="flex-none">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
-                    </button>
-                  ))}
-                </div>
-              )}
+              <AttachmentGallery imageUrls={m.image_urls} fileAttachments={m.file_attachments} />
               <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
                 {formatTime(m.created_at)}
               </span>
@@ -727,8 +709,6 @@ function ProjectThread({
           </button>
         </form>
       </div>
-
-      {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
     </div>
   );
 }

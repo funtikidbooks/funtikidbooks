@@ -16,8 +16,8 @@ import {
   markVisitorConversationRead,
   sendStaffReply,
 } from "@/lib/actions/support-chat";
-import { ImageLightbox } from "@/components/workspace/ImageLightbox";
-import type { ClientMessage, ClientProfile, ClientProject, VisitorConversation, VisitorMessage } from "@/lib/types";
+import { AttachmentGallery } from "@/components/ui/AttachmentGallery";
+import type { ClientMessage, ClientProfile, ClientProject, FileAttachment, VisitorConversation, VisitorMessage } from "@/lib/types";
 
 type ProjectWithClient = ClientProject & { client: ClientProfile | null };
 
@@ -33,15 +33,30 @@ type NormalizedMessage = {
   fromCustomer: boolean;
   content: string;
   imageUrls: string[];
+  fileAttachments: FileAttachment[];
   createdAt: string;
 };
 
 function fromClientMessage(m: ClientMessage): NormalizedMessage {
-  return { id: m.id, fromCustomer: m.sender_type === "client", content: m.content, imageUrls: m.image_urls, createdAt: m.created_at };
+  return {
+    id: m.id,
+    fromCustomer: m.sender_type === "client",
+    content: m.content,
+    imageUrls: m.image_urls,
+    fileAttachments: m.file_attachments,
+    createdAt: m.created_at,
+  };
 }
 
 function fromVisitorMessage(m: VisitorMessage): NormalizedMessage {
-  return { id: m.id, fromCustomer: m.sender_type === "visitor", content: m.content, imageUrls: [], createdAt: m.created_at };
+  return {
+    id: m.id,
+    fromCustomer: m.sender_type === "visitor",
+    content: m.content,
+    imageUrls: m.image_urls,
+    fileAttachments: m.file_attachments,
+    createdAt: m.created_at,
+  };
 }
 
 function formatTime(iso: string) {
@@ -99,14 +114,15 @@ export function ClientProjectsInbox({
   });
   const [messages, setMessages] = useState<NormalizedMessage[]>([]);
   const [text, setText] = useState("");
-  // Client-project messages only — visitor_messages has no image_urls
-  // column, so the picker below is hidden entirely for a visitor thread.
+  // Client-project messages only — staff replying to a still-anonymous
+  // visitor thread stays text-only for now (the visitor's own side can
+  // attach; the picker below just isn't offered for a staff reply there
+  // yet), so this is hidden entirely for a visitor thread.
   const [replyImages, setReplyImages] = useState<string[]>([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const replyFileRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [visitorTyping, setVisitorTyping] = useState(false);
   const typingChannelRef = useRef<RealtimeChannel | null>(null);
   const visitorTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -465,16 +481,7 @@ export function ClientProjectsInbox({
                   <div className="rounded-[12px] px-3 py-2 text-sm max-w-[70%]" style={{ background: "var(--color-surface)" }}>
                     {activeProject.description}
                   </div>
-                  {activeProject.image_urls.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {activeProject.image_urls.map((url) => (
-                        <button key={url} type="button" onClick={() => setLightboxUrl(url)} className="flex-none">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <AttachmentGallery imageUrls={activeProject.image_urls} fileAttachments={[]} />
                   <span className="text-[10px]" style={{ color: "var(--color-neutral-500)" }}>
                     {formatTime(activeProject.created_at)}
                   </span>
@@ -494,16 +501,7 @@ export function ClientProjectsInbox({
                       {m.content}
                     </div>
                   )}
-                  {m.imageUrls.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {m.imageUrls.map((url) => (
-                        <button key={url} type="button" onClick={() => setLightboxUrl(url)} className="flex-none">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={url} alt="" className="rounded-[8px] object-cover" style={{ width: 72, height: 72 }} />
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <AttachmentGallery imageUrls={m.imageUrls} fileAttachments={m.fileAttachments} />
                   <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
                     {formatTime(m.createdAt)}
                   </span>
@@ -583,8 +581,6 @@ export function ClientProjectsInbox({
           </>
         )}
       </div>
-
-      {lightboxUrl && <ImageLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
     </div>
   );
 }
