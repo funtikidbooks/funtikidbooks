@@ -19,13 +19,17 @@ function formatTime(iso: string) {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
 }
 
-// The Upwork-messenger-style panel for the signed-out state of Work With
-// Funti: a visitor can start typing immediately, no form first — every
-// message lands straight in visitor_messages, which staff already watch
-// live in /workspace/khach-hang (see ClientProjectsInbox.tsx), same as the
-// floating widget. Underneath, a one-field email prompt lets them turn this
-// into a real account; the conversation itself carries over automatically
-// (claimVisitorConversation) once they do.
+// Two-column, Upwork-Messages-style layout for the signed-out state of Work
+// With Funti — a narrow left rail (here repurposed from Upwork's
+// conversation list into a "your info / sign in" panel, since there's only
+// ever one thread: this visitor's) beside one wide chat column that fills
+// the rest of the card (no third/right panel — sếp Phúc: "anh sẽ làm sau
+// nếu có idea"). A visitor can start typing immediately, no form first —
+// every message lands straight in visitor_messages, which staff already
+// watch live in /workspace/khach-hang (see ClientProjectsInbox.tsx), same
+// as the floating widget. On mobile the two columns stack, chat first
+// (order-1), info/sign-in panel below (order-2) — chatting stays the thing
+// a visitor can do with zero friction on any screen size.
 export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onError: (msg: string | null) => void }) {
   const { t } = useDict();
   const [conversationId, setConversationId] = useState<string | null>(() =>
@@ -114,82 +118,99 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
   }
 
   return (
-    <div className="card elev-sm flex flex-col w-full max-w-[520px] mx-auto" style={{ height: 480 }}>
-      <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
-        <div className="flex flex-col items-start gap-1">
-          <div
-            className="rounded-[12px] px-3 py-2 text-sm max-w-[85%]"
-            style={{ background: "var(--color-surface)", color: "var(--color-text)" }}
+    <div className="card elev-lg flex flex-col sm:flex-row w-full" style={{ height: 560 }}>
+      {/* Chat column — first in DOM so it's first on mobile too */}
+      <div className="flex-1 flex flex-col min-h-0 order-1">
+        <div className="flex-none flex items-center gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+          <span
+            className="flex items-center justify-center rounded-full flex-none"
+            style={{ width: 36, height: 36, background: "var(--color-accent-100)", fontSize: 16 }}
+            aria-hidden
           >
-            {t.portal.guestChatGreeting}
+            💬
+          </span>
+          <div className="flex flex-col min-w-0">
+            <span className="font-bold text-sm truncate">Funti Kidbooks Studio</span>
+            <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+              {t.portal.guestChatSubtitle}
+            </span>
           </div>
         </div>
-        {messages.map((m) => {
-          const mine = m.sender_type === "visitor";
-          return (
-            <div key={m.id} className={`flex flex-col gap-1 ${mine ? "items-end" : "items-start"}`}>
-              <div
-                className="rounded-[12px] px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap break-words"
-                style={{
-                  background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
-                  color: mine ? "#fff" : "var(--color-text)",
-                }}
-              >
-                {m.content}
-              </div>
-              <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
-                {formatTime(m.created_at)}
-              </span>
+
+        <div ref={listRef} className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
+          <div className="flex flex-col items-start gap-1">
+            <div
+              className="rounded-[12px] px-3 py-2 text-sm max-w-[85%]"
+              style={{ background: "var(--color-surface)", color: "var(--color-text)" }}
+            >
+              {t.portal.guestChatGreeting}
             </div>
-          );
-        })}
-      </div>
-
-      <div className="flex-none p-3 flex flex-col gap-2" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
-        {chatError && (
-          <p className="text-[12px] font-semibold" style={{ color: "var(--status-red)" }}>
-            {chatError}
-          </p>
-        )}
-        <form onSubmit={handleSend} className="flex items-center gap-2">
-          <input
-            className="input flex-1"
-            placeholder={t.portal.guestChatPlaceholder}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-          <button type="submit" disabled={sending || !text.trim()} className="btn btn-primary btn-sm flex-none">
-            {t.portal.guestChatSendBtn}
-          </button>
-        </form>
-      </div>
-
-      <form
-        onSubmit={handleLogin}
-        className="flex-none flex flex-col gap-2 p-3"
-        style={{ borderTop: "1px solid var(--color-neutral-200)", background: "var(--color-surface)" }}
-      >
-        <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-          {t.portal.guestChatLoginIntro}
-        </p>
-        <div className="flex items-center gap-2">
-          <input
-            type="email"
-            className="input flex-1"
-            style={{ padding: "6px 10px", fontSize: 13 }}
-            placeholder={t.portal.guestChatEmailPlaceholder}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <button
-            type="submit"
-            disabled={loggingIn || !email.trim()}
-            className="btn btn-secondary btn-sm flex-none"
-          >
-            {loggingIn ? t.portal.sending : t.portal.guestChatLoginBtn}
-          </button>
+          </div>
+          {messages.map((m) => {
+            const mine = m.sender_type === "visitor";
+            return (
+              <div key={m.id} className={`flex flex-col gap-1 ${mine ? "items-end" : "items-start"}`}>
+                <div
+                  className="rounded-[12px] px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap break-words"
+                  style={{
+                    background: mine ? "var(--color-accent-500)" : "var(--color-surface)",
+                    color: mine ? "#fff" : "var(--color-text)",
+                  }}
+                >
+                  {m.content}
+                </div>
+                <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                  {formatTime(m.created_at)}
+                </span>
+              </div>
+            );
+          })}
         </div>
-      </form>
+
+        <div className="flex-none p-3 flex flex-col gap-2" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+          {chatError && (
+            <p className="text-[12px] font-semibold" style={{ color: "var(--status-red)" }}>
+              {chatError}
+            </p>
+          )}
+          <form onSubmit={handleSend} className="flex items-center gap-2">
+            <input
+              className="input flex-1"
+              placeholder={t.portal.guestChatPlaceholder}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+            <button type="submit" disabled={sending || !text.trim()} className="btn btn-primary btn-sm flex-none">
+              {t.portal.guestChatSendBtn}
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Info / sign-in column — Upwork's conversation rail, repurposed:
+          there's only ever this one thread, so instead it holds the one
+          thing worth doing there — turning it into a saved account. */}
+      <div className="flex-none w-full sm:w-[260px] order-2 flex flex-col border-t sm:border-t-0 sm:border-l border-[var(--color-neutral-200)]">
+        <div className="flex flex-col gap-3 p-4">
+          <span className="font-bold text-sm">{t.portal.guestChatInfoTitle}</span>
+          <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+            {t.portal.guestChatLoginIntro}
+          </p>
+          <form onSubmit={handleLogin} className="flex flex-col gap-2">
+            <input
+              type="email"
+              className="input"
+              style={{ padding: "8px 10px", fontSize: 13 }}
+              placeholder={t.portal.guestChatEmailPlaceholder}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <button type="submit" disabled={loggingIn || !email.trim()} className="btn btn-secondary btn-sm w-full">
+              {loggingIn ? t.portal.sending : t.portal.guestChatLoginBtn}
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
