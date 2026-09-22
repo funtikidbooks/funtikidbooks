@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -253,13 +254,13 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
       {/* Chat column — first in DOM so it's first on mobile too */}
       <div className="flex-1 flex flex-col min-h-0 order-1">
         <div className="flex-none flex items-center gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-          <span
-            className="flex items-center justify-center rounded-full flex-none"
-            style={{ width: 36, height: 36, background: "var(--color-accent-100)", fontSize: 16 }}
-            aria-hidden
-          >
-            💬
-          </span>
+          <Image
+            src="/brand/funti-logo.jpg"
+            alt=""
+            width={36}
+            height={36}
+            className="rounded-full object-cover flex-none"
+          />
           <div className="flex flex-col min-w-0">
             <span className="font-bold text-sm truncate">Funti Kidbooks Studio</span>
             <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
