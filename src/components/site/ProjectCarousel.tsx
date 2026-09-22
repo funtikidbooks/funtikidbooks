@@ -43,7 +43,15 @@ export function ProjectCarousel({ projects }: { projects: Project[] }) {
 
   return (
     <div className="flex flex-col items-center gap-5">
-      <div className="relative w-full flex items-center justify-center" style={{ height: 300 }}>
+      {/* overflow-hidden: the fanned-out side cards translate well past this
+          box's own edges (by design — they fade out via opacity, not a
+          hard cut), which without clipping left them sticking out past the
+          page's real content width. Harmless on real estate anywhere
+          near-invisible at that distance, but it silently made the whole
+          page ~270px horizontally scrollable on mobile — sếp Phúc caught
+          this as a big blank strip of background after an accidental
+          swipe. */}
+      <div className="relative w-full flex items-center justify-center overflow-hidden" style={{ height: 300 }}>
         <button
           type="button"
           onClick={() => go(-1)}
