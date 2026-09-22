@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useDict } from "@/components/site/LocaleProvider";
 
@@ -44,13 +43,12 @@ export function Footer() {
       <div className="site-container py-14 grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1fr_1fr]">
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <Image
-              src="/brand/funti-logo.jpg"
-              alt="Funti Kidbooks Studio"
-              width={40}
-              height={40}
-              className="rounded-full object-cover flex-none"
-            />
+            {/* Transparent-background cutout (public/brand/funti-mascot.png),
+                not the opaque funti-logo.jpg used elsewhere — that one's
+                own cream background showed up as a visible white disc
+                against this footer's dark band (sếp Phúc caught it). */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/funti-mascot.png" alt="Funti Kidbooks Studio" width={40} height={40} className="flex-none" />
             <span className="font-heading font-bold text-lg" style={{ color: "#fff" }}>Funti Kidbooks Studio</span>
           </div>
           <p className="text-sm max-w-[320px]" style={{ color: "#c8c7c1" }}>
