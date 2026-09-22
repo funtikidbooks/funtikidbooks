@@ -350,6 +350,18 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
             </div>
           )}
           <form onSubmit={handleSend} className="flex items-center gap-2">
+            <input
+              className="input flex-1"
+              placeholder={t.portal.guestChatPlaceholder}
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                notifyTyping();
+              }}
+            />
+            {/* Attach sits right beside Send, both the same pill shape and
+                size (btn-sm) — a matched secondary/primary pair instead of
+                a plain grey circle floating apart from an orange pill. */}
             <div ref={attachMenuRef} className="relative flex-none">
               <button
                 type="button"
@@ -357,15 +369,15 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
                 disabled={uploading}
                 aria-label={t.portal.guestChatAttachLabel}
                 title={t.portal.guestChatAttachLabel}
-                className="btn-icon flex-none"
-                style={{ width: 36, height: 36 }}
+                className="btn btn-secondary btn-sm flex-none"
+                style={{ padding: "8px 10px" }}
               >
                 {uploading ? "…" : "📎"}
               </button>
               {attachMenuOpen && (
                 <div
                   className="fk-popup-in card elev-lg absolute flex flex-col p-1.5 gap-0.5"
-                  style={{ bottom: "calc(100% + 8px)", left: 0, width: 160, transformOrigin: "0% 100%" }}
+                  style={{ bottom: "calc(100% + 8px)", right: 0, width: 160, transformOrigin: "100% 100%" }}
                 >
                   <button
                     type="button"
@@ -406,15 +418,6 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
                 onChange={handlePickFiles}
               />
             </div>
-            <input
-              className="input flex-1"
-              placeholder={t.portal.guestChatPlaceholder}
-              value={text}
-              onChange={(e) => {
-                setText(e.target.value);
-                notifyTyping();
-              }}
-            />
             <button
               type="submit"
               disabled={sending || uploading || (!text.trim() && !hasPending)}
