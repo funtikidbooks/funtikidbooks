@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { visitorTypingChannelName, TYPING_IDLE_MS, TYPING_BROADCAST_THROTTLE_MS } from "@/lib/visitorTyping";
 import {
   getClientProjectMessagesForStaff,
   markProjectReadByStaff,
@@ -60,6 +62,26 @@ function labelForVisitor(c: VisitorConversation) {
   return c.visitor_name?.trim() || `Khách #${c.id.slice(0, 4)}`;
 }
 
+// Same "typing…" broadcast dots as the internal 1-1 chat (DirectConversation.tsx).
+function TypingDots({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-[12px] italic" style={{ color: "var(--color-neutral-500)" }}>
+        {label}
+      </span>
+      <span className="inline-flex items-center gap-0.5">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="fk-typing-dot"
+            style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--color-neutral-500)", display: "inline-block", animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </span>
+    </span>
+  );
+}
+
 export function ClientProjectsInbox({
   initialProjects,
   initialVisitorConversations,
@@ -85,6 +107,10 @@ export function ClientProjectsInbox({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [visitorTyping, setVisitorTyping] = useState(false);
+  const typingChannelRef = useRef<RealtimeChannel | null>(null);
+  const visitorTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentAtRef = useRef(0);
 
   const activeProject = useMemo(
     () => (active?.kind === "client" ? (projects.find((p) => p.id === active.id) ?? null) : null),
@@ -133,6 +159,41 @@ export function ClientProjectsInbox({
       cancelled = true;
     };
   }, [active]);
+
+  // Joins the guest's own typing channel (GuestChatPanel.tsx) only while a
+  // visitor thread is open — re-joins whenever `active` switches to a
+  // different visitor, and leaves it entirely for a client-project thread
+  // or when nothing is selected.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVisitorTyping(false);
+    if (active?.kind !== "visitor") return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(visitorTypingChannelName(active.id))
+      .on("broadcast", { event: "typing" }, (msg) => {
+        if ((msg.payload as { from?: string } | null)?.from !== "visitor") return;
+        setVisitorTyping(true);
+        if (visitorTypingTimeoutRef.current) clearTimeout(visitorTypingTimeoutRef.current);
+        visitorTypingTimeoutRef.current = setTimeout(() => setVisitorTyping(false), TYPING_IDLE_MS);
+      })
+      .subscribe();
+    typingChannelRef.current = channel;
+    return () => {
+      typingChannelRef.current = null;
+      if (visitorTypingTimeoutRef.current) clearTimeout(visitorTypingTimeoutRef.current);
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.kind === "visitor" ? active.id : null]);
+
+  function notifyVisitorTyping() {
+    if (!typingChannelRef.current) return;
+    const now = Date.now();
+    if (now - lastTypingSentAtRef.current < TYPING_BROADCAST_THROTTLE_MS) return;
+    lastTypingSentAtRef.current = now;
+    typingChannelRef.current.send({ type: "broadcast", event: "typing", payload: { from: "staff" } });
+  }
 
   useEffect(() => {
     const supabase = createClient();
@@ -448,6 +509,11 @@ export function ClientProjectsInbox({
                   </span>
                 </div>
               ))}
+              {visitorTyping && (
+                <div className="flex flex-col items-start">
+                  <TypingDots label="Khách đang gõ" />
+                </div>
+              )}
             </div>
 
             <div className="flex-none p-3 flex flex-col gap-2" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
@@ -499,7 +565,10 @@ export function ClientProjectsInbox({
                   className="input flex-1"
                   placeholder="Trả lời khách…"
                   value={text}
-                  onChange={(e) => setText(e.target.value)}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    if (active?.kind === "visitor") notifyVisitorTyping();
+                  }}
                   disabled={activeVisitor?.status === "closed"}
                 />
                 <button

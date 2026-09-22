@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { startVisitorConversation, sendVisitorMessage, getVisitorMessages } from "@/lib/actions/visitor-chat";
 import { useDict } from "@/components/site/LocaleProvider";
+import { visitorTypingChannelName, TYPING_IDLE_MS, TYPING_BROADCAST_THROTTLE_MS } from "@/lib/visitorTyping";
 import type { VisitorMessage } from "@/lib/types";
 
 // Same localStorage keys as the floating "Chat với chúng tôi" widget
@@ -17,6 +19,25 @@ const POLL_MS = 4000;
 
 function formatTime(iso: string) {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+}
+
+function TypingDots({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-[12px] italic" style={{ color: "var(--color-neutral-500)" }}>
+        {label}
+      </span>
+      <span className="inline-flex items-center gap-0.5">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="fk-typing-dot"
+            style={{ width: 4, height: 4, borderRadius: "50%", background: "var(--color-neutral-500)", display: "inline-block", animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </span>
+    </span>
+  );
 }
 
 // Two-column, Upwork-Messages-style layout for the signed-out state of Work
@@ -44,7 +65,11 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
   const [chatError, setChatError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
+  const [staffTyping, setStaffTyping] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const typingChannelRef = useRef<RealtimeChannel | null>(null);
+  const staffTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentAtRef = useRef(0);
 
   useEffect(() => {
     if (!conversationId || !token) return;
@@ -64,6 +89,37 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
       clearInterval(interval);
     };
   }, [conversationId, token]);
+
+  // Only once a conversation exists — before the first message there's
+  // nothing yet for staff to see this visitor typing about.
+  useEffect(() => {
+    if (!conversationId) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(visitorTypingChannelName(conversationId))
+      .on("broadcast", { event: "typing" }, (msg) => {
+        if ((msg.payload as { from?: string } | null)?.from !== "staff") return;
+        setStaffTyping(true);
+        if (staffTypingTimeoutRef.current) clearTimeout(staffTypingTimeoutRef.current);
+        staffTypingTimeoutRef.current = setTimeout(() => setStaffTyping(false), TYPING_IDLE_MS);
+      })
+      .subscribe();
+    typingChannelRef.current = channel;
+    return () => {
+      typingChannelRef.current = null;
+      if (staffTypingTimeoutRef.current) clearTimeout(staffTypingTimeoutRef.current);
+      setStaffTyping(false);
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId]);
+
+  function notifyTyping() {
+    if (!typingChannelRef.current) return;
+    const now = Date.now();
+    if (now - lastTypingSentAtRef.current < TYPING_BROADCAST_THROTTLE_MS) return;
+    lastTypingSentAtRef.current = now;
+    typingChannelRef.current.send({ type: "broadcast", event: "typing", payload: { from: "visitor" } });
+  }
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -165,6 +221,11 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
               </div>
             );
           })}
+          {staffTyping && (
+            <div className="flex flex-col items-start">
+              <TypingDots label={t.portal.guestChatStaffTyping} />
+            </div>
+          )}
         </div>
 
         <div className="flex-none p-3 flex flex-col gap-2" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
@@ -178,7 +239,10 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
               className="input flex-1"
               placeholder={t.portal.guestChatPlaceholder}
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                setText(e.target.value);
+                notifyTyping();
+              }}
             />
             <button type="submit" disabled={sending || !text.trim()} className="btn btn-primary btn-sm flex-none">
               {t.portal.guestChatSendBtn}
