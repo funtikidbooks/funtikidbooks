@@ -21,7 +21,6 @@ export function Footer() {
       links: [
         { href: "/dich-vu", label: t.footer.illustration },
         { href: "/dich-vu", label: t.footer.characterDesign },
-        { href: "/dich-vu", label: t.footer.modeling3d },
       ],
     },
     {
