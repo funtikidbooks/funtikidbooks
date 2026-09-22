@@ -72,6 +72,82 @@ export async function registerClientProfile(input: {
   return data as ClientProfile;
 }
 
+// Turns an anonymous "Work With Funti" guest chat (visitor_conversations/
+// visitor_messages — same table the floating "Chat với chúng tôi" widget
+// writes to, see lib/actions/visitor-chat.ts) into this now-signed-in
+// client's first project, the moment they finish registering. Staff already
+// saw every message live in the Khách hàng inbox while the visitor was
+// still anonymous; this just re-homes that same conversation onto their
+// real identity so it continues in the normal client_messages thread
+// instead of staying a dead end in the visitor list. Best-effort: a null
+// return (already claimed, wrong token, or nothing to claim) just leaves
+// the new account with an empty project list — never blocks sign-up.
+export async function claimVisitorConversation(conversationId: string, token: string): Promise<ClientProject | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Please sign in first.");
+
+  const admin = createAdminClient();
+  const { data: conversation } = await admin
+    .from("visitor_conversations")
+    .select("id, visitor_token, claimed_by_client_id, created_at")
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (!conversation || conversation.visitor_token !== token || conversation.claimed_by_client_id) return null;
+
+  const { data: visitorMessages } = await admin
+    .from("visitor_messages")
+    .select("*")
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+  if (!visitorMessages || visitorMessages.length === 0) return null;
+
+  const firstMessage = visitorMessages.find((m) => m.sender_type === "visitor");
+  const description = firstMessage?.content?.slice(0, 4000) || "Cuộc trò chuyện từ Work With Funti";
+
+  const { data: project, error: projectError } = await supabase
+    .from("client_projects")
+    .insert({
+      client_id: user.id,
+      description,
+      image_urls: [],
+      created_at: conversation.created_at,
+      last_message_at: new Date().toISOString(),
+    })
+    .select("*")
+    .single();
+  if (projectError || !project) return null;
+
+  // Service-role, not the client's own session: a 'staff' sender_type row
+  // has no client-side insert policy (client_messages RLS only lets a
+  // client insert sender_type='client' rows on their own project), and this
+  // is a system-side copy of already-delivered messages, not new input.
+  const rows = visitorMessages.map((m) => ({
+    project_id: project.id,
+    sender_type: (m.sender_type === "visitor" ? "client" : "staff") as "client" | "staff",
+    sender_id: m.sender_type === "visitor" ? user.id : null,
+    content: m.content,
+    image_urls: [],
+    // Both sides already saw this conversation happen in real time (the
+    // visitor widget itself, and staff's Khách hàng inbox) — marking it
+    // read on both sides avoids a false "unread" badge the instant this
+    // project first appears.
+    read_by_client: true,
+    read_by_staff: true,
+    created_at: m.created_at,
+  }));
+  await admin.from("client_messages").insert(rows);
+
+  await admin
+    .from("visitor_conversations")
+    .update({ status: "closed", claimed_by_client_id: user.id })
+    .eq("id", conversationId);
+
+  return project as ClientProject;
+}
+
 export async function uploadClientAvatar(formData: FormData): Promise<string> {
   const supabase = await createClient();
   const {

@@ -36,6 +36,11 @@ export type VisitorConversation = {
   unread: boolean;
   created_at: string;
   last_message_at: string;
+  // Set once this anonymous chat is claimed into a signed-in client account
+  // (see claimVisitorConversation in actions/clientPortal.ts) — the guest's
+  // messages live on as that client's first project from then on, and this
+  // row just stays around, closed, as a record of where it started.
+  claimed_by_client_id?: string | null;
 };
 
 export type VisitorMessage = {

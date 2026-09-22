@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
+  claimVisitorConversation,
   createClientProject,
   getMyUnreadCount,
   getPortalState,
@@ -16,45 +17,27 @@ import {
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import { FuntiWordmark } from "@/components/site/FuntiWordmark";
 import { useDict } from "@/components/site/LocaleProvider";
+import { GuestChatPanel, GUEST_CHAT_ID_KEY, GUEST_CHAT_TOKEN_KEY } from "./GuestChatPanel";
 import type { ClientMessage, ClientProfile, ClientProject } from "@/lib/types";
 
 type Stage = "loading" | "signed-out" | "sent-link" | "needs-profile" | "ready";
 
-// Staged across the magic-link email round trip so a first-time visitor
-// only ever fills in ONE form (name, email, what they need) instead of
-// three separate screens (sign in → tell us about yourself → describe your
-// project) before they can say anything to the studio. Best-effort: if
-// storage is unavailable (private browsing) or they verify on a different
-// device, CompleteSignUp below just falls back to asking for a name.
-const PORTAL_DRAFT_KEY = "funti-portal-draft";
-
-type PortalDraft = { name: string; description: string };
-
-function savePortalDraft(draft: PortalDraft) {
+// After registering a profile, turns whatever guest chat this browser was
+// having (GuestChatPanel, same localStorage keys the floating widget uses)
+// into that new client's first project — best-effort, never blocks sign-up.
+async function claimGuestConversation(): Promise<ClientProject | null> {
   try {
-    localStorage.setItem(PORTAL_DRAFT_KEY, JSON.stringify(draft));
-  } catch {
-    // ignore — CompleteSignUp's fallback form covers this
-  }
-}
-
-function loadPortalDraft(): PortalDraft | null {
-  try {
-    const raw = localStorage.getItem(PORTAL_DRAFT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<PortalDraft>;
-    if (typeof parsed.name === "string" && typeof parsed.description === "string") return parsed as PortalDraft;
-    return null;
+    const id = localStorage.getItem(GUEST_CHAT_ID_KEY);
+    const token = localStorage.getItem(GUEST_CHAT_TOKEN_KEY);
+    if (!id || !token) return null;
+    const project = await claimVisitorConversation(id, token);
+    if (project) {
+      localStorage.removeItem(GUEST_CHAT_ID_KEY);
+      localStorage.removeItem(GUEST_CHAT_TOKEN_KEY);
+    }
+    return project;
   } catch {
     return null;
-  }
-}
-
-function clearPortalDraft() {
-  try {
-    localStorage.removeItem(PORTAL_DRAFT_KEY);
-  } catch {
-    // ignore
   }
 }
 
@@ -70,9 +53,10 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
   const { t } = useDict();
   const [stage, setStage] = useState<Stage>("loading");
   const [profile, setProfile] = useState<ClientProfile | null>(null);
-  // Set when CompleteSignUp auto-creates a project from the staged draft —
-  // tells ProjectsDashboard which thread to jump straight into instead of
-  // landing on an empty list right after all that setup.
+  // Set when CompleteSignUp claims a guest chat into a fresh project (see
+  // claimGuestConversation above) — tells ProjectsDashboard which thread to
+  // jump straight into instead of landing on an empty list right after
+  // signup.
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -131,9 +115,7 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
             <p style={{ color: "var(--color-neutral-600)" }}>{t.portal.heroBody}</p>
           </div>
           {showcaseImages.length > 0 && <ShowcaseStrip images={showcaseImages} />}
-          <div className="flex justify-center">
-            <StartForm onSent={() => setStage("sent-link")} onError={setError} />
-          </div>
+          <GuestChatPanel onSent={() => setStage("sent-link")} onError={setError} />
           <HowItWorks />
         </div>
       )}
@@ -281,84 +263,11 @@ function HowItWorks() {
   );
 }
 
-function StartForm({ onSent, onError }: { onSent: () => void; onError: (msg: string | null) => void }) {
-  const { t } = useDict();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [description, setDescription] = useState("");
-  const [sending, setSending] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || !email.trim() || !description.trim() || sending) return;
-    setSending(true);
-    onError(null);
-    try {
-      // Staged before the redirect, not after — signInWithOtp navigates
-      // this tab away once the email link is clicked, so there's no later
-      // point in this flow where writing to localStorage is still
-      // guaranteed to run.
-      savePortalDraft({ name: name.trim(), description: description.trim() });
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        // signup_source lets handle_new_user() (supabase/schema.sql) skip
-        // creating a staff `profiles` row for a client — otherwise every
-        // client sign-in showed up in Chấm công and could open /workspace.
-        options: { emailRedirectTo: `${window.location.origin}/cong-viec`, data: { signup_source: "client" } },
-      });
-      if (error) throw error;
-      onSent();
-    } catch {
-      onError(t.portal.sendLinkError);
-    } finally {
-      setSending(false);
-    }
-  }
-
-  return (
-    <div className="card elev-sm p-6 max-w-[460px] w-full">
-      <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
-        {t.portal.startFormIntro}
-      </p>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <input
-          required
-          className="input"
-          placeholder={t.portal.namePlaceholder}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <input
-          type="email"
-          required
-          className="input"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <textarea
-          required
-          className="input"
-          style={{ minHeight: 110, resize: "vertical" }}
-          placeholder={t.portal.descriptionPlaceholder}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <button type="submit" disabled={sending} className="btn btn-primary">
-          {sending ? t.portal.sending : t.portal.sendLink}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-// Lands here right after the magic-link click. If StartForm's draft made it
-// into localStorage (same device, storage available), this finishes signup
-// and creates the project from it with no further input — the visitor never
-// re-types anything. Falls back to just asking for a name when there's no
-// draft (a different device, private browsing, or the auto-setup itself
-// failed) so nobody gets stuck with no way to continue.
+// Lands here right after the magic-link click. There's no longer a form
+// draft to auto-finish from (GuestChatPanel asks for email only, not a
+// name) — this always asks for a display name, then, once the profile is
+// saved, claims whatever guest chat this browser was having and hands the
+// resulting project back so ProjectsDashboard can jump straight into it.
 function CompleteSignUp({
   onDone,
   onError,
@@ -367,57 +276,10 @@ function CompleteSignUp({
   onError: (msg: string | null) => void;
 }) {
   const { t } = useDict();
-  const [draft] = useState(() => loadPortalDraft());
-  const [autoRunning, setAutoRunning] = useState(!!draft);
-  const [autoFailed, setAutoFailed] = useState(false);
-
-  useEffect(() => {
-    if (!draft) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const profile = await registerClientProfile({
-          displayName: draft.name,
-          country: "",
-          avatarUrl: null,
-          clientType: "individual",
-        });
-        const project = await createClientProject(draft.description, []);
-        if (cancelled) return;
-        clearPortalDraft();
-        onDone(profile, project);
-      } catch (err) {
-        if (cancelled) return;
-        onError(err instanceof Error ? err.message : t.portal.setupError);
-        setAutoRunning(false);
-        setAutoFailed(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft]);
-
-  if (autoRunning) {
-    return (
-      <div className="card elev-sm p-6 max-w-[420px] mx-auto">
-        <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
-          {t.portal.settingUp}
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="card elev-sm p-6 max-w-[420px] mx-auto">
-      {autoFailed && (
-        <p className="text-sm mb-4" style={{ color: "var(--color-neutral-600)" }}>
-          {t.portal.autoSetupFailed}
-        </p>
-      )}
       <p className="font-bold mb-4">{t.portal.askName}</p>
-      <NameOnlyForm onDone={(p) => onDone(p, null)} onError={onError} />
+      <NameOnlyForm onDone={onDone} onError={onError} />
     </div>
   );
 }
@@ -426,7 +288,7 @@ function NameOnlyForm({
   onDone,
   onError,
 }: {
-  onDone: (profile: ClientProfile) => void;
+  onDone: (profile: ClientProfile, project: ClientProject | null) => void;
   onError: (msg: string | null) => void;
 }) {
   const { t } = useDict();
@@ -440,7 +302,8 @@ function NameOnlyForm({
     onError(null);
     try {
       const profile = await registerClientProfile({ displayName, country: "", avatarUrl: null, clientType: "individual" });
-      onDone(profile);
+      const project = await claimGuestConversation();
+      onDone(profile, project);
     } catch (err) {
       onError(err instanceof Error ? err.message : t.portal.saveProfileError);
     } finally {
