@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -92,14 +91,11 @@ export function Header() {
     >
       <div className="site-container flex items-center justify-between gap-4 py-3">
         <Link href="/" className="flex items-center gap-2 flex-none">
-          <Image
-            src="/brand/funti-logo.jpg"
-            alt="Funti Kidbooks Studio"
-            width={40}
-            height={40}
-            className="rounded-full object-cover flex-none"
-            priority
-          />
+          {/* Transparent-background cutout, not the opaque funti-logo.jpg —
+              that one's own cream background showed as a visible white
+              disc wherever this sits on anything but a plain white bar. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/funti-mascot.png" alt="Funti Kidbooks Studio" width={40} height={40} className="flex-none" />
           <span className="flex flex-col leading-tight">
             <span className="font-heading font-bold text-base">Funti Kidbooks</span>
             <span

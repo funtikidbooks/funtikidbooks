@@ -33,13 +33,8 @@ export function ProjectLightbox({
       {/* Top bar */}
       <div className="flex items-center justify-between gap-4 px-5 py-3 flex-none" style={{ borderBottom: "1px solid rgba(255,255,255,.1)" }}>
         <div className="flex items-center gap-3 min-w-0">
-          <Image
-            src="/brand/funti-logo.jpg"
-            alt=""
-            width={36}
-            height={36}
-            className="rounded-full object-cover flex-none"
-          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/funti-mascot.png" alt="" width={36} height={36} className="flex-none" />
           <div className="flex flex-col min-w-0">
             <h2 className="text-white text-sm font-bold truncate">{title}</h2>
             <span className="text-xs truncate" style={{ color: "rgba(255,255,255,.6)" }}>
@@ -162,7 +157,8 @@ export function ProjectLightbox({
         className="hidden md:flex items-center gap-3 fixed rounded-full px-3 py-2"
         style={{ left: 24, bottom: 24, background: "rgba(255,255,255,.95)" }}
       >
-        <Image src="/brand/funti-logo.jpg" alt="" width={32} height={32} className="rounded-full object-cover" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/funti-mascot.png" alt="" width={32} height={32} />
         <span className="text-sm font-semibold">{t.projects.hirePromo}</span>
         <Link href="/cong-viec" className="btn btn-primary btn-sm">
           {t.projects.hireCta}

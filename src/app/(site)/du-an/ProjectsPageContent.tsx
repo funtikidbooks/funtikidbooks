@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense } from "react";
-import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useDict } from "@/components/site/LocaleProvider";
 import { useViewer } from "@/components/site/ViewerProvider";
@@ -36,13 +35,8 @@ export function ProjectsPageContent({ initialProjects }: { initialProjects: Proj
     <>
       <section className="site-container pt-10 pb-8">
         <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-          <Image
-            src="/brand/funti-logo.jpg"
-            alt="Funti Kidbooks Studio"
-            width={72}
-            height={72}
-            className="rounded-full object-cover flex-none"
-          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/funti-mascot.png" alt="Funti Kidbooks Studio" width={72} height={72} className="flex-none" />
           <div className="flex flex-col gap-2 flex-1">
             <h1 className="text-2xl">Funti Kidbooks Studio</h1>
             <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm" style={{ color: "var(--color-neutral-600)" }}>

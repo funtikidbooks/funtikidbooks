@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
@@ -21,13 +20,8 @@ export function AuthCard({ next }: { next: string }) {
   return (
     <div className="w-full max-w-[380px] card elev-lg p-8 flex flex-col gap-5">
       <div className="flex flex-col items-center gap-2 text-center">
-        <Image
-          src="/brand/funti-logo.jpg"
-          alt="Funti Kidbooks Studio"
-          width={52}
-          height={52}
-          className="rounded-full object-cover"
-        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/funti-mascot.png" alt="Funti Kidbooks Studio" width={52} height={52} />
         <h1 className="text-xl">Funti Kidbooks Studio</h1>
         <p className="text-sm" style={{ color: "var(--color-neutral-600)" }}>
           Không gian làm việc dành cho thành viên studio
