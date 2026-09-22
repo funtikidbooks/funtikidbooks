@@ -8,6 +8,7 @@ import { ProjectCarousel } from "@/components/site/ProjectCarousel";
 import { PartnersMarquee } from "@/components/site/PartnersMarquee";
 import { HeroSlideshow } from "@/components/site/HeroSlideshow";
 import { ServicesGrid } from "@/components/site/ServicesGrid";
+import { HeroLogoIntro } from "@/components/site/HeroLogoIntro";
 import { useDict } from "@/components/site/LocaleProvider";
 import { useViewer } from "@/components/site/ViewerProvider";
 import type { ImageTransform } from "@/components/site/EditableImage";
@@ -42,6 +43,7 @@ export function HomeContent({
         revalidatePaths={["/"]}
         overlay="linear-gradient(180deg, rgba(20,18,17,.5) 0%, rgba(20,18,17,.2) 30%, rgba(20,18,17,.72) 52%, rgba(20,18,17,.9) 100%)"
       >
+        <HeroLogoIntro />
         <Reveal x={0} y={-20}>
           <h1 className="text-[32px] leading-[1.25] sm:text-[44px]">
             {t.home.heroTitle[0]}

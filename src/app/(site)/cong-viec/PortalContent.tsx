@@ -61,6 +61,10 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const stageRef = useRef(stage);
+  useEffect(() => {
+    stageRef.current = stage;
+  }, [stage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +76,26 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Catches sign-in completing in another tab of the same browser — a
+  // visitor left on "Kiểm tra email của bạn" who opens the confirmation
+  // link from Gmail in a new tab never sees this one update on its own
+  // otherwise. Supabase syncs the session across tabs via localStorage, so
+  // this fires here the instant that happens (sếp Phúc asked for exactly
+  // this). A full reload is the simplest safe response — far less to get
+  // subtly wrong than re-deriving profile/unread/project state by hand
+  // when a fresh mount already does all of that correctly.
+  useEffect(() => {
+    const supabase = createClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN" && stageRef.current !== "ready") {
+        window.location.reload();
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {

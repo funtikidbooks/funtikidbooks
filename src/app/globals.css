@@ -994,6 +994,133 @@ select.input:focus {
   animation: fk-typing-dot 1.2s ease-in-out infinite;
 }
 
+/* ---------- Homepage hero logo intro (HeroLogoIntro.tsx) ----------
+   Mascot drops in and bounces, each "Funti" letter hops up on its own
+   left-to-right, then "KID BOOKS" pops up as one cluster — sếp Phúc's
+   spec from reviewing the animated-logo prototype. Runs once on mount. */
+.fk-logo-intro-stage-bg {
+  opacity: 0;
+  transform: scale(0.85);
+  animation: fk-logo-intro-stage-in 0.6s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+.fk-logo-intro-ring {
+  opacity: 0;
+  animation: fk-logo-intro-ring-pulse 0.7s ease-out 0.62s both;
+}
+.fk-logo-intro-layer {
+  opacity: 0;
+}
+.fk-logo-intro-mascot {
+  animation:
+    fk-logo-intro-mascot-drop 0.72s cubic-bezier(0.22, 1.35, 0.4, 1) 0.05s forwards,
+    fk-logo-intro-idle-bob 3.2s ease-in-out 0.85s infinite;
+}
+.fk-logo-intro-letter-F {
+  animation: fk-logo-intro-letter-jump 0.46s cubic-bezier(0.25, 1.4, 0.4, 1) 0.62s forwards;
+}
+.fk-logo-intro-letter-u {
+  animation: fk-logo-intro-letter-jump 0.46s cubic-bezier(0.25, 1.4, 0.4, 1) 0.71s forwards;
+}
+.fk-logo-intro-letter-n {
+  animation: fk-logo-intro-letter-jump 0.46s cubic-bezier(0.25, 1.4, 0.4, 1) 0.8s forwards;
+}
+.fk-logo-intro-letter-t {
+  animation: fk-logo-intro-letter-jump 0.46s cubic-bezier(0.25, 1.4, 0.4, 1) 0.89s forwards;
+}
+.fk-logo-intro-letter-i {
+  animation: fk-logo-intro-letter-jump 0.46s cubic-bezier(0.25, 1.4, 0.4, 1) 0.98s forwards;
+}
+.fk-logo-intro-subtitle {
+  animation: fk-logo-intro-cluster-jump 0.5s cubic-bezier(0.25, 1.3, 0.35, 1) 1.28s forwards;
+}
+@keyframes fk-logo-intro-stage-in {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes fk-logo-intro-mascot-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-140%) scale(0.75);
+  }
+  55% {
+    opacity: 1;
+  }
+  72% {
+    transform: translateY(6%) scale(1.05);
+  }
+  86% {
+    transform: translateY(-2%) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes fk-logo-intro-idle-bob {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-2.2%) scale(1);
+  }
+}
+@keyframes fk-logo-intro-letter-jump {
+  0% {
+    opacity: 0;
+    transform: translateY(55%) scale(0.7) rotate(-6deg);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-12%) scale(1.08) rotate(3deg);
+  }
+  78% {
+    transform: translateY(4%) scale(0.97) rotate(-1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+@keyframes fk-logo-intro-cluster-jump {
+  0% {
+    opacity: 0;
+    transform: translateY(65%) scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-10%) scale(1.05);
+  }
+  75% {
+    transform: translateY(3%) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes fk-logo-intro-ring-pulse {
+  0% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.9);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fk-logo-intro-stage-bg,
+  .fk-logo-intro-ring,
+  .fk-logo-intro-layer {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
