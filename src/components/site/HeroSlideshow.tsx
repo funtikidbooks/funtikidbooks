@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { addHeroSlide, removeHeroSlide, saveJsonSetting } from "@/lib/actions/admin";
 import { DEFAULT_IMAGE_TRANSFORM, type ImageTransform } from "@/components/site/EditableImage";
 import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
+import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 
 const ROTATE_MS = 6000;
 
@@ -61,6 +62,16 @@ export function HeroSlideshow({
   // even though only one is visible — only mount the <img> once a slide has
   // actually been reached, so the rest load lazily as the rotation gets there.
   const [loaded, setLoaded] = useState<Set<number>>(() => new Set([0]));
+  // Every slide's posX/posY is tuned once, by dragging while looking at the
+  // wide desktop banner — on a phone's much taller, narrower crop window
+  // the exact same anchor point can land the visible slice almost entirely
+  // off to one side (sếp Phúc: a slide showing empty sky/ocean with the
+  // actual group of people cut off at the very edge). There's no separate
+  // per-breakpoint position saved, so on phones this just re-centers
+  // horizontally instead of trusting the desktop-tuned X — vertical
+  // framing (posY) still matters for keeping faces in frame, so that part
+  // of the saved position is kept as-is.
+  const isMobile = useIsMobileViewport();
 
   // Clamp at render time instead of via an effect — avoids an extra render
   // when a slide is removed and the current index falls out of range.
@@ -169,6 +180,7 @@ export function HeroSlideshow({
       >
         {slides.map((src, i) => {
           const t = transforms[src] ?? DEFAULT_IMAGE_TRANSFORM;
+          const posX = isMobile ? 50 : t.posX;
           const isActive = i === safeIndex;
           // Alternate both zoom direction (in vs out) and pan direction
           // (left→right vs right→left) slide-to-slide, purely by position
@@ -235,7 +247,7 @@ export function HeroSlideshow({
                     priority={i === 0}
                     unoptimized={isSupabaseStorageUrl(src)}
                     className="object-cover"
-                    style={{ transform: `scale(${t.zoom / 100})`, objectPosition: `${t.posX}% ${t.posY}%`, pointerEvents: "none" }}
+                    style={{ transform: `scale(${t.zoom / 100})`, objectPosition: `${posX}% ${t.posY}%`, pointerEvents: "none" }}
                   />
                 </div>
               )}
