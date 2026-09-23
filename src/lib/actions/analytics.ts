@@ -20,8 +20,16 @@ async function requireDirector() {
 // sếp Phúc set this up (2026-09-23/24).
 function getClient() {
   const client_email = process.env.GA4_SERVICE_ACCOUNT_EMAIL;
-  const private_key = process.env.GA4_SERVICE_ACCOUNT_PRIVATE_KEY;
-  if (!client_email || !private_key) throw new Error("Chưa cấu hình Google Analytics (thiếu service account).");
+  const rawKey = process.env.GA4_SERVICE_ACCOUNT_PRIVATE_KEY;
+  if (!client_email || !rawKey) throw new Error("Chưa cấu hình Google Analytics (thiếu service account).");
+  // A key pasted from the downloaded JSON file often keeps its `\n`s as the
+  // two literal characters backslash+n (that's how JSON escapes a newline
+  // inside a string) instead of a real line break — harmless in the JSON
+  // file itself, but OpenSSL can't parse a PEM key on one line and fails
+  // with "DECODER routines::unsupported". Vercel's env var UI doesn't
+  // preserve real newlines reliably either, so this normalizes either form
+  // back to real newlines regardless of how it was pasted.
+  const private_key = rawKey.replace(/\\n/g, "\n");
   return new BetaAnalyticsDataClient({ credentials: { client_email, private_key } });
 }
 
