@@ -67,30 +67,41 @@ export default async function AdminAnalyticsPage() {
               </div>
             </div>
 
-            <div className="card elev-sm p-5 flex flex-col gap-3">
-              <span className="font-bold text-sm">7 ngày gần đây</span>
+            <div className="card elev-sm p-5 flex flex-col gap-4">
+              <span className="font-bold text-sm">7 ngày gần đây — lượt truy cập theo ngày</span>
               {overview.last7Days.every((d) => d.sessions === 0) ? (
                 <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
                   Chưa có dữ liệu — property GA4 mới tạo có thể mất tới 24-48h để bắt đầu ghi nhận.
                 </p>
               ) : (
-                <div className="flex flex-col gap-2">
-                  {overview.last7Days.map((d) => (
-                    <div key={d.date} className="flex items-center gap-3">
-                      <span className="text-xs flex-none" style={{ width: 44, color: "var(--color-neutral-500)" }}>
-                        {d.date}
-                      </span>
-                      <div className="flex-1 rounded-full overflow-hidden" style={{ height: 8, background: "var(--color-surface)" }}>
+                <div className="flex items-stretch gap-3" style={{ height: 190 }}>
+                  {overview.last7Days.map((d) => {
+                    const pct = (d.sessions / maxSessionsInDay) * 100;
+                    return (
+                      <div key={d.date} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
+                        <span className="text-xs font-bold truncate w-full text-center" style={{ color: "var(--color-text)" }}>
+                          {formatNumber(d.sessions)}
+                        </span>
+                        {/* Fixed-height track so each bar's height is a true
+                            percentage of the tallest day (magnitude-accurate,
+                            not just "looks bigger") — anchored to a baseline
+                            rule at the bottom, rounded only at the data end. */}
                         <div
-                          className="h-full rounded-full"
-                          style={{ width: `${(d.sessions / maxSessionsInDay) * 100}%`, background: "var(--color-accent-500)" }}
-                        />
+                          className="w-full flex-1 flex items-end"
+                          style={{ borderBottom: "1px solid var(--color-neutral-200)" }}
+                        >
+                          <div
+                            className="w-full rounded-t-[4px]"
+                            style={{ height: `${Math.max(pct, 3)}%`, minHeight: 3, background: "var(--color-accent-500)" }}
+                            title={`${d.date}: ${formatNumber(d.sessions)} lượt truy cập, ${formatNumber(d.pageViews)} lượt xem trang`}
+                          />
+                        </div>
+                        <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                          {d.date}
+                        </span>
                       </div>
-                      <span className="text-xs font-semibold flex-none" style={{ width: 100, textAlign: "right", color: "var(--color-neutral-600)" }}>
-                        {formatNumber(d.sessions)} lượt · {formatNumber(d.pageViews)} trang
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
