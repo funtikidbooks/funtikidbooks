@@ -40,6 +40,7 @@ const HR_NAV = [
 const DIRECTOR_ONLY_NAV = [
   { href: "/quan-tri/tai-chinh", label: "Tài chính", icon: "📈" },
   { href: "/quan-tri/bao-cao-tai-chinh", label: "Báo cáo tài chính", icon: "📊" },
+  { href: "/quan-tri/luot-truy-cap", label: "Lượt truy cập web", icon: "🌐" },
 ];
 
 export function AdminSidebar({
