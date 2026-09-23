@@ -1,6 +1,14 @@
 import type { MetadataRoute } from "next";
 import { getJobPostings, getPublishedNewsPosts } from "@/lib/data/site-content";
 
+// Without this, Next.js treats a metadata route (sitemap.ts included) as
+// fully static — generated once at build time and served unchanged until
+// the next deploy. A news post (or job posting) added directly in the
+// database, without a code deploy, would then silently never show up in
+// sitemap.xml. Revalidating hourly keeps it current without regenerating
+// on every single crawler hit.
+export const revalidate = 3600;
+
 const SITE_URL = "https://funtikidbooks.com";
 
 const STATIC_PAGES = ["", "dich-vu", "du-an", "gioi-thieu", "lien-he", "quy-trinh", "tin-tuc", "tuyen-dung", "chinh-sach-bao-mat", "dieu-khoan"];
