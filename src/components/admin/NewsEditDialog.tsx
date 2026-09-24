@@ -99,7 +99,11 @@ export function NewsEditDialog({
   const busy = saving !== null;
 
   return (
-    <Modal onClose={onClose} maxWidth={720}>
+    // Only widened for larger screens — Modal's own w-full + backdrop
+    // padding already shrinks this to fit iPad/phone regardless of the cap,
+    // same as every other Modal call in the app, so nothing else needed for
+    // those to stay right-sized.
+    <Modal onClose={onClose} maxWidth={1040}>
       <div className="flex flex-col">
         <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-4" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
           <div>
