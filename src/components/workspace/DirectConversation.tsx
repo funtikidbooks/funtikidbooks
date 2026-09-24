@@ -420,6 +420,18 @@ export function DirectConversation({
     };
   }, [resync]);
 
+  // Safety net for a realtime channel that's gone quietly dead — same fix as
+  // MeetingHub's identical effect: Supabase's socket can stop delivering
+  // postgres_changes events for an already-open conversation without ever
+  // firing its own close/error callback, so nothing above would otherwise
+  // notice. A DM thread left open on screen (never backgrounded, never
+  // unfocused) never trips the focus/visibilitychange resync either — this
+  // is what actually recovers it when the socket has gone stale.
+  useEffect(() => {
+    const interval = setInterval(resync, 20000);
+    return () => clearInterval(interval);
+  }, [resync]);
+
   // Marks every unread message from the peer as read the moment this
   // conversation is open and has anything to show — mirrors Messenger's
   // behavior of marking things read just by having the thread open. Safe to
@@ -504,8 +516,16 @@ export function DirectConversation({
       // Fires with "SUBSCRIBED" both on the initial connect and after any
       // reconnect — resyncing here is what catches up on messages that
       // arrived during a drop, since Realtime doesn't replay missed events.
+      // Also resync on a drop itself (TIMED_OUT/CHANNEL_ERROR/CLOSED) — same
+      // reasoning as MeetingHub's identical fix: the client library doesn't
+      // always resubscribe this exact channel object on its own, and the
+      // 20s safety-net poll below already covers "went quiet with no status
+      // change at all" — this just closes the gap faster on a drop that
+      // does surface one of these statuses.
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") resync();
+        if (status === "SUBSCRIBED" || status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") {
+          resync();
+        }
       });
 
     channelRef.current = channel;
