@@ -96,6 +96,18 @@ export function MindmapCanvas({
     return ids;
   }, [nodes, childrenByParent]);
 
+  // Counts every descendant (children, grandchildren, ...) so the delete
+  // confirmation can warn specifically when there's something to lose —
+  // a leaf branch and a branch with 8 nested items underneath shouldn't
+  // get the same casual "Xoá nhánh này?".
+  function countDescendants(id: string): number {
+    let count = 0;
+    for (const child of childrenByParent.get(id) ?? []) {
+      count += 1 + countDescendants(child.id);
+    }
+    return count;
+  }
+
   // The canvas is much bigger than any screen, and the root node sits at
   // the origin (0,0 → OFFSET_X/OFFSET_Y once rendered), not at the
   // scroll container's own (0,0) — without this, opening a project lands
@@ -427,6 +439,36 @@ export function MindmapCanvas({
                   >
                     + Thêm bài
                   </button>
+
+                  {/* Same hover (desktop) / long-press (touch) affordance as
+                      every other node — "+ Thêm bài" does the identical
+                      thing, this is just the familiar corner shortcut so a
+                      list-mode card doesn't feel like it's missing the
+                      control every other node has. */}
+                  <button
+                    type="button"
+                    aria-label="Thêm bài"
+                    title="Thêm bài"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addChild(n);
+                    }}
+                    className={"fk-mindmap-node-add absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
+                    style={{
+                      right: -12,
+                      bottom: -12,
+                      width: 28,
+                      height: 28,
+                      background: color,
+                      color: "#fff",
+                      fontSize: 16,
+                      boxShadow: "var(--shadow-sm)",
+                      zIndex: 2,
+                    }}
+                  >
+                    +
+                  </button>
                 </div>
               );
             }
@@ -543,24 +585,33 @@ export function MindmapCanvas({
         />
       )}
 
-      {confirmDeleteId && (
-        <Modal onClose={() => setConfirmDeleteId(null)} maxWidth={380}>
-          <div className="p-5 flex flex-col gap-4">
-            <span className="font-bold text-base">Xoá nhánh này?</span>
-            <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
-              Mọi nhánh con bên trong cũng sẽ bị xoá theo. Không thể hoàn tác.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDeleteId(null)}>
-                Huỷ
-              </button>
-              <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDeleteNode(confirmDeleteId)}>
-                Xoá
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+      {confirmDeleteId &&
+        (() => {
+          const descendantCount = countDescendants(confirmDeleteId);
+          const hasChildren = descendantCount > 0;
+          return (
+            <Modal onClose={() => setConfirmDeleteId(null)} maxWidth={380}>
+              <div className="p-5 flex flex-col gap-4">
+                <span className="font-bold text-base">
+                  {hasChildren ? "Nhánh này có nhánh con bên trong" : "Xoá nhánh này?"}
+                </span>
+                <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
+                  {hasChildren
+                    ? `Nhánh này đang có ${descendantCount} nhánh con bên trong — xoá sẽ mất hết luôn, không chỉ riêng nhánh này. Không thể hoàn tác.`
+                    : "Không thể hoàn tác."}
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDeleteId(null)}>
+                    Huỷ
+                  </button>
+                  <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDeleteNode(confirmDeleteId)}>
+                    {hasChildren ? `Xoá cả ${descendantCount + 1} nhánh` : "Xoá"}
+                  </button>
+                </div>
+              </div>
+            </Modal>
+          );
+        })()}
     </div>
   );
 }
