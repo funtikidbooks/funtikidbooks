@@ -289,6 +289,16 @@ export async function deleteNewsPost(id: string) {
   revalidatePath("/tin-tuc");
 }
 
+// Fetches one full post (every field, including content) for NewsEditDialog
+// — used from the "Dự án" mindmap, which only ever holds the partial
+// title/excerpt/category preview joined onto a mindmap node, not the full
+// row every node would otherwise carry for no reason.
+export async function getNewsPostById(id: string): Promise<NewsPost | null> {
+  const { supabase } = await requireContentEditor();
+  const { data } = await supabase.from("news_posts").select("*").eq("id", id).maybeSingle();
+  return (data as NewsPost) ?? null;
+}
+
 export async function uploadContentImage(file: File) {
   const { supabase } = await requireContentEditor();
   return uploadSiteImage(supabase, "news-content", file);

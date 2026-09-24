@@ -9,7 +9,8 @@ import {
   getDraftNewsPosts,
   updateMindmapNode,
 } from "@/lib/actions/mindmap";
-import { updateNewsPost } from "@/lib/actions/admin";
+import { getNewsPostById, updateNewsPost } from "@/lib/actions/admin";
+import { NewsEditDialog } from "@/components/admin/NewsEditDialog";
 import type { MindmapNode, MindmapProject, NewsPost } from "@/lib/types";
 
 const NODE_W = 176;
@@ -40,6 +41,12 @@ export function MindmapCanvas({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draftPosts, setDraftPosts] = useState<DraftPost[] | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // Full post being edited in NewsEditDialog (text + images) — separate
+  // from the node's own partial news_post preview, which only ever carries
+  // title/excerpt/category/published, not content or a cover image.
+  const [editingPost, setEditingPost] = useState<NewsPost | null>(null);
+  const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
+  const [loadingEditFor, setLoadingEditFor] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
@@ -202,6 +209,40 @@ export function MindmapCanvas({
     );
   }
 
+  async function openPostEditor(node: MindmapNode) {
+    if (!node.linked_news_post_id) return;
+    setLoadingEditFor(node.id);
+    const post = await getNewsPostById(node.linked_news_post_id).catch(() => null);
+    setLoadingEditFor(null);
+    if (!post) return;
+    setEditingNodeId(node.id);
+    setEditingPost(post);
+  }
+
+  function closePostEditor() {
+    setEditingPost(null);
+    setEditingNodeId(null);
+  }
+
+  function handlePostUpdated(_id: string, updated: NewsPost) {
+    setNodes((prev) =>
+      prev.map((n) =>
+        n.id === editingNodeId
+          ? { ...n, news_post: { id: updated.id, title: updated.title, excerpt: updated.excerpt, category: updated.category, published: updated.published, created_at: updated.created_at } }
+          : n,
+      ),
+    );
+    closePostEditor();
+  }
+
+  function handlePostDeletedFromEditor(deletedId: string) {
+    setNodes((prev) =>
+      prev.map((n) => (n.linked_news_post_id === deletedId ? { ...n, linked_news_post_id: null, news_post: null } : n)),
+    );
+    if (editingNodeId) updateMindmapNode(editingNodeId, { linkedNewsPostId: null }).catch(() => {});
+    closePostEditor();
+  }
+
   async function handleDeleteNode(id: string) {
     setConfirmDeleteId(null);
     setSelectedId(null);
@@ -349,10 +390,22 @@ export function MindmapCanvas({
             onSave={(patch) => saveNode(selected.id, patch)}
             onLinkDraft={(postId) => linkDraft(selected.id, postId)}
             onApprove={() => approveAndPublish(selected)}
+            onEditPost={() => openPostEditor(selected)}
+            editingPost={loadingEditFor === selected.id}
             onDeleteRequest={() => setConfirmDeleteId(selected.id)}
             onClose={() => setSelectedId(null)}
           />
         </Modal>
+      )}
+
+      {editingPost && (
+        <NewsEditDialog
+          post={editingPost}
+          onClose={closePostEditor}
+          onCreated={() => {}}
+          onUpdated={handlePostUpdated}
+          onDeleted={handlePostDeletedFromEditor}
+        />
       )}
 
       {confirmDeleteId && (
@@ -384,6 +437,8 @@ function NodePanel({
   onSave,
   onLinkDraft,
   onApprove,
+  onEditPost,
+  editingPost,
   onDeleteRequest,
   onClose,
 }: {
@@ -393,6 +448,8 @@ function NodePanel({
   onSave: (patch: { title?: string; note?: string | null; color?: string }) => void;
   onLinkDraft: (postId: string | null) => void;
   onApprove: () => void;
+  onEditPost: () => void;
+  editingPost: boolean;
   onDeleteRequest: () => void;
   onClose: () => void;
 }) {
@@ -488,6 +545,11 @@ function NodePanel({
                 </p>
               )}
               <div className="flex flex-wrap gap-2 pt-1">
+                {node.news_post && (
+                  <button type="button" className="btn btn-secondary btn-sm" disabled={editingPost} onClick={onEditPost}>
+                    {editingPost ? "Đang mở…" : "✏️ Chỉnh sửa nội dung"}
+                  </button>
+                )}
                 {node.news_post && !node.news_post.published && (
                   <button
                     type="button"
