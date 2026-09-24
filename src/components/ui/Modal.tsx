@@ -10,7 +10,7 @@ export function Modal({
 }: {
   onClose: () => void;
   children: React.ReactNode;
-  maxWidth?: number;
+  maxWidth?: number | string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 

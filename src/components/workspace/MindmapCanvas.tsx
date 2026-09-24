@@ -250,7 +250,7 @@ export function MindmapCanvas({
       </div>
 
       {selected && (
-        <Modal onClose={() => setSelectedId(null)} maxWidth={860}>
+        <Modal onClose={() => setSelectedId(null)} maxWidth="90vw">
           <NodePanel
             key={selected.id}
             node={selected}
