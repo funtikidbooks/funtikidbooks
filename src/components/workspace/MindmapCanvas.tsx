@@ -337,6 +337,72 @@ export function MindmapCanvas({
             const isRoot = n.parent_id === null;
             const color = n.color ?? project.color;
 
+            // The root is the project's own title, not another branch —
+            // no list-item rows, no "+ Thêm bài" (sếp Phúc: it only needs
+            // to look like a special title card). It keeps the corner "+"
+            // so branches can still grow out of it.
+            if (isRoot) {
+              return (
+                <div
+                  key={n.id}
+                  className="fk-mindmap-node absolute flex flex-col justify-center select-none"
+                  style={{
+                    left: n.x + OFFSET_X,
+                    top: n.y + OFFSET_Y,
+                    width: LIST_W,
+                    minHeight: 84,
+                    zIndex: 1,
+                    borderRadius: "var(--radius-lg)",
+                    background: `linear-gradient(135deg, ${color}, ${color}cc)`,
+                    boxShadow: `var(--shadow-lg), 0 0 0 1px ${color}55`,
+                  }}
+                >
+                  <div
+                    onPointerDown={(e) => handlePointerDown(e, n)}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    className="flex flex-col gap-1 px-5 py-5 cursor-grab active:cursor-grabbing"
+                    style={{ touchAction: "none" }}
+                  >
+                    <span className="text-[10px] font-bold tracking-wider" style={{ color: "rgba(255,255,255,0.75)" }}>
+                      DỰ ÁN
+                    </span>
+                    <span
+                      className="text-[16px] font-heading font-bold leading-snug"
+                      style={{ color: "#fff", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                    >
+                      {n.title}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    aria-label="Thêm nhánh mới"
+                    title="Thêm nhánh mới"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addChild(n);
+                    }}
+                    className={"fk-mindmap-node-action absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
+                    style={{
+                      right: -14,
+                      bottom: -14,
+                      width: 32,
+                      height: 32,
+                      background: "#fff",
+                      color,
+                      fontSize: 18,
+                      boxShadow: "var(--shadow-md)",
+                      zIndex: 2,
+                    }}
+                  >
+                    +
+                  </button>
+                </div>
+              );
+            }
+
             const listItems = (childrenByParent.get(n.id) ?? []).filter((c) => c.is_list_item);
             return (
               <div
@@ -348,7 +414,6 @@ export function MindmapCanvas({
                   width: LIST_W,
                   zIndex: 1,
                   borderLeft: `4px solid ${color}`,
-                  boxShadow: isRoot ? `0 0 0 2px ${color}33` : undefined,
                 }}
               >
                 <div
@@ -359,9 +424,8 @@ export function MindmapCanvas({
                   style={{ minHeight: NODE_H, paddingTop: 8, paddingBottom: 8, touchAction: "none" }}
                 >
                   <span
-                    className="text-[12.5px] leading-tight"
+                    className="text-[12.5px] leading-tight font-bold"
                     style={{
-                      fontWeight: isRoot ? 800 : 700,
                       display: "-webkit-box",
                       WebkitLineClamp: 2,
                       WebkitBoxOrient: "vertical",
@@ -370,9 +434,8 @@ export function MindmapCanvas({
                   >
                     {n.title}
                   </span>
-                  {(isRoot || n.linked_news_post_id || n.note) && (
+                  {(n.linked_news_post_id || n.note) && (
                     <div className="flex items-center gap-1">
-                      {isRoot && <span className="tag tag-accent" style={{ fontSize: 9, padding: "1px 6px" }}>Gốc</span>}
                       {n.linked_news_post_id && (
                         <span
                           className="tag"
@@ -484,32 +547,30 @@ export function MindmapCanvas({
                   +
                 </button>
 
-                {!isRoot && (
-                  <button
-                    type="button"
-                    aria-label="Xoá nhánh"
-                    title="Xoá nhánh"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConfirmDeleteId(n.id);
-                    }}
-                    className={"fk-mindmap-node-action absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
-                    style={{
-                      right: -12,
-                      top: -12,
-                      width: 24,
-                      height: 24,
-                      background: "var(--status-red)",
-                      color: "#fff",
-                      fontSize: 13,
-                      boxShadow: "var(--shadow-sm)",
-                      zIndex: 2,
-                    }}
-                  >
-                    ✕
-                  </button>
-                )}
+                <button
+                  type="button"
+                  aria-label="Xoá nhánh"
+                  title="Xoá nhánh"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmDeleteId(n.id);
+                  }}
+                  className={"fk-mindmap-node-action absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
+                  style={{
+                    right: -12,
+                    top: -12,
+                    width: 24,
+                    height: 24,
+                    background: "var(--status-red)",
+                    color: "#fff",
+                    fontSize: 13,
+                    boxShadow: "var(--shadow-sm)",
+                    zIndex: 2,
+                  }}
+                >
+                  ✕
+                </button>
               </div>
             );
           })}
