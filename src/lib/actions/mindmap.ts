@@ -100,7 +100,15 @@ export async function createMindmapNode(input: {
 
 export async function updateMindmapNode(
   id: string,
-  patch: { title?: string; note?: string | null; x?: number; y?: number; color?: string | null; linkedNewsPostId?: string | null },
+  patch: {
+    title?: string;
+    note?: string | null;
+    x?: number;
+    y?: number;
+    color?: string | null;
+    linkedNewsPostId?: string | null;
+    listMode?: boolean;
+  },
 ): Promise<void> {
   const { supabase } = await requireUser();
   const row: Partial<Omit<MindmapNode, "news_post">> = {};
@@ -110,6 +118,7 @@ export async function updateMindmapNode(
   if (patch.y !== undefined) row.y = patch.y;
   if (patch.color !== undefined) row.color = patch.color;
   if (patch.linkedNewsPostId !== undefined) row.linked_news_post_id = patch.linkedNewsPostId;
+  if (patch.listMode !== undefined) row.list_mode = patch.listMode;
 
   const { error } = await supabase.from("mindmap_nodes").update(row).eq("id", id);
   if (error) throw new Error("Không thể cập nhật nhánh");

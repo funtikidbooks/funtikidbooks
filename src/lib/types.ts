@@ -375,6 +375,11 @@ export type MindmapNode = {
   y: number;
   color: string | null;
   linked_news_post_id: string | null;
+  // When true, this node's own children render as rows stacked inside its
+  // own card (a growing list with a ✕ per row) instead of as separate
+  // draggable boxes connected by lines — see MindmapCanvas's "absorbed"
+  // node handling.
+  list_mode: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;
