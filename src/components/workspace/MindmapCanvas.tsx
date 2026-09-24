@@ -250,7 +250,7 @@ export function MindmapCanvas({
       </div>
 
       {selected && (
-        <Modal onClose={() => setSelectedId(null)} maxWidth={440}>
+        <Modal onClose={() => setSelectedId(null)} maxWidth={860}>
           <NodePanel
             key={selected.id}
             node={selected}
@@ -319,117 +319,139 @@ function NodePanel({
   }
 
   return (
-    <div className="p-5 flex flex-col gap-4">
+    <div className="p-6 sm:p-8 flex flex-col gap-6">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-bold text-base">{isRoot ? "Gốc dự án" : "Nhánh"}</span>
-        <button type="button" className="btn-icon" style={{ width: 26, height: 26, padding: 0 }} onClick={onClose}>
+        <span className="font-bold text-xl">{isRoot ? "Gốc dự án" : "Nhánh"}</span>
+        <button type="button" className="btn-icon" style={{ width: 32, height: 32, padding: 0 }} onClick={onClose}>
           ✕
         </button>
       </div>
 
-      <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-semibold">Tên</span>
-        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} onBlur={save} maxLength={100} />
-      </label>
-
-      <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-semibold">Ghi chú</span>
-        <textarea className="input" rows={3} value={note} onChange={(e) => setNote(e.target.value)} onBlur={save} maxLength={2000} />
-      </label>
-
-      <div className="flex flex-col gap-1.5 text-sm">
-        <span className="font-semibold">Màu</span>
-        <div className="flex gap-2">
-          {COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => {
-                setColor(c);
-                onSave({ color: c });
-              }}
-              className="rounded-full flex-none"
-              style={{
-                width: 24,
-                height: 24,
-                background: c,
-                border: color === c ? "2px solid var(--color-text)" : "2px solid transparent",
-              }}
-              aria-label={c}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
+        <div className="flex flex-col gap-5">
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="font-semibold">Tên</span>
+            <input
+              className="input text-base"
+              style={{ height: 44 }}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={save}
+              maxLength={100}
             />
-          ))}
+          </label>
+
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="font-semibold">Ghi chú</span>
+            <textarea
+              className="input text-base"
+              rows={7}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              onBlur={save}
+              maxLength={2000}
+            />
+          </label>
+
+          <div className="flex flex-col gap-2 text-sm">
+            <span className="font-semibold">Màu</span>
+            <div className="flex gap-3">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => {
+                    setColor(c);
+                    onSave({ color: c });
+                  }}
+                  className="rounded-full flex-none"
+                  style={{
+                    width: 32,
+                    height: 32,
+                    background: c,
+                    border: color === c ? "3px solid var(--color-text)" : "3px solid transparent",
+                  }}
+                  aria-label={c}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2 text-sm">
+          <span className="font-semibold">Bài viết nháp gắn vào nhánh này</span>
+          {node.linked_news_post_id ? (
+            <div className="card p-4 flex flex-col gap-3" style={{ background: "var(--color-surface)" }}>
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-semibold text-base leading-snug">{node.news_post?.title ?? "(Không có quyền xem bài này)"}</span>
+                {node.news_post?.published ? (
+                  <span
+                    className="tag flex-none"
+                    style={{ background: "var(--status-green-bg, #e4f4e6)", color: "var(--status-green, #3f9e52)" }}
+                  >
+                    Đã đăng
+                  </span>
+                ) : (
+                  <span className="tag tag-neutral flex-none">Nháp</span>
+                )}
+              </div>
+              {node.news_post?.excerpt && (
+                <p className="text-sm leading-relaxed" style={{ color: "var(--color-neutral-500)" }}>
+                  {node.news_post.excerpt}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {node.news_post && !node.news_post.published && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={approving}
+                    onClick={async () => {
+                      setApproving(true);
+                      await onApprove();
+                      setApproving(false);
+                    }}
+                  >
+                    {approving ? "Đang đăng…" : "✅ Duyệt & đăng"}
+                  </button>
+                )}
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => onLinkDraft(null)}>
+                  Bỏ liên kết
+                </button>
+              </div>
+            </div>
+          ) : draftPosts.length > 0 ? (
+            <select
+              className="input text-base"
+              style={{ height: 44 }}
+              defaultValue=""
+              onChange={(e) => {
+                if (e.target.value) onLinkDraft(e.target.value);
+              }}
+            >
+              <option value="" disabled>
+                Chọn bài nháp…
+              </option>
+              {draftPosts.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
+              Không có bài nháp nào (hoặc bạn không có quyền xem bài chưa đăng).
+            </p>
+          )}
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 text-sm">
-        <span className="font-semibold">Bài viết nháp gắn vào nhánh này</span>
-        {node.linked_news_post_id ? (
-          <div className="card p-3 flex flex-col gap-2" style={{ background: "var(--color-surface)" }}>
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-sm">{node.news_post?.title ?? "(Không có quyền xem bài này)"}</span>
-              {node.news_post?.published ? (
-                <span className="tag flex-none" style={{ background: "var(--status-green-bg, #e4f4e6)", color: "var(--status-green, #3f9e52)" }}>
-                  Đã đăng
-                </span>
-              ) : (
-                <span className="tag tag-neutral flex-none">Nháp</span>
-              )}
-            </div>
-            {node.news_post?.excerpt && (
-              <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-                {node.news_post.excerpt}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-2">
-              {node.news_post && !node.news_post.published && (
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  disabled={approving}
-                  onClick={async () => {
-                    setApproving(true);
-                    await onApprove();
-                    setApproving(false);
-                  }}
-                >
-                  {approving ? "Đang đăng…" : "✅ Duyệt & đăng"}
-                </button>
-              )}
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => onLinkDraft(null)}>
-                Bỏ liên kết
-              </button>
-            </div>
-          </div>
-        ) : draftPosts.length > 0 ? (
-          <select
-            className="input"
-            defaultValue=""
-            onChange={(e) => {
-              if (e.target.value) onLinkDraft(e.target.value);
-            }}
-          >
-            <option value="" disabled>
-              Chọn bài nháp…
-            </option>
-            {draftPosts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-            Không có bài nháp nào (hoặc bạn không có quyền xem bài chưa đăng).
-          </p>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between gap-2 pt-2" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={onAddChild}>
+      <div className="flex items-center justify-between gap-2 pt-4" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+        <button type="button" className="btn btn-secondary" onClick={onAddChild}>
           + Thêm nhánh con
         </button>
         {!isRoot && (
-          <button type="button" className="btn btn-danger btn-sm" onClick={onDeleteRequest}>
+          <button type="button" className="btn btn-danger" onClick={onDeleteRequest}>
             Xoá nhánh
           </button>
         )}
