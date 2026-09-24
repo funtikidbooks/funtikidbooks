@@ -27,6 +27,7 @@ const MORE_NAV = [
   { href: "/workspace/hop-dong", label: "Hợp đồng", icon: "📄" },
   { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐" },
   { href: "/workspace/du-an", label: "Dự án", icon: "📁" },
+  { href: "/workspace/luot-truy-cap", label: "Lượt truy cập web", icon: "🌐" },
 ];
 
 // The installed iPhone app trades the "4 most-used + everything else behind

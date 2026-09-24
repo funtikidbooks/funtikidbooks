@@ -6,7 +6,7 @@ import { Modal } from "@/components/ui/Modal";
 import { createMindmapProject, deleteMindmapProject } from "@/lib/actions/mindmap";
 import type { MindmapProject } from "@/lib/types";
 
-const COLORS = ["#FF7A3D", "#4C8DFF", "#3F9E52", "#C2508A", "#B08D2F", "#78776F"];
+const COLORS = ["#FF7A3D", "#4FB3D9", "#3F9E52", "#9146A8", "#D6A400", "#78776F"];
 
 export function MindmapProjectsList({ initialProjects }: { initialProjects: (MindmapProject & { nodeCount: number })[] }) {
   const router = useRouter();

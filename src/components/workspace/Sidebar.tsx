@@ -35,6 +35,7 @@ const INTERNAL_NAV = [
   { href: "/workspace/lich", label: "Lịch", icon: "📅", enabled: true },
   { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐", enabled: true },
   { href: "/workspace/du-an", label: "Dự án", icon: "📁", enabled: true },
+  { href: "/workspace/luot-truy-cap", label: "Lượt truy cập web", icon: "🌐", enabled: true },
 ];
 
 export function Sidebar({

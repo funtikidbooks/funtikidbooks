@@ -1,22 +1,13 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { requireUser } from "@/lib/supabase/server";
 import { getAnalyticsOverview } from "@/lib/actions/analytics";
 
-export const metadata: Metadata = { title: "Quản trị — Lượt truy cập web" };
+export const metadata: Metadata = { title: "Lượt truy cập web" };
 
 function formatNumber(n: number) {
   return n.toLocaleString("vi-VN");
 }
 
-export default async function AdminAnalyticsPage() {
-  const { supabase, user } = await requireUser();
-  const { data: profile } = await supabase.from("profiles").select("access_role").eq("id", user.id).maybeSingle();
-
-  if (profile?.access_role !== "director") {
-    redirect("/quan-tri");
-  }
-
+export default async function AnalyticsPage() {
   let overview: Awaited<ReturnType<typeof getAnalyticsOverview>> | null = null;
   let error: string | null = null;
   try {

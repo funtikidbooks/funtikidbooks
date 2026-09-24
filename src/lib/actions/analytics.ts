@@ -3,14 +3,11 @@
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
 import { requireUser } from "@/lib/supabase/server";
 
-// Director-only, same tier as Tài chính / Báo cáo tài chính (DIRECTOR_ONLY_NAV
-// in AdminSidebar.tsx) — visitor numbers are business-sensitive the same way.
-async function requireDirector() {
-  const { supabase, user } = await requireUser();
-  const { data: profile } = await supabase.from("profiles").select("access_role").eq("id", user.id).maybeSingle();
-  if (profile?.access_role !== "director" && profile?.access_role !== "admin") {
-    throw new Error("Chỉ Giám đốc mới xem được mục này.");
-  }
+// Moved out of /quan-tri into the general workspace ("Dự án" section) per
+// sếp Phúc — any signed-in staff account can see traffic numbers now, not
+// just director/admin. Still requires a real session, just no role check.
+async function requireStaff() {
+  await requireUser();
 }
 
 // Service account funti-web-analytics@funti-kidbooks, granted "Viewer" on
@@ -63,7 +60,7 @@ function mv(row: { metricValues?: { value?: string | null }[] | null }, i = 0): 
 }
 
 export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
-  await requireDirector();
+  await requireStaff();
 
   const propertyId = process.env.GA4_PROPERTY_ID;
   if (!propertyId) throw new Error("Chưa cấu hình GA4_PROPERTY_ID.");
