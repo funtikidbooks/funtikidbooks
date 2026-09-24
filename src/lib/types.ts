@@ -356,6 +356,33 @@ export type NewsPost = {
   updated_at: string;
 };
 
+export type MindmapProject = {
+  id: string;
+  title: string;
+  color: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MindmapNode = {
+  id: string;
+  project_id: string;
+  parent_id: string | null;
+  title: string;
+  note: string | null;
+  x: number;
+  y: number;
+  color: string | null;
+  linked_news_post_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Embedded via the linked_news_post_id FK join — null when there's no
+  // link, or when RLS hides the draft from a non-director/admin viewer.
+  news_post: Pick<NewsPost, "id" | "title" | "excerpt" | "category" | "published" | "created_at"> | null;
+};
+
 export type EmploymentType = "full_time" | "part_time" | "internship" | "freelance";
 
 export type JobPosting = {
@@ -1024,6 +1051,18 @@ export type Database = {
         Row: JobPosting;
         Insert: Partial<JobPosting> & { title: string };
         Update: Partial<JobPosting>;
+        Relationships: [];
+      };
+      mindmap_projects: {
+        Row: MindmapProject;
+        Insert: Partial<MindmapProject> & { title: string };
+        Update: Partial<MindmapProject>;
+        Relationships: [];
+      };
+      mindmap_nodes: {
+        Row: Omit<MindmapNode, "news_post">;
+        Insert: Partial<Omit<MindmapNode, "news_post">> & { project_id: string; title: string };
+        Update: Partial<Omit<MindmapNode, "news_post">>;
         Relationships: [];
       };
       reviews: {
