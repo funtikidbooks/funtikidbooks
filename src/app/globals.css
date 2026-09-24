@@ -504,16 +504,17 @@ h4 {
   box-shadow: var(--shadow-md);
 }
 /* Hidden until hover (desktop) reveals it; a touch long-press reveals it
-   via the .is-visible class instead, since touch has no hover state. */
-.fk-mindmap-node-add {
+   via the .is-visible class instead, since touch has no hover state. Used
+   by both corner buttons — add-branch and delete. */
+.fk-mindmap-node-action {
   opacity: 0;
   transition: opacity 0.15s ease, transform 0.1s ease;
 }
-.fk-mindmap-node:hover .fk-mindmap-node-add,
-.fk-mindmap-node-add.is-visible {
+.fk-mindmap-node:hover .fk-mindmap-node-action,
+.fk-mindmap-node-action.is-visible {
   opacity: 1;
 }
-.fk-mindmap-node-add:active {
+.fk-mindmap-node-action:active {
   transform: scale(0.9);
 }
 .ws-nav-link {

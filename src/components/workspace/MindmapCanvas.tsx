@@ -91,7 +91,9 @@ export function MindmapCanvas({
     const ids = new Set<string>();
     for (const n of nodes) {
       if (!n.list_mode) continue;
-      for (const child of childrenByParent.get(n.id) ?? []) ids.add(child.id);
+      for (const child of childrenByParent.get(n.id) ?? []) {
+        if (child.is_list_item) ids.add(child.id);
+      }
     }
     return ids;
   }, [nodes, childrenByParent]);
@@ -210,16 +212,17 @@ export function MindmapCanvas({
     [nodes, openPanel],
   );
 
-  async function addChild(parent: MindmapNode) {
+  async function addChild(parent: MindmapNode, asListItem = false) {
     setTouchAddVisibleId(null);
     if (hideAddTimerRef.current) clearTimeout(hideAddTimerRef.current);
     const siblings = nodes.filter((n) => n.parent_id === parent.id).length;
     const created = await createMindmapNode({
       projectId: project.id,
       parentId: parent.id,
-      title: "Nhánh mới",
+      title: asListItem ? "Bài mới" : "Nhánh mới",
       x: parent.x + 220,
       y: parent.y + siblings * 90,
+      isListItem: asListItem,
     }).catch(() => null);
     if (created) setNodes((prev) => [...prev, created]);
   }
@@ -433,28 +436,28 @@ export function MindmapCanvas({
 
                   <button
                     type="button"
-                    onClick={() => addChild(n)}
+                    onClick={() => addChild(n, true)}
                     className="flex items-center justify-center gap-1.5 px-3 py-2 text-[12px] font-semibold"
                     style={{ borderTop: "1px solid var(--color-neutral-200)", color }}
                   >
                     + Thêm bài
                   </button>
 
-                  {/* Same hover (desktop) / long-press (touch) affordance as
-                      every other node — "+ Thêm bài" does the identical
-                      thing, this is just the familiar corner shortcut so a
-                      list-mode card doesn't feel like it's missing the
-                      control every other node has. */}
+                  {/* Distinct from "+ Thêm bài": that adds a row INSIDE
+                      this card (a list item); this corner "+" — same
+                      hover/long-press affordance as every other node —
+                      grows a genuinely separate branch, its own box with a
+                      connector line. */}
                   <button
                     type="button"
-                    aria-label="Thêm bài"
-                    title="Thêm bài"
+                    aria-label="Thêm nhánh mới"
+                    title="Thêm nhánh mới"
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
                       addChild(n);
                     }}
-                    className={"fk-mindmap-node-add absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
+                    className={"fk-mindmap-node-action absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
                     style={{
                       right: -12,
                       bottom: -12,
@@ -469,6 +472,33 @@ export function MindmapCanvas({
                   >
                     +
                   </button>
+
+                  {!isRoot && (
+                    <button
+                      type="button"
+                      aria-label="Xoá nhánh"
+                      title="Xoá nhánh"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setConfirmDeleteId(n.id);
+                      }}
+                      className={"fk-mindmap-node-action absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
+                      style={{
+                        right: -12,
+                        top: -12,
+                        width: 24,
+                        height: 24,
+                        background: "var(--status-red)",
+                        color: "#fff",
+                        fontSize: 13,
+                        boxShadow: "var(--shadow-sm)",
+                        zIndex: 2,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               );
             }
@@ -536,7 +566,7 @@ export function MindmapCanvas({
                     e.stopPropagation();
                     addChild(n);
                   }}
-                  className={"fk-mindmap-node-add absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
+                  className={"fk-mindmap-node-action absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
                   style={{
                     right: -12,
                     bottom: -12,
@@ -551,6 +581,33 @@ export function MindmapCanvas({
                 >
                   +
                 </button>
+
+                {!isRoot && (
+                  <button
+                    type="button"
+                    aria-label="Xoá nhánh"
+                    title="Xoá nhánh"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmDeleteId(n.id);
+                    }}
+                    className={"fk-mindmap-node-action absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
+                    style={{
+                      right: -12,
+                      top: -12,
+                      width: 24,
+                      height: 24,
+                      background: "var(--status-red)",
+                      color: "#fff",
+                      fontSize: 13,
+                      boxShadow: "var(--shadow-sm)",
+                      zIndex: 2,
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             );
           })}

@@ -380,6 +380,11 @@ export type MindmapNode = {
   // draggable boxes connected by lines — see MindmapCanvas's "absorbed"
   // node handling.
   list_mode: boolean;
+  // True only for a child deliberately added as a list row ("+ Thêm bài"
+  // inside a list-mode card) — absorption requires both this AND the
+  // parent's own list_mode, so a list-mode node can still grow a normal
+  // branch (its own box + connector line) via its corner "+".
+  is_list_item: boolean;
   created_by: string | null;
   created_at: string;
   updated_at: string;

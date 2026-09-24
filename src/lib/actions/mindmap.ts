@@ -73,6 +73,7 @@ export async function createMindmapNode(input: {
   title: string;
   x: number;
   y: number;
+  isListItem?: boolean;
 }): Promise<MindmapNode> {
   const { supabase, user } = await requireUser();
   const title = input.title.trim() || "Nhánh mới";
@@ -88,6 +89,7 @@ export async function createMindmapNode(input: {
       x: input.x,
       y: input.y,
       color: parent?.color ?? null,
+      is_list_item: input.isListItem ?? false,
       created_by: user.id,
     })
     .select("*, news_post:linked_news_post_id(id, title, excerpt, category, published, created_at)")
