@@ -375,15 +375,15 @@ export type MindmapNode = {
   y: number;
   color: string | null;
   linked_news_post_id: string | null;
-  // When true, this node's own children render as rows stacked inside its
-  // own card (a growing list with a ✕ per row) instead of as separate
-  // draggable boxes connected by lines — see MindmapCanvas's "absorbed"
-  // node handling.
+  // Unused — every node already shows "+ Thêm bài" (see is_list_item), so
+  // no per-node opt-in is needed. Kept as a DB column rather than dropped;
+  // not read anywhere.
   list_mode: boolean;
-  // True only for a child deliberately added as a list row ("+ Thêm bài"
-  // inside a list-mode card) — absorption requires both this AND the
-  // parent's own list_mode, so a list-mode node can still grow a normal
-  // branch (its own box + connector line) via its corner "+".
+  // True for a child added via "+ Thêm bài" — it then renders as a row
+  // stacked inside its own parent's card (a growing list with a ✕ per
+  // row) instead of as a separate draggable box connected by a line. A
+  // child added via the parent's corner "+" leaves this false, so the
+  // exact same node can have both list-item rows and normal branches.
   is_list_item: boolean;
   created_by: string | null;
   created_at: string;

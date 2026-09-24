@@ -13,12 +13,13 @@ import { getNewsPostById, updateNewsPost } from "@/lib/actions/admin";
 import { NewsEditDialog } from "@/components/admin/NewsEditDialog";
 import type { MindmapNode, MindmapProject, NewsPost } from "@/lib/types";
 
-const NODE_W = 176;
+// NODE_H is the header row's height, used for every node — it doubles as
+// the connector-line's y-anchor regardless of how tall a card grows below
+// it (list items only add height downward, never move the header).
 const NODE_H = 56;
-// A "list mode" node ignores its children's own x/y and instead renders
-// them as rows stacked inside its own card, growing taller as rows are
-// added — sếp Phúc's own sketch: one box titled "SEO website" that just
-// grows, instead of spawning a separate connected box per item.
+// Every node uses this same card shape now — header + optional list-item
+// rows + "+ Thêm bài" — so there's one width for the whole canvas, not a
+// separate compact size for a "plain" branch.
 const LIST_W = 224;
 // Root node is stored at (0,0) — this offset just shifts that origin toward
 // the middle of the scrollable canvas so branches have room to grow in
@@ -87,16 +88,10 @@ export function MindmapCanvas({
     }
     return map;
   }, [nodes]);
-  const absorbedIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const n of nodes) {
-      if (!n.list_mode) continue;
-      for (const child of childrenByParent.get(n.id) ?? []) {
-        if (child.is_list_item) ids.add(child.id);
-      }
-    }
-    return ids;
-  }, [nodes, childrenByParent]);
+  // A child renders as a row inside its own parent's card purely based on
+  // its own is_list_item flag — no separate per-parent mode needed, since
+  // every node already shows the same "+ Thêm bài" control.
+  const absorbedIds = useMemo(() => new Set(nodes.filter((n) => n.is_list_item).map((n) => n.id)), [nodes]);
 
   // Counts every descendant (children, grandchildren, ...) so the delete
   // confirmation can warn specifically when there's something to lose —
@@ -138,9 +133,9 @@ export function MindmapCanvas({
       .map((n) => {
         const parent = byId.get(n.parent_id!);
         if (!parent) return null;
-        const x1 = parent.x + OFFSET_X + NODE_W / 2;
+        const x1 = parent.x + OFFSET_X + LIST_W / 2;
         const y1 = parent.y + OFFSET_Y + NODE_H / 2;
-        const x2 = n.x + OFFSET_X + NODE_W / 2;
+        const x2 = n.x + OFFSET_X + LIST_W / 2;
         const y2 = n.y + OFFSET_Y + NODE_H / 2;
         const midX = (x1 + x2) / 2;
         return { id: n.id, d: `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`, color: n.color ?? project.color };
@@ -227,13 +222,8 @@ export function MindmapCanvas({
     if (created) setNodes((prev) => [...prev, created]);
   }
 
-  async function saveNode(id: string, patch: { title?: string; note?: string | null; color?: string; listMode?: boolean }) {
-    const localPatch: Partial<MindmapNode> = {};
-    if (patch.title !== undefined) localPatch.title = patch.title;
-    if (patch.note !== undefined) localPatch.note = patch.note;
-    if (patch.color !== undefined) localPatch.color = patch.color;
-    if (patch.listMode !== undefined) localPatch.list_mode = patch.listMode;
-    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, ...localPatch } : n)));
+  async function saveNode(id: string, patch: { title?: string; note?: string | null; color?: string }) {
+    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, ...patch } : n)));
     await updateMindmapNode(id, patch).catch(() => {});
   }
 
@@ -347,220 +337,132 @@ export function MindmapCanvas({
             const isRoot = n.parent_id === null;
             const color = n.color ?? project.color;
 
-            if (n.list_mode) {
-              const children = childrenByParent.get(n.id) ?? [];
-              return (
-                <div
-                  key={n.id}
-                  className="fk-mindmap-node absolute card elev-sm flex flex-col select-none"
-                  style={{
-                    left: n.x + OFFSET_X,
-                    top: n.y + OFFSET_Y,
-                    width: LIST_W,
-                    zIndex: 1,
-                    borderLeft: `4px solid ${color}`,
-                    boxShadow: isRoot ? `0 0 0 2px ${color}33` : undefined,
-                  }}
-                >
-                  <div
-                    onPointerDown={(e) => handlePointerDown(e, n)}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
-                    className="flex items-center px-3 cursor-grab active:cursor-grabbing"
-                    style={{ height: NODE_H, touchAction: "none" }}
-                  >
-                    <span
-                      className="text-[12.5px] leading-tight"
-                      style={{
-                        fontWeight: isRoot ? 800 : 700,
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                      }}
-                    >
-                      {n.title}
-                    </span>
-                  </div>
-
-                  {children.length > 0 && (
-                    <div className="flex flex-col">
-                      {children.map((child) => (
-                        <div
-                          key={child.id}
-                          onClick={() => openPanel(child.id)}
-                          className="flex items-center gap-2 px-3 py-2 cursor-pointer"
-                          style={{ borderTop: "1px solid var(--color-neutral-200)" }}
-                        >
-                          <span
-                            className="flex-1 text-[12px] leading-tight"
-                            style={{
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                            }}
-                          >
-                            {child.title}
-                          </span>
-                          {child.linked_news_post_id && (
-                            <span
-                              className="tag flex-none"
-                              style={{
-                                fontSize: 9,
-                                padding: "1px 6px",
-                                background: child.news_post?.published ? "var(--status-green-bg, #e4f4e6)" : "var(--color-neutral-100)",
-                                color: child.news_post?.published ? "var(--status-green, #3f9e52)" : "var(--color-neutral-600)",
-                              }}
-                            >
-                              {child.news_post?.published ? "Đã đăng" : "Bài nháp"}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            aria-label="Xoá bài"
-                            title="Xoá bài"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setConfirmDeleteId(child.id);
-                            }}
-                            className="btn-icon flex-none"
-                            style={{ width: 22, height: 22, padding: 0, color: "var(--color-neutral-400)" }}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => addChild(n, true)}
-                    className="flex items-center justify-center gap-1.5 px-3 py-2 text-[12px] font-semibold"
-                    style={{ borderTop: "1px solid var(--color-neutral-200)", color }}
-                  >
-                    + Thêm bài
-                  </button>
-
-                  {/* Distinct from "+ Thêm bài": that adds a row INSIDE
-                      this card (a list item); this corner "+" — same
-                      hover/long-press affordance as every other node —
-                      grows a genuinely separate branch, its own box with a
-                      connector line. */}
-                  <button
-                    type="button"
-                    aria-label="Thêm nhánh mới"
-                    title="Thêm nhánh mới"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      addChild(n);
-                    }}
-                    className={"fk-mindmap-node-action absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
-                    style={{
-                      right: -12,
-                      bottom: -12,
-                      width: 28,
-                      height: 28,
-                      background: color,
-                      color: "#fff",
-                      fontSize: 16,
-                      boxShadow: "var(--shadow-sm)",
-                      zIndex: 2,
-                    }}
-                  >
-                    +
-                  </button>
-
-                  {!isRoot && (
-                    <button
-                      type="button"
-                      aria-label="Xoá nhánh"
-                      title="Xoá nhánh"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmDeleteId(n.id);
-                      }}
-                      className={"fk-mindmap-node-action absolute flex items-center justify-center rounded-full font-bold" + (touchAddVisibleId === n.id ? " is-visible" : "")}
-                      style={{
-                        right: -12,
-                        top: -12,
-                        width: 24,
-                        height: 24,
-                        background: "var(--status-red)",
-                        color: "#fff",
-                        fontSize: 13,
-                        boxShadow: "var(--shadow-sm)",
-                        zIndex: 2,
-                      }}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              );
-            }
-
+            const listItems = (childrenByParent.get(n.id) ?? []).filter((c) => c.is_list_item);
             return (
               <div
                 key={n.id}
-                onPointerDown={(e) => handlePointerDown(e, n)}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                className="fk-mindmap-node absolute card elev-sm flex flex-col justify-center gap-1 px-3 cursor-grab active:cursor-grabbing select-none"
+                className="fk-mindmap-node absolute card elev-sm flex flex-col select-none"
                 style={{
                   left: n.x + OFFSET_X,
                   top: n.y + OFFSET_Y,
-                  width: NODE_W,
-                  height: NODE_H,
+                  width: LIST_W,
                   zIndex: 1,
-                  touchAction: "none",
                   borderLeft: `4px solid ${color}`,
                   boxShadow: isRoot ? `0 0 0 2px ${color}33` : undefined,
                 }}
               >
-                <span
-                  className="text-[12.5px] leading-tight"
-                  style={{
-                    fontWeight: isRoot ? 800 : 600,
-                    display: "-webkit-box",
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: "vertical",
-                    overflow: "hidden",
-                  }}
+                <div
+                  onPointerDown={(e) => handlePointerDown(e, n)}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  className="flex flex-col justify-center gap-1 px-3 cursor-grab active:cursor-grabbing"
+                  style={{ minHeight: NODE_H, paddingTop: 8, paddingBottom: 8, touchAction: "none" }}
                 >
-                  {n.title}
-                </span>
-                {(isRoot || n.linked_news_post_id || n.note) && (
-                  <div className="flex items-center gap-1">
-                    {isRoot && <span className="tag tag-accent" style={{ fontSize: 9, padding: "1px 6px" }}>Gốc</span>}
-                    {n.linked_news_post_id && (
-                      <span
-                        className="tag"
-                        style={{
-                          fontSize: 9,
-                          padding: "1px 6px",
-                          background: n.news_post?.published ? "var(--status-green-bg, #e4f4e6)" : "var(--color-neutral-100)",
-                          color: n.news_post?.published ? "var(--status-green, #3f9e52)" : "var(--color-neutral-600)",
-                        }}
+                  <span
+                    className="text-[12.5px] leading-tight"
+                    style={{
+                      fontWeight: isRoot ? 800 : 700,
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {n.title}
+                  </span>
+                  {(isRoot || n.linked_news_post_id || n.note) && (
+                    <div className="flex items-center gap-1">
+                      {isRoot && <span className="tag tag-accent" style={{ fontSize: 9, padding: "1px 6px" }}>Gốc</span>}
+                      {n.linked_news_post_id && (
+                        <span
+                          className="tag"
+                          style={{
+                            fontSize: 9,
+                            padding: "1px 6px",
+                            background: n.news_post?.published ? "var(--status-green-bg, #e4f4e6)" : "var(--color-neutral-100)",
+                            color: n.news_post?.published ? "var(--status-green, #3f9e52)" : "var(--color-neutral-600)",
+                          }}
+                        >
+                          {n.news_post?.published ? "Đã đăng" : "Bài nháp"}
+                        </span>
+                      )}
+                      {n.note && !n.linked_news_post_id && (
+                        <span className="tag tag-neutral" style={{ fontSize: 9, padding: "1px 6px" }}>
+                          Ghi chú
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {listItems.length > 0 && (
+                  <div className="flex flex-col">
+                    {listItems.map((child) => (
+                      <div
+                        key={child.id}
+                        onClick={() => openPanel(child.id)}
+                        className="flex items-center gap-2 px-3 py-2 cursor-pointer"
+                        style={{ borderTop: "1px solid var(--color-neutral-200)" }}
                       >
-                        {n.news_post?.published ? "Đã đăng" : "Bài nháp"}
-                      </span>
-                    )}
-                    {n.note && !n.linked_news_post_id && (
-                      <span className="tag tag-neutral" style={{ fontSize: 9, padding: "1px 6px" }}>
-                        Ghi chú
-                      </span>
-                    )}
+                        <span
+                          className="flex-1 text-[12px] leading-tight"
+                          style={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {child.title}
+                        </span>
+                        {child.linked_news_post_id && (
+                          <span
+                            className="tag flex-none"
+                            style={{
+                              fontSize: 9,
+                              padding: "1px 6px",
+                              background: child.news_post?.published ? "var(--status-green-bg, #e4f4e6)" : "var(--color-neutral-100)",
+                              color: child.news_post?.published ? "var(--status-green, #3f9e52)" : "var(--color-neutral-600)",
+                            }}
+                          >
+                            {child.news_post?.published ? "Đã đăng" : "Bài nháp"}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          aria-label="Xoá bài"
+                          title="Xoá bài"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDeleteId(child.id);
+                          }}
+                          className="btn-icon flex-none"
+                          style={{ width: 22, height: 22, padding: 0, color: "var(--color-neutral-400)" }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
 
+                {/* Always available on every node — adds a row INSIDE this
+                    same card (a list item), distinct from the corner "+"
+                    below which grows a genuinely separate branch (its own
+                    box + connector line). */}
                 <button
                   type="button"
-                  aria-label="Thêm nhánh con"
-                  title="Thêm nhánh con"
+                  onClick={() => addChild(n, true)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 text-[12px] font-semibold"
+                  style={{ borderTop: "1px solid var(--color-neutral-200)", color }}
+                >
+                  + Thêm bài
+                </button>
+
+                <button
+                  type="button"
+                  aria-label="Thêm nhánh mới"
+                  title="Thêm nhánh mới"
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -688,7 +590,7 @@ function NodePanel({
   node: MindmapNode;
   isRoot: boolean;
   draftPosts: DraftPost[];
-  onSave: (patch: { title?: string; note?: string | null; color?: string; listMode?: boolean }) => void;
+  onSave: (patch: { title?: string; note?: string | null; color?: string }) => void;
   onLinkDraft: (postId: string | null) => void;
   onApprove: () => void;
   onEditPost: () => void;
@@ -699,7 +601,6 @@ function NodePanel({
   const [title, setTitle] = useState(node.title);
   const [note, setNote] = useState(node.note ?? "");
   const [color, setColor] = useState(node.color ?? COLORS[0]);
-  const [listMode, setListMode] = useState(node.list_mode);
   const [approving, setApproving] = useState(false);
 
   function save() {
@@ -764,24 +665,6 @@ function NodePanel({
               ))}
             </div>
           </div>
-
-          <label className="flex items-center gap-2.5 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={listMode}
-              onChange={(e) => {
-                setListMode(e.target.checked);
-                onSave({ listMode: e.target.checked });
-              }}
-              style={{ width: 18, height: 18 }}
-            />
-            <span className="font-semibold">Gom nhánh con thành danh sách trong ô này</span>
-          </label>
-          {listMode && (
-            <p className="text-xs -mt-3" style={{ color: "var(--color-neutral-500)" }}>
-              Nhánh con sẽ hiện thành từng dòng ngay trong ô này thay vì tách riêng ra ngoài — hợp để gom một danh sách bài viết, ví dụ &quot;SEO website&quot;.
-            </p>
-          )}
         </div>
 
         <div className="flex flex-col gap-2 text-sm">
