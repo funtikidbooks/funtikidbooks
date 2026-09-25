@@ -26,7 +26,11 @@ self.addEventListener("push", (event) => {
       body: payload.body || "",
       icon: "/brand/funti-logo.jpg",
       badge: "/brand/funti-logo.jpg",
-      tag: payload.tag || (payload.senderId ? `funti-dm-${payload.senderId}` : "funti-dm"),
+      // Unique per push: a shared tag (one per room/sender) made each new
+      // message silently *replace* the previous one still sitting on the
+      // lock screen — no banner, no sound — so a second message in the same
+      // room could go completely unnoticed. Every message alerts on its own.
+      tag: `${payload.tag || (payload.senderId ? `funti-dm-${payload.senderId}` : "funti-dm")}-${Date.now()}`,
       // Stays on screen until tapped/dismissed instead of disappearing on
       // its own — used for the "khách hàng nhắn tin" alert so it can't slip
       // by unnoticed the way a routine DM ping might. Android/desktop only;
