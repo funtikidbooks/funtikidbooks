@@ -335,8 +335,10 @@ export function HourTimesheet({
   const today = vnToday();
   const isCurrentWeek = weekStart === mondayOf(today);
   const staffById = useMemo(() => new Map(staff.map((p) => [p.id, p])), [staff]);
+  // A closed project ("Đóng dự án") drops off the timesheet until it's
+  // reopened — its logged hours stay in the database and come back with it.
   const projects = useMemo(
-    () => channels.filter((c) => !c.is_general && !c.is_food_room && c.billing_type === "hourly"),
+    () => channels.filter((c) => !c.is_general && !c.is_food_room && c.billing_type === "hourly" && !c.closed_at),
     [channels],
   );
 

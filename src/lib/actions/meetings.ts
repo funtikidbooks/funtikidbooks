@@ -309,6 +309,7 @@ export async function setChannelClosed(channelId: string, closed: boolean) {
     .or(`id.eq.${channelId},parent_channel_id.eq.${channelId}`);
   if (error) throw new Error("Không thể đóng/mở lại dự án — cần chạy file SQL meeting_channel_close.sql trong Supabase trước.");
   revalidatePath("/workspace/hop");
+  revalidatePath("/workspace/bao-cao-gio");
 }
 
 const DM_TAB_LABEL_KEY = "dm_tab";
