@@ -13,6 +13,7 @@ import { notifyNewMessage } from "@/lib/chatNotify";
 import { inboxTopic, listenChatTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
 import { fetchConversation, fetchDirectReactions, readDmSnapshot, writeDmSnapshot } from "@/lib/dmLoad";
 import { reportChatSyncFailure, reportChatSyncOk } from "@/lib/chatSyncHealth";
+import { catchUpFrom, insertByTime, newestCreatedAt, type SyncCursor } from "@/lib/chatSyncCursor";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { addToOutbox, insertWithRetry, removeFromOutbox } from "@/lib/chatOutbox";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
@@ -225,6 +226,9 @@ export function DirectConversation({
   // conversations, need the full history" apart from "same conversation,
   // only catching up on what was missed".
   const lastSyncedPeerIdRef = useRef<string | null>(null);
+  // The open conversation's catch-up cursor — advanced only by rows a fetch
+  // actually returned (see lib/chatSyncCursor.ts), reset on every switch.
+  const syncCursorRef = useRef<SyncCursor>({});
   // Scroll-to-load-older state — see loadOlderMessages below, same shape as
   // MeetingHub's own copy of this (its comment covers the reasoning for
   // each piece: refs for a synchronous read inside handleListScroll,
@@ -330,7 +334,7 @@ export function DirectConversation({
           return next;
         }
       }
-      return capMessagesForRoom([...prev, confirmed]);
+      return capMessagesForRoom(insertByTime(prev, confirmed));
     },
     [currentUser.id, capMessagesForRoom],
   );
@@ -371,28 +375,27 @@ export function DirectConversation({
       const snapshot = readDmSnapshot(peerId);
       setMessages(snapshot?.messages ?? []);
       setReactions(snapshot?.reactions ?? []);
+      // The snapshot is only for an instant paint — the full fetch below
+      // replaces it, so there's no cursor to carry over.
+      syncCursorRef.current = {};
     }
 
-    // Reduce rather than "just read the last element" — a realtime INSERT
-    // can append out of arrival order, so the newest created_at isn't
-    // guaranteed to be the last item in either array (see MeetingHub's
-    // resync for the same reasoning).
-    const latestOf = (timestamps: string[]) =>
-      timestamps.length === 0 ? undefined : timestamps.reduce((max, t) => (t > max ? t : max));
-
-    // Skip optimistic ("temp-") bubbles: they carry this device's own clock,
-    // which can run ahead of the server's and push the cursor past real
-    // messages, leaving our just-sent one stuck on "Đang gửi…".
-    const messagesAfter = isNewPeer
-      ? undefined
-      : latestOf(messagesRef.current.filter((m) => !m.id.startsWith("temp-")).map((m) => m.created_at));
-    const reactionsAfter = isNewPeer ? undefined : latestOf(reactionsRef.current.map((r) => r.created_at));
+    // Catch up from where the last *fetch* got to, not from the newest
+    // message on screen (see lib/chatSyncCursor.ts). No cursor yet (a new
+    // peer, or its full fetch hasn't landed) means the latest page instead.
+    const baseCursor = syncCursorRef.current;
+    const messagesAfter = isNewPeer ? undefined : catchUpFrom(baseCursor.messages);
+    const reactionsAfter = isNewPeer ? undefined : catchUpFrom(baseCursor.reactions);
 
     fetchConversation(currentUser.id, peerId, messagesAfter)
-      .then((msgs) => {
+      .then(({ messages: msgs, replaced }) => {
         reportChatSyncOk();
         if (!stillCurrent()) return;
-        if (isNewPeer) {
+        syncCursorRef.current = {
+          ...syncCursorRef.current,
+          messages: isNewPeer || replaced ? newestCreatedAt(msgs) : newestCreatedAt(msgs, baseCursor.messages),
+        };
+        if (isNewPeer || replaced) {
           // Full fetch replaces the snapshot (which may be missing read
           // receipts/recalls since it was saved) — keeping only bubbles
           // still being sent right now.
@@ -416,9 +419,13 @@ export function DirectConversation({
       });
 
     fetchDirectReactions(currentUser.id, peerId, reactionsAfter)
-      .then((rx) => {
+      .then(({ reactions: rx, replaced }) => {
         if (!stillCurrent()) return;
-        if (isNewPeer) {
+        syncCursorRef.current = {
+          ...syncCursorRef.current,
+          reactions: isNewPeer || replaced ? newestCreatedAt(rx) : newestCreatedAt(rx, baseCursor.reactions),
+        };
+        if (isNewPeer || replaced) {
           setReactions(rx);
         } else if (rx.length > 0) {
           setReactions((prev) => {

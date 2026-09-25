@@ -35,6 +35,7 @@ import { playChatDing } from "@/lib/chatSound";
 import { firstSighting, inboxTopic, listenChatTopic, roomTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
 import { fetchRoomSync } from "@/lib/roomLoad";
 import { reportChatSyncFailure, reportChatSyncOk } from "@/lib/chatSyncHealth";
+import { catchUpFrom, insertByTime, newestCreatedAt, type SyncCursor } from "@/lib/chatSyncCursor";
 import { addToOutbox, insertWithRetry, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
 import { Emoji } from "@/lib/emoji";
 import {
@@ -80,6 +81,8 @@ type RoomSnapshot = {
   reactions: MeetingReaction[];
   reads: MeetingChannelRead[];
   pinnedMessages: MeetingMessage[];
+  // Where the next catch-up fetch starts — see lib/chatSyncCursor.ts.
+  syncedThrough: SyncCursor;
 };
 
 // Persists roomCacheRef to localStorage so it survives a full app relaunch,
@@ -96,13 +99,37 @@ type RoomSnapshot = {
 // forever (a delta fetch only appends new messages, it never notices or
 // replaces wrong old ones). Bumping the prefix orphans every pre-fix entry
 // instead of trying to detect which ones are actually bad.
-const ROOM_CACHE_STORAGE_PREFIX = "funti-room-cache:v2:";
+//
+// v3: v2 snapshots were caught up from "the newest message on screen", which
+// could skip a missed message forever (see lib/chatSyncCursor.ts) — and the
+// hole was saved right along with the snapshot, surviving reloads. Every v2
+// entry is dropped so each room loads fresh once.
+const ROOM_CACHE_STORAGE_PREFIX = "funti-room-cache:v3:";
+
+// Older-version entries are dead weight in a ~5MB quota that the current
+// snapshots need — cleared once per page load.
+let oldRoomCachesDropped = false;
+function dropOldRoomCaches() {
+  if (oldRoomCachesDropped) return;
+  oldRoomCachesDropped = true;
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key?.startsWith("funti-room-cache:") && !key.startsWith(ROOM_CACHE_STORAGE_PREFIX)) localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage unavailable — nothing to clean.
+  }
+}
 
 function loadRoomSnapshotFromStorage(channelId: string): RoomSnapshot | null {
+  dropOldRoomCaches();
   try {
     const raw = localStorage.getItem(ROOM_CACHE_STORAGE_PREFIX + channelId);
     if (!raw) return null;
-    return JSON.parse(raw) as RoomSnapshot;
+    const parsed = JSON.parse(raw) as RoomSnapshot;
+    if (!parsed.syncedThrough || !Array.isArray(parsed.messages)) return null;
+    return parsed;
   } catch {
     return null; // localStorage unavailable (private browsing) or corrupt entry — just skip it
   }
@@ -1626,6 +1653,13 @@ export function MeetingHub({
   // fast), nothing ever came along to overwrite that bad entry — the wrong
   // room's messages stayed cached under this room's key for good.
   const syncedRoomIdRef = useRef<string | null>(initialRoomId);
+  // The active room's catch-up cursor — advanced only by rows a fetch
+  // actually returned (see lib/chatSyncCursor.ts). Seeded from the server's
+  // own full fetch of the initial room.
+  const syncCursorRef = useRef<SyncCursor>({
+    messages: newestCreatedAt(initialMessages),
+    reactions: newestCreatedAt(initialReactions),
+  });
   const lastMarkedReadIdRef = useRef<string | null>(null);
   // Scroll-to-load-older state (see loadOlderMessages below). Refs mirror
   // the two bits of state for a synchronous read inside handleListScroll —
@@ -2005,7 +2039,7 @@ export function MeetingHub({
   useEffect(() => {
     if (!activeId || activeId === DM_TAB_ID || activeId !== lastSyncedChannelIdRef.current) return;
     if (syncedRoomIdRef.current !== activeId) return;
-    const snapshot: RoomSnapshot = { messages, reactions, reads, pinnedMessages };
+    const snapshot: RoomSnapshot = { messages, reactions, reads, pinnedMessages, syncedThrough: { ...syncCursorRef.current } };
     // The in-memory copy (what resync() actually reads) is cheap and stays
     // instant. The localStorage mirror — a synchronous JSON.stringify +
     // write — is debounced separately: a cache-restore immediately
@@ -2072,7 +2106,7 @@ export function MeetingHub({
           return next;
         }
       }
-      return capMessagesForRoom([...prev, confirmed]);
+      return capMessagesForRoom(insertByTime(prev, confirmed));
     },
     [currentUser.id, capMessagesForRoom],
   );
@@ -2158,6 +2192,7 @@ export function MeetingHub({
       setReactions(cached.reactions);
       setReads(cached.reads);
       setPinnedMessages(cached.pinnedMessages);
+      syncCursorRef.current = { ...cached.syncedThrough };
       syncedRoomIdRef.current = id;
     } else if (isNewRoom) {
       // A brand-new room with nothing cached yet — `messages`/etc. on this
@@ -2171,34 +2206,21 @@ export function MeetingHub({
     // below — a full fetch is only for a room with no confirmed data yet.
     const needsFullFetch = !alreadySynced && !cached;
 
-    // Reduce rather than "just read the last element" — a realtime INSERT
-    // can append out of arrival order, so the newest created_at isn't
-    // guaranteed to be the last item in either array.
-    const latestOf = (timestamps: string[]) =>
-      timestamps.length === 0 ? undefined : timestamps.reduce((max, t) => (t > max ? t : max));
-
-    // messagesRef/reactionsRef only ever get read here when alreadySynced
-    // is true (the other case is either a cache hit, using cached.* below,
-    // or a full fetch, which ignores both) — so they're guaranteed to
-    // already hold *this* room's real arrays, not a previous room's.
-    const baseMessages = cached ? cached.messages : messagesRef.current;
-    const baseReactions = cached ? cached.reactions : reactionsRef.current;
-
-    // Optimistic ("temp-") bubbles carry this device's own clock, which can
-    // run ahead of the server's — counting them would move the cursor past
-    // real messages (including our own just-sent one), which then never got
-    // fetched and left the bubble stuck on "Đang gửi…" for good.
-    const messagesAfter = needsFullFetch
-      ? undefined
-      : latestOf(baseMessages.filter((m) => !m.id.startsWith("temp-")).map((m) => m.created_at));
-    const reactionsAfter = needsFullFetch ? undefined : latestOf(baseReactions.map((r) => r.created_at));
+    // Catch up from where the last *fetch* got to, never from the newest
+    // message on screen — that one may have arrived over Broadcast/realtime
+    // or been our own send while earlier ones were missed (see
+    // lib/chatSyncCursor.ts). syncCursorRef is only read when alreadySynced
+    // (it then belongs to this room); a cache hit carries its own.
+    const baseCursor: SyncCursor = needsFullFetch ? {} : cached ? cached.syncedThrough : syncCursorRef.current;
+    const messagesAfter = catchUpFrom(baseCursor.messages);
+    const reactionsAfter = catchUpFrom(baseCursor.reactions);
 
     // One combined round trip (see getRoomSync's own comment) instead of
     // four separate ones — each of those paid for its own auth round trip
     // to Supabase on top of its query, so four client calls meant eight
     // network hops for a single room switch.
     fetchRoomSync(id, { messagesAfter, reactionsAfter })
-      .then(({ messages: msgs, reactions: rx, reads: rd, pinnedMessages: pinned }) => {
+      .then(({ messages: msgs, reactions: rx, reads: rd, pinnedMessages: pinned, messagesReplaced, reactionsReplaced }) => {
         reportChatSyncOk();
         // A newer resync() (this room again, or a switch elsewhere) has
         // already run since this call started — its own result already
@@ -2209,12 +2231,20 @@ export function MeetingHub({
         // overlapping calls for the very same room (tap A, then B, then
         // back to A before either finished) both pass that check.
         if (resyncGenerationRef.current !== generation || activeIdRef.current !== id) return;
+        syncCursorRef.current = {
+          messages: needsFullFetch || messagesReplaced ? newestCreatedAt(msgs) : newestCreatedAt(msgs, baseCursor.messages),
+          reactions: needsFullFetch || reactionsReplaced ? newestCreatedAt(rx) : newestCreatedAt(rx, baseCursor.reactions),
+        };
         if (needsFullFetch) {
           setMessages(msgs);
+        } else if (messagesReplaced) {
+          // Too much missed to stitch in — start over from the latest page,
+          // keeping only bubbles still being sent from this device.
+          setMessages((prev) => [...msgs, ...prev.filter((m) => m.id.startsWith("temp-"))]);
         } else if (msgs.length > 0) {
           setMessages((prev) => capMessagesForRoom(msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev)));
         }
-        if (needsFullFetch) {
+        if (needsFullFetch || reactionsReplaced) {
           setReactions(rx);
         } else if (rx.length > 0) {
           setReactions((prev) => {
@@ -2236,6 +2266,9 @@ export function MeetingHub({
         if (resyncGenerationRef.current === generation && needsFullFetch && activeIdRef.current === id) {
           setMessages([]);
           setReactions([]);
+          // Nothing fetched yet — the next sync must load the latest page,
+          // not catch up from the previous room's cursor.
+          syncCursorRef.current = {};
           syncedRoomIdRef.current = id;
         }
       });
@@ -2283,8 +2316,6 @@ export function MeetingHub({
     if (isMobile || window.matchMedia("(pointer: coarse)").matches) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
-      const latestOf = (timestamps: string[]) =>
-        timestamps.length === 0 ? undefined : timestamps.reduce((max, t) => (t > max ? t : max));
       for (const room of joinedRooms) {
         if (cancelled) return;
         if (room.id === activeIdRef.current) continue;
@@ -2304,31 +2335,45 @@ export function MeetingHub({
             roomCacheRef.current.set(room.id, stored);
           }
         }
-        const messagesAfter = base ? latestOf(base.messages.filter((m) => !m.id.startsWith("temp-")).map((m) => m.created_at)) : undefined;
-        const reactionsAfter = base ? latestOf(base.reactions.map((r) => r.created_at)) : undefined;
+        const messagesAfter = base ? catchUpFrom(base.syncedThrough.messages) : undefined;
+        const reactionsAfter = base ? catchUpFrom(base.syncedThrough.reactions) : undefined;
         try {
           const {
             messages: msgs,
             reactions: rx,
             reads: rd,
             pinnedMessages: pinned,
+            messagesReplaced,
+            reactionsReplaced,
           } = await fetchRoomSync(room.id, { messagesAfter, reactionsAfter });
           if (cancelled || room.id === activeIdRef.current) continue;
-          const priorBase = base;
+          const priorBase = messagesReplaced ? undefined : base;
           const mergedMessages = priorBase
             ? capMessages(
-                [...priorBase.messages, ...msgs.filter((m) => !priorBase.messages.some((bm) => bm.id === m.id))],
+                msgs
+                  .filter((m) => !priorBase.messages.some((bm) => bm.id === m.id))
+                  .reduce((acc, m) => insertByTime(acc, m), priorBase.messages.filter((m) => !m.id.startsWith("temp-"))),
                 MAX_LOADED_MESSAGES,
               )
             : msgs;
-          const mergedReactions = priorBase
+          const priorReactions = reactionsReplaced ? undefined : base?.reactions;
+          const mergedReactions = priorReactions
             ? (() => {
                 const key = (r: MeetingReaction) => `${r.message_id}:${r.profile_id}:${r.emoji}`;
-                const seen = new Set(priorBase.reactions.map(key));
-                return [...priorBase.reactions, ...rx.filter((r) => !seen.has(key(r)))];
+                const seen = new Set(priorReactions.map(key));
+                return [...priorReactions, ...rx.filter((r) => !seen.has(key(r)))];
               })()
             : rx;
-          const snapshot: RoomSnapshot = { messages: mergedMessages, reactions: mergedReactions, reads: rd, pinnedMessages: pinned };
+          const snapshot: RoomSnapshot = {
+            messages: mergedMessages,
+            reactions: mergedReactions,
+            reads: rd,
+            pinnedMessages: pinned,
+            syncedThrough: {
+              messages: newestCreatedAt(msgs, priorBase?.syncedThrough.messages),
+              reactions: newestCreatedAt(rx, priorReactions ? base?.syncedThrough.reactions : undefined),
+            },
+          };
           roomCacheRef.current.set(room.id, snapshot);
           saveRoomSnapshotToStorage(room.id, snapshot);
         } catch {

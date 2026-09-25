@@ -17,7 +17,17 @@ function pairFilter(meId: string, peerId: string) {
   return `and(sender_id.eq.${meId},recipient_id.eq.${peerId}),and(sender_id.eq.${peerId},recipient_id.eq.${meId})`;
 }
 
-export async function fetchConversation(meId: string, peerId: string, afterCreatedAt?: string): Promise<DirectMessage[]> {
+const DELTA_MESSAGE_LIMIT = 300;
+const REACTION_LIMIT = 500;
+
+// `replaced`: a catch-up that hit its row limit can't be merged (there'd be
+// a hole between what it returned and now), so the latest page comes back
+// instead and the caller must replace what it holds.
+export async function fetchConversation(
+  meId: string,
+  peerId: string,
+  afterCreatedAt?: string,
+): Promise<{ messages: DirectMessage[]; replaced: boolean }> {
   await ensureBrowserSession();
   const supabase = createClient();
   if (afterCreatedAt) {
@@ -27,9 +37,9 @@ export async function fetchConversation(meId: string, peerId: string, afterCreat
       .or(pairFilter(meId, peerId))
       .gt("created_at", afterCreatedAt)
       .order("created_at", { ascending: true })
-      .limit(300);
+      .limit(DELTA_MESSAGE_LIMIT);
     if (error) throw error;
-    return (data ?? []) as DirectMessage[];
+    if ((data ?? []).length < DELTA_MESSAGE_LIMIT) return { messages: (data ?? []) as DirectMessage[], replaced: false };
   }
   const { data, error } = await supabase
     .from("direct_messages")
@@ -38,29 +48,44 @@ export async function fetchConversation(meId: string, peerId: string, afterCreat
     .order("created_at", { ascending: false })
     .limit(PAGE_SIZE);
   if (error) throw error;
-  return ((data ?? []) as DirectMessage[]).reverse();
+  return { messages: ((data ?? []) as DirectMessage[]).reverse(), replaced: !!afterCreatedAt };
 }
 
-export async function fetchDirectReactions(meId: string, peerId: string, afterCreatedAt?: string): Promise<DirectMessageReaction[]> {
+export async function fetchDirectReactions(
+  meId: string,
+  peerId: string,
+  afterCreatedAt?: string,
+): Promise<{ reactions: DirectMessageReaction[]; replaced: boolean }> {
   await ensureBrowserSession();
   const supabase = createClient();
-  let query = supabase
-    .from("direct_message_reactions")
-    .select("message_id, profile_id, emoji, created_at, direct_messages!inner(sender_id, recipient_id)")
-    .or(
-      `and(direct_messages.sender_id.eq.${meId},direct_messages.recipient_id.eq.${peerId}),and(direct_messages.sender_id.eq.${peerId},direct_messages.recipient_id.eq.${meId})`,
-    )
-    .order("created_at", { ascending: true })
-    .limit(500);
-  if (afterCreatedAt) query = query.gt("created_at", afterCreatedAt);
-  const { data, error } = await query;
+  const base = () =>
+    supabase
+      .from("direct_message_reactions")
+      .select("message_id, profile_id, emoji, created_at, direct_messages!inner(sender_id, recipient_id)")
+      .or(
+        `and(direct_messages.sender_id.eq.${meId},direct_messages.recipient_id.eq.${peerId}),and(direct_messages.sender_id.eq.${peerId},direct_messages.recipient_id.eq.${meId})`,
+      );
+  const map = (rows: { message_id: unknown; profile_id: unknown; emoji: unknown; created_at: unknown }[]) =>
+    rows.map((r) => ({
+      message_id: r.message_id as string,
+      profile_id: r.profile_id as string,
+      emoji: r.emoji as string,
+      created_at: r.created_at as string,
+    }));
+
+  if (afterCreatedAt) {
+    const { data, error } = await base()
+      .gt("created_at", afterCreatedAt)
+      .order("created_at", { ascending: true })
+      .limit(REACTION_LIMIT);
+    if (error) throw error;
+    if ((data ?? []).length < REACTION_LIMIT) return { reactions: map(data ?? []), replaced: false };
+  }
+  // Newest first, then flipped — ascending with a limit returned the
+  // *oldest* 500, so a long conversation's recent reactions never loaded.
+  const { data, error } = await base().order("created_at", { ascending: false }).limit(REACTION_LIMIT);
   if (error) throw error;
-  return (data ?? []).map((r) => ({
-    message_id: r.message_id as string,
-    profile_id: r.profile_id as string,
-    emoji: r.emoji as string,
-    created_at: r.created_at as string,
-  }));
+  return { reactions: map(data ?? []).reverse(), replaced: !!afterCreatedAt };
 }
 
 // Last-seen copy of each conversation, so reopening someone you already
