@@ -33,6 +33,7 @@ const HR_NAV = [
   { href: "/quan-tri/hop-dong", label: "Hợp đồng", icon: "📄" },
   { href: "/quan-tri/hoa-don", label: "Tạo hoá đơn điện tử", icon: "🧾" },
   { href: "/quan-tri/tai-lieu", label: "Tài liệu", icon: "🗂️" },
+  { href: "/quan-tri/upwork", label: "Tìm khách (Upwork)", icon: "🎯" },
 ];
 
 // Whole-business P&L — more sensitive than payroll (that's one employee at

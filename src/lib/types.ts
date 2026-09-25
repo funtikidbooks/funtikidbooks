@@ -397,6 +397,33 @@ export type MindmapNode = {
   news_post: Pick<NewsPost, "id" | "title" | "excerpt" | "category" | "published" | "created_at"> | null;
 };
 
+export type UpworkBatch = {
+  id: string;
+  ran_at: string;
+  jobs_found: number;
+  leads_drafted: number;
+  note: string | null;
+  created_at: string;
+};
+
+export type UpworkLeadStatus = "pending" | "approved" | "rejected" | "sent";
+
+export type UpworkLead = {
+  id: string;
+  batch_id: string;
+  job_title: string;
+  job_url: string;
+  budget_text: string | null;
+  client_info: string | null;
+  match_reason: string | null;
+  proposal_draft: string;
+  status: UpworkLeadStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type EmploymentType = "full_time" | "part_time" | "internship" | "freelance";
 
 export type JobPosting = {
@@ -1077,6 +1104,18 @@ export type Database = {
         Row: Omit<MindmapNode, "news_post">;
         Insert: Partial<Omit<MindmapNode, "news_post">> & { project_id: string; title: string };
         Update: Partial<Omit<MindmapNode, "news_post">>;
+        Relationships: [];
+      };
+      upwork_batches: {
+        Row: UpworkBatch;
+        Insert: Partial<UpworkBatch>;
+        Update: Partial<UpworkBatch>;
+        Relationships: [];
+      };
+      upwork_leads: {
+        Row: UpworkLead;
+        Insert: Partial<UpworkLead> & { batch_id: string; job_title: string; job_url: string; proposal_draft: string };
+        Update: Partial<UpworkLead>;
         Relationships: [];
       };
       reviews: {
