@@ -159,12 +159,19 @@ export function ChatManagerProvider({
       getUnreadCounts().catch(() => null),
       getUnreadMeetingCounts().catch(() => null),
     ]);
+    // An open conversation only counts as read while the tab is on screen —
+    // a resync from a background tab (e.g. after a socket drop) must keep
+    // its unread count so the tab title still shows it.
+    const watching = document.visibilityState === "visible" && document.hasFocus();
     if (dm) {
-      for (const id of openChatIdsRef.current) delete dm[id];
+      if (watching) {
+        for (const id of openChatIdsRef.current) delete dm[id];
+        if (activeDmPeerIdRef.current) delete dm[activeDmPeerIdRef.current];
+      }
       setUnreadCounts(dm);
     }
     if (meeting) {
-      if (activeMeetingChannelIdRef.current) delete meeting[activeMeetingChannelIdRef.current];
+      if (watching && activeMeetingChannelIdRef.current) delete meeting[activeMeetingChannelIdRef.current];
       setMeetingUnreadCounts(meeting);
     }
   }, []);
@@ -181,10 +188,30 @@ export function ChatManagerProvider({
     };
   }, [resync]);
 
+  // One ding per burst, not one per message — five messages landing in the
+  // same second (a pasted list, several photos) shouldn't machine-gun it.
+  const lastDingAtRef = useRef(0);
+  const ding = useCallback(() => {
+    const now = Date.now();
+    if (now - lastDingAtRef.current < 1500) return;
+    lastDingAtRef.current = now;
+    const audio = notificationAudioRef.current;
+    if (audio) {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    }
+  }, []);
+
   // Global inbox subscription — separate from each ChatWindow's own
   // conversation subscription, so a badge shows up even for teammates whose
   // chat window isn't currently open.
   useEffect(() => {
+    // "Already looking at it" only counts while the tab is actually on
+    // screen: a room left open in a background tab used to swallow its new
+    // messages entirely — no ding, no badge, no "(1)" in the tab title —
+    // which is exactly how a 10:59 message went unnoticed until 11:02.
+    const isWatching = () => document.visibilityState === "visible" && document.hasFocus();
+
     const supabase = createClient();
     const channel = supabase
       .channel(`dm-inbox-${currentUserId}`)
@@ -199,12 +226,9 @@ export function ChatManagerProvider({
           // "Riêng" panel has them selected. No badge, no sound; the
           // conversation's own realtime subscription is what actually shows
           // the message.
-          if (openChatIdsRef.current.has(row.sender_id) || activeDmPeerIdRef.current === row.sender_id) return;
-          const audio = notificationAudioRef.current;
-          if (audio) {
-            audio.currentTime = 0;
-            audio.play().catch(() => {});
-          }
+          const open = openChatIdsRef.current.has(row.sender_id) || activeDmPeerIdRef.current === row.sender_id;
+          if (open && isWatching()) return;
+          ding();
           setUnreadCounts((prev) => ({ ...prev, [row.sender_id]: (prev[row.sender_id] ?? 0) + 1 }));
         },
       )
@@ -217,21 +241,28 @@ export function ChatManagerProvider({
         (payload) => {
           const row = payload.new as MeetingMessage;
           if (row.sender_id === currentUserId) return;
-          if (row.channel_id === activeMeetingChannelIdRef.current) return;
+          if (row.channel_id === activeMeetingChannelIdRef.current && isWatching()) return;
+          // Room messages used to only bump a silent badge — DMs were the
+          // only thing that ever made a sound.
+          ding();
           setMeetingUnreadCounts((prev) => ({ ...prev, [row.channel_id]: (prev[row.channel_id] ?? 0) + 1 }));
         },
       )
       // Fires with "SUBSCRIBED" both on the initial connect and after any
       // reconnect — resyncing here is what catches up on messages that
       // arrived during a drop, since Realtime doesn't replay missed events.
+      // A drop itself (TIMED_OUT/CHANNEL_ERROR/CLOSED) resyncs too, same as
+      // MeetingHub/DirectConversation, rather than waiting for a refocus.
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") resync();
+        if (status === "SUBSCRIBED" || status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") {
+          resync();
+        }
       });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUserId, resync]);
+  }, [currentUserId, resync, ding]);
 
   // Global — everyone's profile card, message sender labels, and DM roster
   // read from this, so it's one subscription here rather than duplicated in

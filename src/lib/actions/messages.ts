@@ -3,6 +3,7 @@
 import { after } from "next/server";
 import { requireUser } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
+import { pushDirectMessage } from "@/lib/chatPush";
 import type { DirectMessage, DirectMessageReaction, DirectMessageSearchResult } from "@/lib/types";
 
 const DM_PAGE_SIZE = 200;
@@ -169,23 +170,6 @@ export async function searchDirectMessages(query: string): Promise<DirectMessage
 }
 
 
-// The message row itself is inserted straight from the browser (see
-// DirectConversation's attemptSend) so a send never waits in the Server
-// Action queue behind background syncs — this is only the push half.
-export async function notifyDirectMessageSent(recipientId: string, content: string, hasAttachment: boolean) {
-  const { supabase, user } = await requireUser();
-  const trimmed = content.trim();
-  after(async () => {
-    const { data: senderProfile } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
-    await sendPushToUser(recipientId, {
-      title: senderProfile?.display_name ?? "Tin nhắn mới",
-      body: trimmed || (hasAttachment ? "📎 Đã gửi một tệp đính kèm" : ""),
-      senderId: user.id,
-      url: `/workspace/hop?dm=${user.id}`,
-    }).catch(() => {});
-  });
-}
-
 // Forwards a message someone already has on screen into a 1:1 conversation
 // — same idea as forwardMeetingMessage in meetings.ts, reusing the existing
 // attachment URL instead of re-uploading the file.
@@ -213,17 +197,10 @@ export async function forwardDirectMessage(
     .single();
   if (error || !data) throw new Error("Không thể chuyển tiếp tin nhắn");
 
-  after(async () => {
-    const { data: senderProfile } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
-    await sendPushToUser(recipientId, {
-      title: senderProfile?.display_name ?? "Tin nhắn mới",
-      body: trimmed || (attachment ? "📎 Đã gửi một tệp đính kèm" : ""),
-      senderId: user.id,
-      url: `/workspace/hop?dm=${user.id}`,
-    }).catch(() => {});
-  });
+  const sent = data as DirectMessage;
+  after(() => pushDirectMessage(sent).catch(() => {}));
 
-  return data as DirectMessage;
+  return sent;
 }
 
 // One unread count per teammate who has sent me a message since I last read

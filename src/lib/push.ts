@@ -14,28 +14,38 @@ function ensureConfigured() {
   return true;
 }
 
-// Sends a Web Push notification to every device a user has registered.
-// Used from the server action that saves a new direct message — pushes a
-// real OS notification even when the recipient's tab isn't open/focused,
+export type PushPayload = {
+  title: string;
+  body: string;
+  senderId: string;
+  url?: string;
+  tag?: string;
+  // Android/desktop keep the notification on screen until it's tapped or
+  // dismissed instead of letting it disappear on its own — see sw.js. iOS
+  // ignores this and falls back to its own default behavior regardless.
+  requireInteraction?: boolean;
+};
+
+// "high" urgency is what lets a chat push through immediately — web-push's
+// default ("normal") lets Android batch it until the phone's next Doze
+// maintenance window, which can be minutes. TTL: a phone that's been off
+// for over a day doesn't need yesterday's chat pings all arriving at once.
+const PUSH_OPTIONS = { urgency: "high" as const, TTL: 60 * 60 * 24 };
+
+// Sends a Web Push notification to every device a user has registered —
+// a real OS notification even when the recipient's tab isn't open/focused,
 // including on an iPad where the site was added to the Home Screen.
-export async function sendPushToUser(
-  userId: string,
-  payload: {
-    title: string;
-    body: string;
-    senderId: string;
-    url?: string;
-    tag?: string;
-    // Android/desktop keep the notification on screen until it's tapped or
-    // dismissed instead of letting it disappear on its own — see sw.js. iOS
-    // ignores this and falls back to its own default behavior regardless.
-    requireInteraction?: boolean;
-  },
-) {
-  if (!ensureConfigured()) return;
+export async function sendPushToUser(userId: string, payload: PushPayload) {
+  return sendPushToUsers([userId], payload);
+}
+
+// Same, for a whole room at once: one query for every recipient's devices
+// instead of one query per recipient before a single push could go out.
+export async function sendPushToUsers(userIds: string[], payload: PushPayload) {
+  if (!ensureConfigured() || userIds.length === 0) return;
 
   const adminClient = createAdminClient();
-  const { data: subs } = await adminClient.from("push_subscriptions").select("*").eq("user_id", userId);
+  const { data: subs } = await adminClient.from("push_subscriptions").select("*").in("user_id", userIds);
   if (!subs || subs.length === 0) return;
 
   const json = JSON.stringify(payload);
@@ -45,6 +55,7 @@ export async function sendPushToUser(
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           json,
+          PUSH_OPTIONS,
         );
       } catch (err) {
         // 404/410 = the browser dropped this subscription (uninstalled,

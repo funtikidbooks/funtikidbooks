@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
+import { pushMeetingMessage } from "@/lib/chatPush";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { MeetingChannel, MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, MeetingSearchResult, Profile } from "@/lib/types";
 
@@ -545,15 +546,6 @@ export async function searchMeetingMessages(query: string): Promise<MeetingSearc
   }));
 }
 
-// The message row itself is now inserted straight from the browser (see
-// MeetingHub's attemptSend) so sending never waits in the Server Action
-// queue behind background syncs — this is only the push-notification half,
-// returning immediately and doing the fan-out in after().
-export async function notifyMeetingMessageSent(channelId: string, content: string, hasAttachment: boolean) {
-  const { supabase, user } = await requireUser();
-  after(() => notifyChannelMembers(supabase, channelId, user.id, content.trim(), hasAttachment).catch(() => {}));
-}
-
 // Forwards a message someone already has on screen to another room they're
 // a member of — takes the content/attachment fields straight from that
 // message instead of re-uploading, since the attachment is already sitting
@@ -582,58 +574,10 @@ export async function forwardMeetingMessage(
     .single();
   if (error || !data) throw new Error("Không thể chuyển tiếp — bạn cần tham gia phòng trước.");
 
-  after(() => notifyChannelMembers(supabase, targetChannelId, user.id, trimmed, !!attachment).catch(() => {}));
+  const sent = data as MeetingMessage;
+  after(() => pushMeetingMessage(sent).catch(() => {}));
 
-  return data as MeetingMessage;
-}
-
-// Fire-and-forget: pushes a real OS notification to everyone who should
-// hear about this message — every staff member for the always-open
-// "Chung" channel, or just that room's members for a private one — the
-// same way sendDirectMessage() already notifies a DM recipient.
-async function notifyChannelMembers(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  channelId: string,
-  senderId: string,
-  content: string,
-  hasAttachment: boolean,
-) {
-  const [{ data: channel }, { data: sender }] = await Promise.all([
-    supabase.from("meeting_channels").select("name, is_general, is_food_room").eq("id", channelId).maybeSingle(),
-    supabase.from("profiles").select("display_name").eq("id", senderId).maybeSingle(),
-  ]);
-  if (!channel) return;
-
-  let recipientIds: string[];
-  if (channel.is_general || channel.is_food_room) {
-    const { data: everyone } = await supabase.from("profiles").select("id");
-    recipientIds = (everyone ?? []).map((p) => p.id as string);
-  } else {
-    const { data: members } = await supabase.from("meeting_channel_members").select("profile_id").eq("channel_id", channelId);
-    recipientIds = (members ?? []).map((m) => m.profile_id as string);
-  }
-
-  const body = content || (hasAttachment ? "📎 Đã gửi một tệp đính kèm" : "");
-  // "@all" makes the push impossible to miss — everyone in the room already
-  // gets notified for every message, this just makes clear the message was
-  // specifically meant for all of them.
-  const taggedAll = /(^|\s)@all\b/.test(content);
-  const title = taggedAll
-    ? `📢 #${channel.name} · ${sender?.display_name ?? "Ai đó"} đã nhắc tất cả mọi người`
-    : `#${channel.name} · ${sender?.display_name ?? "Tin nhắn mới"}`;
-  await Promise.all(
-    recipientIds
-      .filter((id) => id !== senderId)
-      .map((id) =>
-        sendPushToUser(id, {
-          title,
-          body,
-          senderId,
-          url: `/workspace/hop?room=${channelId}`,
-          tag: `funti-channel-${channelId}`,
-        }).catch(() => {}),
-      ),
-  );
+  return sent;
 }
 
 // "Thu hồi" keeps the row so an "Đã thu hồi" placeholder still shows where

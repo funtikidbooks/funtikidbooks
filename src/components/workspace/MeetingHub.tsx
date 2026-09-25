@@ -27,9 +27,10 @@ const ForwardMessageModal = dynamic(
 );
 import { useCallPresence } from "@/lib/useCallPresence";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
+import { usePageVisible } from "@/lib/usePageVisible";
 import { vnToday } from "@/lib/constants/attendance";
 import { thumbnailUrl } from "@/lib/imageTransform";
-import { notifyDirectMessageSent } from "@/lib/actions/messages";
+import { notifyNewMessage } from "@/lib/chatNotify";
 import { addToOutbox, insertWithRetry, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
 import { Emoji } from "@/lib/emoji";
 import {
@@ -48,7 +49,6 @@ import {
   removeChannelMember,
   removeReaction,
   searchMeetingMessages,
-  notifyMeetingMessageSent,
   setChannelClosed,
   setDmTabLabel,
   togglePinMessage,
@@ -1610,6 +1610,7 @@ export function MeetingHub({
   // "gõ @ để nhắc ai đó") is desktop-only guidance, so mobile gets a blank
   // placeholder instead of a truncated, half-useful version of it.
   const isMobile = useIsMobileViewport();
+  const pageVisible = usePageVisible();
 
   // A real thumbnail per pending image beats a filename chip — lets people
   // confirm they're the right pictures before sending, several at once.
@@ -2323,14 +2324,21 @@ export function MeetingHub({
   // unread badges — different per person because it depended on their own
   // room-switching timing. Checking the message's own channel_id makes
   // this self-verifying instead of trusting the array matches activeId.
+  //
+  // Only while the tab is actually on screen — a room left open in a
+  // background tab was marking every new message read the instant it
+  // arrived, so the sender saw "Đã xem" and the recipient's unread badge was
+  // wiped before they'd ever looked. pageVisible flipping back to true
+  // re-runs this and marks it read at the moment they really come back.
   useEffect(() => {
+    if (!pageVisible) return;
     if (!activeId || activeId === DM_TAB_ID || messages.length === 0) return;
     const lastMessage = messages[messages.length - 1];
     if (lastMessage.channel_id !== activeId) return;
     if (lastMarkedReadIdRef.current === lastMessage.id) return;
     lastMarkedReadIdRef.current = lastMessage.id;
     markChannelReadKeepAlive(activeId, lastMessage.id);
-  }, [activeId, messages]);
+  }, [activeId, messages, pageVisible]);
 
   useEffect(() => {
     if (!activeId || activeId === DM_TAB_ID) return;
@@ -2953,7 +2961,7 @@ export function MeetingHub({
         }
         pendingPayloadsRef.current.delete(tempId);
         serverIdsRef.current.delete(tempId);
-        notifyMeetingMessageSent(channelId, content, !!attachment).catch(() => {});
+        notifyNewMessage("meeting", sent.id);
       } catch (err) {
         setError(sendErrorMessage(err, "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại."));
         setFailedIds((prev) => new Set(prev).add(tempId));
@@ -3126,7 +3134,7 @@ export function MeetingHub({
           const res = await insertWithRetry<MeetingMessage>(supabase, "meeting_messages", row);
           if (res.data) {
             removeFromOutbox(entry.serverId);
-            notifyMeetingMessageSent(entry.channelId, entry.content, false).catch(() => {});
+            notifyNewMessage("meeting", res.data.id);
             if (activeIdRef.current === entry.channelId) {
               const confirmed = res.data;
               setMessages((prev) => mergeServerMessage(prev, confirmed));
@@ -3143,7 +3151,7 @@ export function MeetingHub({
           });
           if (res.data) {
             removeFromOutbox(entry.serverId);
-            notifyDirectMessageSent(entry.recipientId, entry.content, false).catch(() => {});
+            notifyNewMessage("dm", entry.serverId);
           } else if (res.code) {
             removeFromOutbox(entry.serverId);
           }

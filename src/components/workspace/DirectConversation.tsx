@@ -10,11 +10,12 @@ import {
   getOlderDirectMessages,
   markDirectMessagesRead,
   removeDirectReaction,
-  notifyDirectMessageSent,
 } from "@/lib/actions/messages";
+import { notifyNewMessage } from "@/lib/chatNotify";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { addToOutbox, insertWithRetry, removeFromOutbox } from "@/lib/chatOutbox";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
+import { usePageVisible } from "@/lib/usePageVisible";
 import { Emoji } from "@/lib/emoji";
 import { vnToday } from "@/lib/constants/attendance";
 import { translateMessage } from "@/lib/actions/translate";
@@ -436,10 +437,14 @@ export function DirectConversation({
   // conversation is open and has anything to show — mirrors Messenger's
   // behavior of marking things read just by having the thread open. Safe to
   // call redundantly: the update only ever touches rows still unread.
+  // Only while the tab is actually on screen — see MeetingHub's identical
+  // gate: a conversation left open in a background tab shouldn't show the
+  // sender "Đã xem" (or clear the badge) before anyone has looked.
+  const pageVisible = usePageVisible();
   useEffect(() => {
-    if (messages.length === 0) return;
+    if (!pageVisible || messages.length === 0) return;
     markDirectMessagesRead(peer.id).catch(() => {});
-  }, [peer.id, messages]);
+  }, [peer.id, messages, pageVisible]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -841,7 +846,7 @@ export function DirectConversation({
         setMessages((prev) => mergeServerMessage(prev, sent, tempId));
         pendingPayloadsRef.current.delete(tempId);
         serverIdsRef.current.delete(tempId);
-        notifyDirectMessageSent(peer.id, content, !!attachment).catch(() => {});
+        notifyNewMessage("dm", sent.id);
       } catch (err) {
         setError(sendErrorMessage(err, "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại."));
         setFailedIds((prev) => new Set(prev).add(tempId));

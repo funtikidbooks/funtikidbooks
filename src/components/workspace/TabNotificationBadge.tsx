@@ -10,15 +10,27 @@ const BASE_FAVICON = "/favicon.ico";
 // favicon — for staff who don't have the tab focused, don't have a headset
 // for the notification sound, or just don't reliably notice either. Purely
 // a side-effecting component, renders nothing.
+const COUNT_PREFIX = /^\(\d+\+?\) /;
+
 export function TabNotificationBadge() {
   const { totalUnreadCount } = useChatManager();
-  const baseTitleRef = useRef<string | null>(null);
   const baseIconImageRef = useRef<HTMLImageElement | null>(null);
 
+  // Next.js rewrites document.title on every page change, which silently
+  // dropped the "(3)" prefix until the unread count happened to change
+  // again — so a hidden tab could sit on unread messages with a clean title.
+  // Watching the <title> element and re-applying keeps the count on it.
   useEffect(() => {
-    if (baseTitleRef.current === null) baseTitleRef.current = document.title;
-    const baseTitle = baseTitleRef.current;
-    document.title = totalUnreadCount > 0 ? `(${totalUnreadCount > 99 ? "99+" : totalUnreadCount}) ${baseTitle}` : baseTitle;
+    const prefix = totalUnreadCount > 0 ? `(${totalUnreadCount > 99 ? "99+" : totalUnreadCount}) ` : "";
+    const apply = () => {
+      const base = document.title.replace(COUNT_PREFIX, "");
+      const next = prefix + base;
+      if (document.title !== next) document.title = next;
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(document.head, { subtree: true, childList: true, characterData: true });
+    return () => observer.disconnect();
   }, [totalUnreadCount]);
 
   useEffect(() => {
