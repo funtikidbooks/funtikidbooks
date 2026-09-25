@@ -28,6 +28,13 @@ const OFFSET_X = 1300;
 const OFFSET_Y = 950;
 const CANVAS_W = 2800;
 const CANVAS_H = 2000;
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 2;
+
+// The map is a camera over a fixed canvas: drag the background to pan,
+// mouse wheel / trackpad / two-finger pinch to zoom around the pointer.
+type View = { x: number; y: number; zoom: number };
+const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
 // Pulled from the site's own design tokens (globals.css :root) rather than
 // picked hex values, so a branch's color always matches something already
 // used elsewhere on the site — accent orange, accent-2 blue, and the
@@ -105,22 +112,193 @@ export function MindmapCanvas({
     return count;
   }
 
-  // The canvas is much bigger than any screen, and the root node sits at
-  // the origin (0,0 → OFFSET_X/OFFSET_Y once rendered), not at the
-  // scroll container's own (0,0) — without this, opening a project lands
-  // on the canvas's empty top-left corner instead of the actual map,
-  // especially on phone where there's no zoom-out to spot it by eye.
+  const [view, setView] = useState<View>({ x: 0, y: 0, zoom: 1 });
+  // Pointer/wheel handlers read the live view from here — they run many
+  // times per frame and mustn't wait on a re-render to see the last move.
+  const viewRef = useRef(view);
+  const applyView = useCallback((next: View) => {
+    viewRef.current = next;
+    setView(next);
+  }, []);
+  const [panning, setPanning] = useState(false);
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const panRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const pinchRef = useRef<{ dist: number; midX: number; midY: number; view: View } | null>(null);
+
+  // Keeps the canvas point under (px, py) — viewport coords — fixed while
+  // the zoom changes, so zooming homes in on the cursor/fingers.
+  const zoomAt = useCallback(
+    (px: number, py: number, zoom: number) => {
+      const v = viewRef.current;
+      const z = clampZoom(zoom);
+      const cx = (px - v.x) / v.zoom;
+      const cy = (py - v.y) / v.zoom;
+      applyView({ zoom: z, x: px - cx * z, y: py - cy * z });
+    },
+    [applyView],
+  );
+
+  // Frames every card in view (their real laid-out boxes, in canvas units —
+  // offset* ignores the transform), capped at 100% so a small map isn't
+  // blown up and floored at 50% so text stays readable on a phone; a bigger
+  // map just needs a pan from there.
+  const fitMap = useCallback(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const cards = [...el.querySelectorAll<HTMLElement>(".fk-mindmap-node")];
+    if (cards.length === 0) {
+      applyView({ zoom: 1, x: el.clientWidth / 2 - OFFSET_X, y: el.clientHeight / 2 - OFFSET_Y });
+      return;
+    }
+    const minX = Math.min(...cards.map((c) => c.offsetLeft));
+    const minY = Math.min(...cards.map((c) => c.offsetTop));
+    const maxX = Math.max(...cards.map((c) => c.offsetLeft + c.offsetWidth));
+    const maxY = Math.max(...cards.map((c) => c.offsetTop + c.offsetHeight));
+    const pad = 32;
+    const fit = Math.min((el.clientWidth - pad * 2) / (maxX - minX), (el.clientHeight - pad * 2) / (maxY - minY));
+    const zoom = Math.min(1, Math.max(0.5, fit));
+    applyView({
+      zoom,
+      x: el.clientWidth / 2 - ((minX + maxX) / 2) * zoom,
+      y: el.clientHeight / 2 - ((minY + maxY) / 2) * zoom,
+    });
+  }, [applyView]);
+
+  // Land on the map, not the canvas's empty corner — once the viewport has
+  // a real size (it can be 0×0 on the very first layout).
+  const centeredRef = useRef(false);
   useEffect(() => {
     const el = canvasRef.current;
-    if (!el || nodes.length === 0) return;
-    const cx = nodes.reduce((sum, n) => sum + n.x, 0) / nodes.length + OFFSET_X;
-    const cy = nodes.reduce((sum, n) => sum + n.y, 0) / nodes.length + OFFSET_Y;
-    el.scrollLeft = Math.max(0, cx - el.clientWidth / 2);
-    el.scrollTop = Math.max(0, cy - el.clientHeight / 2);
-    // Mount-only — this is a one-time "land on the map" scroll, not meant
-    // to yank the view back to center every time a node moves.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (centeredRef.current || el.clientWidth === 0) return;
+      centeredRef.current = true;
+      fitMap();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fitMap]);
+
+  // Wheel = zoom (sếp Phúc). Native listener because React's wheel handler
+  // is passive and can't stop the page from scrolling/zooming instead.
+  // A trackpad pinch arrives as ctrl+wheel with small deltas, hence the
+  // stronger factor for it. Safari's own trackpad pinch comes as gesture
+  // events instead; on touch those are ignored (the pointer pinch below
+  // handles fingers) but still cancelled so the page itself doesn't zoom.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      const rect = el!.getBoundingClientRect();
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? rect.height : 1;
+      const factor = Math.exp(-e.deltaY * unit * (e.ctrlKey ? 0.01 : 0.0015));
+      zoomAt(e.clientX - rect.left, e.clientY - rect.top, viewRef.current.zoom * factor);
+    }
+    let gestureStartZoom = 1;
+    function onGestureStart(e: Event) {
+      e.preventDefault();
+      gestureStartZoom = viewRef.current.zoom;
+    }
+    function onGestureChange(e: Event) {
+      e.preventDefault();
+      if (pointersRef.current.size > 0) return;
+      const g = e as Event & { scale: number; clientX: number; clientY: number };
+      const rect = el!.getBoundingClientRect();
+      zoomAt(g.clientX - rect.left, g.clientY - rect.top, gestureStartZoom * g.scale);
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("gesturestart", onGestureStart);
+    el.addEventListener("gesturechange", onGestureChange);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("gesturestart", onGestureStart);
+      el.removeEventListener("gesturechange", onGestureChange);
+    };
+  }, [zoomAt]);
+
+  function startPinch() {
+    const [a, b] = [...pointersRef.current.values()];
+    const el = canvasRef.current;
+    if (!a || !b || !el) return;
+    // A second finger turns a node drag into a pinch — put the node back.
+    const drag = dragRef.current;
+    if (drag) {
+      dragRef.current = null;
+      if (drag.moved) setNodes((prev) => prev.map((n) => (n.id === drag.id ? { ...n, x: drag.origX, y: drag.origY } : n)));
+    }
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    panRef.current = null;
+    const rect = el.getBoundingClientRect();
+    pinchRef.current = {
+      dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+      midX: (a.x + b.x) / 2 - rect.left,
+      midY: (a.y + b.y) / 2 - rect.top,
+      view: viewRef.current,
+    };
+    setPanning(true);
+  }
+
+  // Every pointer inside the canvas bubbles through here (node drags too),
+  // so a second finger anywhere starts a pinch. A pan only starts from the
+  // background itself, never from a node card.
+  function handleCanvasPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size >= 2) {
+      startPinch();
+      return;
+    }
+    if ((e.target as HTMLElement).closest(".fk-mindmap-node, .fk-mindmap-controls")) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    panRef.current = { startX: e.clientX, startY: e.clientY, origX: viewRef.current.x, origY: viewRef.current.y };
+    setPanning(true);
+  }
+
+  function handleCanvasPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!pointersRef.current.has(e.pointerId)) return;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pinch = pinchRef.current;
+    const el = canvasRef.current;
+    if (pinch && el && pointersRef.current.size >= 2) {
+      const [a, b] = [...pointersRef.current.values()];
+      const rect = el.getBoundingClientRect();
+      const zoom = clampZoom(pinch.view.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / pinch.dist));
+      const midX = (a.x + b.x) / 2 - rect.left;
+      const midY = (a.y + b.y) / 2 - rect.top;
+      // The canvas point that was under the fingers when the pinch began
+      // follows the fingers — zoom and two-finger pan in one gesture.
+      const cx = (pinch.midX - pinch.view.x) / pinch.view.zoom;
+      const cy = (pinch.midY - pinch.view.y) / pinch.view.zoom;
+      applyView({ zoom, x: midX - cx * zoom, y: midY - cy * zoom });
+      return;
+    }
+    const pan = panRef.current;
+    if (pan) applyView({ ...viewRef.current, x: pan.origX + e.clientX - pan.startX, y: pan.origY + e.clientY - pan.startY });
+  }
+
+  function handleCanvasPointerEnd(e: React.PointerEvent<HTMLDivElement>) {
+    pointersRef.current.delete(e.pointerId);
+    if (pinchRef.current && pointersRef.current.size < 2) {
+      pinchRef.current = null;
+      // Lifting one finger of a pinch carries on as a pan with the other.
+      const rest = [...pointersRef.current.values()][0];
+      panRef.current = rest ? { startX: rest.x, startY: rest.y, origX: viewRef.current.x, origY: viewRef.current.y } : null;
+    }
+    if (pointersRef.current.size === 0) {
+      panRef.current = null;
+      setPanning(false);
+    }
+  }
+
+  function zoomBy(factor: number) {
+    const el = canvasRef.current;
+    if (!el) return;
+    zoomAt(el.clientWidth / 2, el.clientHeight / 2, viewRef.current.zoom * factor);
+  }
 
   // A smooth horizontal S-curve (control points pulled toward the
   // midpoint on the x-axis) reads as a hand-drawn branch, the same
@@ -172,7 +350,9 @@ export function MindmapCanvas({
       drag.moved = true;
     }
     if (!drag.moved) return;
-    setNodes((prev) => prev.map((n) => (n.id === drag.id ? { ...n, x: drag.origX + dx, y: drag.origY + dy } : n)));
+    // Screen pixels → canvas units, so the card stays under the finger at any zoom.
+    const z = viewRef.current.zoom;
+    setNodes((prev) => prev.map((n) => (n.id === drag.id ? { ...n, x: drag.origX + dx / z, y: drag.origY + dy / z } : n)));
   }, []);
 
   const openPanel = useCallback((id: string) => {
@@ -314,17 +494,33 @@ export function MindmapCanvas({
         </Link>
         <span className="font-bold text-base truncate">{project.title}</span>
         <span className="text-xs flex-none hidden sm:inline" style={{ color: "var(--color-neutral-500)" }}>
-          {nodes.length} nhánh — kéo để sắp xếp, chạm để sửa, rê chuột/giữ vào một nhánh để thêm nhánh con
+          {nodes.length} nhánh — kéo nền để di chuyển, lăn chuột hoặc chụm 2 ngón để phóng to/thu nhỏ, kéo nhánh để sắp xếp
         </span>
       </div>
 
-      <div ref={canvasRef} className="flex-1 min-h-0 overflow-auto" style={{ background: "var(--color-surface)" }}>
-        <div className="relative" style={{ width: CANVAS_W, height: CANVAS_H }}>
+      <div
+        ref={canvasRef}
+        className="flex-1 min-h-0 relative overflow-hidden select-none"
+        style={{ background: "var(--color-surface)", touchAction: "none", cursor: panning ? "grabbing" : "grab" }}
+        onPointerDown={handleCanvasPointerDown}
+        onPointerMove={handleCanvasPointerMove}
+        onPointerUp={handleCanvasPointerEnd}
+        onPointerCancel={handleCanvasPointerEnd}
+      >
+        <div
+          className="absolute left-0 top-0"
+          style={{
+            width: CANVAS_W,
+            height: CANVAS_H,
+            transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`,
+            transformOrigin: "0 0",
+          }}
+        >
           <svg
             className="absolute inset-0 pointer-events-none"
             width={CANVAS_W}
             height={CANVAS_H}
-            style={{ zIndex: 0 }}
+            style={{ zIndex: 0, overflow: "visible" }}
           >
             {lines.map((l) => (
               <path key={l.id} d={l.d} fill="none" stroke={l.color} strokeWidth={2.5} strokeOpacity={0.5} strokeLinecap="round" />
@@ -574,6 +770,27 @@ export function MindmapCanvas({
               </div>
             );
           })}
+        </div>
+
+        <div
+          className="fk-mindmap-controls card elev-sm absolute flex items-center overflow-hidden"
+          style={{ right: 16, bottom: 16, cursor: "default", zIndex: 5 }}
+        >
+          <button type="button" className="px-3 py-1.5 text-base font-bold" aria-label="Thu nhỏ" title="Thu nhỏ" onClick={() => zoomBy(1 / 1.2)}>
+            −
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1.5 text-xs font-semibold tabular-nums"
+            style={{ minWidth: 52, borderLeft: "1px solid var(--color-neutral-200)", borderRight: "1px solid var(--color-neutral-200)" }}
+            title="Xem toàn bộ bản đồ"
+            onClick={fitMap}
+          >
+            {Math.round(view.zoom * 100)}%
+          </button>
+          <button type="button" className="px-3 py-1.5 text-base font-bold" aria-label="Phóng to" title="Phóng to" onClick={() => zoomBy(1.2)}>
+            +
+          </button>
         </div>
       </div>
 
