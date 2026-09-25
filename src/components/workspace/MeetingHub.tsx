@@ -31,6 +31,7 @@ import { usePageVisible } from "@/lib/usePageVisible";
 import { vnToday } from "@/lib/constants/attendance";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { notifyNewMessage } from "@/lib/chatNotify";
+import { playChatDing } from "@/lib/chatSound";
 import { addToOutbox, insertWithRetry, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
 import { Emoji } from "@/lib/emoji";
 import {
@@ -1604,7 +1605,6 @@ export function MeetingHub({
   const longPressFiredRef = useRef(false);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
-  const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
   const callRingAudioRef = useRef<HTMLAudioElement | null>(null);
   // On phone there's no Ctrl+V and no room to spare — the hint text (and
   // "gõ @ để nhắc ai đó") is desktop-only guidance, so mobile gets a blank
@@ -1631,7 +1631,6 @@ export function MeetingHub({
   }, [pendingPreviews]);
 
   useEffect(() => {
-    notificationAudioRef.current = new Audio("/sounds/dm-message.mp3");
     const ring = new Audio("/sounds/call-ring.mp3");
     ring.loop = true;
     callRingAudioRef.current = ring;
@@ -2350,13 +2349,7 @@ export function MeetingHub({
         { event: "INSERT", schema: "public", table: "meeting_messages", filter: `channel_id=eq.${activeId}` },
         (payload) => {
           const row = payload.new as MeetingMessage;
-          if (row.sender_id !== currentUser.id) {
-            const audio = notificationAudioRef.current;
-            if (audio) {
-              audio.currentTime = 0;
-              audio.play().catch(() => {});
-            }
-          }
+          if (row.sender_id !== currentUser.id) playChatDing();
           setMessages((prev) => mergeServerMessage(prev, row));
         },
       )

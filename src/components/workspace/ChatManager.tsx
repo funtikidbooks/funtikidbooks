@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createClient } from "@/lib/supabase/client";
 import { getUnreadCounts, markConversationRead } from "@/lib/actions/messages";
 import { getUnreadMeetingCounts } from "@/lib/actions/meetings";
+import { playChatDing, unlockChatSound } from "@/lib/chatSound";
 import type { DirectMessage, MeetingMessage, Profile } from "@/lib/types";
 
 type ChatManagerValue = {
@@ -60,39 +61,23 @@ export function ChatManagerProvider({
   // setActiveMeetingChannel whenever its own activeId changes).
   const activeMeetingChannelIdRef = useRef<string | null>(null);
   const activeDmPeerIdRef = useRef<string | null>(null);
-  const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     openChatIdsRef.current = new Set(openChats.map((p) => p.id));
   }, [openChats]);
 
-  useEffect(() => {
-    notificationAudioRef.current = new Audio("/sounds/dm-message.mp3");
-  }, []);
-
-  // Browsers block Audio.play() until the page has had at least one real
-  // user gesture (click/tap/key) this session — calling it any earlier
-  // fails silently (the .catch() below swallows it), which is exactly what
-  // "the notification sound plays sometimes, not others" turned out to be:
-  // silent right after a fresh load/reload, working again the moment
-  // someone clicks anything at all. A one-off play-then-pause on the very
-  // first interaction "unlocks" it well before any real notification needs
-  // to play, instead of leaving that unlock to chance.
+  // Browsers block audio until the page has had at least one real user
+  // gesture (click/tap/key) this session — without this, the ding was
+  // silent right after a fresh load until someone happened to click
+  // something. Unlocking on the first interaction plays nothing (see
+  // chatSound.ts), so it no longer pauses Spotify the way the old
+  // play-then-pause <audio> trick did.
   useEffect(() => {
     let unlocked = false;
     function unlock() {
       if (unlocked) return;
       unlocked = true;
-      const audio = notificationAudioRef.current;
-      if (audio) {
-        audio.play().then(
-          () => {
-            audio.pause();
-            audio.currentTime = 0;
-          },
-          () => {},
-        );
-      }
+      unlockChatSound();
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
     }
@@ -188,20 +173,6 @@ export function ChatManagerProvider({
     };
   }, [resync]);
 
-  // One ding per burst, not one per message — five messages landing in the
-  // same second (a pasted list, several photos) shouldn't machine-gun it.
-  const lastDingAtRef = useRef(0);
-  const ding = useCallback(() => {
-    const now = Date.now();
-    if (now - lastDingAtRef.current < 1500) return;
-    lastDingAtRef.current = now;
-    const audio = notificationAudioRef.current;
-    if (audio) {
-      audio.currentTime = 0;
-      audio.play().catch(() => {});
-    }
-  }, []);
-
   // Global inbox subscription — separate from each ChatWindow's own
   // conversation subscription, so a badge shows up even for teammates whose
   // chat window isn't currently open.
@@ -228,7 +199,7 @@ export function ChatManagerProvider({
           // the message.
           const open = openChatIdsRef.current.has(row.sender_id) || activeDmPeerIdRef.current === row.sender_id;
           if (open && isWatching()) return;
-          ding();
+          playChatDing();
           setUnreadCounts((prev) => ({ ...prev, [row.sender_id]: (prev[row.sender_id] ?? 0) + 1 }));
         },
       )
@@ -244,7 +215,7 @@ export function ChatManagerProvider({
           if (row.channel_id === activeMeetingChannelIdRef.current && isWatching()) return;
           // Room messages used to only bump a silent badge — DMs were the
           // only thing that ever made a sound.
-          ding();
+          playChatDing();
           setMeetingUnreadCounts((prev) => ({ ...prev, [row.channel_id]: (prev[row.channel_id] ?? 0) + 1 }));
         },
       )
@@ -262,7 +233,7 @@ export function ChatManagerProvider({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUserId, resync, ding]);
+  }, [currentUserId, resync]);
 
   // Global — everyone's profile card, message sender labels, and DM roster
   // read from this, so it's one subscription here rather than duplicated in
