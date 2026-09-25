@@ -5,13 +5,12 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
   addDirectReaction,
-  getConversation,
-  getDirectReactionsSince,
   getOlderDirectMessages,
   markDirectMessagesRead,
   removeDirectReaction,
 } from "@/lib/actions/messages";
 import { notifyNewMessage } from "@/lib/chatNotify";
+import { fetchConversation, fetchDirectReactions, readDmSnapshot, writeDmSnapshot } from "@/lib/dmLoad";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { addToOutbox, insertWithRetry, removeFromOutbox } from "@/lib/chatOutbox";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
@@ -347,9 +346,19 @@ export function DirectConversation({
   // refocus, a reconnect while still looking at the same conversation — it
   // only asks for messages newer than the last one already on screen and
   // appends them, instead of re-fetching and replacing all ~200 every time.
+  //
+  // Opening a conversation paints the last-seen copy (readDmSnapshot)
+  // instantly, then replaces it with a fresh full fetch — fetched straight
+  // from the browser (see lib/dmLoad.ts), not through the Server Action
+  // queue, which is what made opening a DM feel so slow.
   const resync = useCallback(() => {
-    const isNewPeer = lastSyncedPeerIdRef.current !== peer.id;
-    lastSyncedPeerIdRef.current = peer.id;
+    const peerId = peer.id;
+    const isNewPeer = lastSyncedPeerIdRef.current !== peerId;
+    lastSyncedPeerIdRef.current = peerId;
+    // Responses can now come back in any order (direct fetches run in
+    // parallel, unlike the old serialized Server Actions) — one for a
+    // conversation that's no longer open must never land in this one.
+    const stillCurrent = () => lastSyncedPeerIdRef.current === peerId;
 
     // Fresh peer, fresh scroll-to-load-older state — see the identical
     // reset in MeetingHub's resync() for why.
@@ -357,6 +366,9 @@ export function DirectConversation({
       hasMoreOlderRef.current = true;
       setHasMoreOlder(true);
       manuallyExpandedRef.current = false;
+      const snapshot = readDmSnapshot(peerId);
+      setMessages(snapshot?.messages ?? []);
+      setReactions(snapshot?.reactions ?? []);
     }
 
     // Reduce rather than "just read the last element" — a realtime INSERT
@@ -374,21 +386,34 @@ export function DirectConversation({
       : latestOf(messagesRef.current.filter((m) => !m.id.startsWith("temp-")).map((m) => m.created_at));
     const reactionsAfter = isNewPeer ? undefined : latestOf(reactionsRef.current.map((r) => r.created_at));
 
-    getConversation(peer.id, messagesAfter)
+    fetchConversation(currentUser.id, peerId, messagesAfter)
       .then((msgs) => {
+        if (!stillCurrent()) return;
         if (isNewPeer) {
-          setMessages(msgs);
+          // Full fetch replaces the snapshot (which may be missing read
+          // receipts/recalls since it was saved) — keeping only bubbles
+          // still being sent right now.
+          setMessages((prev) => {
+            const fetchedIds = new Set(msgs.map((m) => m.id));
+            const inFlight = prev.filter((m) => {
+              if (!m.id.startsWith("temp-")) return false;
+              const serverId = serverIdsRef.current.get(m.id);
+              return !serverId || !fetchedIds.has(serverId);
+            });
+            return capMessagesForRoom([...msgs, ...inFlight]);
+          });
         } else if (msgs.length > 0) {
           setMessages((prev) => capMessagesForRoom(msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev)));
         }
       })
       .catch(() => {
-        // no live backend yet (e.g. workspace-demo) — chat just starts empty
-        if (isNewPeer) setMessages([]);
+        // Offline / no live backend (e.g. workspace-demo) — keep whatever
+        // the snapshot already put on screen.
       });
 
-    getDirectReactionsSince(peer.id, reactionsAfter)
+    fetchDirectReactions(currentUser.id, peerId, reactionsAfter)
       .then((rx) => {
+        if (!stillCurrent()) return;
         if (isNewPeer) {
           setReactions(rx);
         } else if (rx.length > 0) {
@@ -400,10 +425,20 @@ export function DirectConversation({
           });
         }
       })
-      .catch(() => {
-        if (isNewPeer) setReactions([]);
-      });
-  }, [peer.id, mergeServerMessage, capMessagesForRoom]);
+      .catch(() => {});
+  }, [peer.id, currentUser.id, mergeServerMessage, capMessagesForRoom]);
+
+  // Keeps the last-seen copy current for the next instant open. Keyed off
+  // the messages' own sender/recipient rather than `peer` — right after a
+  // switch there's one render where `peer` is already the new person but
+  // `messages` still holds the previous conversation.
+  useEffect(() => {
+    const first = messages.find((m) => !m.id.startsWith("temp-"));
+    if (!first) return;
+    const otherId = first.sender_id === currentUser.id ? first.recipient_id : first.sender_id;
+    if (otherId !== peer.id) return;
+    writeDmSnapshot(otherId, { messages, reactions });
+  }, [messages, reactions, peer.id, currentUser.id]);
 
   useEffect(() => {
     resync();

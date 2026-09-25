@@ -32,6 +32,7 @@ import { vnToday } from "@/lib/constants/attendance";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { notifyNewMessage } from "@/lib/chatNotify";
 import { playChatDing } from "@/lib/chatSound";
+import { fetchRoomSync } from "@/lib/roomLoad";
 import { addToOutbox, insertWithRetry, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
 import { Emoji } from "@/lib/emoji";
 import {
@@ -40,7 +41,6 @@ import {
   createChannel,
   deleteChannel,
   getOlderMeetingMessages,
-  getRoomSync,
   joinChannel,
   leaveChannel,
   listChannelMembers,
@@ -2195,7 +2195,7 @@ export function MeetingHub({
     // four separate ones — each of those paid for its own auth round trip
     // to Supabase on top of its query, so four client calls meant eight
     // network hops for a single room switch.
-    getRoomSync(id, { messagesAfter, reactionsAfter })
+    fetchRoomSync(id, { messagesAfter, reactionsAfter })
       .then(({ messages: msgs, reactions: rx, reads: rd, pinnedMessages: pinned }) => {
         // A newer resync() (this room again, or a switch elsewhere) has
         // already run since this call started — its own result already
@@ -2308,7 +2308,7 @@ export function MeetingHub({
             reactions: rx,
             reads: rd,
             pinnedMessages: pinned,
-          } = await getRoomSync(room.id, { messagesAfter, reactionsAfter });
+          } = await fetchRoomSync(room.id, { messagesAfter, reactionsAfter });
           if (cancelled || room.id === activeIdRef.current) continue;
           const priorBase = base;
           const mergedMessages = priorBase

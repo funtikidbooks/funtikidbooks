@@ -432,9 +432,10 @@ export async function getOlderMeetingMessages(
 // server via auth.getUser(), not a local check — so four separate
 // client→server calls meant four separate auth round trips stacked on top
 // of four separate queries. This pays that auth cost once and runs every
-// query in parallel server-side afterward; MeetingHub's resync() is the
-// only caller. The individual functions above stay exported for anything
-// that only ever needs one piece of this.
+// query in parallel server-side afterward. Only the /workspace/hop page's
+// initial server render calls this now — MeetingHub's own resync() and
+// warm-up pass use lib/roomLoad.ts's fetchRoomSync straight from the
+// browser instead, so they never queue behind other Server Actions.
 export async function getRoomSync(
   channelId: string,
   opts: { messagesAfter?: string; reactionsAfter?: string } = {},

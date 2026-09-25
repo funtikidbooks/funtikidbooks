@@ -6,46 +6,6 @@ import { sendPushToUser } from "@/lib/push";
 import { pushDirectMessage } from "@/lib/chatPush";
 import type { DirectMessage, DirectMessageReaction, DirectMessageSearchResult } from "@/lib/types";
 
-const DM_PAGE_SIZE = 200;
-
-// `afterCreatedAt` (exclusive) lets a caller that already has a page of
-// messages ask for only what's new since the last one it holds, instead of
-// re-fetching the whole capped 200 every time — see DirectConversation's
-// resync().
-//
-// The *initial* fetch (no afterCreatedAt) has to sort descending and
-// re-reverse rather than just sorting ascending with the same limit — a
-// plain ascending-order LIMIT 200 returns the OLDEST 200 messages in the
-// conversation, not the newest. That's invisible for any conversation still
-// under 200 messages total (every row comes back either way), but the
-// busiest conversation in this app is already most of the way there — once
-// it crosses 200, resync()'s delta fetch anchors off "the newest message
-// already loaded", which would have been permanently stuck 200-messages-old
-// with the wrong-end fetch, silently hiding every message since.
-export async function getConversation(otherUserId: string, afterCreatedAt?: string): Promise<DirectMessage[]> {
-  const { supabase, user } = await requireUser();
-  const orFilter = `and(sender_id.eq.${user.id},recipient_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},recipient_id.eq.${user.id})`;
-
-  if (afterCreatedAt) {
-    const { data } = await supabase
-      .from("direct_messages")
-      .select("*")
-      .or(orFilter)
-      .gt("created_at", afterCreatedAt)
-      .order("created_at", { ascending: true })
-      .limit(300);
-    return (data ?? []) as DirectMessage[];
-  }
-
-  const { data } = await supabase
-    .from("direct_messages")
-    .select("*")
-    .or(orFilter)
-    .order("created_at", { ascending: false })
-    .limit(DM_PAGE_SIZE);
-  return ((data ?? []) as DirectMessage[]).reverse();
-}
-
 // One "scroll up for more" page older than whatever's currently loaded —
 // the DM counterpart to getOlderMeetingMessages in meetings.ts (see its own
 // comment). Reactions for this specific batch come along too, or they'd
@@ -75,32 +35,6 @@ export async function getOlderDirectMessages(
       messages.map((m) => m.id),
     );
   return { messages, reactions: (rxData ?? []) as DirectMessageReaction[] };
-}
-
-// Every reaction in this conversation created after `afterCreatedAt` (or all
-// of them, for the initial load) — same delta-fetch shape as
-// getReactionsSince() in meetings.ts, and for the same reason: a reaction
-// added to a message already on screen needs to be caught up on too, not
-// just reactions on brand-new messages.
-export async function getDirectReactionsSince(otherUserId: string, afterCreatedAt?: string): Promise<DirectMessageReaction[]> {
-  const { supabase, user } = await requireUser();
-  let query = supabase
-    .from("direct_message_reactions")
-    .select("message_id, profile_id, emoji, created_at, direct_messages!inner(sender_id, recipient_id)")
-    .or(
-      `and(direct_messages.sender_id.eq.${user.id},direct_messages.recipient_id.eq.${otherUserId}),and(direct_messages.sender_id.eq.${otherUserId},direct_messages.recipient_id.eq.${user.id})`,
-    )
-    .order("created_at", { ascending: true })
-    .limit(500);
-  if (afterCreatedAt) query = query.gt("created_at", afterCreatedAt);
-  const { data, error } = await query;
-  if (error || !data) return [];
-  return data.map((r) => ({
-    message_id: r.message_id as string,
-    profile_id: r.profile_id as string,
-    emoji: r.emoji as string,
-    created_at: r.created_at as string,
-  }));
 }
 
 export async function addDirectReaction(messageId: string, emoji: string) {
