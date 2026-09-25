@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
+import { DEFAULT_UPWORK_SOP, normalizeSop, type UpworkSop } from "@/lib/upworkSop";
 import type { UpworkBatch, UpworkLead, UpworkLeadStatus, UpworkProposalTemplate } from "@/lib/types";
 
 // Director, or any staff whose chức danh is exactly "Project Manager" —
@@ -113,4 +114,24 @@ export async function deleteProposalTemplate(id: string) {
   const { supabase } = await requireDirectorOrPM();
   await supabase.from("upwork_proposal_templates").delete().eq("id", id);
   revalidatePath("/quan-tri/upwork");
+}
+
+// The built-in copy of the original deck until a row exists (or before
+// supabase/migrations/upwork_sop.sql has been run).
+export async function getUpworkSop(): Promise<{ sop: UpworkSop; saved: boolean }> {
+  const { supabase } = await requireDirectorOrPM();
+  const { data } = await supabase.from("upwork_sop").select("content").eq("id", "default").maybeSingle();
+  return data ? { sop: normalizeSop(data.content), saved: true } : { sop: DEFAULT_UPWORK_SOP, saved: false };
+}
+
+export async function saveUpworkSop(input: UpworkSop): Promise<UpworkSop> {
+  const { supabase, user } = await requireDirectorOrPM();
+  const sop = normalizeSop(input);
+  if (JSON.stringify(sop).length > 200_000) throw new Error("SOP quá dài.");
+  const { error } = await supabase
+    .from("upwork_sop")
+    .upsert({ id: "default", content: sop, updated_by: user.id, updated_at: new Date().toISOString() });
+  if (error) throw new Error("Không thể lưu SOP — cần chạy file SQL upwork_sop.sql trong Supabase trước.");
+  revalidatePath("/quan-tri/upwork");
+  return sop;
 }

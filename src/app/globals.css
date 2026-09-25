@@ -557,6 +557,45 @@ h4 {
 .fk-mindmap-node-action:active {
   transform: scale(0.9);
 }
+/* Upwork SOP page: text becomes an input in place while its section is
+   being edited — keeps the layout's own font/size/color (inherit), marked
+   by a dashed outline tinted from the surrounding text color so it reads
+   on both light cards and the navy blocks. In the components layer so a
+   size/weight utility on the same element (text-xl, font-bold) still wins
+   over this rule's `font: inherit`. */
+@layer components {
+  .fk-sop-edit {
+    display: block;
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    background: color-mix(in srgb, currentColor 7%, transparent);
+    border: 1.5px dashed color-mix(in srgb, currentColor 40%, transparent);
+    border-radius: 6px;
+    padding: 2px 6px;
+    resize: vertical;
+  }
+  .fk-sop-edit:focus {
+    outline: none;
+    border-style: solid;
+    border-color: color-mix(in srgb, currentColor 70%, transparent);
+  }
+  .fk-sop-edit::placeholder {
+    color: inherit;
+    opacity: 0.5;
+  }
+}
+.fk-sop-link {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+@media (hover: hover) {
+  .fk-sop-link:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+}
 /* A list row inside a card opens its own edit panel — on a mouse, hovering
    rings it in the branch's color (--row-color) with a "›" so it reads as
    something to click, not just text in the card. */

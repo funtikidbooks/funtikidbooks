@@ -1126,6 +1126,12 @@ export type Database = {
         Update: Partial<UpworkBatch>;
         Relationships: [];
       };
+      upwork_sop: {
+        Row: { id: string; content: unknown; updated_by: string | null; updated_at: string };
+        Insert: { id?: string; content: unknown; updated_by?: string | null; updated_at?: string };
+        Update: { content?: unknown; updated_by?: string | null; updated_at?: string };
+        Relationships: [];
+      };
       upwork_proposal_templates: {
         Row: UpworkProposalTemplate;
         Insert: Partial<UpworkProposalTemplate> & { name: string; content: string };

@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { updateUpworkLeadDraft, updateUpworkLeadStatus, listUpworkLeads } from "@/lib/actions/upwork";
 import type { UpworkBatch, UpworkLead, UpworkLeadStatus, UpworkProposalTemplate } from "@/lib/types";
 import { ProposalTemplates } from "./ProposalTemplates";
+import { UpworkSopView } from "./UpworkSopView";
+import type { UpworkSop } from "@/lib/upworkSop";
 
 const STATUS_LABEL: Record<UpworkLeadStatus, string> = {
   pending: "Chờ duyệt",
@@ -228,15 +230,17 @@ function BatchSection({ batch }: { batch: UpworkBatch }) {
   );
 }
 
-type Tab = "batches" | "templates";
+type Tab = "batches" | "templates" | "sop";
 
 export function UpworkReportsAdmin({
   initialBatches,
   initialTemplates,
+  sop,
   initialTab,
 }: {
   initialBatches: UpworkBatch[];
   initialTemplates: UpworkProposalTemplate[];
+  sop: { sop: UpworkSop; saved: boolean };
   initialTab: Tab;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -247,13 +251,15 @@ export function UpworkReportsAdmin({
     // Keeps the tab on reload / when the link is shared, without a navigation.
     const url = new URL(window.location.href);
     if (next === "templates") url.searchParams.set("tab", "mau");
+    else if (next === "sop") url.searchParams.set("tab", "sop");
     else url.searchParams.delete("tab");
     window.history.replaceState(null, "", url);
   }
 
-  const tabs: { id: Tab; label: string; count: number }[] = [
+  const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "batches", label: "Đợt tìm khách", count: initialBatches.length },
     { id: "templates", label: "Mẫu proposal", count: templates.length },
+    { id: "sop", label: "SOP" },
   ];
 
   return (
@@ -283,12 +289,14 @@ export function UpworkReportsAdmin({
                 }}
               >
                 {t.label}
-                <span
-                  className="text-[11px] tabular-nums rounded-full px-1.5"
-                  style={{ background: active ? "var(--color-accent-100)" : "var(--color-neutral-100)" }}
-                >
-                  {t.count}
-                </span>
+                {t.count !== undefined && (
+                  <span
+                    className="text-[11px] tabular-nums rounded-full px-1.5"
+                    style={{ background: active ? "var(--color-accent-100)" : "var(--color-neutral-100)" }}
+                  >
+                    {t.count}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -296,7 +304,9 @@ export function UpworkReportsAdmin({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-3">
-        {tab === "templates" ? (
+        {tab === "sop" ? (
+          <UpworkSopView initialSop={sop.sop} saved={sop.saved} />
+        ) : tab === "templates" ? (
           <ProposalTemplates templates={templates} onTemplatesChange={setTemplates} />
         ) : initialBatches.length === 0 ? (
           <p style={{ color: "var(--color-neutral-500)" }}>
