@@ -2,20 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { isIos, isStandalone, subscribeToPush } from "@/lib/pushClient";
+import { getPushStatus, isIos, isStandalone, subscribeToPush, type PushStatus } from "@/lib/pushClient";
 
-// Registers the service worker and subscribes this device to Web Push so
-// chat notifications reach the person even when the tab isn't open/focused.
-// On iPad this only works once the site has been "Added to Home Screen" —
-// until then, this quietly does nothing and InstallHint (below) explains why.
-// Runs silently on every workspace load; anyone who dismissed the native
-// permission prompt (now stuck on "denied") can retry manually from the
-// "Bật thông báo" button in their profile (ProfileMenu.tsx).
+// Registers the service worker and keeps this device's Web Push
+// subscription saved so chat notifications reach the person even when the
+// tab isn't open/focused. Silent on load — it never prompts by itself (see
+// subscribeToPush's `prompt` option); PushPermissionBanner below is what
+// asks, from a real click.
 export function PushSetup() {
   const router = useRouter();
 
   useEffect(() => {
-    subscribeToPush();
+    subscribeToPush({ prompt: false });
   }, []);
 
   // sw.js focuses the existing tab on a notification click instead of doing
@@ -34,6 +32,65 @@ export function PushSetup() {
   }, [router]);
 
   return null;
+}
+
+// Shown on every workspace page while this device can't receive chat
+// notifications — a staff laptop with no push subscription at all got
+// nothing when a message arrived while the tab sat in the background
+// (sếp Phúc: sent 10:59, only noticed at 11:02 by clicking in). Dismissing
+// only hides it for this browser session, since missing messages is costly.
+export function PushPermissionBanner() {
+  const [status, setStatus] = useState<PushStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (sessionStorage.getItem("funti-push-banner-dismissed")) return;
+    // Browser-only APIs — has to run post-mount, same as IosInstallHint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setStatus(getPushStatus());
+  }, []);
+
+  if (status !== "default" && status !== "denied") return null;
+
+  async function enable() {
+    setBusy(true);
+    setStatus(await subscribeToPush());
+    setBusy(false);
+  }
+
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-2.5 text-[13px] flex-wrap"
+      style={{ background: "var(--color-accent-100)", color: "var(--color-accent-800)", borderBottom: "1px solid var(--color-accent-200)" }}
+    >
+      <span aria-hidden>🔔</span>
+      {status === "default" ? (
+        <>
+          <span className="flex-1 min-w-[200px]">
+            Máy này <b>chưa bật thông báo tin nhắn</b> — có tin mới khi đang ở tab khác sẽ không được báo.
+          </span>
+          <button type="button" onClick={enable} disabled={busy} className="btn btn-primary btn-sm flex-none">
+            {busy ? "Đang bật…" : "Bật thông báo"}
+          </button>
+        </>
+      ) : (
+        <span className="flex-1 min-w-[200px]">
+          Thông báo đang <b>bị chặn</b> trên trình duyệt này. Bấm biểu tượng 🔒 (hoặc ⚙) cạnh địa chỉ web → <b>Thông báo</b> → <b>Cho phép</b>, rồi tải lại trang.
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          sessionStorage.setItem("funti-push-banner-dismissed", "1");
+          setStatus(null);
+        }}
+        className="btn-icon flex-none"
+        aria-label="Đóng"
+      >
+        ✕
+      </button>
+    </div>
+  );
 }
 
 // A small dismissible banner nudging iPad/iPhone Safari users to install

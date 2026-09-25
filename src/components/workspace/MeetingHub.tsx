@@ -222,6 +222,11 @@ function FlipPopover({
 }) {
   const innerRef = useRef<HTMLDivElement | null>(null);
   const [alignRight, setAlignRight] = useState(preferRight);
+  // Opens upward by default; a message near the top of the scrolled chat
+  // list had its menu cut off under the room header (sếp Phúc's screenshot:
+  // only "Thu hồi" left visible), so it drops below the button instead
+  // when there isn't room above.
+  const [openDown, setOpenDown] = useState(false);
 
   useLayoutEffect(() => {
     const el = innerRef.current;
@@ -232,7 +237,18 @@ function FlipPopover({
     const rect = el.getBoundingClientRect();
     if (alignRight && rect.left < bounds.left + 4) setAlignRight(false);
     else if (!alignRight && rect.right > bounds.right - 4) setAlignRight(true);
-  }, [alignRight]);
+
+    if (!openDown) {
+      let clipY: HTMLElement | null = el.parentElement;
+      while (clipY && getComputedStyle(clipY).overflowY === "visible") clipY = clipY.parentElement;
+      const top = clipY ? clipY.getBoundingClientRect().top : 0;
+      if (rect.top < top + 4) setOpenDown(true);
+    }
+  }, [alignRight, openDown]);
+
+  const vertical: React.CSSProperties = openDown
+    ? { bottom: "auto", top: "100%", marginBottom: 0, marginTop: 6 }
+    : {};
 
   return (
     <div
@@ -241,7 +257,7 @@ function FlipPopover({
         popoverRef.current = node;
       }}
       className={className}
-      style={{ ...style, [alignRight ? "right" : "left"]: 0 }}
+      style={{ ...style, ...vertical, [alignRight ? "right" : "left"]: 0 }}
     >
       {children}
     </div>

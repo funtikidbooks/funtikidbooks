@@ -38,12 +38,19 @@ export function getPushStatus(): PushStatus {
 // saves the subscription. Shared by the silent auto-run on every workspace
 // page load (PushSetup) and the manual "Bật thông báo" button in the
 // profile dialog for anyone who dismissed/missed that first prompt.
-export async function subscribeToPush(): Promise<PushStatus> {
+//
+// `prompt: false` only (re)saves an existing permission — the silent page-load
+// path uses it, because Chrome quietly suppresses permission prompts that
+// don't come from a click (and can auto-block the site after a few), which
+// is how some staff machines ended up never subscribed at all. The real
+// prompt only happens from a button (PushPermissionBanner / ProfileMenu).
+export async function subscribeToPush({ prompt = true }: { prompt?: boolean } = {}): Promise<PushStatus> {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   if (!publicKey) return "unsupported";
 
   const status = getPushStatus();
   if (status === "unsupported" || status === "needs-ios-install") return status;
+  if (!prompt && status !== "granted") return status;
 
   try {
     const registration = await navigator.serviceWorker.register("/sw.js");
