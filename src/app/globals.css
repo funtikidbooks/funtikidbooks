@@ -557,6 +557,29 @@ h4 {
 .fk-mindmap-node-action:active {
   transform: scale(0.9);
 }
+/* A list row inside a card opens its own edit panel — on a mouse, hovering
+   rings it in the branch's color (--row-color) with a "›" so it reads as
+   something to click, not just text in the card. */
+.fk-mindmap-row {
+  position: relative;
+  transition: background-color 0.12s ease, box-shadow 0.12s ease;
+}
+.fk-mindmap-row-go {
+  opacity: 0;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  transform: translateX(-3px);
+}
+@media (hover: hover) {
+  .fk-mindmap-row:hover {
+    background: color-mix(in srgb, var(--row-color) 10%, transparent);
+    box-shadow: inset 0 0 0 1.5px var(--row-color);
+    border-radius: 6px;
+  }
+  .fk-mindmap-row:hover .fk-mindmap-row-go {
+    opacity: 1;
+    transform: none;
+  }
+}
 .ws-nav-link {
   transition: background-color 0.15s ease, color 0.15s ease;
 }

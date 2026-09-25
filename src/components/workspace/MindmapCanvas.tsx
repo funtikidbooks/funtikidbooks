@@ -660,8 +660,9 @@ export function MindmapCanvas({
                       <div
                         key={child.id}
                         onClick={() => openPanel(child.id)}
-                        className="flex items-center gap-2 px-3 py-2 cursor-pointer"
-                        style={{ borderTop: "1px solid var(--color-neutral-200)" }}
+                        title="Bấm để mở"
+                        className="fk-mindmap-row flex items-center gap-2 px-3 py-2 cursor-pointer"
+                        style={{ borderTop: "1px solid var(--color-neutral-200)", "--row-color": color } as React.CSSProperties}
                       >
                         <span
                           className="flex-1 text-[12px] leading-tight"
@@ -687,6 +688,9 @@ export function MindmapCanvas({
                             {child.news_post?.published ? "Đã đăng" : "Bài nháp"}
                           </span>
                         )}
+                        <span aria-hidden className="fk-mindmap-row-go flex-none text-base font-bold leading-none" style={{ color }}>
+                          ›
+                        </span>
                         <button
                           type="button"
                           aria-label="Xoá bài"
