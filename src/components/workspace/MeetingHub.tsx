@@ -32,6 +32,7 @@ import { vnToday } from "@/lib/constants/attendance";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { notifyNewMessage } from "@/lib/chatNotify";
 import { playChatDing } from "@/lib/chatSound";
+import { firstSighting, inboxTopic, listenChatTopic, roomTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
 import { fetchRoomSync } from "@/lib/roomLoad";
 import { addToOutbox, insertWithRetry, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
 import { Emoji } from "@/lib/emoji";
@@ -2423,7 +2424,7 @@ export function MeetingHub({
         { event: "INSERT", schema: "public", table: "meeting_messages", filter: `channel_id=eq.${activeId}` },
         (payload) => {
           const row = payload.new as MeetingMessage;
-          if (row.sender_id !== currentUser.id) playChatDing();
+          if (row.sender_id !== currentUser.id && firstSighting("room-ding", row.id)) playChatDing();
           setMessages((prev) => mergeServerMessage(prev, row));
         },
       )
@@ -2515,6 +2516,21 @@ export function MeetingHub({
       supabase.removeChannel(channel);
     };
   }, [activeId, currentUser.id, resync, mergeServerMessage]);
+
+  // Broadcast fast path for the open room — the sender pushes the saved row
+  // here the moment it's stored (~0.06s), well ahead of the change-feed
+  // INSERT above (~0.6s), which then just merges as a no-op (same id).
+  useEffect(() => {
+    if (!activeId || activeId === DM_TAB_ID) return;
+    const roomId = activeId;
+    return listenChatTopic(roomTopic(roomId), (event, payload) => {
+      if (event !== "message") return;
+      const row = payload as MeetingMessage;
+      if (!row?.id || row.channel_id !== roomId || activeIdRef.current !== roomId) return;
+      if (row.sender_id !== currentUser.id && firstSighting("room-ding", row.id)) playChatDing();
+      setMessages((prev) => mergeServerMessage(prev, row));
+    });
+  }, [activeId, currentUser.id, mergeServerMessage]);
 
   // Shared by the effect below and each message image's onLoad — an
   // attachment thumbnail has no reserved width/height (just a max-size
@@ -3028,6 +3044,8 @@ export function MeetingHub({
         }
         pendingPayloadsRef.current.delete(tempId);
         serverIdsRef.current.delete(tempId);
+        // Fast path to everyone else in the room (~0.06s) — see chatBroadcast.ts.
+        sendChatBroadcast(roomTopic(channelId), "message", sent);
         notifyNewMessage("meeting", sent.id);
       } catch (err) {
         setError(sendErrorMessage(err, "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại."));
@@ -3201,6 +3219,7 @@ export function MeetingHub({
           const res = await insertWithRetry<MeetingMessage>(supabase, "meeting_messages", row);
           if (res.data) {
             removeFromOutbox(entry.serverId);
+            sendChatBroadcast(roomTopic(entry.channelId), "message", res.data);
             notifyNewMessage("meeting", res.data.id);
             if (activeIdRef.current === entry.channelId) {
               const confirmed = res.data;
@@ -3218,6 +3237,7 @@ export function MeetingHub({
           });
           if (res.data) {
             removeFromOutbox(entry.serverId);
+            sendChatBroadcast(inboxTopic(entry.recipientId), "dm", res.data);
             notifyNewMessage("dm", entry.serverId);
           } else if (res.code) {
             removeFromOutbox(entry.serverId);

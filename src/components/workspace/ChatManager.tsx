@@ -5,6 +5,11 @@ import { createClient } from "@/lib/supabase/client";
 import { getUnreadCounts, markConversationRead } from "@/lib/actions/messages";
 import { getUnreadMeetingCounts } from "@/lib/actions/meetings";
 import { playChatDing, unlockChatSound } from "@/lib/chatSound";
+import { firstSighting, inboxTopic, listenChatTopic, roomTopic } from "@/lib/chatBroadcast";
+
+function isWatching() {
+  return document.visibilityState === "visible" && document.hasFocus();
+}
 import type { DirectMessage, MeetingMessage, Profile } from "@/lib/types";
 
 type ChatManagerValue = {
@@ -204,43 +209,106 @@ export function ChatManagerProvider({
     };
   }, [resync]);
 
-  // Global inbox subscription — separate from each ChatWindow's own
-  // conversation subscription, so a badge shows up even for teammates whose
-  // chat window isn't currently open.
-  useEffect(() => {
-    // "Already looking at it" only counts while the tab is actually on
-    // screen: a room left open in a background tab used to swallow its new
-    // messages entirely — no ding, no badge, no "(1)" in the tab title —
-    // which is exactly how a 10:59 message went unnoticed until 11:02.
-    const isWatching = () => document.visibilityState === "visible" && document.hasFocus();
+  // One handler per kind, fed by BOTH the Broadcast fast path (~0.06s, see
+  // lib/chatBroadcast.ts) and the change-feed backup (~0.6s) below —
+  // firstSighting() makes sure whichever copy lands second is ignored, so a
+  // message dings, pops up and counts as unread exactly once.
+  //
+  // "Already looking at it" only counts while the tab is actually on
+  // screen: a room left open in a background tab used to swallow its new
+  // messages entirely — no ding, no badge, no "(1)" in the tab title —
+  // which is exactly how a 10:59 message went unnoticed until 11:02.
+  const handleIncomingDm = useCallback(
+    (row: DirectMessage) => {
+      if (row.recipient_id !== currentUserId || !firstSighting("inbox", row.id)) return;
+      setRecentSenderOrder((prev) => [row.sender_id, ...prev.filter((id) => id !== row.sender_id)]);
+      // Already looking straight at this exact conversation — either a
+      // floating ChatWindow for this peer is open, or the embedded "Riêng"
+      // panel has them selected. No badge, no sound; the conversation's own
+      // subscription is what actually shows the message.
+      const open = openChatIdsRef.current.has(row.sender_id) || activeDmPeerIdRef.current === row.sender_id;
+      if (open && isWatching()) return;
+      playChatDing();
+      pushToast({
+        key: row.id,
+        kind: "dm",
+        channelId: null,
+        senderId: row.sender_id,
+        content: row.content ?? "",
+        hasAttachment: !!row.attachment_url,
+      });
+      setUnreadCounts((prev) => ({ ...prev, [row.sender_id]: (prev[row.sender_id] ?? 0) + 1 }));
+    },
+    [currentUserId, pushToast],
+  );
 
+  const handleIncomingRoomMessage = useCallback(
+    (row: MeetingMessage) => {
+      if (row.sender_id === currentUserId || !firstSighting("inbox", row.id)) return;
+      if (row.channel_id === activeMeetingChannelIdRef.current && isWatching()) return;
+      // Room messages used to only bump a silent badge — DMs were the only
+      // thing that ever made a sound.
+      playChatDing();
+      pushToast({
+        key: row.id,
+        kind: "room",
+        channelId: row.channel_id,
+        senderId: row.sender_id,
+        content: row.content ?? "",
+        hasAttachment: !!row.attachment_url,
+      });
+      setMeetingUnreadCounts((prev) => ({ ...prev, [row.channel_id]: (prev[row.channel_id] ?? 0) + 1 }));
+    },
+    [currentUserId, pushToast],
+  );
+
+  // Every room this user is in (#Chung and the food room count for
+  // everyone), for the per-room Broadcast listeners below. Read straight
+  // from the browser — not a Server Action, so it never queues.
+  const [joinedRoomIds, setJoinedRoomIds] = useState<string[]>([]);
+  const refreshJoinedRooms = useCallback(async () => {
+    const supabase = createClient();
+    const [{ data: memberships }, { data: openRooms }] = await Promise.all([
+      supabase.from("meeting_channel_members").select("channel_id").eq("profile_id", currentUserId),
+      supabase.from("meeting_channels").select("id").or("is_general.eq.true,is_food_room.eq.true"),
+    ]);
+    if (!memberships && !openRooms) return;
+    const ids = [
+      ...new Set([...(memberships ?? []).map((m) => m.channel_id as string), ...(openRooms ?? []).map((c) => c.id as string)]),
+    ].sort();
+    setJoinedRoomIds((prev) => (prev.join() === ids.join() ? prev : ids));
+  }, [currentUserId]);
+
+  // Broadcast fast path: my own inbox (DMs) and every room I'm in.
+  useEffect(() => {
+    return listenChatTopic(inboxTopic(currentUserId), (event, payload) => {
+      if (event === "dm" && (payload as DirectMessage)?.id) handleIncomingDm(payload as DirectMessage);
+    });
+  }, [currentUserId, handleIncomingDm]);
+
+  const joinedRoomKey = joinedRoomIds.join(",");
+  useEffect(() => {
+    if (!joinedRoomKey) return;
+    const stops = joinedRoomKey.split(",").map((roomId) =>
+      listenChatTopic(roomTopic(roomId), (event, payload) => {
+        const row = payload as MeetingMessage;
+        if (event === "message" && row?.id && row.channel_id === roomId) handleIncomingRoomMessage(row);
+      }),
+    );
+    return () => stops.forEach((stop) => stop());
+  }, [joinedRoomKey, handleIncomingRoomMessage]);
+
+  // Change-feed backup — separate from each ChatWindow's own conversation
+  // subscription, so a badge shows up even for teammates whose chat window
+  // isn't currently open.
+  useEffect(() => {
     const supabase = createClient();
     const channel = supabase
       .channel(`dm-inbox-${currentUserId}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "direct_messages", filter: `recipient_id=eq.${currentUserId}` },
-        (payload) => {
-          const row = payload.new as DirectMessage;
-          setRecentSenderOrder((prev) => [row.sender_id, ...prev.filter((id) => id !== row.sender_id)]);
-          // Already looking straight at this exact conversation — either a
-          // floating ChatWindow for this peer is open, or the embedded
-          // "Riêng" panel has them selected. No badge, no sound; the
-          // conversation's own realtime subscription is what actually shows
-          // the message.
-          const open = openChatIdsRef.current.has(row.sender_id) || activeDmPeerIdRef.current === row.sender_id;
-          if (open && isWatching()) return;
-          playChatDing();
-          pushToast({
-            key: row.id,
-            kind: "dm",
-            channelId: null,
-            senderId: row.sender_id,
-            content: row.content ?? "",
-            hasAttachment: !!row.attachment_url,
-          });
-          setUnreadCounts((prev) => ({ ...prev, [row.sender_id]: (prev[row.sender_id] ?? 0) + 1 }));
-        },
+        (payload) => handleIncomingDm(payload.new as DirectMessage),
       )
       // No channel_id filter — Realtime enforces the same "member of the
       // room, or it's #Chung" RLS select policy as a normal query, so this
@@ -248,22 +316,15 @@ export function ChatManagerProvider({
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "meeting_messages" },
-        (payload) => {
-          const row = payload.new as MeetingMessage;
-          if (row.sender_id === currentUserId) return;
-          if (row.channel_id === activeMeetingChannelIdRef.current && isWatching()) return;
-          // Room messages used to only bump a silent badge — DMs were the
-          // only thing that ever made a sound.
-          playChatDing();
-          pushToast({
-            key: row.id,
-            kind: "room",
-            channelId: row.channel_id,
-            senderId: row.sender_id,
-            content: row.content ?? "",
-            hasAttachment: !!row.attachment_url,
-          });
-          setMeetingUnreadCounts((prev) => ({ ...prev, [row.channel_id]: (prev[row.channel_id] ?? 0) + 1 }));
+        (payload) => handleIncomingRoomMessage(payload.new as MeetingMessage),
+      )
+      // Joined/left a room (or were added/removed by someone else) — keep
+      // the per-room Broadcast listeners above in step.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "meeting_channel_members", filter: `profile_id=eq.${currentUserId}` },
+        () => {
+          refreshJoinedRooms().catch(() => {});
         },
       )
       // Fires with "SUBSCRIBED" both on the initial connect and after any
@@ -275,12 +336,16 @@ export function ChatManagerProvider({
         if (status === "SUBSCRIBED" || status === "TIMED_OUT" || status === "CHANNEL_ERROR" || status === "CLOSED") {
           resync();
         }
+        // Also (re)loads the room list the Broadcast listeners follow — on
+        // first connect, and after any reconnect in case memberships
+        // changed while the socket was down.
+        if (status === "SUBSCRIBED") refreshJoinedRooms().catch(() => {});
       });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUserId, resync, pushToast]);
+  }, [currentUserId, resync, handleIncomingDm, handleIncomingRoomMessage, refreshJoinedRooms]);
 
   // Global — everyone's profile card, message sender labels, and DM roster
   // read from this, so it's one subscription here rather than duplicated in

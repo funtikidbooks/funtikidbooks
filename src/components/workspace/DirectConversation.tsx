@@ -10,6 +10,7 @@ import {
   removeDirectReaction,
 } from "@/lib/actions/messages";
 import { notifyNewMessage } from "@/lib/chatNotify";
+import { inboxTopic, listenChatTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
 import { fetchConversation, fetchDirectReactions, readDmSnapshot, writeDmSnapshot } from "@/lib/dmLoad";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { addToOutbox, insertWithRetry, removeFromOutbox } from "@/lib/chatOutbox";
@@ -578,6 +579,21 @@ export function DirectConversation({
     };
   }, [currentUser.id, peer.id, resync, mergeServerMessage]);
 
+  // Broadcast fast path — the peer's browser pushes each saved DM into my
+  // inbox topic right as it's stored, well ahead of the change-feed INSERT
+  // above (which then merges as a no-op, same id).
+  useEffect(() => {
+    const peerId = peer.id;
+    return listenChatTopic(inboxTopic(currentUser.id), (event, payload) => {
+      if (event !== "dm") return;
+      const row = payload as DirectMessage;
+      if (!row?.id || row.sender_id !== peerId || row.recipient_id !== currentUser.id) return;
+      setMessages((prev) => mergeServerMessage(prev, row));
+      if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
+      setPeerTyping(false);
+    });
+  }, [currentUser.id, peer.id, mergeServerMessage]);
+
   // Shared by the effect below and each message image's onLoad — an
   // attachment thumbnail has no reserved width/height (just a max-size
   // cap), so the browser doesn't know its real height until the image data
@@ -881,6 +897,8 @@ export function DirectConversation({
         setMessages((prev) => mergeServerMessage(prev, sent, tempId));
         pendingPayloadsRef.current.delete(tempId);
         serverIdsRef.current.delete(tempId);
+        // Fast path to the recipient's inbox (~0.1s) — see chatBroadcast.ts.
+        sendChatBroadcast(inboxTopic(peer.id), "dm", sent);
         notifyNewMessage("dm", sent.id);
       } catch (err) {
         setError(sendErrorMessage(err, "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại."));
