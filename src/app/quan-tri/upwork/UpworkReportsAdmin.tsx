@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { updateUpworkLeadDraft, updateUpworkLeadStatus, listUpworkLeads } from "@/lib/actions/upwork";
-import type { UpworkBatch, UpworkLead, UpworkLeadStatus } from "@/lib/types";
+import type { UpworkBatch, UpworkLead, UpworkLeadStatus, UpworkProposalTemplate } from "@/lib/types";
+import { ProposalTemplates } from "./ProposalTemplates";
 
 const STATUS_LABEL: Record<UpworkLeadStatus, string> = {
   pending: "Chờ duyệt",
@@ -122,7 +123,7 @@ function LeadCard({ lead, onChanged }: { lead: UpworkLead; onChanged: (next: Upw
             </div>
           </>
         ) : (
-          <p className="text-sm whitespace-pre-wrap rounded-[8px] p-3" style={{ background: "var(--color-neutral-50)", color: "var(--color-text)" }}>
+          <p className="text-sm whitespace-pre-wrap rounded-[8px] p-3" style={{ background: "var(--color-surface)", color: "var(--color-text)" }}>
             {draft}
           </p>
         )}
@@ -227,19 +228,77 @@ function BatchSection({ batch }: { batch: UpworkBatch }) {
   );
 }
 
-export function UpworkReportsAdmin({ initialBatches }: { initialBatches: UpworkBatch[] }) {
+type Tab = "batches" | "templates";
+
+export function UpworkReportsAdmin({
+  initialBatches,
+  initialTemplates,
+  initialTab,
+}: {
+  initialBatches: UpworkBatch[];
+  initialTemplates: UpworkProposalTemplate[];
+  initialTab: Tab;
+}) {
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const [templates, setTemplates] = useState(initialTemplates);
+
+  function switchTab(next: Tab) {
+    setTab(next);
+    // Keeps the tab on reload / when the link is shared, without a navigation.
+    const url = new URL(window.location.href);
+    if (next === "templates") url.searchParams.set("tab", "mau");
+    else url.searchParams.delete("tab");
+    window.history.replaceState(null, "", url);
+  }
+
+  const tabs: { id: Tab; label: string; count: number }[] = [
+    { id: "batches", label: "Đợt tìm khách", count: initialBatches.length },
+    { id: "templates", label: "Mẫu proposal", count: templates.length },
+  ];
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="px-6 py-4" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-        <h1 className="text-xl">Tìm khách (Upwork)</h1>
-        <p className="text-xs mt-1" style={{ color: "var(--color-neutral-500)" }}>
-          Báo cáo job tìm được và proposal nháp mỗi đêm — chỉ giám đốc và Project Manager thấy được. Không có gì ở đây tự
-          gửi lên Upwork; bấm &quot;Duyệt&quot; rồi tự tay gửi.
-        </p>
+      <div className="px-4 sm:px-6 pt-4 flex flex-col gap-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+        <div>
+          <h1 className="text-xl">Tìm khách (Upwork)</h1>
+          <p className="text-xs mt-1" style={{ color: "var(--color-neutral-500)" }}>
+            Báo cáo job tìm được và proposal nháp mỗi đêm — chỉ giám đốc và Project Manager thấy được. Không có gì ở đây tự
+            gửi lên Upwork; bấm &quot;Duyệt&quot; rồi tự tay gửi.
+          </p>
+        </div>
+        <div role="tablist" className="flex gap-5 -mb-px">
+          {tabs.map((t) => {
+            const active = tab === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => switchTab(t.id)}
+                className="pb-2.5 text-sm font-semibold flex items-center gap-1.5"
+                style={{
+                  color: active ? "var(--color-accent-700)" : "var(--color-neutral-500)",
+                  borderBottom: `2px solid ${active ? "var(--color-accent-500)" : "transparent"}`,
+                }}
+              >
+                {t.label}
+                <span
+                  className="text-[11px] tabular-nums rounded-full px-1.5"
+                  style={{ background: active ? "var(--color-accent-100)" : "var(--color-neutral-100)" }}
+                >
+                  {t.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-3">
-        {initialBatches.length === 0 ? (
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-3">
+        {tab === "templates" ? (
+          <ProposalTemplates templates={templates} onTemplatesChange={setTemplates} />
+        ) : initialBatches.length === 0 ? (
           <p style={{ color: "var(--color-neutral-500)" }}>
             Chưa có đợt báo cáo nào. Khi lịch tìm khách ban đêm được thiết lập, kết quả sẽ hiện ở đây.
           </p>

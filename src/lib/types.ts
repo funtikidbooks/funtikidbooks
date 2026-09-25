@@ -389,6 +389,9 @@ export type MindmapNode = {
   // child added via the parent's corner "+" leaves this false, so the
   // exact same node can have both list-item rows and normal branches.
   is_list_item: boolean;
+  // Where the branch's "Mở →" button goes — an in-app path ("/quan-tri/…")
+  // or an http(s) URL. See supabase/migrations/upwork_proposal_templates.sql.
+  link_url?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -404,6 +407,17 @@ export type UpworkBatch = {
   leads_drafted: number;
   note: string | null;
   created_at: string;
+};
+
+export type UpworkProposalTemplate = {
+  id: string;
+  name: string;
+  job_type: string | null;
+  content: string;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type UpworkLeadStatus = "pending" | "approved" | "rejected" | "sent";
@@ -1110,6 +1124,12 @@ export type Database = {
         Row: UpworkBatch;
         Insert: Partial<UpworkBatch>;
         Update: Partial<UpworkBatch>;
+        Relationships: [];
+      };
+      upwork_proposal_templates: {
+        Row: UpworkProposalTemplate;
+        Insert: Partial<UpworkProposalTemplate> & { name: string; content: string };
+        Update: Partial<UpworkProposalTemplate>;
         Relationships: [];
       };
       upwork_leads: {

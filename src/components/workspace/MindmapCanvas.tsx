@@ -402,8 +402,11 @@ export function MindmapCanvas({
     if (created) setNodes((prev) => [...prev, created]);
   }
 
-  async function saveNode(id: string, patch: { title?: string; note?: string | null; color?: string }) {
-    setNodes((prev) => prev.map((n) => (n.id === id ? { ...n, ...patch } : n)));
+  async function saveNode(id: string, patch: { title?: string; note?: string | null; color?: string; linkUrl?: string | null }) {
+    const { linkUrl, ...rest } = patch;
+    setNodes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, ...rest, ...(linkUrl !== undefined ? { link_url: linkUrl } : {}) } : n)),
+    );
     await updateMindmapNode(id, patch).catch(() => {});
   }
 
@@ -688,6 +691,11 @@ export function MindmapCanvas({
                             {child.news_post?.published ? "Đã đăng" : "Bài nháp"}
                           </span>
                         )}
+                        {child.link_url && (
+                          <span className="tag flex-none" title="Có liên kết" style={{ fontSize: 9, padding: "1px 6px", background: `${color}1f`, color }}>
+                            ↗ Liên kết
+                          </span>
+                        )}
                         <span aria-hidden className="fk-mindmap-row-go flex-none text-base font-bold leading-none" style={{ color }}>
                           ›
                         </span>
@@ -857,6 +865,26 @@ export function MindmapCanvas({
   );
 }
 
+// Same rule as updateMindmapNode's server-side check: an in-app path or a
+// plain web link, never javascript:/data: or a protocol-relative "//host".
+function isSafeLink(url: string) {
+  return /^\/(?!\/)/.test(url) || /^https?:\/\//i.test(url);
+}
+
+function NodeLinkButton({ url }: { url: string }) {
+  if (!isSafeLink(url)) return null;
+  const className = "btn btn-primary btn-sm";
+  return url.startsWith("/") ? (
+    <Link href={url} className={className}>
+      Mở →
+    </Link>
+  ) : (
+    <a href={url} target="_blank" rel="noopener noreferrer" className={className}>
+      Mở ↗
+    </a>
+  );
+}
+
 function NodePanel({
   node,
   isRoot,
@@ -872,7 +900,7 @@ function NodePanel({
   node: MindmapNode;
   isRoot: boolean;
   draftPosts: DraftPost[];
-  onSave: (patch: { title?: string; note?: string | null; color?: string }) => void;
+  onSave: (patch: { title?: string; note?: string | null; color?: string; linkUrl?: string | null }) => void;
   onLinkDraft: (postId: string | null) => void;
   onApprove: () => void;
   onEditPost: () => void;
@@ -884,18 +912,36 @@ function NodePanel({
   const [note, setNote] = useState(node.note ?? "");
   const [color, setColor] = useState(node.color ?? COLORS[0]);
   const [approving, setApproving] = useState(false);
+  const [linkUrl, setLinkUrl] = useState(node.link_url ?? "");
+  const [savedLink, setSavedLink] = useState(node.link_url ?? "");
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   function save() {
     onSave({ title, note: note || null, color });
+  }
+
+  function saveLink() {
+    const url = linkUrl.trim();
+    if (url === savedLink) return;
+    if (url && !isSafeLink(url)) {
+      setLinkError("Liên kết phải bắt đầu bằng / (trang trong web) hoặc https://");
+      return;
+    }
+    setLinkError(null);
+    setSavedLink(url);
+    onSave({ linkUrl: url || null });
   }
 
   return (
     <div className="p-6 sm:p-8 flex flex-col gap-6">
       <div className="flex items-center justify-between gap-2">
         <span className="font-bold text-xl">{isRoot ? "Gốc dự án" : "Nhánh"}</span>
-        <button type="button" className="btn-icon" style={{ width: 32, height: 32, padding: 0 }} onClick={onClose}>
-          ✕
-        </button>
+        <div className="flex items-center gap-2">
+          {savedLink && <NodeLinkButton url={savedLink} />}
+          <button type="button" className="btn-icon" style={{ width: 32, height: 32, padding: 0 }} onClick={onClose}>
+            ✕
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
@@ -922,6 +968,29 @@ function NodePanel({
               onBlur={save}
               maxLength={2000}
             />
+          </label>
+
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="font-semibold">
+              Liên kết <span className="font-normal" style={{ color: "var(--color-neutral-500)" }}>(tuỳ chọn — hiện nút &quot;Mở&quot;)</span>
+            </span>
+            <input
+              className="input text-base"
+              style={{ height: 44 }}
+              value={linkUrl}
+              onChange={(e) => {
+                setLinkUrl(e.target.value);
+                setLinkError(null);
+              }}
+              onBlur={saveLink}
+              placeholder="/quan-tri/upwork?tab=mau hoặc https://…"
+              maxLength={500}
+            />
+            {linkError && (
+              <span className="text-xs font-semibold" style={{ color: "var(--status-red)" }}>
+                {linkError}
+              </span>
+            )}
           </label>
 
           <div className="flex flex-col gap-2 text-sm">

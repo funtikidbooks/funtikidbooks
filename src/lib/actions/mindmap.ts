@@ -109,10 +109,20 @@ export async function updateMindmapNode(
     y?: number;
     color?: string | null;
     linkedNewsPostId?: string | null;
+    linkUrl?: string | null;
   },
 ): Promise<void> {
   const { supabase } = await requireUser();
   const row: Partial<Omit<MindmapNode, "news_post">> = {};
+  if (patch.linkUrl !== undefined) {
+    const url = patch.linkUrl?.trim() || null;
+    // An in-app path or a plain web link only — never javascript:/data:
+    // or a protocol-relative "//host" link rendered as a clickable button.
+    if (url && !/^\/(?!\/)/.test(url) && !/^https?:\/\//i.test(url)) {
+      throw new Error("Liên kết phải bắt đầu bằng / hoặc https://");
+    }
+    row.link_url = url;
+  }
   if (patch.title !== undefined) row.title = patch.title.trim() || "Chưa đặt tên";
   if (patch.note !== undefined) row.note = patch.note?.trim() || null;
   if (patch.x !== undefined) row.x = patch.x;
