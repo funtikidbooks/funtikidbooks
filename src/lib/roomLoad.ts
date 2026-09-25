@@ -1,6 +1,6 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
+import { createClient, ensureBrowserSession } from "@/lib/supabase/client";
 import type { MeetingChannelRead, MeetingMessage, MeetingReaction } from "@/lib/types";
 
 // Browser-side twin of the old getRoomSync Server Action — same four
@@ -24,6 +24,7 @@ export async function fetchRoomSync(
   channelId: string,
   opts: { messagesAfter?: string; reactionsAfter?: string } = {},
 ): Promise<RoomSync> {
+  await ensureBrowserSession();
   const supabase = createClient();
 
   const messagesQuery = opts.messagesAfter

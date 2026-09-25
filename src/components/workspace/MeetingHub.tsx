@@ -34,6 +34,7 @@ import { notifyNewMessage } from "@/lib/chatNotify";
 import { playChatDing } from "@/lib/chatSound";
 import { firstSighting, inboxTopic, listenChatTopic, roomTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
 import { fetchRoomSync } from "@/lib/roomLoad";
+import { reportChatSyncFailure, reportChatSyncOk } from "@/lib/chatSyncHealth";
 import { addToOutbox, insertWithRetry, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
 import { Emoji } from "@/lib/emoji";
 import {
@@ -2198,6 +2199,7 @@ export function MeetingHub({
     // network hops for a single room switch.
     fetchRoomSync(id, { messagesAfter, reactionsAfter })
       .then(({ messages: msgs, reactions: rx, reads: rd, pinnedMessages: pinned }) => {
+        reportChatSyncOk();
         // A newer resync() (this room again, or a switch elsewhere) has
         // already run since this call started — its own result already
         // reflects wherever the user actually is now, so applying this
@@ -2229,7 +2231,8 @@ export function MeetingHub({
         setPinnedMessages(pinned);
         if (needsFullFetch) syncedRoomIdRef.current = id;
       })
-      .catch(() => {
+      .catch((err) => {
+        reportChatSyncFailure(err);
         if (resyncGenerationRef.current === generation && needsFullFetch && activeIdRef.current === id) {
           setMessages([]);
           setReactions([]);
@@ -2355,9 +2358,13 @@ export function MeetingHub({
     }
     document.addEventListener("visibilitychange", handleVisible);
     window.addEventListener("focus", resync);
+    // iOS Safari restoring a page from its back/forward cache after a long sleep
+    // doesn't always fire visibilitychange.
+    window.addEventListener("pageshow", resync);
     return () => {
       document.removeEventListener("visibilitychange", handleVisible);
       window.removeEventListener("focus", resync);
+      window.removeEventListener("pageshow", resync);
     };
   }, [resync]);
 

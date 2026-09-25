@@ -12,6 +12,7 @@ import {
 import { notifyNewMessage } from "@/lib/chatNotify";
 import { inboxTopic, listenChatTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
 import { fetchConversation, fetchDirectReactions, readDmSnapshot, writeDmSnapshot } from "@/lib/dmLoad";
+import { reportChatSyncFailure, reportChatSyncOk } from "@/lib/chatSyncHealth";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { addToOutbox, insertWithRetry, removeFromOutbox } from "@/lib/chatOutbox";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
@@ -389,6 +390,7 @@ export function DirectConversation({
 
     fetchConversation(currentUser.id, peerId, messagesAfter)
       .then((msgs) => {
+        reportChatSyncOk();
         if (!stillCurrent()) return;
         if (isNewPeer) {
           // Full fetch replaces the snapshot (which may be missing read
@@ -407,9 +409,10 @@ export function DirectConversation({
           setMessages((prev) => capMessagesForRoom(msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev)));
         }
       })
-      .catch(() => {
-        // Offline / no live backend (e.g. workspace-demo) — keep whatever
-        // the snapshot already put on screen.
+      .catch((err) => {
+        // Keep whatever the snapshot already put on screen — but say so if
+        // it keeps failing (see chatSyncHealth).
+        reportChatSyncFailure(err);
       });
 
     fetchDirectReactions(currentUser.id, peerId, reactionsAfter)
@@ -451,9 +454,13 @@ export function DirectConversation({
     }
     document.addEventListener("visibilitychange", handleVisible);
     window.addEventListener("focus", resync);
+    // iOS Safari restoring a page from its back/forward cache after a long sleep
+    // doesn't always fire visibilitychange.
+    window.addEventListener("pageshow", resync);
     return () => {
       document.removeEventListener("visibilitychange", handleVisible);
       window.removeEventListener("focus", resync);
+      window.removeEventListener("pageshow", resync);
     };
   }, [resync]);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
+import { createClient, ensureBrowserSession } from "@/lib/supabase/client";
 import type { DirectMessage, DirectMessageReaction } from "@/lib/types";
 
 // Loads a DM conversation straight from the browser — the same two queries
@@ -18,6 +18,7 @@ function pairFilter(meId: string, peerId: string) {
 }
 
 export async function fetchConversation(meId: string, peerId: string, afterCreatedAt?: string): Promise<DirectMessage[]> {
+  await ensureBrowserSession();
   const supabase = createClient();
   if (afterCreatedAt) {
     const { data, error } = await supabase
@@ -41,6 +42,7 @@ export async function fetchConversation(meId: string, peerId: string, afterCreat
 }
 
 export async function fetchDirectReactions(meId: string, peerId: string, afterCreatedAt?: string): Promise<DirectMessageReaction[]> {
+  await ensureBrowserSession();
   const supabase = createClient();
   let query = supabase
     .from("direct_message_reactions")

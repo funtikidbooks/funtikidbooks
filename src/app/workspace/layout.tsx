@@ -8,6 +8,7 @@ import { ChatManagerProvider } from "@/components/workspace/ChatManager";
 import { ChatDock } from "@/components/workspace/ChatDock";
 import { ChatHeadBubbles } from "@/components/workspace/ChatHeadBubbles";
 import { MessageToasts } from "@/components/workspace/MessageToasts";
+import { ChatSyncBanner } from "@/components/workspace/ChatSyncBanner";
 import { TabNotificationBadge } from "@/components/workspace/TabNotificationBadge";
 import { ThemeSync } from "@/components/workspace/ThemeSync";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
@@ -151,6 +152,7 @@ export default async function WorkspaceLayout({
                 <ProfileMenu profile={myProfile} />
               </div>
             </div>
+            <ChatSyncBanner />
             <div className="flex-1 flex flex-col min-h-0">{children}</div>
           </div>
         </div>

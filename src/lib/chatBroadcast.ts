@@ -24,9 +24,42 @@ type Topic = {
   channel: RealtimeChannel;
   listeners: Set<Listener>;
   joined: boolean;
+  retryTimer: ReturnType<typeof setTimeout> | null;
 };
 
 const topics = new Map<string, Topic>();
+
+// A refused join isn't always permanent — an expired token (a phone tab
+// waking from hours asleep) gets the exact same "Unauthorized" as a real
+// RLS refusal. Try again after a while instead of giving up for the rest
+// of the page's life.
+const REFUSED_RETRY_MS = 30000;
+
+function connect(topic: string, entry: Topic) {
+  const supabase = createClient();
+  const channel = supabase.channel(topic, { config: { private: true, broadcast: { self: false } } });
+  entry.channel = channel;
+  entry.joined = false;
+  channel
+    .on("broadcast", { event: "*" }, (message) => {
+      for (const l of entry.listeners) l(message.event, message.payload);
+    })
+    .subscribe((status, err) => {
+      if (entry.channel !== channel) return;
+      entry.joined = status === "SUBSCRIBED";
+      // Stop the client's own every-few-seconds rejoin loop and retry on a
+      // slow timer instead. The change feed still delivers everything in
+      // the meantime, just slower.
+      if (status === "CHANNEL_ERROR" && err && /unauthori|permission/i.test(err.message)) {
+        supabase.removeChannel(channel);
+        if (entry.retryTimer) clearTimeout(entry.retryTimer);
+        entry.retryTimer = setTimeout(() => {
+          entry.retryTimer = null;
+          if (topics.get(topic) === entry && entry.channel === channel) connect(topic, entry);
+        }, REFUSED_RETRY_MS);
+      }
+    });
+}
 
 export function roomTopic(channelId: string) {
   return `room:${channelId}`;
@@ -43,25 +76,9 @@ export function inboxTopic(profileId: string) {
 export function listenChatTopic(topic: string, listener: Listener): () => void {
   let entry = topics.get(topic);
   if (!entry) {
-    const supabase = createClient();
-    const channel = supabase.channel(topic, { config: { private: true, broadcast: { self: false } } });
-    const created: Topic = { channel, listeners: new Set(), joined: false };
-    channel
-      .on("broadcast", { event: "*" }, (message) => {
-        for (const l of created.listeners) l(message.event, message.payload);
-      })
-      .subscribe((status, err) => {
-        created.joined = status === "SUBSCRIBED";
-        // Refused by the RLS policies (e.g. removed from the room, or the
-        // migration isn't in yet): stop here instead of letting the client
-        // retry the join every few seconds forever. The change feed still
-        // delivers everything, just slower.
-        if (status === "CHANNEL_ERROR" && err && /unauthori|permission/i.test(err.message)) {
-          if (topics.get(topic) === created) topics.delete(topic);
-          createClient().removeChannel(channel);
-        }
-      });
+    const created = { listeners: new Set(), joined: false, retryTimer: null } as unknown as Topic;
     topics.set(topic, created);
+    connect(topic, created);
     entry = created;
   }
   entry.listeners.add(listener);
@@ -70,6 +87,7 @@ export function listenChatTopic(topic: string, listener: Listener): () => void {
     current.listeners.delete(listener);
     if (current.listeners.size === 0 && topics.get(topic) === current) {
       topics.delete(topic);
+      if (current.retryTimer) clearTimeout(current.retryTimer);
       createClient().removeChannel(current.channel);
     }
   };

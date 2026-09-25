@@ -203,9 +203,13 @@ export function ChatManagerProvider({
     }
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("focus", resync);
+    // iOS Safari restoring a page from its back/forward cache after a long sleep
+    // doesn't always fire visibilitychange.
+    window.addEventListener("pageshow", resync);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("focus", resync);
+      window.removeEventListener("pageshow", resync);
     };
   }, [resync]);
 
