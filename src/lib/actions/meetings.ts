@@ -90,9 +90,19 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
   // closed_at is fetched on its own so a database that hasn't run
   // supabase/meeting_channel_close.sql yet just reads as "nothing closed"
   // instead of breaking the whole room list.
-  const closedRes = await supabase.from("meeting_channels").select("id, closed_at");
+  // last_message_at the same way (supabase/migrations/meeting_channel_last_message.sql)
+  // — before it's run, rooms just keep their old creation-date order.
+  const [closedRes, activityRes] = await Promise.all([
+    supabase.from("meeting_channels").select("id, closed_at"),
+    supabase.from("meeting_channels").select("id, last_message_at"),
+  ]);
   const closedAtById = new Map<string, string | null>(
     closedRes.error ? [] : (closedRes.data ?? []).map((c) => [c.id as string, (c.closed_at as string | null) ?? null]),
+  );
+  const lastMessageAtById = new Map<string, string | null>(
+    activityRes.error
+      ? []
+      : (activityRes.data ?? []).map((c) => [c.id as string, ((c as { last_message_at?: string | null }).last_message_at) ?? null]),
   );
 
   return (channels ?? []).map((c) => {
@@ -111,6 +121,7 @@ export async function listChannels(): Promise<MeetingChannelPublic[]> {
       weekly_hour_cap: (c.weekly_hour_cap as number | null | undefined) ?? null,
       billing_type: ((c.billing_type as "hourly" | "milestone" | undefined) ?? "hourly") as "hourly" | "milestone",
       closed_at: closedAtById.get(c.id as string) ?? null,
+      last_message_at: lastMessageAtById.get(c.id as string) ?? null,
       has_password: !!c.password_hash,
       joined,
       is_new: !isGeneral && !isFoodRoom && joined && seenAtByChannelId.get(c.id as string) == null,

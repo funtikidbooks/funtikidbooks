@@ -1209,6 +1209,26 @@ export function MeetingHub({
   // since this page loaded — see useLiveProfiles.
   const profiles = useLiveProfiles(profilesProp);
   const [channels, setChannels] = useState(initialChannels);
+  // Each room's last_message_at as of the latest render, read (not reacted
+  // to) by the realtime handler below to tell "a new message just landed"
+  // apart from a rename/password UPDATE on the same row.
+  const lastActivityRef = useRef(new Map<string, string | null>());
+  useEffect(() => {
+    lastActivityRef.current = new Map(channels.map((c) => [c.id, c.last_message_at ?? null]));
+  }, [channels]);
+  // Rooms that just received a message — briefly highlighted in the list
+  // so a ding can be traced to its room without reading every badge.
+  const [flashRoomIds, setFlashRoomIds] = useState<Set<string>>(() => new Set());
+  const flashRoom = useCallback((id: string) => {
+    setFlashRoomIds((prev) => new Set(prev).add(id));
+    setTimeout(() => {
+      setFlashRoomIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, 4000);
+  }, []);
   const [dmTabLabel, setDmTabLabelState] = useState(initialDmTabLabel);
   const [showLabelsEditor, setShowLabelsEditor] = useState(false);
   const myProfile = profiles.find((p) => p.id === currentUser.id);
@@ -1266,11 +1286,12 @@ export function MeetingHub({
   // router.push (which only keeps the address bar in sync), is what
   // actually switches the open conversation on a click that lands while
   // already sitting on /workspace/hop.
+  //
+  // The in-app corner popup (MessageToasts) sends the same kind of URL via a
+  // "funti-open-chat" window event, for the same reason.
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    function onMessage(event: MessageEvent) {
-      if (event.data?.type !== "notification-click" || typeof event.data.url !== "string") return;
-      const params = new URL(event.data.url, window.location.origin).searchParams;
+    function openFromUrl(url: string) {
+      const params = new URL(url, window.location.origin).searchParams;
       const dm = params.get("dm");
       const room = params.get("room");
       if (dm) {
@@ -1281,8 +1302,21 @@ export function MeetingHub({
         setActiveId(room);
       }
     }
+    function onMessage(event: MessageEvent) {
+      if (event.data?.type !== "notification-click" || typeof event.data.url !== "string") return;
+      openFromUrl(event.data.url);
+    }
+    function onOpenChat(event: Event) {
+      const url = (event as CustomEvent<{ url?: string }>).detail?.url;
+      if (typeof url === "string") openFromUrl(url);
+    }
+    window.addEventListener("funti-open-chat", onOpenChat);
+    if (!("serviceWorker" in navigator)) return () => window.removeEventListener("funti-open-chat", onOpenChat);
     navigator.serviceWorker.addEventListener("message", onMessage);
-    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("funti-open-chat", onOpenChat);
+      navigator.serviceWorker.removeEventListener("message", onMessage);
+    };
   }, [initialChannels]);
 
   // Someone else adding this user to a room (an invite) or this user joining
@@ -1320,9 +1354,29 @@ export function MeetingHub({
       // filters are plain column equality, not a membership subquery), so it
       // takes every room's UPDATE and just no-ops for ids not in `channels`.
       // Renames are rare enough that this is cheap.
+      //
+      // Also fires for every new message now — a trigger keeps
+      // last_message_at current (see meeting_channel_last_message.sql) — which
+      // is what re-sorts the room list live and flashes the room that just
+      // got a message, so a ding can be traced to its room at a glance.
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "meeting_channels" }, (payload) => {
-        const row = payload.new as { id: string; name: string; icon: string; password_hash: string | null };
-        refreshChannel(row.id, { name: row.name, icon: row.icon, has_password: !!row.password_hash });
+        const row = payload.new as {
+          id: string;
+          name: string;
+          icon: string;
+          password_hash: string | null;
+          last_message_at?: string | null;
+        };
+        const prevAt = lastActivityRef.current.get(row.id);
+        refreshChannel(row.id, {
+          name: row.name,
+          icon: row.icon,
+          has_password: !!row.password_hash,
+          ...(row.last_message_at !== undefined ? { last_message_at: row.last_message_at } : {}),
+        });
+        if (row.last_message_at && prevAt !== undefined && row.last_message_at !== prevAt && row.id !== activeIdRef.current) {
+          flashRoom(row.id);
+        }
       })
       // Also resync on reconnect (a network blip drops the socket, then
       // Supabase's client silently rejoins it) — postgres_changes has no
@@ -1701,16 +1755,10 @@ export function MeetingHub({
   // Rendered in its own row under TRÒ CHUYỆN, right below "Riêng" — not
   // mixed into the ordinary PHÒNG HỌP list below the divider.
   const foodRoom = useMemo(() => topLevelJoinedRooms.find((c) => c.is_food_room) ?? null, [topLevelJoinedRooms]);
-  const customTopLevelRooms = useMemo(
-    () => topLevelJoinedRooms.filter((c) => !c.is_general && !c.is_food_room && !c.closed_at),
-    [topLevelJoinedRooms],
-  );
-  // "Đóng dự án" rooms live in their own collapsed section instead of the
-  // main list — still readable, just out of the way.
-  const closedRooms = useMemo(
-    () => joinedRooms.filter((c) => !c.is_general && !c.is_food_room && !!c.closed_at),
-    [joinedRooms],
-  );
+  // Zalo-style "newest message on top" — only once last_message_at actually
+  // exists (see meeting_channel_last_message.sql); until then every room
+  // reads null and the list keeps its old creation-date order untouched.
+  const sortByActivity = useMemo(() => channels.some((c) => c.last_message_at), [channels]);
   const childRoomsByParent = useMemo(() => {
     const map = new Map<string, MeetingChannelPublic[]>();
     for (const c of joinedRooms) {
@@ -1719,8 +1767,34 @@ export function MeetingHub({
       if (list) list.push(c);
       else map.set(c.parent_channel_id, [c]);
     }
+    if (sortByActivity) {
+      for (const list of map.values()) {
+        list.sort((a, b) => (b.last_message_at ?? b.created_at).localeCompare(a.last_message_at ?? a.created_at));
+      }
+    }
     return map;
-  }, [joinedRooms]);
+  }, [joinedRooms, sortByActivity]);
+  const customTopLevelRooms = useMemo(() => {
+    const rooms = topLevelJoinedRooms.filter((c) => !c.is_general && !c.is_food_room && !c.closed_at);
+    if (!sortByActivity) return rooms;
+    // A parent room counts as active when any of its sub-rooms is, so a
+    // message in a sub-room lifts its whole folder to the top.
+    const activity = (c: MeetingChannelPublic) =>
+      [c, ...(childRoomsByParent.get(c.id) ?? [])].reduce(
+        (latest, r) => {
+          const at = r.last_message_at ?? r.created_at;
+          return at > latest ? at : latest;
+        },
+        "",
+      );
+    return [...rooms].sort((a, b) => activity(b).localeCompare(activity(a)));
+  }, [topLevelJoinedRooms, childRoomsByParent, sortByActivity]);
+  // "Đóng dự án" rooms live in their own collapsed section instead of the
+  // main list — still readable, just out of the way.
+  const closedRooms = useMemo(
+    () => joinedRooms.filter((c) => !c.is_general && !c.is_food_room && !!c.closed_at),
+    [joinedRooms],
+  );
   const dmTotalUnread = useMemo(() => Object.values(dmUnreadCounts).reduce((sum, n) => sum + n, 0), [dmUnreadCounts]);
   const browsableRooms = useMemo(() => channels.filter((c) => !c.joined), [channels]);
   const activeChannel = channels.find((c) => c.id === activeId) ?? null;
@@ -3865,7 +3939,9 @@ export function MeetingHub({
                     selectChannel(r.id);
                   }}
                   {...roomPeekHandlers(r)}
-                  className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold flex-1 min-w-0"
+                  className={`ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-left text-[13px] font-semibold flex-1 min-w-0${
+                    flashRoomIds.has(r.id) || (!expanded && children.some((c) => flashRoomIds.has(c.id))) ? " fk-room-flash" : ""
+                  }`}
                   style={{
                     background: activeId === r.id ? "var(--color-accent-100)" : undefined,
                     color: activeId === r.id ? "var(--color-accent-700)" : "var(--color-text)",
@@ -3908,7 +3984,9 @@ export function MeetingHub({
                           selectChannel(child.id);
                         }}
                         {...roomPeekHandlers(child)}
-                        className="ws-nav-link flex items-center gap-2 py-2 rounded-[8px] text-left text-[13px] font-semibold"
+                        className={`ws-nav-link flex items-center gap-2 py-2 rounded-[8px] text-left text-[13px] font-semibold${
+                          flashRoomIds.has(child.id) ? " fk-room-flash" : ""
+                        }`}
                         style={{
                           marginLeft: 26,
                           paddingLeft: 8,

@@ -172,6 +172,10 @@ export type MeetingChannel = {
   billing_type: "hourly" | "milestone";
   // Set by "Đóng dự án" — see supabase/meeting_channel_close.sql. null = open.
   closed_at?: string | null;
+  // Newest message's time, kept current by a trigger — drives the room
+  // list's "newest activity on top" order. See
+  // supabase/migrations/meeting_channel_last_message.sql.
+  last_message_at?: string | null;
 };
 
 // What the client actually receives for a channel — password_hash is never

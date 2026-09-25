@@ -495,6 +495,46 @@ h4 {
   box-shadow: var(--shadow-md);
   border-color: var(--color-accent-300);
 }
+/* A room in the "Trò chuyện & họp" list that just received a message —
+   pulses a few times so a ding can be traced to its room at a glance. */
+@keyframes fk-room-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  30%,
+  60% {
+    background-color: var(--color-accent-200);
+  }
+}
+.fk-room-flash {
+  animation: fk-room-flash 1.2s ease-in-out 3;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fk-room-flash {
+    animation: none;
+    background-color: var(--color-accent-100);
+  }
+}
+/* Corner popup for a new chat message (MessageToasts). */
+@keyframes fk-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.fk-toast-in {
+  animation: fk-toast-in 0.2s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fk-toast-in {
+    animation: none;
+  }
+}
 /* ---------- Workspace mindmap ("Dự án") ---------- */
 .fk-mindmap-node {
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;

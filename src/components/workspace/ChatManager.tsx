@@ -34,7 +34,23 @@ type ChatManagerValue = {
   // down as a prop, so a colleague changing their name/avatar mid-session
   // would sit stale everywhere it's shown until a reload. See useLiveProfiles.
   profileOverrides: Record<string, Profile>;
+  // Corner popups for messages that just dinged — see MessageToasts. Lets a
+  // ding be traced to its room/sender instead of guessing among a dozen
+  // busy rooms (sếp Phúc).
+  toasts: ChatToast[];
+  dismissToast: (key: string) => void;
 };
+
+export type ChatToast = {
+  key: string;
+  kind: "room" | "dm";
+  channelId: string | null;
+  senderId: string;
+  content: string;
+  hasAttachment: boolean;
+};
+
+const MAX_TOASTS = 3;
 
 const ChatManagerContext = createContext<ChatManagerValue | null>(null);
 
@@ -52,6 +68,19 @@ export function ChatManagerProvider({
   const [meetingUnreadCounts, setMeetingUnreadCounts] = useState<Record<string, number>>({});
   const [recentSenderOrder, setRecentSenderOrder] = useState<string[]>([]);
   const [profileOverrides, setProfileOverrides] = useState<Record<string, Profile>>({});
+  const [toasts, setToasts] = useState<ChatToast[]>([]);
+  const dismissToast = useCallback((key: string) => {
+    setToasts((prev) => prev.filter((t) => t.key !== key));
+  }, []);
+  // Newest first, capped — a burst in a busy room replaces that room's
+  // previous popup instead of stacking a wall of them.
+  const pushToast = useCallback((toast: ChatToast) => {
+    setToasts((prev) => {
+      const sameThread = (t: ChatToast) =>
+        toast.kind === "room" ? t.kind === "room" && t.channelId === toast.channelId : t.kind === "dm" && t.senderId === toast.senderId;
+      return [toast, ...prev.filter((t) => !sameThread(t))].slice(0, MAX_TOASTS);
+    });
+  }, []);
   // Mirrors openChats without forcing the realtime effect below to
   // re-subscribe every time a chat window opens or closes.
   const openChatIdsRef = useRef<Set<string>>(new Set());
@@ -90,6 +119,7 @@ export function ChatManagerProvider({
   }, []);
 
   const clearDmUnread = useCallback((profileId: string) => {
+    setToasts((prev) => prev.filter((t) => !(t.kind === "dm" && t.senderId === profileId)));
     setUnreadCounts((prev) => {
       if (!prev[profileId]) return prev;
       const next = { ...prev };
@@ -114,6 +144,7 @@ export function ChatManagerProvider({
   const setActiveMeetingChannel = useCallback((channelId: string | null) => {
     activeMeetingChannelIdRef.current = channelId;
     if (!channelId) return;
+    setToasts((prev) => prev.filter((t) => !(t.kind === "room" && t.channelId === channelId)));
     setMeetingUnreadCounts((prev) => {
       if (!prev[channelId]) return prev;
       const next = { ...prev };
@@ -200,6 +231,14 @@ export function ChatManagerProvider({
           const open = openChatIdsRef.current.has(row.sender_id) || activeDmPeerIdRef.current === row.sender_id;
           if (open && isWatching()) return;
           playChatDing();
+          pushToast({
+            key: row.id,
+            kind: "dm",
+            channelId: null,
+            senderId: row.sender_id,
+            content: row.content ?? "",
+            hasAttachment: !!row.attachment_url,
+          });
           setUnreadCounts((prev) => ({ ...prev, [row.sender_id]: (prev[row.sender_id] ?? 0) + 1 }));
         },
       )
@@ -216,6 +255,14 @@ export function ChatManagerProvider({
           // Room messages used to only bump a silent badge — DMs were the
           // only thing that ever made a sound.
           playChatDing();
+          pushToast({
+            key: row.id,
+            kind: "room",
+            channelId: row.channel_id,
+            senderId: row.sender_id,
+            content: row.content ?? "",
+            hasAttachment: !!row.attachment_url,
+          });
           setMeetingUnreadCounts((prev) => ({ ...prev, [row.channel_id]: (prev[row.channel_id] ?? 0) + 1 }));
         },
       )
@@ -233,7 +280,7 @@ export function ChatManagerProvider({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUserId, resync]);
+  }, [currentUserId, resync, pushToast]);
 
   // Global — everyone's profile card, message sender labels, and DM roster
   // read from this, so it's one subscription here rather than duplicated in
@@ -273,6 +320,8 @@ export function ChatManagerProvider({
         totalUnreadCount,
         recentSenderOrder,
         profileOverrides,
+        toasts,
+        dismissToast,
       }}
     >
       {children}
