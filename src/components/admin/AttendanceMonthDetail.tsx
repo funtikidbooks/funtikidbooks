@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { getMonthAttendance, listOffDates } from "@/lib/actions/attendance";
-import { AttendanceAvatar, AttendanceEditCellModal } from "@/components/admin/AttendanceEditCellModal";
+import { AttendanceAvatar, AttendanceEditCellModal, OvertimeBadge, offDayLabel } from "@/components/admin/AttendanceEditCellModal";
 import {
   MONTH_LABELS,
+  isCalendarOffFor,
   WEEKDAYS_SHORT,
   addMonths,
   firstOfMonth,
@@ -137,8 +138,11 @@ export function AttendanceMonthDetail({
                   let badge: React.ReactNode = null;
                   // Same override as elsewhere: a calendar-wide off day wins
                   // over a stale entry (e.g. an auto-checked-in "present"
-                  // recorded before the day got marked off).
-                  if (offDateSet.has(date)) {
+                  // recorded before the day got marked off) — but not over
+                  // a day a director/PM marked as tăng ca.
+                  if (entry?.overtime) {
+                    badge = <OvertimeBadge entry={entry} />;
+                  } else if (isCalendarOffFor(date, entry, offDateSet)) {
                     badge = <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
                   } else if (entry?.status === "off") {
                     badge = <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
@@ -159,6 +163,8 @@ export function AttendanceMonthDetail({
                     );
                   } else if (inMonth && !isFuture && weekday) {
                     badge = <span style={{ color: "var(--color-neutral-400)" }}>·</span>;
+                  } else if (inMonth && !weekday) {
+                    badge = <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
                   }
 
                   return (
@@ -191,6 +197,7 @@ export function AttendanceMonthDetail({
           profile={profile}
           date={editingDate}
           entry={byDate.get(editingDate)}
+          offLabel={offDayLabel(editingDate, offDateSet)}
           onClose={() => setEditingDate(null)}
           onSaved={(entry) => {
             setEntries((prev) => {

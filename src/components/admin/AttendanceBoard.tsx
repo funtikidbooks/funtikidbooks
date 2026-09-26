@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getMonthAttendance, listOffDates } from "@/lib/actions/attendance";
-import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
+import { AttendanceAvatar, OvertimeBadge } from "@/components/admin/AttendanceEditCellModal";
 import { AttendanceMonthDetail } from "@/components/admin/AttendanceMonthDetail";
 import {
   WORK_HOURS_LABEL,
   firstOfMonth,
   formatCheckInTime,
+  isCalendarOffFor,
   isDefaultWorkDay,
   isLateCheckIn,
   vnToday,
@@ -129,8 +130,14 @@ export function AttendanceBoard({
             let statusNode: React.ReactNode;
             // Same override as MyAttendance's dayBadge: a calendar-wide off
             // day wins over a stale entry (e.g. someone auto-checked-in
-            // before it got marked off).
-            if (offDateSet.has(today)) {
+            // before it got marked off) — except a day marked as tăng ca.
+            if (entry?.overtime) {
+              statusNode = (
+                <span className="text-xs font-bold">
+                  <OvertimeBadge entry={entry} />
+                </span>
+              );
+            } else if (isCalendarOffFor(today, entry, offDateSet)) {
               statusNode = (
                 <span className="text-xs" style={{ color: "var(--color-neutral-400)" }}>
                   Ngày nghỉ

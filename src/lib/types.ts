@@ -481,6 +481,9 @@ export type AttendanceEntry = {
   check_in_at: string | null;
   status: "present" | "absent" | "leave" | "off" | "paid_leave" | "half_day";
   note: string | null;
+  // Director/PM marked this person as working on a day that's off by
+  // default — see supabase/migrations/attendance_overtime.sql.
+  overtime?: boolean;
   created_at: string;
 };
 

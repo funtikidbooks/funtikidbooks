@@ -213,8 +213,21 @@ export async function upsertAttendance(input: {
   status: "present" | "absent" | "leave" | "off" | "paid_leave" | "half_day";
   checkInTime?: string; // "HH:mm", combined with workDate in VN time
   note?: string;
+  // Only sent for a day that's off by default (see isOffByDefault) — left
+  // out otherwise so ordinary edits keep working before
+  // supabase/migrations/attendance_overtime.sql has been run.
+  overtime?: boolean;
 }) {
   const { supabase } = await requireHrManager();
+
+  if (input.overtime && input.status !== "present" && input.status !== "half_day") {
+    throw new Error("Tăng ca chỉ áp dụng cho ngày có đi làm.");
+  }
+  // A full overtime day only counts as a ngày công with a check-in time
+  // (summarizeAttendance) — don't let one be saved that silently won't.
+  if (input.overtime && input.status === "present" && !input.checkInTime) {
+    throw new Error("Nhập giờ vào làm cho ngày tăng ca.");
+  }
 
   const checkInAt = input.checkInTime
     ? new Date(`${input.workDate}T${input.checkInTime}:00+07:00`).toISOString()
@@ -227,11 +240,18 @@ export async function upsertAttendance(input: {
       status: input.status,
       check_in_at: checkInAt,
       note: input.note?.trim() || null,
+      ...(input.overtime !== undefined ? { overtime: input.overtime } : {}),
     },
     { onConflict: "profile_id,work_date" },
   );
 
-  if (error) throw new Error("Không thể cập nhật chấm công");
+  if (error) {
+    throw new Error(
+      input.overtime !== undefined
+        ? "Không thể lưu — cần chạy file SQL attendance_overtime.sql trong Supabase trước."
+        : "Không thể cập nhật chấm công",
+    );
+  }
 
   // Best-effort — the attendance save above already succeeded either way.
   try {

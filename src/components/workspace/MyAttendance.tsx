@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { listMyMonthAttendance, listOffDates } from "@/lib/actions/attendance";
 import { MyPayrollPanel } from "@/components/workspace/MyPayrollPanel";
+import { OvertimeBadge } from "@/components/admin/AttendanceEditCellModal";
 import {
+  isCalendarOffFor,
   MONTH_LABELS,
   WEEKDAYS_SHORT,
   WORK_HOURS_LABEL,
@@ -151,7 +153,9 @@ export function MyAttendance({
     // from someone who logged in (and got auto-checked-in) before that day
     // got marked off — instead of quietly showing a check-in time on a
     // day that's now supposed to read as a holiday.
-    if (offDateSet.has(date)) return <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
+    // …except a day a director/PM marked as tăng ca: that person really came in.
+    if (entry?.overtime) return <OvertimeBadge entry={entry} />;
+    if (isCalendarOffFor(date, entry, offDateSet)) return <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
     if (entry?.status === "off") return <span style={{ color: "var(--color-neutral-400)" }}>Ngày nghỉ</span>;
     if (entry?.status === "paid_leave") return <span style={{ color: "var(--status-blue)" }}>Nghỉ có lương</span>;
     if (entry?.status === "half_day") return <span style={{ color: "var(--status-purple)" }}>Nửa công</span>;

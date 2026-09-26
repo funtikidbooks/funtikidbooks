@@ -173,8 +173,15 @@ export type AttendanceSummary = { present: number; late: number; absent: number;
 // to `present` — a half công, which flows straight into "Số ngày đi làm"
 // and payroll (lương/ngày × 0.5) without any separate handling anywhere
 // else.
+// An overtime day (tăng ca on a day off) counts like any worked day but is
+// never "late" — there's no start time to be late for on a day off.
 export function summarizeAttendance(
-  entries: { work_date: string; status: "present" | "absent" | "leave" | "off" | "paid_leave" | "half_day"; check_in_at: string | null }[],
+  entries: {
+    work_date: string;
+    status: "present" | "absent" | "leave" | "off" | "paid_leave" | "half_day";
+    check_in_at: string | null;
+    overtime?: boolean;
+  }[],
 ): AttendanceSummary {
   let present = 0;
   let late = 0;
@@ -188,8 +195,24 @@ export function summarizeAttendance(
     else if (e.status === "half_day") present += 0.5;
     else if (e.status === "present" && e.check_in_at) {
       present++;
-      if (isLateCheckIn(e.check_in_at)) late++;
+      if (!e.overtime && isLateCheckIn(e.check_in_at)) late++;
     }
   }
   return { present, late, absent, leave };
 }
+
+// Whether a day reads as "Ngày nghỉ" because the shared calendar marks it
+// off. A calendar day off wins over an ordinary entry (usually a stale auto
+// check-in from before the day got marked off), but not over one a
+// director/PM marked as tăng ca — that's someone who really came in.
+export function isCalendarOffFor(date: string, entry: { overtime?: boolean } | undefined, offDateSet: Set<string>) {
+  return offDateSet.has(date) && !entry?.overtime;
+}
+
+// A day that's off unless someone is marked as coming in: a calendar day
+// off, or a day outside the default work week (Sunday).
+export function isOffByDefault(date: string, offDateSet: Set<string>) {
+  return offDateSet.has(date) || !isDefaultWorkDay(date);
+}
+
+export const DEFAULT_OVERTIME_START = `${String(WORK_START_HOUR).padStart(2, "0")}:${String(WORK_START_MINUTE).padStart(2, "0")}`;
