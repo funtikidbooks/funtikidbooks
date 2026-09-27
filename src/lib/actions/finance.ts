@@ -74,22 +74,35 @@ export async function deleteFinanceEntry(id: string) {
   await supabase.from("finance_entries").delete().eq("id", id);
 }
 
+const payslipTotal = (r: PayrollRecord) => r.base_salary + r.items.reduce((s, item) => s + item.amount, 0);
+
 // Salary is never entered on this ledger — it's read straight off the real
-// payroll sheet for the same month, so the two can never drift apart.
-// Mirrors payroll.ts's listPayrollForMonth but under this page's own
-// director-only gate instead of can_manage_hr(). Also folds in
-// historical_salary_totals — the lump-sum figure for months before
-// per-employee payroll_records existed (see that table's own comment).
+// payroll sheet for the same month, so the two can never drift apart. Only
+// payslips marked "Đã trả" count: marking one paid is what takes that
+// salary out of the month's numbers here, and setting it back to "Nháp"
+// puts it back (sếp Phúc). Also folds in historical_salary_totals — the
+// lump-sum figure for months before per-employee payroll_records existed,
+// all long since paid (see that table's own comment). Director-only gate,
+// not can_manage_hr().
 export async function getMonthlySalaryTotal(monthStartInput?: string): Promise<number> {
   const { supabase } = await requireDirector();
   const monthStart = firstOfMonth(monthStartInput ?? vnToday());
   const [{ data }, { data: historical }] = await Promise.all([
-    supabase.from("payroll_records").select("*").eq("month", monthStart),
+    supabase.from("payroll_records").select("*").eq("month", monthStart).eq("status", "paid"),
     supabase.from("historical_salary_totals").select("total_amount").eq("month", monthStart).maybeSingle(),
   ]);
   const records = (data ?? []) as PayrollRecord[];
-  const payrollTotal = records.reduce((sum, r) => sum + r.base_salary + r.items.reduce((s, item) => s + item.amount, 0), 0);
-  return payrollTotal + Number(historical?.total_amount ?? 0);
+  return records.reduce((sum, r) => sum + payslipTotal(r), 0) + Number(historical?.total_amount ?? 0);
+}
+
+// The month's payslips not yet marked "Đã trả" — shown beside the salary
+// figure so what's still owed stays visible without counting as spent.
+export async function getMonthlySalaryPending(monthStartInput?: string): Promise<{ amount: number; count: number }> {
+  const { supabase } = await requireDirector();
+  const monthStart = firstOfMonth(monthStartInput ?? vnToday());
+  const { data } = await supabase.from("payroll_records").select("*").eq("month", monthStart).neq("status", "paid");
+  const records = (data ?? []) as PayrollRecord[];
+  return { amount: records.reduce((sum, r) => sum + payslipTotal(r), 0), count: records.length };
 }
 
 // One salary total per month for the whole year — backs the yearly table
@@ -97,14 +110,18 @@ export async function getMonthlySalaryTotal(monthStartInput?: string): Promise<n
 export async function getYearlySalaryTotals(year: number): Promise<Record<string, number>> {
   const { supabase } = await requireDirector();
   const [{ data }, { data: historical }] = await Promise.all([
-    supabase.from("payroll_records").select("*").gte("month", `${year}-01-01`).lte("month", `${year}-12-01`),
+    supabase
+      .from("payroll_records")
+      .select("*")
+      .eq("status", "paid")
+      .gte("month", `${year}-01-01`)
+      .lte("month", `${year}-12-01`),
     supabase.from("historical_salary_totals").select("month, total_amount").gte("month", `${year}-01-01`).lte("month", `${year}-12-01`),
   ]);
   const records = (data ?? []) as PayrollRecord[];
   const totals: Record<string, number> = {};
   for (const r of records) {
-    const perRecord = r.base_salary + r.items.reduce((s, item) => s + item.amount, 0);
-    totals[r.month] = (totals[r.month] ?? 0) + perRecord;
+    totals[r.month] = (totals[r.month] ?? 0) + payslipTotal(r);
   }
   for (const h of (historical ?? []) as { month: string; total_amount: number }[]) {
     totals[h.month] = (totals[h.month] ?? 0) + Number(h.total_amount);

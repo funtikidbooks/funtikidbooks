@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   deleteFinanceEntry,
+  getMonthlySalaryPending,
   getMonthlySalaryTotal,
   getYearlySalaryTotals,
   listFinanceEntries,
@@ -258,6 +259,17 @@ export function FinanceBoard({
   // chi) — nên nó bắt đầu bằng đúng số dư cuối tháng trước rồi tăng/giảm
   // sống theo các khoản biến phí/doanh thu vừa nhập.
   const [prevMonthNet, setPrevMonthNet] = useState<number | null>(null);
+  const [salaryPending, setSalaryPending] = useState<{ month: string; amount: number; count: number } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getMonthlySalaryPending(monthStart)
+      .then((p) => !cancelled && setSalaryPending({ month: monthStart, ...p }))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [monthStart]);
+  const pendingForMonth = salaryPending?.month === monthStart ? salaryPending : null;
   useEffect(() => {
     let cancelled = false;
     const prevMonth = addMonths(monthStart, -1);
@@ -387,7 +399,7 @@ export function FinanceBoard({
         <div>
           <h1 className="text-xl">Tài chính kinh doanh</h1>
           <p className="text-sm mt-1" style={{ color: "var(--color-neutral-500)" }}>
-            Chỉ Giám đốc xem được. Lương nhân viên lấy tự động từ Bảng lương của tháng — không cần nhập lại ở đây.
+            Chỉ Giám đốc xem được. Lương nhân viên lấy tự động từ Bảng lương của tháng — chỉ trừ các phiếu đã bấm &quot;Đã trả&quot;, không cần nhập lại ở đây.
           </p>
         </div>
         <div
@@ -478,8 +490,13 @@ export function FinanceBoard({
             </span>
             <span className="text-lg font-bold">{formatVnd(summary.salaryTotal)}</span>
             <span className="text-[10px]" style={{ color: "var(--color-neutral-400)" }}>
-              tự động từ Bảng lương
+              Phiếu lương đã bấm &quot;Đã trả&quot;
             </span>
+            {pendingForMonth && pendingForMonth.count > 0 && (
+              <span className="text-[11px] font-semibold" style={{ color: "var(--status-yellow)" }}>
+                Chưa trả: {formatVnd(pendingForMonth.amount)} ({pendingForMonth.count} phiếu)
+              </span>
+            )}
           </div>
         </div>
 
