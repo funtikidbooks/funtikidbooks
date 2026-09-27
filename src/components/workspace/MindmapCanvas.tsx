@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Modal } from "@/components/ui/Modal";
 import {
   createMindmapNode,
@@ -10,8 +11,13 @@ import {
   updateMindmapNode,
 } from "@/lib/actions/mindmap";
 import { getNewsPostById, updateNewsPost } from "@/lib/actions/admin";
-import { NewsEditDialog } from "@/components/admin/NewsEditDialog";
 import type { MindmapNode, MindmapProject, NewsPost } from "@/lib/types";
+
+// Loaded only when a draft is actually opened for editing — it pulls in the
+// ~370 KB Tiptap editor, which the map itself never needs.
+const NewsEditDialog = dynamic(() => import("@/components/admin/NewsEditDialog").then((m) => m.NewsEditDialog), {
+  ssr: false,
+});
 
 // NODE_H is the header row's height, used for every node — it doubles as
 // the connector-line's y-anchor regardless of how tall a card grows below

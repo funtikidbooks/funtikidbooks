@@ -17,13 +17,18 @@ export default async function MeetingPage() {
   // listChannels() just to read its is_general id off the result — so
   // getRoomSync below only ever waits on one extra round trip, not two.
   // See getGeneralChannelId's own comment for why that mattered.
-  const [channels, { data: profiles }, dmTabLabel, generalChannelId] = await Promise.all([
+  // The general room's first page starts loading the moment its id is known,
+  // alongside listChannels/profiles, instead of after all of them finish.
+  const generalChannelIdPromise = getGeneralChannelId().catch(() => null);
+  const generalSyncPromise = generalChannelIdPromise.then((id) => (id ? getRoomSync(id).catch(() => null) : null));
+  const [channels, { data: profiles }, dmTabLabel, generalChannelId, generalSync] = await Promise.all([
     listChannels(),
     supabase
       .from("profiles")
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at"),
     getDmTabLabel().catch(() => "Riêng"),
-    getGeneralChannelId().catch(() => null),
+    generalChannelIdPromise,
+    generalSyncPromise,
   ]);
 
   const me = (profiles ?? []).find((p) => p.id === user?.id);
@@ -39,7 +44,12 @@ export default async function MeetingPage() {
   // to fetching everything itself, same as before this existed. Falls back
   // to channels[0] only if getGeneralChannelId itself failed/returned null.
   const generalRoomId = generalChannelId ?? channels.find((c) => c.is_general)?.id ?? channels[0]?.id ?? null;
-  const initialRoomSync = generalRoomId ? await getRoomSync(generalRoomId).catch(() => null) : null;
+  const initialRoomSync =
+    generalChannelId && generalRoomId === generalChannelId
+      ? generalSync
+      : generalRoomId
+        ? await getRoomSync(generalRoomId).catch(() => null)
+        : null;
 
   return (
     <MeetingHub
