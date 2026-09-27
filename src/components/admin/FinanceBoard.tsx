@@ -13,6 +13,7 @@ import {
 import { FinanceEntryModal } from "@/components/admin/FinanceEntryModal";
 import { FinanceYearChart } from "@/components/admin/FinanceYearChart";
 import { DebtEditModal } from "@/components/admin/DebtEditModal";
+import { FinanceReceipt } from "@/components/admin/FinanceReceipt";
 import { MONTH_LABELS, addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import { TYPE_LABELS, TYPE_ORDER, computeFinanceSummary, formatVnd } from "@/lib/financeSummary";
 import type { FinanceEntry, FinanceEntryType, HomeLoanInstallment, PersonalDebt } from "@/lib/types";
@@ -259,7 +260,7 @@ export function FinanceBoard({
   // chi) — nên nó bắt đầu bằng đúng số dư cuối tháng trước rồi tăng/giảm
   // sống theo các khoản biến phí/doanh thu vừa nhập.
   const [prevMonthNet, setPrevMonthNet] = useState<number | null>(null);
-  const [salaryPending, setSalaryPending] = useState<{ month: string; amount: number; count: number } | null>(null);
+  const [salaryPending, setSalaryPending] = useState<{ month: string; amount: number; count: number; paidCount: number } | null>(null);
   useEffect(() => {
     let cancelled = false;
     getMonthlySalaryPending(monthStart)
@@ -402,23 +403,6 @@ export function FinanceBoard({
             Chỉ Giám đốc xem được. Lương nhân viên lấy tự động từ Bảng lương của tháng — chỉ trừ các phiếu đã bấm &quot;Đã trả&quot;, không cần nhập lại ở đây.
           </p>
         </div>
-        <div
-          className="card px-4 py-3 flex flex-col gap-1 items-end"
-          style={{ background: cashFund !== null && cashFund < 0 ? "rgba(192,82,79,0.1)" : "var(--color-accent-2-100)", minWidth: 200 }}
-        >
-          <span className="text-[11px] font-bold" style={{ color: cashFund !== null && cashFund < 0 ? "var(--status-red)" : "var(--color-accent-2-800)" }}>
-            QUỸ TIỀN
-          </span>
-          <span
-            className="text-xl font-bold"
-            style={{ color: cashFund !== null && cashFund < 0 ? "var(--status-red)" : "var(--color-accent-2-800)" }}
-          >
-            {cashFund === null ? "…" : formatVnd(cashFund)}
-          </span>
-          <span className="text-[10px] text-right" style={{ color: "var(--color-neutral-400)" }}>
-            Luỹ kế lợi nhuận ròng đến hiện tại
-          </span>
-        </div>
       </div>
 
       <div className="flex items-center gap-3">
@@ -462,84 +446,13 @@ export function FinanceBoard({
       </div>
 
       <div style={{ opacity: loading ? 0.6 : 1 }} className="flex flex-col gap-6">
-        {/* Summary */}
-        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
-          <div className="card p-4 flex flex-col gap-1" style={{ background: "var(--color-surface)" }}>
-            <span className="text-[11px] font-bold" style={{ color: "var(--color-neutral-500)" }}>
-              DOANH THU
-            </span>
-            <span className="text-lg font-bold" style={{ color: "var(--status-green)" }}>
-              {formatVnd(summary.revenue)}
-            </span>
-          </div>
-          <div className="card p-4 flex flex-col gap-1" style={{ background: "var(--color-surface)" }}>
-            <span className="text-[11px] font-bold" style={{ color: "var(--color-neutral-500)" }}>
-              BIẾN PHÍ
-            </span>
-            <span className="text-lg font-bold">{formatVnd(summary.variableCost)}</span>
-          </div>
-          <div className="card p-4 flex flex-col gap-1" style={{ background: "var(--color-surface)" }}>
-            <span className="text-[11px] font-bold" style={{ color: "var(--color-neutral-500)" }}>
-              ĐỊNH PHÍ
-            </span>
-            <span className="text-lg font-bold">{formatVnd(summary.fixedCost)}</span>
-          </div>
-          <div className="card p-4 flex flex-col gap-1" style={{ background: "var(--color-surface)" }}>
-            <span className="text-[11px] font-bold" style={{ color: "var(--color-neutral-500)" }}>
-              LƯƠNG NHÂN VIÊN
-            </span>
-            <span className="text-lg font-bold">{formatVnd(summary.salaryTotal)}</span>
-            <span className="text-[10px]" style={{ color: "var(--color-neutral-400)" }}>
-              Phiếu lương đã bấm &quot;Đã trả&quot;
-            </span>
-            {pendingForMonth && pendingForMonth.count > 0 && (
-              <span className="text-[11px] font-semibold" style={{ color: "var(--status-yellow)" }}>
-                Chưa trả: {formatVnd(pendingForMonth.amount)} ({pendingForMonth.count} phiếu)
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
-          <div className="card p-4 flex flex-col gap-1" style={{ background: "var(--color-accent-100)" }}>
-            <span className="text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
-              LỢI NHUẬN GỘP
-            </span>
-            <span className="text-xl font-bold" style={{ color: "var(--color-accent-800)" }}>
-              {formatVnd(summary.grossProfit)}
-            </span>
-            <span className="text-[11px]" style={{ color: "var(--color-accent-700)" }}>
-              Biên lợi nhuận gộp: {(summary.grossMarginRatio * 100).toFixed(1)}%
-            </span>
-          </div>
-          <div
-            className="card p-4 flex flex-col gap-1"
-            style={{ background: summary.netProfit >= 0 ? "var(--color-accent-2-100)" : "rgba(192,82,79,0.1)" }}
-          >
-            <span className="text-[11px] font-bold" style={{ color: summary.netProfit >= 0 ? "var(--color-accent-2-800)" : "var(--status-red)" }}>
-              LỢI NHUẬN RÒNG
-            </span>
-            <span className="text-xl font-bold" style={{ color: summary.netProfit >= 0 ? "var(--color-accent-2-800)" : "var(--status-red)" }}>
-              {formatVnd(summary.netProfit)}
-            </span>
-            <span className="text-[11px]" style={{ color: summary.netProfit >= 0 ? "var(--color-accent-2-700)" : "var(--status-red)" }}>
-              Sau khi trừ toàn bộ chi phí + lương
-            </span>
-          </div>
-          <div className="card p-4 flex flex-col gap-1" style={{ background: "var(--color-surface)" }}>
-            <span className="text-[11px] font-bold" style={{ color: "var(--color-neutral-500)" }}>
-              ĐIỂM HOÀ VỐN (DOANH THU)
-            </span>
-            <span className="text-xl font-bold">
-              {summary.breakEvenRevenue === null ? "Chưa xác định" : formatVnd(summary.breakEvenRevenue)}
-            </span>
-            <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
-              {summary.breakEvenRevenue === null
-                ? "Cần có doanh thu và biên lợi nhuận gộp dương"
-                : "Doanh thu cần đạt để không lời không lỗ"}
-            </span>
-          </div>
-        </div>
+        <FinanceReceipt
+          monthLabel={`${MONTH_LABELS[selectedMonthIndex].toLowerCase()}/${selectedYear}`}
+          summary={summary}
+          salary={pendingForMonth ? { pendingAmount: pendingForMonth.amount, pendingCount: pendingForMonth.count, paidCount: pendingForMonth.paidCount } : null}
+          cashFund={cashFund}
+          loading={loading}
+        />
 
         {/* Entries by type */}
         <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>

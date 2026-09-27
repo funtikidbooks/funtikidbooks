@@ -96,13 +96,21 @@ export async function getMonthlySalaryTotal(monthStartInput?: string): Promise<n
 }
 
 // The month's payslips not yet marked "Đã trả" — shown beside the salary
-// figure so what's still owed stays visible without counting as spent.
-export async function getMonthlySalaryPending(monthStartInput?: string): Promise<{ amount: number; count: number }> {
+// figure so what's still owed stays visible without counting as spent —
+// plus how many are paid, for the "1/18 phiếu" count.
+export async function getMonthlySalaryPending(
+  monthStartInput?: string,
+): Promise<{ amount: number; count: number; paidCount: number }> {
   const { supabase } = await requireDirector();
   const monthStart = firstOfMonth(monthStartInput ?? vnToday());
-  const { data } = await supabase.from("payroll_records").select("*").eq("month", monthStart).neq("status", "paid");
+  const { data } = await supabase.from("payroll_records").select("*").eq("month", monthStart);
   const records = (data ?? []) as PayrollRecord[];
-  return { amount: records.reduce((sum, r) => sum + payslipTotal(r), 0), count: records.length };
+  const unpaid = records.filter((r) => r.status !== "paid");
+  return {
+    amount: unpaid.reduce((sum, r) => sum + payslipTotal(r), 0),
+    count: unpaid.length,
+    paidCount: records.length - unpaid.length,
+  };
 }
 
 // One salary total per month for the whole year — backs the yearly table
