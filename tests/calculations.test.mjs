@@ -122,3 +122,13 @@ test("chat: provisional messages are replaced by the saved row, or dropped when 
   assert.equal(dropStaleProvisional(list, 1_000 + 30_000), list);
   assert.deepEqual(withoutProvisional(list), saved);
 });
+
+test("chat: both people build the same private DM channel name, lower id first", async () => {
+  const { dmTopic, roomTopic, inboxTopic } = await import("../src/lib/chatTopics.ts");
+  const a = "1fe95dd5-f7dd-46c7-bc9a-6b4c837f4f2a";
+  const b = "52661369-7ae9-4a2a-8327-02297342681e";
+  assert.equal(dmTopic(a, b), dmTopic(b, a));
+  assert.equal(dmTopic(b, a), `dm:${a}:${b}`);
+  assert.equal(roomTopic("x"), "room:x");
+  assert.equal(inboxTopic("y"), "inbox:y");
+});

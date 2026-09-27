@@ -10,7 +10,7 @@ import {
   removeDirectReaction,
 } from "@/lib/actions/messages";
 import { notifyNewMessage } from "@/lib/chatNotify";
-import { inboxTopic, listenChatTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
+import { dmTopic, inboxTopic, listenChatTopic, sendDmBroadcast } from "@/lib/chatBroadcast";
 import { fetchConversation, fetchDirectReactions, readDmSnapshot, writeDmSnapshot } from "@/lib/dmLoad";
 import { reportChatSyncFailure, reportChatSyncOk } from "@/lib/chatSyncHealth";
 import {
@@ -609,9 +609,12 @@ export function DirectConversation({
   // Broadcast fast path — the peer's browser pushes each saved DM into my
   // inbox topic right as it's stored, well ahead of the change-feed INSERT
   // above (which then merges as a no-op, same id).
+  // Listens on the pair's own channel too (see dmTopic) — the fastest path
+  // while both sides have the conversation open; the same message arriving
+  // on both merges once by id.
   useEffect(() => {
     const peerId = peer.id;
-    return listenChatTopic(inboxTopic(currentUser.id), (event, payload) => {
+    const onEvent = (event: string, payload: unknown) => {
       if (event === "retract") {
         const id = (payload as { id?: string })?.id;
         if (id) setMessages((prev) => (prev.some((m) => m.id === id && m.provisional) ? prev.filter((m) => m.id !== id) : prev));
@@ -624,7 +627,13 @@ export function DirectConversation({
       setMessages((prev) => mergeServerMessage(prev, row));
       if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
       setPeerTyping(false);
-    });
+    };
+    const stopInbox = listenChatTopic(inboxTopic(currentUser.id), onEvent);
+    const stopPair = listenChatTopic(dmTopic(currentUser.id, peerId), onEvent);
+    return () => {
+      stopInbox();
+      stopPair();
+    };
   }, [currentUser.id, peer.id, mergeServerMessage]);
 
   // Shared by the effect below and each message image's onLoad — an
@@ -918,7 +927,7 @@ export function DirectConversation({
         // text reaches the recipient while the save is still in flight.
         if (!file && !provisionalSentRef.current.has(serverId)) {
           provisionalSentRef.current.add(serverId);
-          sendChatBroadcast(inboxTopic(peer.id), "dm", {
+          sendDmBroadcast(currentUser.id, peer.id, "dm", {
             ...insertRow,
             created_at: new Date().toISOString(),
             read_at: null,
@@ -932,7 +941,7 @@ export function DirectConversation({
           if (res.code) {
             removeFromOutbox(serverId);
             if (provisionalSentRef.current.delete(serverId)) {
-              sendChatBroadcast(inboxTopic(peer.id), "retract", { id: serverId });
+              sendDmBroadcast(currentUser.id, peer.id, "retract", { id: serverId });
             }
             throw new Error("Không thể gửi tin nhắn");
           }
@@ -946,7 +955,7 @@ export function DirectConversation({
         pendingPayloadsRef.current.delete(tempId);
         serverIdsRef.current.delete(tempId);
         // Fast path to the recipient's inbox (~0.1s) — see chatBroadcast.ts.
-        sendChatBroadcast(inboxTopic(peer.id), "dm", sent);
+        sendDmBroadcast(currentUser.id, peer.id, "dm", sent);
         notifyNewMessage("dm", sent.id);
       } catch (err) {
         setError(sendErrorMessage(err, "Không thể gửi tin nhắn — kiểm tra lại mạng và bấm gửi lại."));

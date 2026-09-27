@@ -2,6 +2,9 @@
 
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { dmTopic, inboxTopic } from "@/lib/chatTopics";
+
+export { dmTopic, inboxTopic, roomTopic } from "@/lib/chatTopics";
 
 // Fast path for chat delivery. Right after a message is saved, the sender's
 // browser Broadcasts the saved row to everyone listening — ~0.06s, versus
@@ -11,12 +14,17 @@ import { createClient } from "@/lib/supabase/client";
 // being counted, dinged or popped up twice.
 //
 // Topics (PRIVATE channels — who may listen/send is enforced by RLS on
-// realtime.messages, see supabase/migrations/chat_private_broadcast.sql):
+// realtime.messages, see supabase/migrations/chat_private_broadcast.sql and
+// performance_night.sql), named in lib/chatTopics.ts:
 //   room:<meeting channel id>  event "message"  payload MeetingMessage
 //   inbox:<recipient id>       event "dm"       payload DirectMessage
+//   dm:<id A>:<id B>           event "dm"       payload DirectMessage
+//   any of the above           event "retract"  payload { id }
 //
-// Only already-saved rows are ever broadcast, so a receiver never shows a
-// message that didn't actually make it into the database.
+// A text message is first broadcast flagged `provisional` while its save
+// is in flight; the saved row (same id) follows and replaces it, and a
+// rejected save sends "retract". A provisional message that is never
+// confirmed is dropped by the receiver (see lib/chatSyncCursor.ts).
 
 type Listener = (event: string, payload: unknown) => void;
 
@@ -61,12 +69,12 @@ function connect(topic: string, entry: Topic) {
     });
 }
 
-export function roomTopic(channelId: string) {
-  return `room:${channelId}`;
-}
-
-export function inboxTopic(profileId: string) {
-  return `inbox:${profileId}`;
+// Sends one DM event to both places the other person may be listening:
+// the pair channel (their open conversation, fastest) and their inbox
+// (unread badge / ding anywhere else in the workspace).
+export function sendDmBroadcast(meId: string, peerId: string, event: string, payload: Record<string, unknown>) {
+  sendChatBroadcast(dmTopic(meId, peerId), event, payload);
+  sendChatBroadcast(inboxTopic(peerId), event, payload);
 }
 
 // One channel per topic no matter how many components listen (supabase-js

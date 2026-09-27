@@ -70,6 +70,16 @@ as $$
 begin
   begin
     perform realtime.send(to_jsonb(new), 'dm', 'inbox:' || new.recipient_id::text, true);
+    -- The pair's own channel too (section 3): the open conversation on both
+    -- sides listens there. Lower id first, compared as plain bytes — the
+    -- same order the browser uses to build the topic name.
+    perform realtime.send(
+      to_jsonb(new),
+      'dm',
+      'dm:' || least(new.sender_id::text collate "C", new.recipient_id::text collate "C")
+        || ':' || greatest(new.sender_id::text collate "C", new.recipient_id::text collate "C"),
+      true
+    );
   exception when others then
     null; -- never block saving the message
   end;
@@ -84,3 +94,62 @@ create trigger direct_messages_broadcast
 
 -- (No revoke needed: trigger functions can't be called directly — Postgres
 -- only runs them as triggers, and the API never exposes them.)
+
+-- 3) Private DM channel per pair ---------------------------------------------
+-- dm:<id A>:<id B> (the two profile ids, lower one first) — only those two
+-- people may listen or send. While a conversation is open both sides are
+-- joined to it, so a message goes out over the already-open socket
+-- (~0.06–0.08s) instead of a REST call into the other person's inbox
+-- (~0.13–0.16s). inbox:<id> stays for unread badges / dings elsewhere.
+-- Same functions as supabase/migrations/chat_private_broadcast.sql, with the
+-- dm: branch added — room: and inbox: rules are unchanged.
+
+create or replace function public.chat_topic_can_receive(p_topic text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when p_topic like 'room:%' then
+      exists (
+        select 1 from public.meeting_channels c
+        where c.id::text = substr(p_topic, 6) and (c.is_general or c.is_food_room)
+      )
+      or exists (
+        select 1 from public.meeting_channel_members m
+        where m.channel_id::text = substr(p_topic, 6) and m.profile_id = auth.uid()
+      )
+      or public.current_access_role() = 'director'
+    when p_topic like 'inbox:%' then substr(p_topic, 7) = auth.uid()::text
+    when p_topic ~ '^dm:[0-9a-f-]{36}:[0-9a-f-]{36}$' then
+      auth.uid()::text in (substr(p_topic, 4, 36), substr(p_topic, 41, 36))
+    else false
+  end;
+$$;
+
+create or replace function public.chat_topic_can_send(p_topic text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when p_topic like 'room:%' then
+      exists (
+        select 1 from public.meeting_channels c
+        where c.id::text = substr(p_topic, 6) and (c.is_general or c.is_food_room)
+      )
+      or exists (
+        select 1 from public.meeting_channel_members m
+        where m.channel_id::text = substr(p_topic, 6) and m.profile_id = auth.uid()
+      )
+    when p_topic like 'inbox:%' then
+      exists (select 1 from public.profiles p where p.id = auth.uid())
+    when p_topic ~ '^dm:[0-9a-f-]{36}:[0-9a-f-]{36}$' then
+      auth.uid()::text in (substr(p_topic, 4, 36), substr(p_topic, 41, 36))
+    else false
+  end;
+$$;

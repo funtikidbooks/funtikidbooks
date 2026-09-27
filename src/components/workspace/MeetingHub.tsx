@@ -32,7 +32,7 @@ import { vnToday } from "@/lib/constants/attendance";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { notifyNewMessage } from "@/lib/chatNotify";
 import { playChatDing } from "@/lib/chatSound";
-import { firstSighting, inboxTopic, listenChatTopic, roomTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
+import { firstSighting, listenChatTopic, roomTopic, sendChatBroadcast, sendDmBroadcast } from "@/lib/chatBroadcast";
 import { fetchRoomSync } from "@/lib/roomLoad";
 import { reportChatSyncFailure, reportChatSyncOk } from "@/lib/chatSyncHealth";
 import {
@@ -3341,7 +3341,7 @@ export function MeetingHub({
           });
           if (res.data) {
             removeFromOutbox(entry.serverId);
-            sendChatBroadcast(inboxTopic(entry.recipientId), "dm", res.data);
+            sendDmBroadcast(currentUser.id, entry.recipientId, "dm", res.data);
             notifyNewMessage("dm", entry.serverId);
           } else if (res.code) {
             removeFromOutbox(entry.serverId);
