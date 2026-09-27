@@ -81,13 +81,15 @@ export function FinanceReceipt({
   monthLabel,
   summary,
   salary,
-  cashFund,
+  cumulative,
+  debts,
   loading,
 }: {
   monthLabel: string;
   summary: FinanceSummary;
   salary: { pendingAmount: number; pendingCount: number; paidCount: number } | null;
-  cashFund: number | null;
+  cumulative: { year: string; yearToDate: number; sinceStart: number; startLabel: string | null } | null;
+  debts: { lines: { label: string; hint?: string; amount: number }[]; total: number };
   loading: boolean;
 }) {
   const totalPayslips = salary ? salary.paidCount + salary.pendingCount : 0;
@@ -143,28 +145,71 @@ export function FinanceReceipt({
       </section>
 
       <div className="flex flex-col gap-4">
+        {/* Luỹ kế = "cộng dồn": each month's tiền còn lại thực tế added up. */}
         <section
           className="card elev-sm p-5 flex flex-col gap-1"
           style={{
-            background: cashFund !== null && cashFund < 0 ? "color-mix(in srgb, var(--status-red) 12%, var(--color-bg))" : "var(--color-accent-2-100)",
+            background:
+              cumulative && cumulative.yearToDate < 0
+                ? "color-mix(in srgb, var(--status-red) 12%, var(--color-bg))"
+                : "var(--color-accent-2-100)",
           }}
         >
           <span
             className="text-[11px] font-bold tracking-[0.08em]"
-            style={{ color: cashFund !== null && cashFund < 0 ? "var(--status-red)" : "var(--color-accent-2-700)" }}
+            style={{ color: cumulative && cumulative.yearToDate < 0 ? "var(--status-red)" : "var(--color-accent-2-700)" }}
           >
-            QUỸ TIỀN
+            LUỸ KẾ TỪ ĐẦU NĂM {cumulative?.year ?? ""}
           </span>
           <span
             className="font-heading text-2xl font-bold tabular-nums"
-            style={{ color: cashFund !== null && cashFund < 0 ? "var(--status-red)" : "var(--color-accent-2-800)" }}
+            style={{ color: cumulative && cumulative.yearToDate < 0 ? "var(--status-red)" : "var(--color-accent-2-800)" }}
           >
-            {cashFund === null ? "…" : formatVnd(cashFund)}
+            {cumulative ? formatVnd(cumulative.yearToDate) : "…"}
           </span>
           <span className="text-[11px]" style={{ color: "var(--color-accent-2-700)" }}>
-            Lợi nhuận tháng trước + tiền còn lại thực tế tháng này
+            Cộng dồn &quot;tiền còn lại thực tế&quot; từ tháng 1 đến hết {monthLabel}
           </span>
+          {cumulative?.startLabel && (
+            <span
+              className="text-xs flex justify-between gap-2 pt-2 mt-1"
+              style={{ borderTop: "1px dashed var(--color-accent-2-300)", color: "var(--color-accent-2-800)" }}
+            >
+              <span>Từ {cumulative.startLabel} (bắt đầu ghi sổ)</span>
+              <span className="font-bold tabular-nums">{formatVnd(cumulative.sinceStart)}</span>
+            </span>
+          )}
         </section>
+
+        {debts.lines.length > 0 && (
+          <section className="card elev-sm p-5 flex flex-col gap-2">
+            <span className="text-[11px] font-bold tracking-[0.08em]" style={{ color: "var(--color-neutral-500)" }}>
+              NỢ CÒN PHẢI TRẢ
+            </span>
+            {debts.lines.map((d) => (
+              <div key={d.label} className="flex justify-between gap-3 text-sm">
+                <span className="flex flex-col min-w-0">
+                  <span style={{ color: "var(--color-neutral-600)" }}>{d.label}</span>
+                  {d.hint && (
+                    <span className="text-[11px]" style={{ color: "var(--color-neutral-400)" }}>
+                      {d.hint}
+                    </span>
+                  )}
+                </span>
+                <span className="font-semibold tabular-nums">{formatVnd(d.amount)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between gap-3 text-sm pt-2 mt-1" style={{ borderTop: "1px dashed var(--color-neutral-200)" }}>
+              <span className="font-bold">Tổng nợ</span>
+              <span className="font-bold tabular-nums" style={{ color: "var(--status-red)" }}>
+                {formatVnd(debts.total)}
+              </span>
+            </div>
+            <span className="text-[11px]" style={{ color: "var(--color-neutral-400)" }}>
+              Chỉ tính tiền gốc còn lại, chưa gồm lãi các kỳ sau.
+            </span>
+          </section>
+        )}
 
         <section className="card elev-sm p-5 flex flex-col gap-2">
           <span className="text-[11px] font-bold tracking-[0.08em]" style={{ color: "var(--color-neutral-500)" }}>

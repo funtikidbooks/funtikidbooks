@@ -113,6 +113,42 @@ export async function getMonthlySalaryPending(
   };
 }
 
+// "Luỹ kế" = the month-by-month "tiền còn lại thực tế" (revenue − costs −
+// salary paid) added up. Returns the sum for every month BEFORE
+// `monthStartInput` — the page adds the open month's live figure on top,
+// so a just-added entry shows up in the running total immediately. Two
+// ranges: since January of that year, and since the earliest month with
+// any data (when record-keeping started).
+export async function getCumulativeNetBefore(
+  monthStartInput: string,
+): Promise<{ yearToDateBefore: number; sinceStartBefore: number; startMonth: string | null }> {
+  const { supabase } = await requireDirector();
+  const monthStart = firstOfMonth(monthStartInput);
+  const yearStart = `${monthStart.slice(0, 4)}-01-01`;
+  const [{ data: entries }, { data: payroll }, { data: historical }] = await Promise.all([
+    supabase.from("finance_entries").select("entry_month, type, amount").lt("entry_month", monthStart),
+    supabase.from("payroll_records").select("*").eq("status", "paid").lt("month", monthStart),
+    supabase.from("historical_salary_totals").select("month, total_amount").lt("month", monthStart),
+  ]);
+
+  const byMonth = new Map<string, number>();
+  const add = (month: string, amount: number) => byMonth.set(month, (byMonth.get(month) ?? 0) + amount);
+  for (const e of (entries ?? []) as Pick<FinanceEntry, "entry_month" | "type" | "amount">[]) {
+    add(firstOfMonth(e.entry_month), e.type === "revenue" ? Number(e.amount) : -Number(e.amount));
+  }
+  for (const r of (payroll ?? []) as PayrollRecord[]) add(r.month, -payslipTotal(r));
+  for (const h of (historical ?? []) as { month: string; total_amount: number }[]) add(h.month, -Number(h.total_amount));
+
+  let yearToDateBefore = 0;
+  let sinceStartBefore = 0;
+  for (const [month, net] of byMonth) {
+    sinceStartBefore += net;
+    if (month >= yearStart) yearToDateBefore += net;
+  }
+  const months = [...byMonth.keys()].sort();
+  return { yearToDateBefore, sinceStartBefore, startMonth: months[0] ?? null };
+}
+
 // One salary total per month for the whole year — backs the yearly table
 // the same way listFinanceEntriesForYear does for the ledger entries.
 export async function getYearlySalaryTotals(year: number): Promise<Record<string, number>> {

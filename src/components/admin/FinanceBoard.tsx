@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   deleteFinanceEntry,
+  getCumulativeNetBefore,
   getMonthlySalaryPending,
   getMonthlySalaryTotal,
   getYearlySalaryTotals,
@@ -255,11 +256,14 @@ export function FinanceBoard({
   const [yearSalaryTotals, setYearSalaryTotals] = useState(initialYearSalaryTotals);
   const [yearLoading, setYearLoading] = useState(false);
 
-  // Quỹ tiền = lợi nhuận ròng luỹ kế tới hết tháng trước, cộng thêm lợi
-  // nhuận ròng của tháng đang xem (biến động ngay khi thêm/xoá khoản thu
-  // chi) — nên nó bắt đầu bằng đúng số dư cuối tháng trước rồi tăng/giảm
-  // sống theo các khoản biến phí/doanh thu vừa nhập.
-  const [prevMonthNet, setPrevMonthNet] = useState<number | null>(null);
+  // Luỹ kế = every earlier month's net (from the server) + the open month's
+  // live net, so adding/removing an entry moves the running total at once.
+  const [cumulativeBefore, setCumulativeBefore] = useState<{
+    month: string;
+    yearToDateBefore: number;
+    sinceStartBefore: number;
+    startMonth: string | null;
+  } | null>(null);
   const [salaryPending, setSalaryPending] = useState<{ month: string; amount: number; count: number; paidCount: number } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -273,19 +277,36 @@ export function FinanceBoard({
   const pendingForMonth = salaryPending?.month === monthStart ? salaryPending : null;
   useEffect(() => {
     let cancelled = false;
-    const prevMonth = addMonths(monthStart, -1);
-    Promise.all([listFinanceEntries(prevMonth), getMonthlySalaryTotal(prevMonth)])
-      .then(([e, s]) => {
-        if (cancelled) return;
-        setPrevMonthNet(computeFinanceSummary(e, s).netProfit);
-      })
-      .catch(() => {
-        if (!cancelled) setPrevMonthNet(null);
-      });
+    getCumulativeNetBefore(monthStart)
+      .then((c) => !cancelled && setCumulativeBefore({ month: monthStart, ...c }))
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [monthStart]);
+  const cumulativeForMonth = cumulativeBefore?.month === monthStart ? cumulativeBefore : null;
+
+  // Principal still owed: the home loan's balance going into its first
+  // unpaid kỳ, plus every other debt's remaining amount. A debt with no
+  // numbers entered (e.g. "Nợ ngân hàng", which is the home loan itself) is
+  // skipped rather than guessed at.
+  const debtSummary = useMemo(() => {
+    const lines: { label: string; hint?: string; amount: number }[] = [];
+    if (homeLoanInstallments.length > 0) {
+      const unpaid = homeLoanInstallments.filter((i) => !i.is_paid);
+      lines.push({
+        label: "Nợ nhà (ngân hàng)",
+        hint: `còn ${unpaid.length}/${homeLoanInstallments.length} kỳ`,
+        amount: unpaid[0]?.opening_balance ?? 0,
+      });
+    }
+    for (const d of debts) {
+      if (!d.remaining_amount || d.remaining_amount <= 0) continue;
+      const paidPct = d.total_amount ? Math.round(((d.total_amount - d.remaining_amount) / d.total_amount) * 100) : null;
+      lines.push({ label: d.label, hint: paidPct !== null ? `đã trả ${paidPct}%` : undefined, amount: d.remaining_amount });
+    }
+    return { lines, total: lines.reduce((s, l) => s + l.amount, 0) };
+  }, [debts, homeLoanInstallments]);
 
   async function goToMonth(newStart: string) {
     setMonthStart(newStart);
@@ -355,7 +376,16 @@ export function FinanceBoard({
   }
 
   const summary = useMemo(() => computeFinanceSummary(entries, salaryTotal), [entries, salaryTotal]);
-  const cashFund = prevMonthNet === null ? null : prevMonthNet + summary.netProfit;
+  const cumulative = cumulativeForMonth
+    ? {
+        year: monthStart.slice(0, 4),
+        yearToDate: cumulativeForMonth.yearToDateBefore + summary.netProfit,
+        sinceStart: cumulativeForMonth.sinceStartBefore + summary.netProfit,
+        startLabel: cumulativeForMonth.startMonth
+          ? `${cumulativeForMonth.startMonth.slice(5, 7)}/${cumulativeForMonth.startMonth.slice(0, 4)}`
+          : null,
+      }
+    : null;
 
   const yearRows = useMemo(
     () =>
@@ -450,7 +480,8 @@ export function FinanceBoard({
           monthLabel={`${MONTH_LABELS[selectedMonthIndex].toLowerCase()}/${selectedYear}`}
           summary={summary}
           salary={pendingForMonth ? { pendingAmount: pendingForMonth.amount, pendingCount: pendingForMonth.count, paidCount: pendingForMonth.paidCount } : null}
-          cashFund={cashFund}
+          cumulative={cumulative}
+          debts={debtSummary}
           loading={loading}
         />
 
