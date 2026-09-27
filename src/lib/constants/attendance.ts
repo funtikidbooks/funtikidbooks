@@ -175,6 +175,8 @@ export type AttendanceSummary = { present: number; late: number; absent: number;
 // else.
 // An overtime day (tăng ca on a day off) counts like any worked day but is
 // never "late" — there's no start time to be late for on a day off.
+// The `present` count is mirrored in SQL by the nightly payroll job
+// (supabase/migrations/payroll_daily_sync.sql) — change both together.
 export function summarizeAttendance(
   entries: {
     work_date: string;
