@@ -102,3 +102,23 @@ test("SOP: a partial saved copy is completed from the original deck", () => {
   assert.equal(sop.cover.title, DEFAULT_UPWORK_SOP.cover.title);
   assert.equal(sop.decision.tiers.length, 2);
 });
+
+test("chat: provisional messages are replaced by the saved row, or dropped when never confirmed", async () => {
+  const { dropStaleProvisional, withoutProvisional, replaceIfProvisional } = await import("../src/lib/chatSyncCursor.ts");
+  const t = (h) => `2026-09-28T${h}:00.000Z`;
+  const saved = [{ id: "a", created_at: t("10:00") }];
+  const prov = { id: "p", created_at: t("10:05"), provisional: true, provisional_at: 1_000 };
+  const list = [...saved, prov];
+  // Confirmed row with the server's (earlier) timestamp takes the provisional's place.
+  const confirmed = { id: "p", created_at: t("10:04") };
+  assert.deepEqual(replaceIfProvisional(list, confirmed), [saved[0], confirmed]);
+  // A second provisional copy, or a duplicate saved row, changes nothing.
+  assert.equal(replaceIfProvisional(list, { ...prov }), list);
+  const done = [...saved, confirmed];
+  assert.equal(replaceIfProvisional(done, confirmed), done);
+  assert.equal(replaceIfProvisional(list, { id: "new", created_at: t("10:06") }), null);
+  // Unconfirmed after 90s → gone; within 90s → kept.
+  assert.deepEqual(dropStaleProvisional(list, 1_000 + 91_000), saved);
+  assert.equal(dropStaleProvisional(list, 1_000 + 30_000), list);
+  assert.deepEqual(withoutProvisional(list), saved);
+});

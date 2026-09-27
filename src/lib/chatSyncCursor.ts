@@ -38,3 +38,36 @@ export function insertByTime<T extends { id: string; created_at: string }>(list:
   if (i === list.length) return [...list, row];
   return [...list.slice(0, i), row, ...list.slice(i)];
 }
+
+// A "provisional" message is broadcast the instant Send is pressed, before
+// the database has confirmed saving it — that's what gets delivery under
+// ~0.1s. The saved row replaces it (same id) moments later. If the sender
+// loses connection and the row never arrives, it mustn't linger as if it
+// were real: dropped after this long without confirmation.
+export const PROVISIONAL_MAX_AGE_MS = 90_000;
+
+export function dropStaleProvisional<T extends { provisional?: boolean; provisional_at?: number }>(list: T[], now = Date.now()): T[] {
+  const stale = (m: T) => !!m.provisional && now - (m.provisional_at ?? 0) > PROVISIONAL_MAX_AGE_MS;
+  return list.some(stale) ? list.filter((m) => !stale(m)) : list;
+}
+
+// Snapshots saved for instant re-open must only hold confirmed messages.
+export function withoutProvisional<T extends { provisional?: boolean }>(list: T[]): T[] {
+  return list.some((m) => m.provisional) ? list.filter((m) => !m.provisional) : list;
+}
+
+// Merge rule for a row whose id is already on screen: a confirmed (saved)
+// row replaces a provisional one and moves to its server timestamp; any
+// other duplicate is ignored. Returns null when the id isn't on screen yet.
+export function replaceIfProvisional<T extends { id: string; created_at: string; provisional?: boolean }>(
+  list: T[],
+  row: T,
+): T[] | null {
+  const idx = list.findIndex((m) => m.id === row.id);
+  if (idx === -1) return null;
+  if (!list[idx].provisional || row.provisional) return list;
+  return insertByTime(
+    list.filter((_, i) => i !== idx),
+    row,
+  );
+}

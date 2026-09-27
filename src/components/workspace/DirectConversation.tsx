@@ -13,7 +13,14 @@ import { notifyNewMessage } from "@/lib/chatNotify";
 import { inboxTopic, listenChatTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
 import { fetchConversation, fetchDirectReactions, readDmSnapshot, writeDmSnapshot } from "@/lib/dmLoad";
 import { reportChatSyncFailure, reportChatSyncOk } from "@/lib/chatSyncHealth";
-import { catchUpFrom, insertByTime, newestCreatedAt, type SyncCursor } from "@/lib/chatSyncCursor";
+import {
+  catchUpFrom,
+  dropStaleProvisional,
+  insertByTime,
+  newestCreatedAt,
+  replaceIfProvisional,
+  type SyncCursor,
+} from "@/lib/chatSyncCursor";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { addToOutbox, insertWithRetry, removeFromOutbox } from "@/lib/chatOutbox";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
@@ -300,6 +307,8 @@ export function DirectConversation({
   // temp bubble with the same content, so the rare case of the realtime
   // event arriving before our own await does doesn't leave a duplicate.
   const serverIdsRef = useRef(new Map<string, string>());
+  // Row ids already broadcast as provisional (see attemptSend).
+  const provisionalSentRef = useRef(new Set<string>());
   const mergeServerMessage = useCallback(
     (prev: DirectMessage[], confirmed: DirectMessage, tempId?: string) => {
       // Our own send, recognised by the row id it was posted with — exact,
@@ -317,7 +326,8 @@ export function DirectConversation({
           return next;
         }
       }
-      if (alreadyHas) return prev;
+      // The saved row takes a provisional copy's place (lib/chatSyncCursor.ts).
+      if (alreadyHas) return replaceIfProvisional(prev, confirmed) ?? prev;
       if (tempId) {
         const idx = prev.findIndex((m) => m.id === tempId);
         if (idx !== -1) {
@@ -411,6 +421,9 @@ export function DirectConversation({
         } else if (msgs.length > 0) {
           setMessages((prev) => capMessagesForRoom(msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev)));
         }
+        // A provisional message never confirmed long after it arrived was
+        // never saved — stop showing it.
+        setMessages((prev) => dropStaleProvisional(prev));
       })
       .catch((err) => {
         // Keep whatever the snapshot already put on screen — but say so if
@@ -599,9 +612,15 @@ export function DirectConversation({
   useEffect(() => {
     const peerId = peer.id;
     return listenChatTopic(inboxTopic(currentUser.id), (event, payload) => {
+      if (event === "retract") {
+        const id = (payload as { id?: string })?.id;
+        if (id) setMessages((prev) => (prev.some((m) => m.id === id && m.provisional) ? prev.filter((m) => m.id !== id) : prev));
+        return;
+      }
       if (event !== "dm") return;
       const row = payload as DirectMessage;
       if (!row?.id || row.sender_id !== peerId || row.recipient_id !== currentUser.id) return;
+      if (row.provisional) row.provisional_at = Date.now();
       setMessages((prev) => mergeServerMessage(prev, row));
       if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
       setPeerTyping(false);
@@ -895,18 +914,33 @@ export function DirectConversation({
           attachment_mime: attachment?.mime ?? null,
           attachment_size: attachment?.size ?? null,
         };
+        // Same provisional fast path as rooms (see MeetingHub's attemptSend):
+        // text reaches the recipient while the save is still in flight.
+        if (!file && !provisionalSentRef.current.has(serverId)) {
+          provisionalSentRef.current.add(serverId);
+          sendChatBroadcast(inboxTopic(peer.id), "dm", {
+            ...insertRow,
+            created_at: new Date().toISOString(),
+            read_at: null,
+            provisional: true,
+          });
+        }
         const res = await insertWithRetry<DirectMessage>(supabase, "direct_messages", insertRow);
         const sent = res.data;
         if (!sent) {
           if (storagePath) await supabase.storage.from("task-attachments").remove([storagePath]).catch(() => {});
           if (res.code) {
             removeFromOutbox(serverId);
+            if (provisionalSentRef.current.delete(serverId)) {
+              sendChatBroadcast(inboxTopic(peer.id), "retract", { id: serverId });
+            }
             throw new Error("Không thể gửi tin nhắn");
           }
           networkFailedRef.current.add(tempId);
           throw new Error("Không thể gửi tin nhắn — sẽ tự gửi lại khi có mạng ổn định.");
         }
         removeFromOutbox(serverId);
+        provisionalSentRef.current.delete(serverId);
         networkFailedRef.current.delete(tempId);
         setMessages((prev) => mergeServerMessage(prev, sent, tempId));
         pendingPayloadsRef.current.delete(tempId);

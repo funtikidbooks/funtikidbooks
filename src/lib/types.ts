@@ -135,6 +135,11 @@ export type DirectMessage = {
   attachment_size: number | null;
   created_at: string;
   read_at: string | null;
+  // Client-only, never stored: a message broadcast the instant it was sent,
+  // before the row is confirmed saved. Replaced by the saved row when that
+  // arrives, or dropped if it never does (see lib/chatSyncCursor.ts).
+  provisional?: boolean;
+  provisional_at?: number;
 };
 
 // A direct_messages row plus who the OTHER person in that conversation is —
@@ -303,6 +308,11 @@ export type MeetingMessage = {
   pinned_at: string | null;
   pinned_by: string | null;
   created_at: string;
+  // Client-only, never stored: a message broadcast the instant it was sent,
+  // before the row is confirmed saved. Replaced by the saved row when that
+  // arrives, or dropped if it never does (see lib/chatSyncCursor.ts).
+  provisional?: boolean;
+  provisional_at?: number;
 };
 
 // A meeting_messages row plus which room it came from — searchMeetingMessages()

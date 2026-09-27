@@ -242,8 +242,31 @@ export function ChatManagerProvider({
         hasAttachment: !!row.attachment_url,
       });
       setUnreadCounts((prev) => ({ ...prev, [row.sender_id]: (prev[row.sender_id] ?? 0) + 1 }));
+      countedRef.current.set(row.id, { dmSender: row.sender_id });
     },
     [currentUserId, pushToast],
+  );
+
+  // What each counted message bumped, so a provisional message that gets
+  // retracted (its save was rejected) can be un-counted and its popup
+  // removed — see the "retract" events below and lib/chatSyncCursor.ts.
+  const countedRef = useRef(new Map<string, { dmSender?: string; roomId?: string }>());
+  const handleRetract = useCallback(
+    (id: string) => {
+      const counted = countedRef.current.get(id);
+      if (!counted) return;
+      countedRef.current.delete(id);
+      dismissToast(id);
+      if (counted.dmSender) {
+        const sender = counted.dmSender;
+        setUnreadCounts((prev) => ({ ...prev, [sender]: Math.max(0, (prev[sender] ?? 0) - 1) }));
+      }
+      if (counted.roomId) {
+        const room = counted.roomId;
+        setMeetingUnreadCounts((prev) => ({ ...prev, [room]: Math.max(0, (prev[room] ?? 0) - 1) }));
+      }
+    },
+    [dismissToast],
   );
 
   const handleIncomingRoomMessage = useCallback(
@@ -262,6 +285,7 @@ export function ChatManagerProvider({
         hasAttachment: !!row.attachment_url,
       });
       setMeetingUnreadCounts((prev) => ({ ...prev, [row.channel_id]: (prev[row.channel_id] ?? 0) + 1 }));
+      countedRef.current.set(row.id, { roomId: row.channel_id });
     },
     [currentUserId, pushToast],
   );
@@ -287,8 +311,9 @@ export function ChatManagerProvider({
   useEffect(() => {
     return listenChatTopic(inboxTopic(currentUserId), (event, payload) => {
       if (event === "dm" && (payload as DirectMessage)?.id) handleIncomingDm(payload as DirectMessage);
+      if (event === "retract" && (payload as { id?: string })?.id) handleRetract((payload as { id: string }).id);
     });
-  }, [currentUserId, handleIncomingDm]);
+  }, [currentUserId, handleIncomingDm, handleRetract]);
 
   const joinedRoomKey = joinedRoomIds.join(",");
   useEffect(() => {
@@ -297,10 +322,11 @@ export function ChatManagerProvider({
       listenChatTopic(roomTopic(roomId), (event, payload) => {
         const row = payload as MeetingMessage;
         if (event === "message" && row?.id && row.channel_id === roomId) handleIncomingRoomMessage(row);
+        if (event === "retract" && row?.id) handleRetract(row.id);
       }),
     );
     return () => stops.forEach((stop) => stop());
-  }, [joinedRoomKey, handleIncomingRoomMessage]);
+  }, [joinedRoomKey, handleIncomingRoomMessage, handleRetract]);
 
   // Change-feed backup — separate from each ChatWindow's own conversation
   // subscription, so a badge shows up even for teammates whose chat window

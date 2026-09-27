@@ -35,7 +35,15 @@ import { playChatDing } from "@/lib/chatSound";
 import { firstSighting, inboxTopic, listenChatTopic, roomTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
 import { fetchRoomSync } from "@/lib/roomLoad";
 import { reportChatSyncFailure, reportChatSyncOk } from "@/lib/chatSyncHealth";
-import { catchUpFrom, insertByTime, newestCreatedAt, type SyncCursor } from "@/lib/chatSyncCursor";
+import {
+  catchUpFrom,
+  dropStaleProvisional,
+  insertByTime,
+  newestCreatedAt,
+  replaceIfProvisional,
+  withoutProvisional,
+  type SyncCursor,
+} from "@/lib/chatSyncCursor";
 import { addToOutbox, insertWithRetry, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
 import { Emoji } from "@/lib/emoji";
 import {
@@ -2039,7 +2047,13 @@ export function MeetingHub({
   useEffect(() => {
     if (!activeId || activeId === DM_TAB_ID || activeId !== lastSyncedChannelIdRef.current) return;
     if (syncedRoomIdRef.current !== activeId) return;
-    const snapshot: RoomSnapshot = { messages, reactions, reads, pinnedMessages, syncedThrough: { ...syncCursorRef.current } };
+    const snapshot: RoomSnapshot = {
+      messages: withoutProvisional(messages),
+      reactions,
+      reads,
+      pinnedMessages,
+      syncedThrough: { ...syncCursorRef.current },
+    };
     // The in-memory copy (what resync() actually reads) is cheap and stays
     // instant. The localStorage mirror — a synchronous JSON.stringify +
     // write — is debounced separately: a cache-restore immediately
@@ -2072,6 +2086,9 @@ export function MeetingHub({
   // temp bubble with the same content, so the rare case of the realtime
   // event arriving before our own await does doesn't leave a duplicate.
   const serverIdsRef = useRef(new Map<string, string>());
+  // Row ids already broadcast as provisional — so a retry of the same send
+  // doesn't broadcast it again, and a rejection knows to retract it.
+  const provisionalSentRef = useRef(new Set<string>());
   const mergeServerMessage = useCallback(
     (prev: MeetingMessage[], confirmed: MeetingMessage, tempId?: string) => {
       // Our own send, recognised by the row id it was posted with — exact,
@@ -2089,7 +2106,9 @@ export function MeetingHub({
           return next;
         }
       }
-      if (alreadyHas) return prev;
+      // Already on screen: the saved row takes a provisional copy's place
+      // (see lib/chatSyncCursor.ts); anything else is a harmless duplicate.
+      if (alreadyHas) return replaceIfProvisional(prev, confirmed) ?? prev;
       if (tempId) {
         const idx = prev.findIndex((m) => m.id === tempId);
         if (idx !== -1) {
@@ -2244,6 +2263,9 @@ export function MeetingHub({
         } else if (msgs.length > 0) {
           setMessages((prev) => capMessagesForRoom(msgs.reduce((acc, m) => mergeServerMessage(acc, m), prev)));
         }
+        // Any provisional message still unconfirmed long after it arrived
+        // was never saved (sender lost connection) — don't keep showing it.
+        setMessages((prev) => dropStaleProvisional(prev));
         if (needsFullFetch || reactionsReplaced) {
           setReactions(rx);
         } else if (rx.length > 0) {
@@ -2459,8 +2481,10 @@ export function MeetingHub({
   useEffect(() => {
     if (!pageVisible) return;
     if (!activeId || activeId === DM_TAB_ID || messages.length === 0) return;
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage.channel_id !== activeId) return;
+    // A provisional message isn't saved yet, so it can't be the read
+    // marker — its saved copy replacing it re-runs this effect.
+    const lastMessage = messages.findLast((m) => !m.provisional);
+    if (!lastMessage || lastMessage.channel_id !== activeId) return;
     if (lastMarkedReadIdRef.current === lastMessage.id) return;
     lastMarkedReadIdRef.current = lastMessage.id;
     markChannelReadKeepAlive(activeId, lastMessage.id);
@@ -2576,9 +2600,16 @@ export function MeetingHub({
     if (!activeId || activeId === DM_TAB_ID) return;
     const roomId = activeId;
     return listenChatTopic(roomTopic(roomId), (event, payload) => {
+      if (activeIdRef.current !== roomId) return;
+      if (event === "retract") {
+        const id = (payload as { id?: string })?.id;
+        if (id) setMessages((prev) => (prev.some((m) => m.id === id && m.provisional) ? prev.filter((m) => m.id !== id) : prev));
+        return;
+      }
       if (event !== "message") return;
       const row = payload as MeetingMessage;
-      if (!row?.id || row.channel_id !== roomId || activeIdRef.current !== roomId) return;
+      if (!row?.id || row.channel_id !== roomId) return;
+      if (row.provisional) row.provisional_at = Date.now();
       if (row.sender_id !== currentUser.id && firstSighting("room-ding", row.id)) playChatDing();
       setMessages((prev) => mergeServerMessage(prev, row));
     });
@@ -3075,6 +3106,23 @@ export function MeetingHub({
           attachment_size: attachment?.size ?? null,
         };
         if (replyId) insertRow.reply_to_message_id = replyId;
+        // Text goes out to the room the instant Send is pressed, flagged
+        // provisional, while the insert is still in flight — delivery in
+        // ~0.06–0.08s instead of waiting ~0.1s more for the save. The saved
+        // row follows (same id) and replaces it; a rejected save retracts
+        // it. Files still wait for their upload + save as before.
+        if (!file && !provisionalSentRef.current.has(serverId)) {
+          provisionalSentRef.current.add(serverId);
+          sendChatBroadcast(roomTopic(channelId), "message", {
+            ...insertRow,
+            reply_to_message_id: replyId,
+            is_recalled: false,
+            pinned_at: null,
+            pinned_by: null,
+            created_at: new Date().toISOString(),
+            provisional: true,
+          });
+        }
         const res = await insertWithRetry<MeetingMessage>(supabase, "meeting_messages", insertRow);
         const sent = res.data;
         if (!sent) {
@@ -3083,6 +3131,9 @@ export function MeetingHub({
             // A real rejection (not a member, closed room...) — retrying
             // won't help, so it leaves the outbox too.
             removeFromOutbox(serverId);
+            if (provisionalSentRef.current.delete(serverId)) {
+              sendChatBroadcast(roomTopic(channelId), "retract", { id: serverId });
+            }
             if (res.message && /[À-ỹ]/.test(res.message)) throw new Error(res.message);
             throw new Error("Không thể gửi tin nhắn — bạn cần tham gia phòng trước.");
           }
@@ -3090,6 +3141,7 @@ export function MeetingHub({
           throw new Error("Không thể gửi tin nhắn — sẽ tự gửi lại khi có mạng ổn định.");
         }
         removeFromOutbox(serverId);
+        provisionalSentRef.current.delete(serverId);
         networkFailedRef.current.delete(tempId);
         if (activeIdRef.current === channelId) {
           setMessages((prev) => mergeServerMessage(prev, sent, tempId));

@@ -113,9 +113,9 @@ export function readDmSnapshot(peerId: string): Snapshot | null {
 }
 
 export function writeDmSnapshot(peerId: string, snapshot: Snapshot) {
-  // Never cache optimistic/unsent bubbles — they carry this device's clock
-  // and a temp id, and would come back as ghosts on the next open.
-  const confirmed = snapshot.messages.filter((m) => !m.id.startsWith("temp-"));
+  // Never cache optimistic/unsent bubbles or unconfirmed provisional ones —
+  // they'd come back as ghosts on the next open.
+  const confirmed = snapshot.messages.filter((m) => !m.id.startsWith("temp-") && !m.provisional);
   const clean = { messages: confirmed, reactions: snapshot.reactions };
   memory.set(peerId, clean);
   try {
