@@ -2,6 +2,7 @@
 
 import { requireUser } from "@/lib/supabase/server";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
+import { CUMULATIVE_START_MONTH } from "@/lib/financeSummary";
 import type { FinanceEntry, FinanceEntryType, HomeLoanInstallment, PayrollRecord, PersonalDebt } from "@/lib/types";
 
 // This ledger is deliberately more sensitive than payroll/attendance — it's
@@ -114,39 +115,28 @@ export async function getMonthlySalaryPending(
 }
 
 // "Luỹ kế" = the month-by-month "tiền còn lại thực tế" (revenue − costs −
-// salary paid) added up. Returns the sum for every month BEFORE
-// `monthStartInput` — the page adds the open month's live figure on top,
-// so a just-added entry shows up in the running total immediately. Two
-// ranges: since January of that year, and since the earliest month with
-// any data (when record-keeping started).
-export async function getCumulativeNetBefore(
-  monthStartInput: string,
-): Promise<{ yearToDateBefore: number; sinceStartBefore: number; startMonth: string | null }> {
+// salary paid) added up from CUMULATIVE_START_MONTH. Returns the sum for
+// the months from there up to (not including) `monthStartInput` — the page
+// adds the open month's live figure on top, so a just-added entry shows up
+// in the running total immediately.
+export async function getCumulativeNetBefore(monthStartInput: string): Promise<{ before: number; startMonth: string }> {
   const { supabase } = await requireDirector();
   const monthStart = firstOfMonth(monthStartInput);
-  const yearStart = `${monthStart.slice(0, 4)}-01-01`;
+  const from = CUMULATIVE_START_MONTH;
+  if (monthStart <= from) return { before: 0, startMonth: from };
   const [{ data: entries }, { data: payroll }, { data: historical }] = await Promise.all([
-    supabase.from("finance_entries").select("entry_month, type, amount").lt("entry_month", monthStart),
-    supabase.from("payroll_records").select("*").eq("status", "paid").lt("month", monthStart),
-    supabase.from("historical_salary_totals").select("month, total_amount").lt("month", monthStart),
+    supabase.from("finance_entries").select("type, amount").gte("entry_month", from).lt("entry_month", monthStart),
+    supabase.from("payroll_records").select("*").eq("status", "paid").gte("month", from).lt("month", monthStart),
+    supabase.from("historical_salary_totals").select("total_amount").gte("month", from).lt("month", monthStart),
   ]);
 
-  const byMonth = new Map<string, number>();
-  const add = (month: string, amount: number) => byMonth.set(month, (byMonth.get(month) ?? 0) + amount);
-  for (const e of (entries ?? []) as Pick<FinanceEntry, "entry_month" | "type" | "amount">[]) {
-    add(firstOfMonth(e.entry_month), e.type === "revenue" ? Number(e.amount) : -Number(e.amount));
+  let before = 0;
+  for (const e of (entries ?? []) as Pick<FinanceEntry, "type" | "amount">[]) {
+    before += e.type === "revenue" ? Number(e.amount) : -Number(e.amount);
   }
-  for (const r of (payroll ?? []) as PayrollRecord[]) add(r.month, -payslipTotal(r));
-  for (const h of (historical ?? []) as { month: string; total_amount: number }[]) add(h.month, -Number(h.total_amount));
-
-  let yearToDateBefore = 0;
-  let sinceStartBefore = 0;
-  for (const [month, net] of byMonth) {
-    sinceStartBefore += net;
-    if (month >= yearStart) yearToDateBefore += net;
-  }
-  const months = [...byMonth.keys()].sort();
-  return { yearToDateBefore, sinceStartBefore, startMonth: months[0] ?? null };
+  for (const r of (payroll ?? []) as PayrollRecord[]) before -= payslipTotal(r);
+  for (const h of (historical ?? []) as { total_amount: number }[]) before -= Number(h.total_amount);
+  return { before, startMonth: from };
 }
 
 // One salary total per month for the whole year — backs the yearly table

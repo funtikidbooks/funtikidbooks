@@ -14,7 +14,7 @@ import {
 import { FinanceEntryModal } from "@/components/admin/FinanceEntryModal";
 import { FinanceYearChart } from "@/components/admin/FinanceYearChart";
 import { DebtEditModal } from "@/components/admin/DebtEditModal";
-import { FinanceReceipt } from "@/components/admin/FinanceReceipt";
+import { DebtTotalCard, FinanceReceipt } from "@/components/admin/FinanceReceipt";
 import { MONTH_LABELS, addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import { TYPE_LABELS, TYPE_ORDER, computeFinanceSummary, formatVnd } from "@/lib/financeSummary";
 import type { FinanceEntry, FinanceEntryType, HomeLoanInstallment, PersonalDebt } from "@/lib/types";
@@ -258,12 +258,7 @@ export function FinanceBoard({
 
   // Luỹ kế = every earlier month's net (from the server) + the open month's
   // live net, so adding/removing an entry moves the running total at once.
-  const [cumulativeBefore, setCumulativeBefore] = useState<{
-    month: string;
-    yearToDateBefore: number;
-    sinceStartBefore: number;
-    startMonth: string | null;
-  } | null>(null);
+  const [cumulativeBefore, setCumulativeBefore] = useState<{ month: string; before: number; startMonth: string } | null>(null);
   const [salaryPending, setSalaryPending] = useState<{ month: string; amount: number; count: number; paidCount: number } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -378,12 +373,8 @@ export function FinanceBoard({
   const summary = useMemo(() => computeFinanceSummary(entries, salaryTotal), [entries, salaryTotal]);
   const cumulative = cumulativeForMonth
     ? {
-        year: monthStart.slice(0, 4),
-        yearToDate: cumulativeForMonth.yearToDateBefore + summary.netProfit,
-        sinceStart: cumulativeForMonth.sinceStartBefore + summary.netProfit,
-        startLabel: cumulativeForMonth.startMonth
-          ? `${cumulativeForMonth.startMonth.slice(5, 7)}/${cumulativeForMonth.startMonth.slice(0, 4)}`
-          : null,
+        startLabel: `${Number(cumulativeForMonth.startMonth.slice(5, 7))}/${cumulativeForMonth.startMonth.slice(0, 4)}`,
+        value: monthStart < cumulativeForMonth.startMonth ? null : cumulativeForMonth.before + summary.netProfit,
       }
     : null;
 
@@ -481,7 +472,6 @@ export function FinanceBoard({
           summary={summary}
           salary={pendingForMonth ? { pendingAmount: pendingForMonth.amount, pendingCount: pendingForMonth.count, paidCount: pendingForMonth.paidCount } : null}
           cumulative={cumulative}
-          debts={debtSummary}
           loading={loading}
         />
 
@@ -607,7 +597,15 @@ export function FinanceBoard({
       {/* Nợ cá nhân — separate from the business P&L above, just kept on
           the same director-only page. */}
       <div className="flex flex-col gap-3 mt-4">
-        <span className="text-sm font-bold">Nợ cá nhân</span>
+        <div>
+          <span className="text-sm font-bold">Nợ cá nhân</span>
+          <p className="text-xs mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
+            Riêng của Giám đốc — không tính vào số kinh doanh ở trên.
+          </p>
+        </div>
+        <div className="max-w-[420px]">
+          <DebtTotalCard debts={debtSummary} />
+        </div>
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
           {debts.map((debt) => (
             <DebtCard key={debt.id} debt={debt} onEdit={() => setEditingDebt(debt)} />

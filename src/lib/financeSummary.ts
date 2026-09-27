@@ -62,3 +62,7 @@ export function costBreakdown(entries: FinanceEntry[]) {
   }
   return [...byCategory.values()].sort((a, b) => b.amount - a.amount);
 }
+
+// Luỹ kế counts from here on — sếp Phúc's fresh start: spending before
+// August 2026 wasn't kept in check, so it shouldn't weigh on the figure.
+export const CUMULATIVE_START_MONTH = "2026-08-01";
