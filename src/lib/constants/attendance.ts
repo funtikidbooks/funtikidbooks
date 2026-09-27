@@ -204,11 +204,22 @@ export function summarizeAttendance(
 }
 
 // Whether a day reads as "Ngày nghỉ" because the shared calendar marks it
-// off. A calendar day off wins over an ordinary entry (usually a stale auto
-// check-in from before the day got marked off), but not over one a
-// director/PM marked as tăng ca — that's someone who really came in.
-export function isCalendarOffFor(date: string, entry: { overtime?: boolean } | undefined, offDateSet: Set<string>) {
-  return offDateSet.has(date) && !entry?.overtime;
+// off. Only when nothing on that day counts toward pay: a row that
+// summarizeAttendance() counts as công (a check-in, half day, paid leave,
+// or tăng ca) is shown as what it is — otherwise the screen would say
+// "Ngày nghỉ" while payroll quietly paid for the day. A check-in on a day
+// off then stands out for a director/PM to fix (mark it off, or tăng ca).
+export function isCalendarOffFor(
+  date: string,
+  entry: { overtime?: boolean; status?: string; check_in_at?: string | null } | undefined,
+  offDateSet: Set<string>,
+) {
+  if (!offDateSet.has(date)) return false;
+  if (!entry) return true;
+  if (entry.overtime) return false;
+  const countsAsWork =
+    (entry.status === "present" && !!entry.check_in_at) || entry.status === "half_day" || entry.status === "paid_leave";
+  return !countsAsWork;
 }
 
 // A day that's off unless someone is marked as coming in: a calendar day

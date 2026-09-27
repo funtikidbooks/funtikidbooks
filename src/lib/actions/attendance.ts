@@ -13,6 +13,7 @@ import {
   weekdayIndex,
 } from "@/lib/constants/attendance";
 import { holidayOn } from "@/lib/constants/calendar";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { AttendanceEntry } from "@/lib/types";
 
 // Director, or any staff whose chức danh is exactly "Project Manager" —
@@ -177,6 +178,17 @@ async function syncPayrollForAttendanceChange(
   workDate: string,
 ) {
   const month = firstOfMonth(workDate);
+
+  // One payroll formula, not two: the same SQL function the 23:00 job runs
+  // (supabase/migrations/payroll_daily_sync.sql) recomputes the month right
+  // away, called with the service role. If that call fails for any reason,
+  // fall through to the equivalent calculation below.
+  try {
+    const { error } = await createAdminClient().rpc("sync_payroll_month", { target_month: month });
+    if (!error) return;
+  } catch {
+    // fall through
+  }
 
   const { data: record } = await supabase
     .from("payroll_records")

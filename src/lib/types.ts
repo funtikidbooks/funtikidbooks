@@ -1321,6 +1321,12 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      // Nightly payroll recompute — supabase/migrations/payroll_daily_sync.sql.
+      // Called with the service role from attendance edits, too.
+      sync_payroll_month: {
+        Args: { target_month?: string };
+        Returns: { created_count: number; updated_count: number }[];
+      };
       increment_project_view: {
         Args: { project_id: string };
         Returns: undefined;
