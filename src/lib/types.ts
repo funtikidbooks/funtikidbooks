@@ -1139,6 +1139,26 @@ export type Database = {
         Update: Partial<UpworkBatch>;
         Relationships: [];
       };
+      client_errors: {
+        Row: {
+          id: string;
+          profile_id: string | null;
+          message: string;
+          stack: string | null;
+          page_url: string | null;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: {
+          profile_id?: string | null;
+          message: string;
+          stack?: string | null;
+          page_url?: string | null;
+          user_agent?: string | null;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       upwork_sop: {
         Row: { id: string; content: unknown; updated_by: string | null; updated_at: string };
         Insert: { id?: string; content: unknown; updated_by?: string | null; updated_at?: string };

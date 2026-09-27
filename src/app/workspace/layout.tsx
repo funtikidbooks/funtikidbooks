@@ -9,6 +9,7 @@ import { ChatDock } from "@/components/workspace/ChatDock";
 import { ChatHeadBubbles } from "@/components/workspace/ChatHeadBubbles";
 import { MessageToasts } from "@/components/workspace/MessageToasts";
 import { ChatSyncBanner } from "@/components/workspace/ChatSyncBanner";
+import { ClientErrorReporter } from "@/components/workspace/ClientErrorReporter";
 import { TabNotificationBadge } from "@/components/workspace/TabNotificationBadge";
 import { ThemeSync } from "@/components/workspace/ThemeSync";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
@@ -161,6 +162,7 @@ export default async function WorkspaceLayout({
       <ChatDock currentUser={{ id: myProfile.id, display_name: myProfile.display_name }} />
       <ChatHeadBubbles profiles={(allProfiles ?? []) as Profile[]} />
       <MessageToasts profiles={(allProfiles ?? []) as Profile[]} />
+      <ClientErrorReporter />
     </ChatManagerProvider>
   );
 }

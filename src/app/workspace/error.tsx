@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { STALE_CHUNK_RE, tryAutoReload } from "@/lib/autoReload";
+import { reportClientError } from "@/components/workspace/ClientErrorReporter";
 
 // Without this file, any uncaught error thrown while rendering anything
 // under /workspace (a bad realtime payload, a stale chunk mid-render, any
@@ -14,6 +15,8 @@ export default function WorkspaceError({ error }: { error: Error & { digest?: st
 
   useEffect(() => {
     console.error(error);
+    // A deploy-time stale chunk is expected and self-heals — only report real bugs.
+    if (!STALE_CHUNK_RE.test(error.message || "")) reportClientError(error.message || "render error", error.stack);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setReloaded(tryAutoReload());
   }, [error]);
