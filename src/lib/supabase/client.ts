@@ -13,7 +13,17 @@ export function createClient() {
       // 11:02). Running the heartbeat in a Web Worker keeps it on schedule
       // in the background. The worker is built from an inline Blob by
       // realtime-js itself, so no extra file or origin is involved.
-      realtime: { worker: true },
+      // 15s instead of the default 25s: a connection that dies silently
+      // while the app is open gets noticed and replaced sooner (the
+      // realtimeWatchdog handles returning from the background).
+      // First reconnect attempt after 0.25s instead of 1s (a dead socket
+      // found on returning to the app should come back at once), then the
+      // usual stepped backoff so a real outage isn't hammered.
+      realtime: {
+        worker: true,
+        heartbeatIntervalMs: 15000,
+        reconnectAfterMs: (tries: number) => [250, 1000, 2000, 5000][tries - 1] ?? 10000,
+      },
     },
   );
 }

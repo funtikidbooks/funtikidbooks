@@ -6,6 +6,7 @@ import { getUnreadCounts, markConversationRead } from "@/lib/actions/messages";
 import { getUnreadMeetingCounts } from "@/lib/actions/meetings";
 import { playChatDing, unlockChatSound } from "@/lib/chatSound";
 import { firstSighting, inboxTopic, listenChatTopic, roomTopic } from "@/lib/chatBroadcast";
+import { startRealtimeWatchdog } from "@/lib/realtimeWatchdog";
 
 function isWatching() {
   return document.visibilityState === "visible" && document.hasFocus();
@@ -99,6 +100,12 @@ export function ChatManagerProvider({
   useEffect(() => {
     openChatIdsRef.current = new Set(openChats.map((p) => p.id));
   }, [openChats]);
+
+  // Reconnect a socket that died while the app was in the background the
+  // moment it comes back, instead of up to ~25s later (see the module).
+  useEffect(() => {
+    startRealtimeWatchdog();
+  }, []);
 
   // Browsers block audio until the page has had at least one real user
   // gesture (click/tap/key) this session — without this, the ding was
