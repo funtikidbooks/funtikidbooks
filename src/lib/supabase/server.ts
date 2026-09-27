@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { AccessRole, Database } from "@/lib/types";
 
 export async function createClient() {
@@ -47,12 +48,41 @@ export async function createClient() {
 // now just re-exports this.
 export const requireUser = cache(async () => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await verifiedUser(supabase);
   if (!user) throw new Error("Bạn cần đăng nhập.");
   return { supabase, user };
 });
+
+// Who's signed in, verified without a network round trip when possible:
+// the project signs session JWTs with an asymmetric key (ES256), so
+// getClaims() checks the signature locally against the cached public key
+// (refreshing an expired session first, same as getUser()). Anything
+// unexpected — no claims, an error, a missing `sub` — falls back to the
+// old auth-server check, so this can only ever be faster, never lock
+// anyone out. Code here only reads id, email and user_metadata, all of
+// which are claims in the token.
+export async function verifiedUser(supabase: SupabaseClient<Database>): Promise<User | null> {
+  try {
+    const { data, error } = await supabase.auth.getClaims();
+    const claims = data?.claims;
+    if (!error && claims && typeof claims.sub === "string" && claims.sub) {
+      return {
+        id: claims.sub,
+        email: typeof claims.email === "string" ? claims.email : undefined,
+        user_metadata: (claims.user_metadata as User["user_metadata"]) ?? {},
+        app_metadata: (claims.app_metadata as User["app_metadata"]) ?? {},
+        aud: typeof claims.aud === "string" ? claims.aud : "authenticated",
+        created_at: "",
+      } as User;
+    }
+  } catch {
+    // fall through to the auth-server check
+  }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+}
 
 // Same dedup as requireUser() above, but for the public marketing site's
 // two independent per-request checks that both need to tolerate an
@@ -64,9 +94,7 @@ export const requireUser = cache(async () => {
 // already fetch.
 export const getViewer = cache(async (): Promise<{ userId: string; accessRole: AccessRole } | null> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await verifiedUser(supabase);
   if (!user) return null;
   const { data: profile } = await supabase
     .from("profiles")

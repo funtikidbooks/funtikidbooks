@@ -25,9 +25,23 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Verified locally against the project's ES256 public key when possible
+  // (getClaims also refreshes an expired session and rewrites the cookie,
+  // which is this proxy's main job); falls back to the auth server on
+  // anything unexpected — see verifiedUser() in lib/supabase/server.ts.
+  let user = false;
+  try {
+    const { data, error } = await supabase.auth.getClaims();
+    user = !error && typeof data?.claims?.sub === "string" && data.claims.sub.length > 0;
+  } catch {
+    // fall through
+  }
+  if (!user) {
+    const {
+      data: { user: serverUser },
+    } = await supabase.auth.getUser();
+    user = !!serverUser;
+  }
 
   const path = request.nextUrl.pathname;
 
