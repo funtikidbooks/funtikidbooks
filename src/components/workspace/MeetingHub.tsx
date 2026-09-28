@@ -32,7 +32,7 @@ import { vnToday } from "@/lib/constants/attendance";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { notifyNewMessage } from "@/lib/chatNotify";
 import { playChatDing } from "@/lib/chatSound";
-import { firstSighting, listenChatTopic, roomTopic, sendChatBroadcast, sendDmBroadcast } from "@/lib/chatBroadcast";
+import { firstSighting, listenChatTopic, roomTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
 import { fetchRoomSync } from "@/lib/roomLoad";
 import { reportChatSyncFailure, reportChatSyncOk } from "@/lib/chatSyncHealth";
 import {
@@ -44,7 +44,8 @@ import {
   withoutProvisional,
   type SyncCursor,
 } from "@/lib/chatSyncCursor";
-import { addToOutbox, insertWithRetry, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
+import { addToOutbox, insertWithRetry, removeFromOutbox } from "@/lib/chatOutbox";
+import { onConnectivityRestored } from "@/lib/connectivity";
 import { Emoji } from "@/lib/emoji";
 import {
   addChannelMember,
@@ -3077,7 +3078,14 @@ export function MeetingHub({
           const { error: uploadError } = await supabase.storage
             .from("task-attachments")
             .upload(storagePath, file, { contentType: file.type });
-          if (uploadError) throw new Error("Không thể tải tệp lên");
+          if (uploadError) {
+            // A dropped connection mid-upload is retried automatically once
+            // it's back (see the flush below), same as a text message.
+            if (!navigator.onLine || /fetch|network|timeout|abort/i.test(uploadError.message ?? "")) {
+              networkFailedRef.current.add(tempId);
+            }
+            throw new Error("Không thể tải tệp lên");
+          }
           const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
           attachment = { url: publicUrlData.publicUrl, filename: file.name, mime: file.type, size: file.size };
         }
@@ -3295,63 +3303,21 @@ export function MeetingHub({
     function onVisible() {
       if (document.visibilityState === "visible") flush();
     }
-    window.addEventListener("online", flush);
+    // The instant the connection is back (connectivity.ts: device network
+    // or Realtime socket), plus on return to the app and a short timer as a
+    // fallback — a send that failed from lag goes out right away.
+    const stopRestored = onConnectivityRestored(flush);
     document.addEventListener("visibilitychange", onVisible);
-    const interval = setInterval(flush, 8000);
+    const interval = setInterval(flush, 3000);
     return () => {
-      window.removeEventListener("online", flush);
+      stopRestored();
       document.removeEventListener("visibilitychange", onVisible);
       clearInterval(interval);
     };
   }, [attemptSend]);
 
-  // Messages left in the outbox by a previous session (app closed or killed
-  // before they were confirmed) are re-sent silently on start; the confirmed
-  // row then shows up like any other new message.
-  useEffect(() => {
-    const supabase = createClient();
-    (async () => {
-      for (const entry of loadOutbox()) {
-        if (entry.kind === "meeting") {
-          const row: Record<string, unknown> & { id: string } = {
-            id: entry.serverId,
-            channel_id: entry.channelId,
-            sender_id: currentUser.id,
-            content: entry.content,
-          };
-          if (entry.replyId) row.reply_to_message_id = entry.replyId;
-          const res = await insertWithRetry<MeetingMessage>(supabase, "meeting_messages", row);
-          if (res.data) {
-            removeFromOutbox(entry.serverId);
-            sendChatBroadcast(roomTopic(entry.channelId), "message", res.data);
-            notifyNewMessage("meeting", res.data.id);
-            if (activeIdRef.current === entry.channelId) {
-              const confirmed = res.data;
-              setMessages((prev) => mergeServerMessage(prev, confirmed));
-            }
-          } else if (res.code) {
-            removeFromOutbox(entry.serverId);
-          }
-        } else if (entry.senderId === currentUser.id) {
-          const res = await insertWithRetry(supabase, "direct_messages", {
-            id: entry.serverId,
-            sender_id: entry.senderId,
-            recipient_id: entry.recipientId,
-            content: entry.content,
-          });
-          if (res.data) {
-            removeFromOutbox(entry.serverId);
-            sendDmBroadcast(currentUser.id, entry.recipientId, "dm", res.data);
-            notifyNewMessage("dm", entry.serverId);
-          } else if (res.code) {
-            removeFromOutbox(entry.serverId);
-          }
-        }
-      }
-    })();
-    // Once per app start — mergeServerMessage etc. are read fresh inside.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Messages left unsent by an earlier session are re-sent by ChatManager
+  // (from any workspace page, and again whenever the connection returns).
 
   /* Wrapped in useMemo — this block used to be plain inline JSX,
                   which meant React rebuilt and diffed every visible message

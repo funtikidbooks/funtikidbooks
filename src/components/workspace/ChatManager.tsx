@@ -5,8 +5,11 @@ import { createClient } from "@/lib/supabase/client";
 import { getUnreadCounts, markConversationRead } from "@/lib/actions/messages";
 import { getUnreadMeetingCounts } from "@/lib/actions/meetings";
 import { playChatDing, unlockChatSound } from "@/lib/chatSound";
-import { firstSighting, inboxTopic, listenChatTopic, roomTopic } from "@/lib/chatBroadcast";
+import { firstSighting, inboxTopic, listenChatTopic, roomTopic, sendChatBroadcast, sendDmBroadcast } from "@/lib/chatBroadcast";
 import { startRealtimeWatchdog } from "@/lib/realtimeWatchdog";
+import { insertWithRetry, isQueuedThisSession, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
+import { onConnectivityRestored } from "@/lib/connectivity";
+import { notifyNewMessage } from "@/lib/chatNotify";
 
 function isWatching() {
   return document.visibilityState === "visible" && document.hasFocus();
@@ -106,6 +109,71 @@ export function ChatManagerProvider({
   useEffect(() => {
     startRealtimeWatchdog();
   }, []);
+
+  // Text messages left unsent by an earlier session (app closed or killed
+  // while offline) — re-sent from any workspace page, not only the chat
+  // page: on start, the instant the connection comes back, and every 15s
+  // while any are waiting. Ones queued by this tab are left to the chat
+  // view that owns their bubble. Same row id every time, so a repeat can
+  // never post twice.
+  useEffect(() => {
+    let running = false;
+    async function resend() {
+      if (running || !navigator.onLine) return;
+      const waiting = loadOutbox().filter((e) => !isQueuedThisSession(e.serverId));
+      if (waiting.length === 0) return;
+      running = true;
+      const supabase = createClient();
+      try {
+        for (const entry of waiting) {
+          if (entry.kind === "meeting") {
+            const row: Record<string, unknown> & { id: string } = {
+              id: entry.serverId,
+              channel_id: entry.channelId,
+              sender_id: currentUserId,
+              content: entry.content,
+            };
+            if (entry.replyId) row.reply_to_message_id = entry.replyId;
+            const res = await insertWithRetry<MeetingMessage>(supabase, "meeting_messages", row);
+            if (res.data) {
+              removeFromOutbox(entry.serverId);
+              sendChatBroadcast(roomTopic(entry.channelId), "message", res.data);
+              notifyNewMessage("meeting", res.data.id);
+            } else if (res.code) {
+              removeFromOutbox(entry.serverId);
+            } else {
+              break; // still no connection — try again on the next trigger
+            }
+          } else if (entry.senderId === currentUserId) {
+            const res = await insertWithRetry<DirectMessage>(supabase, "direct_messages", {
+              id: entry.serverId,
+              sender_id: entry.senderId,
+              recipient_id: entry.recipientId,
+              content: entry.content,
+            });
+            if (res.data) {
+              removeFromOutbox(entry.serverId);
+              sendDmBroadcast(currentUserId, entry.recipientId, "dm", res.data);
+              notifyNewMessage("dm", entry.serverId);
+            } else if (res.code) {
+              removeFromOutbox(entry.serverId);
+            } else {
+              break;
+            }
+          }
+        }
+      } finally {
+        running = false;
+      }
+    }
+    resend();
+    const stop = onConnectivityRestored(resend);
+    const interval = setInterval(resend, 15000);
+    return () => {
+      stop();
+      clearInterval(interval);
+    };
+  }, [currentUserId]);
 
   // Browsers block audio until the page has had at least one real user
   // gesture (click/tap/key) this session — without this, the ding was

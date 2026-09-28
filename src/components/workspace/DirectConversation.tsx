@@ -23,6 +23,7 @@ import {
 } from "@/lib/chatSyncCursor";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { addToOutbox, insertWithRetry, removeFromOutbox } from "@/lib/chatOutbox";
+import { onConnectivityRestored } from "@/lib/connectivity";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 import { usePageVisible } from "@/lib/usePageVisible";
 import { Emoji } from "@/lib/emoji";
@@ -899,7 +900,14 @@ export function DirectConversation({
           const { error: uploadError } = await supabase.storage
             .from("task-attachments")
             .upload(storagePath, file, { contentType: file.type });
-          if (uploadError) throw new Error("Không thể tải tệp lên");
+          if (uploadError) {
+            // A dropped connection mid-upload is retried automatically once
+            // it's back (see the flush below), same as a text message.
+            if (!navigator.onLine || /fetch|network|timeout|abort/i.test(uploadError.message ?? "")) {
+              networkFailedRef.current.add(tempId);
+            }
+            throw new Error("Không thể tải tệp lên");
+          }
           const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
           attachment = { url: publicUrlData.publicUrl, filename: file.name, mime: file.type, size: file.size };
         }
@@ -1086,11 +1094,14 @@ export function DirectConversation({
     function onVisible() {
       if (document.visibilityState === "visible") flush();
     }
-    window.addEventListener("online", flush);
+    // The instant the connection is back (connectivity.ts: device network
+    // or Realtime socket), plus on return to the app and a short timer as a
+    // fallback — a send that failed from lag goes out right away.
+    const stopRestored = onConnectivityRestored(flush);
     document.addEventListener("visibilitychange", onVisible);
-    const interval = setInterval(flush, 8000);
+    const interval = setInterval(flush, 3000);
     return () => {
-      window.removeEventListener("online", flush);
+      stopRestored();
       document.removeEventListener("visibilitychange", onVisible);
       clearInterval(interval);
     };
