@@ -16,7 +16,8 @@ export function ProfileMenu({ profile }: { profile: Profile }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="ws-profile-btn flex items-center gap-2 rounded-full pl-1 pr-3 py-1 flex-none elev-sm"
+        // Phone: just the avatar — the word "Hồ sơ" returns from sm up.
+        className="ws-profile-btn flex items-center gap-2 rounded-full p-1 sm:pr-3 flex-none elev-sm"
         aria-label="Hồ sơ của tôi"
       >
         <span
@@ -30,7 +31,7 @@ export function ProfileMenu({ profile }: { profile: Profile }) {
             profile.display_name.charAt(0).toUpperCase()
           )}
         </span>
-        <span className="text-[13px] font-bold">Hồ sơ</span>
+        <span className="text-[13px] font-bold hidden sm:inline">Hồ sơ</span>
       </button>
       {open && <ProfileDialog profile={profile} onClose={() => setOpen(false)} />}
     </>

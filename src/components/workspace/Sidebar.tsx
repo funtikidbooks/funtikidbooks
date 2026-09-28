@@ -15,27 +15,47 @@ import type { Profile } from "@/lib/types";
 
 const CLIENT_PROJECTS_NAV_ITEM = { href: "/workspace/khach-hang", label: "Khách hàng", icon: "🧑‍💼", enabled: true };
 
-const INTERNAL_NAV_COLLAPSED_KEY = "funti-ws-internal-nav-collapsed";
+const OPEN_GROUPS_KEY = "funti-ws-nav-open-groups";
 
+// The everyday pages stay on top; the rest is folded into a few groups
+// (sếp Phúc: "làm gọn") — same pattern as the Quản trị menu.
 const NAV = [
   { href: "/workspace", label: "Bảng công việc", icon: "📊", enabled: true },
   { href: "/workspace/hop", label: "Trò chuyện & họp", icon: "💬", enabled: true },
   { href: "/workspace/bao-cao-gio", label: "Báo cáo giờ", icon: "⏱️", enabled: true },
 ];
 
-// Split into its own "NỘI BỘ" group below a divider, per sếp Phúc —
-// everything after Trò chuyện & họp is more "internal tooling" than the
-// core workspace/chat pair above it.
-const INTERNAL_NAV = [
-  { href: "/workspace/kho-font", label: "Kho font & brush", icon: "🔤", enabled: true },
-  { href: "/workspace/tinh-kho-sach", label: "Tính khổ sách", icon: "📐", enabled: true },
-  { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️", enabled: true },
-  { href: "/workspace/thanh-vien", label: "Thành viên", icon: "👥", enabled: true },
-  { href: "/workspace/hop-dong", label: "Hợp đồng", icon: "📄", enabled: true },
-  { href: "/workspace/lich", label: "Lịch", icon: "📅", enabled: true },
-  { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐", enabled: true },
-  { href: "/workspace/du-an", label: "Dự án", icon: "📁", enabled: true },
-  { href: "/workspace/luot-truy-cap", label: "Lượt truy cập web", icon: "🌐", enabled: true },
+const NAV_GROUPS = [
+  {
+    id: "doi-ngu",
+    label: "Đội ngũ",
+    icon: "👥",
+    items: [
+      { href: "/workspace/thanh-vien", label: "Thành viên", icon: "👥", enabled: true },
+      { href: "/workspace/lich", label: "Lịch", icon: "📅", enabled: true },
+      { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐", enabled: true },
+      { href: "/workspace/hop-dong", label: "Hợp đồng", icon: "📄", enabled: true },
+    ],
+  },
+  {
+    id: "cong-cu",
+    label: "Công cụ vẽ",
+    icon: "🎨",
+    items: [
+      { href: "/workspace/kho-font", label: "Kho font & brush", icon: "🔤", enabled: true },
+      { href: "/workspace/tinh-kho-sach", label: "Tính khổ sách", icon: "📐", enabled: true },
+      { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️", enabled: true },
+    ],
+  },
+  {
+    id: "du-an-web",
+    label: "Dự án & web",
+    icon: "📁",
+    items: [
+      { href: "/workspace/du-an", label: "Dự án", icon: "📁", enabled: true },
+      { href: "/workspace/luot-truy-cap", label: "Lượt truy cập web", icon: "🌐", enabled: true },
+    ],
+  },
 ];
 
 export function Sidebar({
@@ -55,37 +75,36 @@ export function Sidebar({
   const { totalUnreadCount } = useChatManager();
   const myAvatarUrl = profiles.find((p) => p.id === currentUserId)?.avatar_url ?? null;
   const showsIphoneAppNav = useShowsIphoneAppNav();
-  const visibleNav = showsIphoneAppNav ? NAV.filter((item) => STANDALONE_ALLOWED_HREFS.has(item.href)) : NAV;
-  const visibleInternalNav = showsIphoneAppNav
-    ? INTERNAL_NAV.filter((item) => STANDALONE_ALLOWED_HREFS.has(item.href))
-    : INTERNAL_NAV;
+  const allowed = (item: { href: string }) => !showsIphoneAppNav || STANDALONE_ALLOWED_HREFS.has(item.href);
+  const visibleNav = NAV.filter(allowed);
+  const visibleGroups = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter(allowed) })).filter((g) => g.items.length > 0);
 
   const isDirector = user.accessRole === "director";
   const isProjectManager = user.jobTitle === "Project Manager";
   const canOpenClientProjects = isDirector || user.accessRole === "admin" || isProjectManager;
+  const canOpenAdmin = isDirector || isProjectManager;
 
-  // Collapsed by default (matches the server-rendered-vs-first-client-render
-  // requirement — both start from the same value), then a post-mount effect
-  // reads the real per-device preference from localStorage, same pattern as
-  // the liked-projects flag elsewhere in this app.
-  const [internalCollapsed, setInternalCollapsed] = useState(true);
+  // Groups start folded (same on server and first client render), except
+  // the one holding the current page; a post-mount effect restores what
+  // was open last time on this device.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(INTERNAL_NAV_COLLAPSED_KEY);
-      if (stored !== null) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setInternalCollapsed(stored === "1");
-      }
+      const stored = JSON.parse(localStorage.getItem(OPEN_GROUPS_KEY) ?? "[]");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (Array.isArray(stored)) setOpenGroups(new Set(stored));
     } catch {
-      // localStorage unavailable (private mode, etc.) — stays collapsed.
+      // localStorage unavailable (private mode, etc.) — stays folded.
     }
   }, []);
 
-  function toggleInternalNav() {
-    setInternalCollapsed((prev) => {
-      const next = !prev;
+  function toggleGroup(id: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       try {
-        localStorage.setItem(INTERNAL_NAV_COLLAPSED_KEY, next ? "1" : "0");
+        localStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify([...next]));
       } catch {
         // Ignore — nothing to persist to.
       }
@@ -122,7 +141,7 @@ export function Sidebar({
     }
   }, [pathname]);
 
-  function NavLink(item: (typeof NAV)[number]) {
+  function NavLink(item: (typeof NAV)[number], indent = false) {
     const active = item.enabled && pathname === item.href;
     return (
       <Link
@@ -130,7 +149,7 @@ export function Sidebar({
         href={item.href}
         aria-disabled={!item.enabled}
         title={item.enabled ? undefined : "Sắp ra mắt"}
-        className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
+        className={`ws-nav-link flex items-center gap-2 py-2 rounded-[8px] text-[13px] font-semibold ${indent ? "pl-7 pr-2" : "px-2"}`}
         style={{
           background: active ? "var(--color-accent-100)" : undefined,
           color: active
@@ -199,43 +218,52 @@ export function Sidebar({
         {visibleNav.map((item) => NavLink(item))}
         {canOpenClientProjects && NavLink(CLIENT_PROJECTS_NAV_ITEM)}
 
-        {visibleInternalNav.length > 0 && (
-          <>
-            <div className="mt-2 mb-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }} />
-            <button
-              type="button"
-              onClick={toggleInternalNav}
-              className="flex items-center justify-between px-2 mb-1"
-              style={{ color: "var(--color-neutral-500)" }}
-              aria-expanded={!internalCollapsed}
-            >
-              <span className="text-[11px] font-bold tracking-[0.08em]">NỘI BỘ</span>
-              <span
-                aria-hidden
-                style={{
-                  display: "inline-block",
-                  fontSize: 16,
-                  lineHeight: 1,
-                  color: "var(--color-accent-500)",
-                  transition: "transform 0.2s ease",
-                  transform: internalCollapsed ? "rotate(0deg)" : "rotate(180deg)",
-                }}
+        {visibleGroups.length > 0 && <div className="mt-2 mb-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }} />}
+        {visibleGroups.map((g) => {
+          const holdsActive = g.items.some((i) => pathname === i.href);
+          const open = holdsActive || openGroups.has(g.id);
+          // A folded group still shows its items' pending count (Hợp đồng).
+          const badge = g.items.some((i) => i.href === "/workspace/hop-dong") ? pendingDocumentCount : 0;
+          return (
+            <div key={g.id} className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => toggleGroup(g.id)}
+                aria-expanded={open}
+                className="ws-nav-link flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-bold text-left"
+                style={{ color: holdsActive ? "var(--color-accent-700)" : "var(--color-text)" }}
               >
-                ▾
-              </span>
-            </button>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateRows: internalCollapsed ? "0fr" : "1fr",
-                transition: "grid-template-rows 0.25s ease",
-              }}
-            >
-              <div className="flex flex-col gap-1" style={{ overflow: "hidden", minHeight: 0 }}>
-                {visibleInternalNav.map((item) => NavLink(item))}
-              </div>
+                <span aria-hidden>{g.icon}</span>
+                <span className="flex-1 truncate">{g.label}</span>
+                {!open && badge > 0 && (
+                  <span
+                    className="flex items-center justify-center rounded-full font-bold flex-none"
+                    style={{ minWidth: 17, height: 17, padding: "0 4px", fontSize: 10, background: "var(--status-red)", color: "#fff" }}
+                  >
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                )}
+                <span
+                  aria-hidden
+                  className="text-[10px] transition-transform"
+                  style={{ color: "var(--color-neutral-500)", transform: open ? "rotate(90deg)" : "none" }}
+                >
+                  ▶
+                </span>
+              </button>
+              {open && g.items.map((item) => NavLink(item, true))}
             </div>
-          </>
+          );
+        })}
+
+        {canOpenAdmin && (
+          <Link
+            href="/quan-tri"
+            className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-[10px] text-[13px] font-bold mt-3"
+            style={{ background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+          >
+            🛠 Vào Quản trị →
+          </Link>
         )}
       </div>
 

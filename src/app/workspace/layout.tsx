@@ -1,5 +1,4 @@
 import type { Viewport } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { requireUser } from "@/lib/supabase/server";
@@ -138,17 +137,6 @@ export default async function WorkspaceLayout({
                 profiles={(allProfiles ?? []) as Profile[]}
               />
               <div className="flex items-center gap-2">
-                {canOpenAdmin && (
-                  <Link
-                    href="/quan-tri"
-                    className="ws-quan-tri-link btn-icon flex-none hidden md:inline-flex"
-                    style={{ width: 30, height: 30, padding: 0, color: "var(--color-accent-2-700)", background: "var(--color-accent-2-100)" }}
-                    title="Quản trị"
-                    aria-label="Quản trị"
-                  >
-                    🛠
-                  </Link>
-                )}
                 <MessengerButton currentUserId={user.id} profiles={(allProfiles ?? []) as Profile[]} />
                 <ProfileMenu profile={myProfile} />
               </div>

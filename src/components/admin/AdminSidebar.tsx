@@ -75,7 +75,6 @@ const GROUPS: NavGroup[] = [
     label: "Khác",
     icon: "🧰",
     items: [
-      { href: "/workspace", label: "Bảng công việc", icon: "📋", who: "hr" },
       { href: "/quan-tri/do-toc-do", label: "Đo tốc độ chat", icon: "⚡", who: "hr" },
     ],
   },
@@ -199,8 +198,23 @@ export function AdminSidebar({
 
   // Shared between the desktop <aside> and the mobile drawer, so the two
   // never drift apart — same role gating, same items, same order.
+  // Back to the staff workspace — director and PM work in both; a content
+  // admin has no workspace (its layout sends them straight back here).
+  const canOpenWorkspace = isDirector || isProjectManager;
+  const workspaceButton = canOpenWorkspace && (
+    <Link
+      href="/workspace"
+      onClick={() => setMobileOpen(false)}
+      className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-[10px] text-[13px] font-bold mb-3"
+      style={{ background: "var(--color-accent-500)", color: "#fff" }}
+    >
+      ← Về trang nhân viên
+    </Link>
+  );
+
   const navSections = (
     <div className="flex flex-col gap-0.5">
+      {workspaceButton}
       {canSee(OVERVIEW.who) && <div className="mb-2">{renderLink(OVERVIEW)}</div>}
       {visibleGroups.map((g) => {
         const holdsActive = g.items.some((i) => isActive(i.href));
@@ -280,15 +294,26 @@ export function AdminSidebar({
           />
           <span className="font-heading font-bold text-sm">Funti Kidbooks</span>
         </Link>
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          className="btn-icon"
-          style={{ width: 34, height: 34 }}
-          aria-label="Mở menu quản trị"
-        >
-          ☰
-        </button>
+        <div className="flex items-center gap-2">
+          {canOpenWorkspace && (
+            <Link
+              href="/workspace"
+              className="flex items-center rounded-full px-3 text-[12px] font-bold"
+              style={{ height: 34, background: "var(--color-accent-100)", color: "var(--color-accent-700)" }}
+            >
+              ← Nhân viên
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="btn-icon"
+            style={{ width: 34, height: 34 }}
+            aria-label="Mở menu quản trị"
+          >
+            ☰
+          </button>
+        </div>
       </div>
 
       {mobileOpen && (

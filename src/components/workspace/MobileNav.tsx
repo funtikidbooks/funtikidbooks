@@ -184,52 +184,59 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
           style={{ background: "rgba(0,0,0,0.4)" }}
           onClick={() => setShowMore(false)}
         >
+          {/* A grid of tiles like a phone's app drawer — every section is
+              one tap, and the sheet stays short instead of a long list. */}
           <div
-            className="w-full flex flex-col gap-1 p-3"
-            style={{ background: "var(--color-panel)", borderRadius: "16px 16px 0 0", paddingBottom: "calc(20px + env(safe-area-inset-bottom))" }}
+            className="w-full flex flex-col gap-3 p-3"
+            style={{ background: "var(--color-panel)", borderRadius: "16px 16px 0 0", paddingBottom: "calc(16px + env(safe-area-inset-bottom))" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-2 pb-2">
+            <div className="flex items-center justify-between px-1">
               <span className="text-sm font-bold">Thêm</span>
-              <button type="button" onClick={() => setShowMore(false)} className="btn-icon" aria-label="Đóng">
+              <button type="button" onClick={() => setShowMore(false)} className="btn-icon" style={{ width: 32, height: 32, padding: 0 }} aria-label="Đóng">
                 ✕
               </button>
             </div>
-            {moreNav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setShowMore(false)}
-                className="ws-nav-link flex items-center gap-2.5 px-2 py-2.5 rounded-[8px] text-[14px] font-semibold"
-              >
-                <span aria-hidden>{item.icon}</span> {item.label}
-              </Link>
-            ))}
-            {canOpenAdmin && (
-              <Link
-                href="/quan-tri"
-                onClick={() => setShowMore(false)}
-                className="ws-nav-link flex items-center gap-2.5 px-2 py-2.5 rounded-[8px] text-[14px] font-semibold"
-              >
-                <span aria-hidden>🛠</span> Quản trị
-              </Link>
-            )}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="ws-nav-link flex items-center gap-2.5 px-2 py-2.5 rounded-[8px] text-[14px] font-semibold text-left"
-            >
-              <span aria-hidden>{theme === "dark" ? "☀️" : "🌙"}</span> {theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
-            </button>
-            <form action={signOut} onSubmit={resetThemeOnSignOut}>
+            <div className="grid grid-cols-4 gap-1.5">
+              {[...moreNav, ...(canOpenAdmin ? [{ href: "/quan-tri", label: "Quản trị", icon: "🛠" }] : [])].map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setShowMore(false)}
+                    className="flex flex-col items-center justify-start gap-1 rounded-[12px] px-1 py-2.5 text-center"
+                    style={{
+                      background: active ? "var(--color-accent-100)" : "var(--color-neutral-100)",
+                      color: active ? "var(--color-accent-700)" : "var(--color-text)",
+                    }}
+                  >
+                    <span aria-hidden style={{ fontSize: 22, lineHeight: 1 }}>
+                      {item.icon}
+                    </span>
+                    <span className="text-[11px] font-semibold leading-tight">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2 pt-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
               <button
-                type="submit"
-                className="ws-nav-link flex items-center gap-2.5 px-2 py-2.5 rounded-[8px] text-[14px] font-semibold w-full text-left"
-                style={{ color: "var(--color-neutral-600)" }}
+                type="button"
+                onClick={toggleTheme}
+                className="ws-nav-link flex-1 flex items-center justify-center gap-2 py-2.5 rounded-[10px] text-[13px] font-semibold"
               >
-                <span aria-hidden>↩</span> Đăng xuất
+                <span aria-hidden>{theme === "dark" ? "☀️" : "🌙"}</span> {theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
               </button>
-            </form>
+              <form action={signOut} onSubmit={resetThemeOnSignOut} className="flex-1">
+                <button
+                  type="submit"
+                  className="ws-nav-link w-full flex items-center justify-center gap-2 py-2.5 rounded-[10px] text-[13px] font-semibold"
+                  style={{ color: "var(--color-neutral-600)" }}
+                >
+                  <span aria-hidden>↩</span> Đăng xuất
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}
