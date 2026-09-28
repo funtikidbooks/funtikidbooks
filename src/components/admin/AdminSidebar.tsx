@@ -9,41 +9,79 @@ import { createClient } from "@/lib/supabase/client";
 import { resetThemeOnSignOut } from "@/lib/useTheme";
 import type { AccessRole } from "@/lib/types";
 
-// Points into the workspace now — Khách hàng consolidates this with the
-// Công việc client-project inbox, so there's one place to check instead of
-// two. See src/app/quan-tri/chat/page.tsx for the redirect covering any
-// old bookmark to the previous location.
-const CHAT_NAV_ITEM = { href: "/workspace/khach-hang", label: "Khách hàng", icon: "💬" };
+// Who sees an item:
+//   director — sếp only (Tổng quan, the whole-business P&L)
+//   content  — director + admin (site content)
+//   hr       — director + chức danh "Project Manager" (see can_manage_hr()
+//              in supabase/schema.sql; Nhân sự is view-only for a PM)
+//   inbox    — anyone who answers customers: director, admin, PM
+type Audience = "director" | "content" | "hr" | "inbox";
+type NavItem = { href: string; label: string; icon: string; who: Audience };
+type NavGroup = { id: string; label: string; icon: string; items: NavItem[] };
 
-const NAV = [
-  { href: "/quan-tri/du-an", label: "Dự án", icon: "📁" },
-  { href: "/quan-tri/danh-gia", label: "Đánh giá khách hàng", icon: "⭐" },
-  { href: "/quan-tri/tin-nhan", label: "Tin nhắn khách hàng", icon: "✉️" },
-  CHAT_NAV_ITEM,
+// Tổng quan sits on its own at the top; everything else is folded into a
+// handful of groups so the menu stays short (sếp Phúc: "nhiều mục quá").
+const OVERVIEW: NavItem = { href: "/quan-tri/tong-quan", label: "Tổng quan", icon: "📊", who: "director" };
+
+const GROUPS: NavGroup[] = [
+  {
+    id: "nhan-su",
+    label: "Nhân sự",
+    icon: "🧑‍🤝‍🧑",
+    items: [
+      { href: "/quan-tri/nhan-su", label: "Nhân sự & phân quyền", icon: "🧑‍🤝‍🧑", who: "hr" },
+      { href: "/quan-tri/cham-cong", label: "Chấm công", icon: "🕐", who: "hr" },
+      { href: "/quan-tri/bang-luong", label: "Bảng lương", icon: "💰", who: "hr" },
+      { href: "/quan-tri/hop-dong", label: "Hợp đồng", icon: "📄", who: "hr" },
+      { href: "/quan-tri/tai-lieu", label: "Tài liệu", icon: "🗂️", who: "hr" },
+    ],
+  },
+  {
+    id: "tai-chinh",
+    label: "Tài chính",
+    icon: "📈",
+    items: [
+      { href: "/quan-tri/tai-chinh", label: "Tài chính", icon: "📈", who: "director" },
+      { href: "/quan-tri/bao-cao-tai-chinh", label: "Báo cáo tài chính", icon: "📊", who: "director" },
+      { href: "/quan-tri/hoa-don", label: "Tạo hoá đơn điện tử", icon: "🧾", who: "hr" },
+    ],
+  },
+  {
+    id: "khach-hang",
+    label: "Khách hàng",
+    icon: "🤝",
+    items: [
+      // The workspace inbox — see src/app/quan-tri/chat/page.tsx for the
+      // redirect covering old bookmarks to the previous location.
+      { href: "/workspace/khach-hang", label: "Tin nhắn khách hàng", icon: "💬", who: "inbox" },
+      { href: "/quan-tri/tin-nhan", label: "Form liên hệ", icon: "✉️", who: "content" },
+      { href: "/quan-tri/tai-khoan-khach-hang", label: "Tài khoản khách hàng", icon: "🤝", who: "hr" },
+      { href: "/quan-tri/danh-gia", label: "Đánh giá khách hàng", icon: "⭐", who: "content" },
+      { href: "/quan-tri/upwork", label: "Tìm khách (Upwork)", icon: "🎯", who: "hr" },
+    ],
+  },
+  {
+    id: "noi-dung",
+    label: "Nội dung web",
+    icon: "🌐",
+    items: [
+      { href: "/quan-tri/du-an", label: "Dự án", icon: "📁", who: "content" },
+      { href: "/tin-tuc", label: "Tin tức (đăng trên trang)", icon: "📰", who: "content" },
+      { href: "/tuyen-dung", label: "Tuyển dụng (đăng trên trang)", icon: "🌱", who: "content" },
+    ],
+  },
+  {
+    id: "khac",
+    label: "Khác",
+    icon: "🧰",
+    items: [
+      { href: "/workspace", label: "Bảng công việc", icon: "📋", who: "hr" },
+      { href: "/quan-tri/do-toc-do", label: "Đo tốc độ chat", icon: "⚡", who: "hr" },
+    ],
+  },
 ];
 
-// Also open to staff whose chức danh is exactly "Project Manager" — see
-// can_manage_hr() / requireDirectorOrPM() in supabase/schema.sql and
-// lib/actions/admin.ts. Nhân sự is view-only for them (StaffRoles.tsx
-// hides every edit control unless the viewer is actually the director).
-const HR_NAV = [
-  { href: "/quan-tri/nhan-su", label: "Nhân sự & phân quyền", icon: "🧑‍🤝‍🧑" },
-  { href: "/quan-tri/tai-khoan-khach-hang", label: "Tài khoản khách hàng", icon: "🤝" },
-  { href: "/quan-tri/cham-cong", label: "Chấm công", icon: "🕐" },
-  { href: "/quan-tri/bang-luong", label: "Bảng lương", icon: "💰" },
-  { href: "/quan-tri/hop-dong", label: "Hợp đồng", icon: "📄" },
-  { href: "/quan-tri/hoa-don", label: "Tạo hoá đơn điện tử", icon: "🧾" },
-  { href: "/quan-tri/tai-lieu", label: "Tài liệu", icon: "🗂️" },
-  { href: "/quan-tri/upwork", label: "Tìm khách (Upwork)", icon: "🎯" },
-  { href: "/quan-tri/do-toc-do", label: "Đo tốc độ chat", icon: "⚡" },
-];
-
-// Whole-business P&L — more sensitive than payroll (that's one employee at
-// a time), so unlike HR_NAV this is director-only, not shared with PM.
-const DIRECTOR_ONLY_NAV = [
-  { href: "/quan-tri/tai-chinh", label: "Tài chính", icon: "📈" },
-  { href: "/quan-tri/bao-cao-tai-chinh", label: "Báo cáo tài chính", icon: "📊" },
-];
+const OPEN_GROUPS_KEY = "funti-admin-nav-open";
 
 export function AdminSidebar({
   user,
@@ -89,24 +127,65 @@ export function AdminSidebar({
 
   const hasPendingPayrollFeedback = pendingFeedbackIds.size > 0;
 
+  const isAdmin = user.accessRole === "admin";
+  function canSee(who: Audience) {
+    if (who === "director") return isDirector;
+    if (who === "content") return isDirector || isAdmin;
+    if (who === "hr") return isDirector || isProjectManager;
+    return isDirector || isAdmin || isProjectManager;
+  }
+  const isActive = (href: string) => pathname.startsWith(href);
+  const visibleGroups = GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => canSee(i.who)) })).filter(
+    (g) => g.items.length > 0,
+  );
+
+  // Groups start folded except the one holding the current page; whatever
+  // sếp opens or closes is remembered on this device.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    let saved: string[] = [];
+    try {
+      saved = JSON.parse(localStorage.getItem(OPEN_GROUPS_KEY) ?? "[]");
+    } catch {
+      saved = [];
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring a per-device preference after hydration
+    setOpenGroups(new Set(saved));
+  }, []);
+  function toggleGroup(id: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        localStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify([...next]));
+      } catch {
+        // private mode etc. — the menu still works, it just won't remember
+      }
+      return next;
+    });
+  }
+
   // Closing here (not via a pathname-watching effect) mirrors how
   // MobileNav's own "Thêm" sheet closes itself — every navigational
   // element in the drawer just closes it directly on click. A no-op on
   // the desktop <aside> instance since mobileOpen is already false there.
-  function NavLink({ item, showDot }: { item: { href: string; label: string; icon: string }; showDot?: boolean }) {
-    const active = pathname.startsWith(item.href);
+  // A plain render helper, not a component, so React never remounts links.
+  function renderLink(item: NavItem, showDot = false, indent = false) {
+    const active = isActive(item.href);
     return (
       <Link
+        key={item.href}
         href={item.href}
         onClick={() => setMobileOpen(false)}
-        className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold transition-colors"
+        className={`flex items-center gap-2 py-2 rounded-[8px] text-[13px] font-semibold transition-colors ${indent ? "pl-7 pr-2" : "px-2"}`}
         style={{
           background: active ? "var(--color-accent-100)" : "transparent",
           color: active ? "var(--color-accent-700)" : "var(--color-text)",
         }}
       >
         <span aria-hidden>{item.icon}</span>
-        {item.label}
+        <span className="flex-1 min-w-0 truncate">{item.label}</span>
         {showDot && (
           <span
             title="Có thắc mắc lương chưa xử lý"
@@ -121,79 +200,36 @@ export function AdminSidebar({
   // Shared between the desktop <aside> and the mobile drawer, so the two
   // never drift apart — same role gating, same items, same order.
   const navSections = (
-    <div className="flex flex-col gap-1">
-      {(isDirector || user.accessRole === "admin") && (
-        <>
-          <div className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1" style={{ color: "var(--color-neutral-500)" }}>
-            QUẢN TRỊ NỘI DUNG
-          </div>
-          {NAV.map((item) => (
-            <NavLink key={item.href} item={item} />
-          ))}
-          <Link
-            href="/tin-tuc"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
-            style={{ color: "var(--color-text)" }}
-          >
-            <span aria-hidden>📰</span>
-            Tin tức (đăng bài trực tiếp trên trang)
-          </Link>
-          <Link
-            href="/tuyen-dung"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
-            style={{ color: "var(--color-text)" }}
-          >
-            <span aria-hidden>🌱</span>
-            Tuyển dụng (đăng tin trực tiếp trên trang)
-          </Link>
-        </>
-      )}
-
-      {(isDirector || isProjectManager) && (
-        <>
-          <div className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1 mt-3" style={{ color: "var(--color-neutral-500)" }}>
-            {isDirector ? "GIÁM ĐỐC" : "QUẢN LÝ"}
-          </div>
-          <Link
-            href="/workspace"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
-            style={{ color: "var(--color-text)" }}
-          >
-            📊 Bảng công việc
-          </Link>
-          {HR_NAV.map((item) => (
-            <NavLink
-              key={item.href}
-              item={item}
-              showDot={item.href === "/quan-tri/bang-luong" && hasPendingPayrollFeedback}
-            />
-          ))}
-          {/* Director already sees this under QUẢN TRỊ NỘI DUNG (NAV,
-              above) — only add it here for a PM, who never renders that
-              block. See requireStaff() in lib/actions/support-chat.ts.
-              Hand-written like Bảng công việc/Tin tức above instead of
-              through NavLink, which only tolerates being called from a
-              .map(). */}
-          {isProjectManager && !isDirector && (
-            <Link
-              href={CHAT_NAV_ITEM.href}
-              onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-semibold"
-              style={{
-                background: pathname.startsWith(CHAT_NAV_ITEM.href) ? "var(--color-accent-100)" : "transparent",
-                color: pathname.startsWith(CHAT_NAV_ITEM.href) ? "var(--color-accent-700)" : "var(--color-text)",
-              }}
+    <div className="flex flex-col gap-0.5">
+      {canSee(OVERVIEW.who) && <div className="mb-2">{renderLink(OVERVIEW)}</div>}
+      {visibleGroups.map((g) => {
+        const holdsActive = g.items.some((i) => isActive(i.href));
+        const open = holdsActive || openGroups.has(g.id);
+        const dot = g.items.some((i) => i.href === "/quan-tri/bang-luong") && hasPendingPayrollFeedback;
+        return (
+          <div key={g.id} className="flex flex-col gap-0.5">
+            <button
+              type="button"
+              onClick={() => toggleGroup(g.id)}
+              aria-expanded={open}
+              className="flex items-center gap-2 px-2 py-2 rounded-[8px] text-[13px] font-bold text-left"
+              style={{ color: holdsActive ? "var(--color-accent-700)" : "var(--color-text)" }}
             >
-              <span aria-hidden>{CHAT_NAV_ITEM.icon}</span>
-              {CHAT_NAV_ITEM.label}
-            </Link>
-          )}
-          {isDirector && DIRECTOR_ONLY_NAV.map((item) => <NavLink key={item.href} item={item} />)}
-        </>
-      )}
+              <span aria-hidden>{g.icon}</span>
+              <span className="flex-1">{g.label}</span>
+              {!open && dot && <span className="rounded-full flex-none" style={{ width: 8, height: 8, background: "var(--status-red)" }} />}
+              <span
+                aria-hidden
+                className="text-[10px] transition-transform"
+                style={{ color: "var(--color-neutral-500)", transform: open ? "rotate(90deg)" : "none" }}
+              >
+                ▶
+              </span>
+            </button>
+            {open && g.items.map((item) => renderLink(item, item.href === "/quan-tri/bang-luong" && hasPendingPayrollFeedback, true))}
+          </div>
+        );
+      })}
     </div>
   );
 

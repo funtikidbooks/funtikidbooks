@@ -12,5 +12,7 @@ export default async function AdminHomePage() {
   if (profile?.access_role === "staff" && profile.role === "Project Manager") {
     redirect("/quan-tri/nhan-su");
   }
+  // The director lands on Tổng quan — the one page with everything at a glance.
+  if (profile?.access_role === "director") redirect("/quan-tri/tong-quan");
   redirect("/quan-tri/du-an");
 }

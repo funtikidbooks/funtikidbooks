@@ -151,3 +151,27 @@ test("thử việc: 2 months from the join date, then due for 30 days, confirmed
   assert.equal(probationStatus({ ...staff, access_role: "director" }, null, "2026-09-28").kind, "official");
   assert.equal(probationStatus({ ...staff, joined_at: null }, null, "2026-09-28").endsOn, "2026-10-01");
 });
+
+test("tổng quan: monthly thu/chi/lãi match the Tài chính page, luỹ kế starts at T8/2026", async () => {
+  const { monthlySeries, compactVnd, shortMonthLabel } = await import("../src/lib/dashboardMath.ts");
+  const entries = [
+    { entry_month: "2026-07-01", type: "revenue", amount: 50_000_000 },
+    { entry_month: "2026-08-01", type: "revenue", amount: 80_000_000 },
+    { entry_month: "2026-08-01", type: "fixed_cost", amount: 10_000_000 },
+    { entry_month: "2026-08-01", type: "variable_cost", amount: 5_000_000 },
+    { entry_month: "2026-09-01", type: "revenue", amount: 40_000_000 },
+    { entry_month: "2026-09-01", type: "fixed_cost", amount: 10_000_000 },
+  ];
+  const salary = { "2026-08-01": 30_000_000, "2026-09-01": 35_000_000 };
+  const s = monthlySeries(["2026-07-01", "2026-08-01", "2026-09-01"], entries, salary, "2026-08-01");
+  assert.deepEqual(s.map((p) => p.net), [50_000_000, 35_000_000, -5_000_000]);
+  // July is before the fresh start — no luỹ kế; Aug starts it, Sep adds on.
+  assert.deepEqual(s.map((p) => p.cumulative), [null, 35_000_000, 30_000_000]);
+  const aug = computeFinanceSummary(entries.filter((e) => e.entry_month === "2026-08-01"), 30_000_000);
+  assert.equal(s[1].net, aug.netProfit);
+  assert.equal(s[1].cost, aug.totalCost);
+  assert.equal(compactVnd(12_500_000), "12,5tr");
+  assert.equal(compactVnd(-5_000_000), "−5tr");
+  assert.equal(compactVnd(850_000), "850k");
+  assert.equal(shortMonthLabel("2027-01-01"), "T1/27");
+});
