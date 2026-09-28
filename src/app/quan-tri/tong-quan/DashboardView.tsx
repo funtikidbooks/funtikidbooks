@@ -569,6 +569,25 @@ export function DashboardView({ data, cumulativeStartMonth }: { data: DashboardD
                 { label: "Chốt được", value: upwork.hired },
               ]}
             />
+            {upwork.templates.length > 0 && (
+              <div className="flex flex-col gap-1.5 pt-1" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+                <span className="text-xs font-bold pt-2" style={{ color: "var(--color-neutral-500)" }}>
+                  MẪU NÀO ĐƯỢC KHÁCH TRẢ LỜI NHIỀU NHẤT
+                </span>
+                {upwork.templates.map((t) => (
+                  <div key={t.name} className="flex items-center justify-between gap-3 text-[13px]">
+                    <span className="truncate min-w-0">{t.name}</span>
+                    <span className="tabular-nums whitespace-nowrap">
+                      <b>{Math.round((t.replied / t.sent) * 100)}%</b>
+                      <span style={{ color: "var(--color-neutral-500)" }}>
+                        {" "}
+                        · {t.replied}/{t.sent} proposal
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             <Muted>
               Số % là tỉ lệ đi tiếp từ bước trước. Trên trang Upwork, bấm &quot;Khách đã trả lời&quot; / &quot;Đã chốt&quot; để
               phễu đủ số.

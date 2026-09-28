@@ -444,6 +444,14 @@ export type UpworkLead = {
   match_reason: string | null;
   proposal_draft: string;
   status: UpworkLeadStatus;
+  // Filled by the email-based night shift (supabase/migrations/
+  // upwork_night_email.sql) — null on leads saved before it.
+  fit_score?: number | null; // 1–5, how well the job fits the studio
+  recommendation?: "strong" | "maybe" | null;
+  template_name?: string | null;
+  client_region?: string | null;
+  send_window?: string | null;
+  posted_at?: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
   created_at: string;

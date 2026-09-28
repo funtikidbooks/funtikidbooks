@@ -87,11 +87,59 @@ function LeadCard({ lead, onChanged }: { lead: UpworkLead; onChanged: (next: Upw
         </span>
       </div>
 
+      {/* Night-shift report: how well it fits, what to do, when to send. */}
+      {(lead.fit_score || lead.recommendation || lead.template_name || lead.send_window || lead.client_region) && (
+        <div className="flex flex-wrap gap-1.5">
+          {lead.recommendation && (
+            <span
+              className="text-[11px] font-bold px-2 py-1 rounded-full"
+              style={{
+                background:
+                  lead.recommendation === "strong"
+                    ? "color-mix(in srgb, var(--status-green) 16%, transparent)"
+                    : "color-mix(in srgb, var(--status-yellow) 18%, transparent)",
+                border: `1px solid ${lead.recommendation === "strong" ? "var(--status-green)" : "var(--status-yellow)"}`,
+              }}
+            >
+              {lead.recommendation === "strong" ? "✅ Rất hợp — nên gửi" : "🤔 Có thể hợp — xem kỹ"}
+            </span>
+          )}
+          {lead.fit_score && (
+            <span className="text-[11px] font-semibold px-2 py-1 rounded-full" style={{ background: "var(--color-neutral-100)" }}>
+              Mức phù hợp {"★".repeat(lead.fit_score)}
+              <span style={{ color: "var(--color-neutral-400)" }}>{"★".repeat(5 - lead.fit_score)}</span>
+            </span>
+          )}
+          {lead.template_name && (
+            <span className="text-[11px] font-semibold px-2 py-1 rounded-full" style={{ background: "var(--color-neutral-100)" }}>
+              📄 {lead.template_name}
+            </span>
+          )}
+          {(lead.client_region || lead.send_window) && (
+            <span className="text-[11px] font-semibold px-2 py-1 rounded-full" style={{ background: "var(--color-neutral-100)" }}>
+              🕘 {[lead.client_region, lead.send_window && `gửi ${lead.send_window}`].filter(Boolean).join(" · ")}
+            </span>
+          )}
+        </div>
+      )}
+
       {lead.match_reason && (
         <p className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
-          <span className="font-semibold">Vì sao khớp SOP: </span>
+          <span className="font-semibold">Vì sao hợp: </span>
           {lead.match_reason}
         </p>
+      )}
+
+      {/* The email a lead comes from has no client history — these four
+          SOP checks are for whoever opens the job to send it. */}
+      {lead.status !== "rejected" && lead.fit_score && (
+        <div className="rounded-[8px] px-3 py-2 text-xs flex flex-col gap-1" style={{ background: "var(--color-neutral-100)" }}>
+          <span className="font-semibold">Mở job, kiểm tra khách trước khi gửi:</span>
+          <span>☐ Thanh toán đã xác minh · tổng tiền đã chi</span>
+          <span>☐ Đánh giá từ freelancer khác (tìm tên thật của khách)</span>
+          <span>☐ Tỉ lệ thuê (hire rate) · số Connects cần (trên 25 → Giám đốc duyệt)</span>
+          <span style={{ color: "var(--color-neutral-500)" }}>Đạt từ 15/20 điểm SOP mới gửi.</span>
+        </div>
       )}
 
       <div className="flex flex-col gap-1.5">
@@ -136,9 +184,26 @@ function LeadCard({ lead, onChanged }: { lead: UpworkLead; onChanged: (next: Upw
       </div>
 
       <div className="flex flex-wrap gap-2 pt-1">
-        <button type="button" className="btn btn-secondary btn-sm" onClick={copyDraft}>
-          {copied ? "Đã chép ✓" : "Sao chép proposal"}
-        </button>
+        {/* One tap on the phone: the draft goes to the clipboard and the job
+            opens on Upwork, ready to paste. A real link (not window.open
+            after an await) so iOS Safari never blocks it as a popup. */}
+        {lead.status !== "rejected" && (
+          <a
+            href={lead.job_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => void copyDraft()}
+            className="btn btn-secondary btn-sm"
+          >
+            {copied ? "Đã chép ✓ — dán vào Upwork" : "Mở job & chép proposal"}
+          </a>
+        )}
+        {/* A skipped lead has no "open job" button — keep a plain copy. */}
+        {lead.status === "rejected" && (
+          <button type="button" className="btn btn-secondary btn-sm" onClick={copyDraft}>
+            {copied ? "Đã chép ✓" : "Sao chép proposal"}
+          </button>
+        )}
         {lead.status === "pending" && (
           <>
             <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => setStatus("approved")}>
