@@ -43,7 +43,7 @@ export function BoardFilterMenu({
         // Phone: a sheet pinned 12px from both edges under the bar;
         // sm and up: a dropdown under the button.
         className="card elev-md fixed left-3 right-3 top-14 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1.5 sm:w-[320px] z-40 flex flex-col p-2 overflow-y-auto"
-        style={{ maxHeight: "70vh" }}
+        style={{ maxHeight: "70vh", color: "var(--color-text)" }}
         role="dialog"
         aria-label="Lọc thẻ"
       >

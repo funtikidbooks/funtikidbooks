@@ -549,7 +549,12 @@ h4 {
   background: var(--color-panel);
   border-color: var(--color-accent-500);
 }
+/* Raised above the list chips and the lists: its blur makes it a stacking
+   context of its own, which trapped the Lọc and ⋯ menus underneath the
+   lists (seen on sếp Phúc's iPad). */
 .fk-board-bar {
+  position: relative;
+  z-index: 20;
   background: var(--bar-bg);
   color: var(--bar-fg);
   backdrop-filter: blur(6px);
