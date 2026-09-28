@@ -938,6 +938,32 @@ select.input {
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   width: 100%;
+  /* Lets an input shrink inside a grid/flex column instead of forcing it
+     wider — the default min-width: auto is the input's intrinsic width. */
+  min-width: 0;
+}
+.field {
+  min-width: 0;
+}
+/* iOS/iPadOS Safari draws date/time inputs as a native control with its own
+   intrinsic width that ignores width: 100%, so in a two-column form it ran
+   past the card's edge (Nhân viên chính thức dialog, sếp Phúc's iPad).
+   Dropping the native appearance makes it size like every other .input;
+   tapping it still opens the system date picker. iOS only — desktop
+   browsers already respect the width and keep their calendar icon. */
+@supports (-webkit-touch-callout: none) {
+  input.input[type="date"],
+  input.input[type="time"],
+  input.input[type="month"],
+  input.input[type="datetime-local"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    text-align: left;
+  }
+  input.input::-webkit-date-and-time-value {
+    text-align: left;
+  }
 }
 /* iOS auto-zooms the whole page in on focus for any text input under
    16px — jarring and the single biggest "this is a website" tell in a

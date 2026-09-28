@@ -138,10 +138,17 @@ function ConfirmDialog({
           <div className="flex flex-col gap-4 px-6 py-6">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="field">
-                <label>Gửi tới</label>
-                <div className="input font-normal truncate" style={{ background: "var(--color-surface)" }} title={profile.email}>
-                  {profile.email}
-                </div>
+                <label htmlFor="official-to">Gửi tới</label>
+                {/* A read-only input (not a div) so it's exactly as tall as
+                    the date field beside it. */}
+                <input
+                  id="official-to"
+                  className="input font-normal"
+                  style={{ background: "var(--color-surface)" }}
+                  value={profile.email}
+                  title={profile.email}
+                  readOnly
+                />
               </div>
               <div className="field">
                 <label htmlFor="official-at">Chính thức từ ngày</label>
@@ -170,7 +177,7 @@ function ConfirmDialog({
               <textarea
                 id="official-message"
                 className="input font-normal"
-                rows={10}
+                rows={12}
                 required
                 value={message}
                 onChange={(e) => {
