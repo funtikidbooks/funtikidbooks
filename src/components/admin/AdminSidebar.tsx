@@ -28,6 +28,7 @@ const NAV = [
 // hides every edit control unless the viewer is actually the director).
 const HR_NAV = [
   { href: "/quan-tri/nhan-su", label: "Nhân sự & phân quyền", icon: "🧑‍🤝‍🧑" },
+  { href: "/quan-tri/tai-khoan-khach-hang", label: "Tài khoản khách hàng", icon: "🤝" },
   { href: "/quan-tri/cham-cong", label: "Chấm công", icon: "🕐" },
   { href: "/quan-tri/bang-luong", label: "Bảng lương", icon: "💰" },
   { href: "/quan-tri/hop-dong", label: "Hợp đồng", icon: "📄" },
