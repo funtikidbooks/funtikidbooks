@@ -65,7 +65,7 @@ export function TaskCover({
   }
 
   return (
-    <div className="relative -m-6 mb-0 rounded-t-[var(--radius-lg)] overflow-hidden group">
+    <div className="relative sm:rounded-t-[var(--radius-lg)] overflow-hidden group">
       {coverUrl ? (
         <div className="relative" style={{ height: 130 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}

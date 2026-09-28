@@ -16,17 +16,39 @@ import { createClient } from "@/lib/supabase/client";
 import type { Board, BoardColumn, BoardLabel, Profile, Task, TaskWithAssignee } from "@/lib/types";
 import { Column } from "./Column";
 import { TaskCard } from "./TaskCard";
-import { AddTaskDialog } from "./AddTaskDialog";
 import { EditTaskDialog } from "./EditTaskDialog";
+import { BoardFilterMenu } from "./BoardFilterMenu";
+import { ArchiveDrawer } from "./ArchiveDrawer";
 import {
+  archiveTasks,
+  copyTask,
   createBoardLabel,
   createColumn,
+  createTask,
   deleteBoardLabel,
   deleteColumn,
+  deleteTask,
+  reorderColumns,
   reorderTasks,
+  restoreTask,
   updateBoardLabel,
 } from "@/lib/actions/board";
 import { isDoneColumnTitle } from "@/lib/taskProgress";
+import { vnToday } from "@/lib/constants/attendance";
+import {
+  ARCHIVE_COLUMN_TITLE,
+  EMPTY_FILTER,
+  filterCount,
+  isArchiveColumnTitle,
+  matchesFilter,
+  sortTasks,
+  type BoardFilter,
+  type SortMode,
+} from "@/lib/boardTools";
+
+// Archived cards wait under this key until the server has created the
+// hidden "📦 Lưu trữ" list and told us its id.
+const PENDING_ARCHIVE = "__archive_pending";
 
 export function WorkspaceBoard({
   board,
@@ -60,10 +82,12 @@ export function WorkspaceBoard({
   );
 
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
-  const [addTaskColumn, setAddTaskColumn] = useState<BoardColumn | null>(null);
   const [editingTask, setEditingTask] = useState<TaskWithAssignee | null>(null);
   const [newColumnOpen, setNewColumnOpen] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState("");
+  const [filter, setFilter] = useState<BoardFilter>(EMPTY_FILTER);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [, startTransition] = useTransition();
 
   // A plain PointerSensor's distance-based activation also fires for touch
@@ -77,7 +101,19 @@ export function WorkspaceBoard({
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
+  // The hidden archive list never shows as a column.
+  const archiveColumn = columns.find((c) => isArchiveColumnTitle(c.title)) ?? null;
+  const visibleColumns = useMemo(() => columns.filter((c) => !isArchiveColumnTitle(c.title)), [columns]);
+  const archivedTasks = [
+    ...(archiveColumn ? (tasksByColumn[archiveColumn.id] ?? []) : []),
+    ...(tasksByColumn[PENDING_ARCHIVE] ?? []),
+  ];
+
   const allTasks = useMemo(() => Object.values(tasksByColumn).flat(), [tasksByColumn]);
+  const boardTasks = useMemo(
+    () => visibleColumns.flatMap((c) => tasksByColumn[c.id] ?? []),
+    [visibleColumns, tasksByColumn],
+  );
   // Read from inside the realtime subscription below, which only subscribes
   // once per board — a plain closure over allTasks/profiles would keep
   // seeing whatever those were at mount, not their current values.
@@ -89,14 +125,22 @@ export function WorkspaceBoard({
   useEffect(() => {
     profilesRef.current = profiles;
   }, [profiles]);
-  const doneColumn = columns.find((c) => isDoneColumnTitle(c.title));
+  const doneColumn = visibleColumns.find((c) => isDoneColumnTitle(c.title));
   const doneCount = doneColumn ? (tasksByColumn[doneColumn.id]?.length ?? 0) : 0;
   const activeTask = activeTaskId ? allTasks.find((t) => t.id === activeTaskId) : null;
+
+  const filtering = filterCount(filter) > 0;
+  const today = vnToday();
+  const visibleTasksOf = (columnId: string) => {
+    const list = tasksByColumn[columnId] ?? [];
+    return filtering ? list.filter((t) => matchesFilter(t, filter, today)) : list;
+  };
+  const matchCount = filtering ? boardTasks.filter((t) => matchesFilter(t, filter, today)).length : boardTasks.length;
 
   // One "Final <year>" column per year of archived work (renamed every year,
   // per isDoneColumnTitle) — surface how many cards landed in each year
   // rather than only the grand total, in board column order (newest first).
-  const yearStats = columns
+  const yearStats = visibleColumns
     .map((c) => {
       const match = c.title.match(/final\s*(\d{4})/i);
       if (!match) return null;
@@ -112,7 +156,7 @@ export function WorkspaceBoard({
   // (e.g. a plain "Hoàn thành" column) keep the classic done/total reading.
   const currentYearStat = yearStats[0];
   const headerDoneCount = currentYearStat ? currentYearStat.count : doneCount;
-  const headerTotalCount = currentYearStat ? currentYearStat.count : allTasks.length;
+  const headerTotalCount = currentYearStat ? currentYearStat.count : boardTasks.length;
 
   function findColumnIdOfTask(taskId: string) {
     for (const [colId, tasks] of Object.entries(tasksByColumn)) {
@@ -183,7 +227,7 @@ export function WorkspaceBoard({
       board_id: board.id,
       title,
       color: "#78776F",
-      position: columns.length,
+      position: visibleColumns.length,
       created_at: new Date().toISOString(),
     };
     setColumns((prev) => [...prev, optimisticColumn]);
@@ -205,14 +249,55 @@ export function WorkspaceBoard({
   }
 
   function handleTaskCreated(columnId: string, task: TaskWithAssignee) {
-    setTasksByColumn((prev) => ({ ...prev, [columnId]: [...(prev[columnId] ?? []), task] }));
+    setTasksByColumn((prev) =>
+      Object.values(prev).some((list) => list.some((t) => t.id === task.id))
+        ? prev
+        : { ...prev, [columnId]: [...(prev[columnId] ?? []), task] },
+    );
   }
 
   function handleTaskReconciled(columnId: string, tempId: string, task: TaskWithAssignee) {
-    setTasksByColumn((prev) => ({
-      ...prev,
-      [columnId]: (prev[columnId] ?? []).map((t) => (t.id === tempId ? task : t)),
-    }));
+    setTasksByColumn((prev) => {
+      const list = prev[columnId] ?? [];
+      // Realtime may already have delivered the saved row — then just drop the placeholder.
+      if (list.some((t) => t.id === task.id)) return { ...prev, [columnId]: list.filter((t) => t.id !== tempId) };
+      return { ...prev, [columnId]: list.map((t) => (t.id === tempId ? task : t)) };
+    });
+  }
+
+  // Trello's "Thêm thẻ" at the bottom of a list: title only, straight in.
+  function handleQuickAdd(columnId: string, title: string) {
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const now = new Date().toISOString();
+    const optimistic: TaskWithAssignee = {
+      id: tempId,
+      board_id: board.id,
+      column_id: columnId,
+      code: "…",
+      title,
+      description: null,
+      assignee_id: null,
+      start_date: null,
+      due_date: null,
+      progress: 0,
+      position: (tasksByColumn[columnId] ?? []).length,
+      cover_image_url: null,
+      labels: [],
+      created_by: currentUserId,
+      created_at: now,
+      updated_at: now,
+      assignee: null,
+      assignees: [],
+    };
+    handleTaskCreated(columnId, optimistic);
+    startTransition(async () => {
+      try {
+        const saved = await createTask({ boardId: board.id, columnId, title });
+        if (saved) handleTaskReconciled(columnId, tempId, { ...saved, assignee: null, assignees: [] } as TaskWithAssignee);
+      } catch {
+        // Optimistic card stays as-is (e.g. workspace-demo has no real backend).
+      }
+    });
   }
 
   function handleTaskUpdated(updated: TaskWithAssignee) {
@@ -266,16 +351,118 @@ export function WorkspaceBoard({
     });
   }
 
-  // A card someone else added/moved/edited/deleted, a column they added/
-  // renamed/deleted, or a label they added/recolored/deleted — this is the
-  // one screen the whole team has open side by side all day, so none of
-  // that should ever need a reload to show up. A raw `tasks` row (from
-  // realtime) is missing the joined assignee profile and checklist/comment/
-  // attachment counts a TaskWithAssignee needs; the assignee is resolved
-  // from the `profiles` prop already on hand (same trick AddTaskDialog uses
-  // reconciling its own optimistic create), and the count fields are just
-  // left undefined — they render as 0 until the card is actually opened,
-  // which already re-fetches full detail.
+  // "← / →" in a list's menu: swap it with its neighbour.
+  function handleMoveColumn(columnId: string, dir: -1 | 1) {
+    const order = visibleColumns.map((c) => c.id);
+    const i = order.indexOf(columnId);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= order.length) return;
+    [order[i], order[j]] = [order[j], order[i]];
+    setColumns((prev) =>
+      prev
+        .map((c) => (order.includes(c.id) ? { ...c, position: order.indexOf(c.id) } : c))
+        .sort((a, b) => a.position - b.position),
+    );
+    startTransition(async () => {
+      try {
+        await reorderColumns(order.filter((id) => !id.startsWith("temp-")));
+      } catch {
+        // Local order stays as-is (e.g. workspace-demo has no real backend).
+      }
+    });
+  }
+
+  function handleSortColumn(columnId: string, mode: SortMode) {
+    const sorted = sortTasks(tasksByColumn[columnId] ?? [], mode);
+    setTasksByColumn((prev) => ({ ...prev, [columnId]: sorted }));
+    startTransition(async () => {
+      try {
+        await reorderTasks(sorted.map((t, i) => ({ id: t.id, column_id: columnId, position: i })));
+      } catch {
+        // Local order stays as-is (e.g. workspace-demo has no real backend).
+      }
+    });
+  }
+
+  // Archive = move into the hidden list; restorable from 📦 Lưu trữ.
+  function handleArchive(taskIds: string[]) {
+    if (taskIds.length === 0) return;
+    const target = archiveColumn?.id ?? PENDING_ARCHIVE;
+    setTasksByColumn((prev) => {
+      const next: Record<string, TaskWithAssignee[]> = {};
+      const moving: TaskWithAssignee[] = [];
+      for (const [colId, tasks] of Object.entries(prev)) {
+        next[colId] = tasks.filter((t) => {
+          if (taskIds.includes(t.id) && colId !== target) {
+            moving.push({ ...t, column_id: target });
+            return false;
+          }
+          return true;
+        });
+      }
+      next[target] = [...(next[target] ?? []), ...moving];
+      return next;
+    });
+    startTransition(async () => {
+      try {
+        const archiveId = await archiveTasks(taskIds.filter((id) => !id.startsWith("temp-")));
+        if (archiveId && target === PENDING_ARCHIVE) {
+          setColumns((prev) =>
+            prev.some((c) => c.id === archiveId)
+              ? prev
+              : [...prev, { id: archiveId, board_id: board.id, title: ARCHIVE_COLUMN_TITLE, color: "#78776F", position: 9999, created_at: new Date().toISOString() }],
+          );
+          setTasksByColumn((prev) => {
+            const pending = (prev[PENDING_ARCHIVE] ?? []).map((t) => ({ ...t, column_id: archiveId }));
+            const { [PENDING_ARCHIVE]: _drop, ...rest } = prev;
+            void _drop;
+            const existing = rest[archiveId] ?? [];
+            return { ...rest, [archiveId]: [...existing, ...pending.filter((t) => !existing.some((e) => e.id === t.id))] };
+          });
+        }
+      } catch {
+        // Local move stays as-is (e.g. workspace-demo has no real backend).
+      }
+    });
+  }
+
+  function handleRestore(taskId: string, toColumnId: string) {
+    const task = archivedTasks.find((t) => t.id === taskId);
+    if (!task) return;
+    handleTaskUpdated({ ...task, column_id: toColumnId });
+    startTransition(async () => {
+      try {
+        await restoreTask(taskId, toColumnId);
+      } catch {
+        // Local move stays as-is.
+      }
+    });
+  }
+
+  function handleDeleteForever(taskId: string) {
+    handleTaskDeleted(taskId);
+    startTransition(async () => {
+      try {
+        await deleteTask(taskId);
+      } catch {
+        // Local removal stays as-is.
+      }
+    });
+  }
+
+  async function handleCopy(taskId: string) {
+    const src = allTasks.find((t) => t.id === taskId);
+    const copy = await copyTask(taskId);
+    if (copy && src) {
+      handleTaskCreated(copy.column_id as string, {
+        ...(copy as unknown as TaskWithAssignee),
+        assignee: src.assignee,
+        assignees: src.assignees,
+        checklist_items: src.checklist_items?.map((c) => ({ ...c })),
+      });
+    }
+  }
+
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
@@ -429,23 +616,79 @@ export function WorkspaceBoard({
     });
   }
 
+  const nFilters = filterCount(filter);
+
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      <div className="flex flex-wrap items-center gap-6 px-6 py-4" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-        <h1 className="text-xl">{board.title}</h1>
-        <div className="flex items-center gap-5 text-sm" style={{ color: "var(--color-neutral-600)" }}>
-          <span>✅ {headerDoneCount}/{headerTotalCount} hoàn thành</span>
-        </div>
+      {/* Compact Trello-style bar: name, progress, search, filter, archive. */}
+      <div
+        className="flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-3 flex-none"
+        style={{ borderBottom: "1px solid var(--color-neutral-200)" }}
+      >
+        <h1 className="text-base sm:text-xl truncate min-w-0">{board.title}</h1>
+        <span className="hidden md:inline text-sm whitespace-nowrap" style={{ color: "var(--color-neutral-600)" }}>
+          ✅ {headerDoneCount}/{headerTotalCount}
+        </span>
         {yearStats.length > 0 && (
-          <div className="flex items-center gap-5 text-sm" style={{ color: "var(--color-neutral-600)" }}>
+          <span className="hidden xl:flex items-center gap-4 text-sm whitespace-nowrap" style={{ color: "var(--color-neutral-600)" }}>
             {yearStats.map((y) => (
               <span key={y.year}>
-                Năm {y.year}: <strong style={{ color: "var(--color-neutral-800)" }}>{y.count}</strong> dự án
+                Năm {y.year}: <strong style={{ color: "var(--color-neutral-800)" }}>{y.count}</strong>
               </span>
             ))}
-          </div>
+          </span>
         )}
-        <div className="flex items-center -space-x-2 ml-auto">
+        <span className="flex-1" />
+        <label className="relative flex items-center flex-none">
+          <span aria-hidden className="absolute left-2.5 text-[13px]" style={{ color: "var(--color-neutral-500)" }}>
+            🔍
+          </span>
+          <input
+            id="board-search"
+            type="search"
+            className="input font-normal"
+            style={{ width: "min(200px, 34vw)", padding: "7px 10px 7px 30px", borderRadius: 999 }}
+            placeholder="Tìm thẻ…"
+            value={filter.text}
+            onChange={(e) => setFilter((f) => ({ ...f, text: e.target.value }))}
+            aria-label="Tìm thẻ"
+          />
+        </label>
+        <div className="relative flex-none">
+          <button
+            type="button"
+            onClick={() => setFilterOpen((v) => !v)}
+            className="btn btn-sm flex-none"
+            style={{
+              background: nFilters ? "var(--color-accent-100)" : "var(--color-neutral-100)",
+              color: nFilters ? "var(--color-accent-700)" : "var(--color-text)",
+              padding: "7px 12px",
+            }}
+            aria-expanded={filterOpen}
+          >
+            ⚲ Lọc{nFilters ? ` · ${nFilters}` : ""}
+          </button>
+          {filterOpen && (
+            <BoardFilterMenu
+              filter={filter}
+              onChange={setFilter}
+              profiles={profiles}
+              labels={boardLabels}
+              onClose={() => setFilterOpen(false)}
+            />
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setArchiveOpen(true)}
+          className="btn-icon flex-none"
+          style={{ width: 34, height: 34, padding: 0 }}
+          aria-label="Thẻ đã lưu trữ"
+          title="Thẻ đã lưu trữ"
+        >
+          📦
+        </button>
+        <div className="hidden lg:flex items-center -space-x-2 flex-none">
           {profiles.slice(0, 6).map((p) => (
             <div
               key={p.id}
@@ -481,7 +724,23 @@ export function WorkspaceBoard({
         </div>
       </div>
 
-      <div className="flex-1 overflow-x-auto p-6 fk-board-scroll">
+      {filtering && (
+        <div
+          className="flex items-center gap-3 px-3 sm:px-6 py-1.5 text-[12.5px] flex-none"
+          style={{ background: "var(--color-accent-100)", color: "var(--color-accent-800)" }}
+        >
+          <span className="flex-1 min-w-0 truncate">
+            Đang lọc: <b>{matchCount}</b> / {boardTasks.length} thẻ khớp
+          </span>
+          <button type="button" className="font-bold underline flex-none" onClick={() => setFilter(EMPTY_FILTER)}>
+            Xoá bộ lọc
+          </button>
+        </div>
+      )}
+
+      {/* Lists: side by side with horizontal scroll; on a phone each list is
+          almost a screen wide and snaps into place, like the Trello app. */}
+      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden fk-board-scroll snap-x snap-mandatory sm:snap-none px-3 sm:px-6 py-3">
         <DndContext
           id={`board-${board.id}`}
           sensors={sensors}
@@ -489,37 +748,44 @@ export function WorkspaceBoard({
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex gap-4 items-start min-w-fit">
-            {columns.map((col) => (
+          <div className="flex gap-3 items-start h-full min-w-fit">
+            {visibleColumns.map((col, i) => (
               <Column
                 key={col.id}
                 column={col}
-                tasks={tasksByColumn[col.id] ?? []}
+                tasks={visibleTasksOf(col.id)}
+                totalCount={(tasksByColumn[col.id] ?? []).length}
+                filtering={filtering}
                 boardLabels={boardLabels}
+                canMoveLeft={i > 0}
+                canMoveRight={i < visibleColumns.length - 1}
                 onOpenTask={setEditingTask}
-                onAddTask={() => setAddTaskColumn(col)}
+                onQuickAdd={(title) => handleQuickAdd(col.id, title)}
+                onMove={(dir) => handleMoveColumn(col.id, dir)}
+                onSort={(mode) => handleSortColumn(col.id, mode)}
+                onArchiveAll={() => handleArchive((tasksByColumn[col.id] ?? []).map((t) => t.id))}
                 onDeleteColumn={() => handleColumnDeleted(col.id)}
               />
             ))}
 
-            <div className="flex-none w-[220px]">
+            <div className="flex-none w-[84vw] max-w-[300px] sm:w-[272px] snap-center">
               {newColumnOpen ? (
                 <form
                   onSubmit={handleAddColumn}
-                  className="p-3 rounded-[var(--radius-md)] flex flex-col gap-2"
+                  className="p-3 rounded-[12px] flex flex-col gap-2"
                   style={{ border: "1.5px dashed var(--color-neutral-300)" }}
                 >
                   <input
                     autoFocus
                     className="input"
-                    placeholder="Tên cột mới…"
+                    placeholder="Tên danh sách mới…"
                     value={newColumnTitle}
                     onChange={(e) => setNewColumnTitle(e.target.value)}
                     onBlur={() => !newColumnTitle && setNewColumnOpen(false)}
                   />
                   <div className="flex gap-2">
                     <button type="submit" className="btn btn-primary btn-sm">
-                      Thêm cột
+                      Thêm danh sách
                     </button>
                     <button
                       type="button"
@@ -537,10 +803,10 @@ export function WorkspaceBoard({
                 <button
                   type="button"
                   onClick={() => setNewColumnOpen(true)}
-                  className="ws-add-btn w-full h-12 rounded-[var(--radius-md)] text-sm font-semibold"
+                  className="ws-add-btn w-full h-12 rounded-[12px] text-sm font-semibold"
                   style={{ border: "1.5px dashed var(--color-neutral-300)", color: "var(--color-neutral-500)" }}
                 >
-                  + Thêm cột
+                  + Thêm danh sách
                 </button>
               )}
             </div>
@@ -548,7 +814,7 @@ export function WorkspaceBoard({
 
           <DragOverlay>
             {activeTask ? (
-              <div style={{ width: 250 }}>
+              <div style={{ width: 256 }}>
                 <TaskCard task={activeTask} boardLabels={boardLabels} onOpen={() => {}} />
               </div>
             ) : null}
@@ -556,32 +822,36 @@ export function WorkspaceBoard({
         </DndContext>
       </div>
 
-      {addTaskColumn && (
-        <AddTaskDialog
-          boardId={board.id}
-          columnId={addTaskColumn.id}
-          columnTitle={addTaskColumn.title}
-          profiles={profiles}
-          onCreated={(task) => handleTaskCreated(addTaskColumn.id, task)}
-          onReconciled={(tempId, task) => handleTaskReconciled(addTaskColumn.id, tempId, task)}
-          onClose={() => setAddTaskColumn(null)}
-        />
-      )}
-
       {editingTask && (
         <EditTaskDialog
           task={editingTask}
-          columns={columns}
+          columns={visibleColumns}
           profiles={profiles}
           boardLabels={boardLabels}
           currentUserId={currentUserId}
           onUpdated={handleTaskUpdated}
           onDeleted={handleTaskDeleted}
+          onArchive={(id) => handleArchive([id])}
+          onCopy={handleCopy}
           onCreateLabel={handleCreateLabel}
           onRenameLabel={handleRenameLabel}
           onRecolorLabel={handleRecolorLabel}
           onDeleteLabel={handleDeleteLabel}
           onClose={() => setEditingTask(null)}
+        />
+      )}
+
+      {archiveOpen && (
+        <ArchiveDrawer
+          tasks={archivedTasks}
+          columns={visibleColumns}
+          onRestore={handleRestore}
+          onDeleteForever={handleDeleteForever}
+          onOpen={(t) => {
+            setArchiveOpen(false);
+            setEditingTask(t);
+          }}
+          onClose={() => setArchiveOpen(false)}
         />
       )}
     </div>

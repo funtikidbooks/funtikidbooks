@@ -69,7 +69,7 @@ export function TaskCard({
       {...attributes}
       {...listeners}
       onClick={onOpen}
-      className="fk-task-card card elev-sm p-2.5 flex flex-col gap-2 cursor-pointer select-none"
+      className="fk-task-card card elev-sm p-2.5 flex flex-col gap-1.5 cursor-pointer select-none"
     >
       {task.cover_image_url && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -77,7 +77,7 @@ export function TaskCard({
           src={thumbnailUrl(task.cover_image_url, 480, 180)}
           alt=""
           className="rounded-[6px] w-full object-cover"
-          style={{ height: 90 }}
+          style={{ height: 96 }}
         />
       )}
       {task.labels.length > 0 && (
@@ -96,21 +96,41 @@ export function TaskCard({
           })}
         </div>
       )}
-      <span className="text-[11px] font-semibold" style={{ color: "var(--color-neutral-500)" }}>
-        {task.code}
-      </span>
-      <h4 className="text-[13px] font-bold leading-snug">{task.title}</h4>
-      <div className="flex items-center justify-between text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
-        {task.assignees.length > 0 ? (
-          <div className="flex items-center -space-x-1.5">
-            {task.assignees.slice(0, 4).map((a) => (
+      <h4 className="text-[13.5px] font-semibold leading-snug break-words">{task.title}</h4>
+      {/* One Trello-style badge row: due · checklist · comments · files ·
+          description, members on the right, the card code last. */}
+      <div className="flex items-center gap-2 text-[11px] min-w-0" style={{ color: "var(--color-neutral-500)" }}>
+        {dueLabel && (
+          <span
+            className="flex-none rounded-[4px] px-1.5 py-0.5 font-semibold"
+            style={{ background: dueTone.bg, color: dueTone.fg, textDecoration: isDone ? "line-through" : "none" }}
+          >
+            🕐 {dueLabel}
+          </span>
+        )}
+        {checklistTotal > 0 && (
+          <span className="flex-none" style={checklistDone === checklistTotal ? { color: "var(--status-green)", fontWeight: 700 } : undefined}>
+            ☑ {checklistDone}/{checklistTotal}
+          </span>
+        )}
+        {commentCount > 0 && <span className="flex-none">💬 {commentCount}</span>}
+        {attachmentCount > 0 && <span className="flex-none">📎 {attachmentCount}</span>}
+        {!!task.description && task.description.replace(/<[^>]+>/g, "").trim().length > 0 && (
+          <span className="flex-none" title="Có mô tả">
+            ≡
+          </span>
+        )}
+        <span className="flex-1" />
+        {task.assignees.length > 0 && (
+          <div className="flex items-center -space-x-1.5 flex-none">
+            {task.assignees.slice(0, 3).map((a) => (
               <span
                 key={a.id}
                 title={a.display_name}
                 className="flex items-center justify-center rounded-full font-bold flex-none"
                 style={{
-                  width: 18,
-                  height: 18,
+                  width: 20,
+                  height: 20,
                   fontSize: 9,
                   background: "var(--color-accent-100)",
                   color: "var(--color-accent-700)",
@@ -120,47 +140,29 @@ export function TaskCard({
                 {a.display_name.charAt(0).toUpperCase()}
               </span>
             ))}
-            {task.assignees.length > 4 && (
+            {task.assignees.length > 3 && (
               <span
                 className="flex items-center justify-center rounded-full font-bold flex-none"
                 style={{
-                  width: 18,
-                  height: 18,
+                  width: 20,
+                  height: 20,
                   fontSize: 8,
                   background: "var(--color-neutral-200)",
                   color: "var(--color-neutral-700)",
                   border: "1.5px solid var(--color-panel)",
                 }}
               >
-                +{task.assignees.length - 4}
+                +{task.assignees.length - 3}
               </span>
             )}
           </div>
-        ) : (
-          <span>Chưa giao</span>
         )}
-        {dueLabel && (
-          <span
-            className="flex-none rounded-[4px] px-1.5 py-0.5 font-semibold"
-            style={{ background: dueTone.bg, color: dueTone.fg, textDecoration: isDone ? "line-through" : "none" }}
-          >
-            🕐 {dueLabel}
-          </span>
-        )}
+        <span className="flex-none text-[10px] tabular-nums" style={{ color: "var(--color-neutral-400)" }}>
+          {task.code}
+        </span>
       </div>
-      {(checklistTotal > 0 || commentCount > 0 || attachmentCount > 0) && (
-        <div className="flex items-center gap-2 text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
-          {checklistTotal > 0 && (
-            <span>
-              ☑ {checklistDone}/{checklistTotal}
-            </span>
-          )}
-          {commentCount > 0 && <span>💬 {commentCount}</span>}
-          {attachmentCount > 0 && <span>📎 {attachmentCount}</span>}
-        </div>
-      )}
       <div
-        className="h-1 rounded-full overflow-hidden"
+        className="h-[3px] rounded-full overflow-hidden"
         style={{ background: "var(--color-neutral-200)" }}
         title={`Tiến độ theo thời hạn: ${progressPct}%`}
       >

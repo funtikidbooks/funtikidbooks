@@ -38,6 +38,8 @@ export function EditTaskDialog({
   currentUserId,
   onUpdated,
   onDeleted,
+  onArchive,
+  onCopy,
   onCreateLabel,
   onRenameLabel,
   onRecolorLabel,
@@ -51,6 +53,8 @@ export function EditTaskDialog({
   currentUserId: string;
   onUpdated: (task: TaskWithAssignee) => void;
   onDeleted: (taskId: string) => void;
+  onArchive?: (taskId: string) => void;
+  onCopy?: (taskId: string) => Promise<void>;
   onCreateLabel: (name: string, color: string) => void;
   onRenameLabel: (labelId: string, name: string) => void;
   onRecolorLabel: (labelId: string, color: string) => void;
@@ -246,6 +250,25 @@ export function EditTaskDialog({
     });
   }
 
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    if (!onCopy) return;
+    try {
+      await onCopy(task.id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      alert("Không sao chép được thẻ.");
+    }
+  }
+
+  function archive() {
+    if (!onArchive) return;
+    pushUpdate({ title, description: description || null });
+    onArchive(task.id);
+    onClose();
+  }
+
   function remove() {
     if (!confirm("Xoá thẻ công việc này?")) return;
     onDeleted(task.id);
@@ -260,7 +283,7 @@ export function EditTaskDialog({
   }
 
   return (
-    <Modal onClose={onClose} maxWidth={1280}>
+    <Modal onClose={onClose} maxWidth={1280} sheetOnPhone>
       <div className="flex flex-col">
         <div className="relative">
           <TaskCover
@@ -622,10 +645,23 @@ export function EditTaskDialog({
               </>
             )}
 
-            <div className="flex items-center justify-between gap-3 mt-1">
-              <button type="button" onClick={remove} className="btn btn-danger" disabled={pending}>
-                🗑 Xoá thẻ công việc này
+            {/* Trello's card actions: copy, archive (restorable), delete. */}
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              {onCopy && (
+                <button type="button" onClick={copy} className="btn btn-ghost btn-sm">
+                  {copied ? "✓ Đã sao chép" : "⧉ Sao chép thẻ"}
+                </button>
+              )}
+              {onArchive && (
+                <button type="button" onClick={archive} className="btn btn-ghost btn-sm" title="Cất thẻ khỏi bảng, khôi phục được ở mục 📦">
+                  📦 Lưu trữ
+                </button>
+              )}
+              <button type="button" onClick={remove} className="btn btn-danger btn-sm" disabled={pending}>
+                🗑 Xoá
               </button>
+            </div>
+            <div className="flex items-center justify-end gap-3">
               <button type="button" onClick={save} className="btn btn-primary" disabled={pending || !title.trim()}>
                 {pending ? "Đang lưu…" : "Lưu thay đổi"}
               </button>

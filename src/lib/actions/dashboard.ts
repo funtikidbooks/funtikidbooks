@@ -14,6 +14,7 @@ import { getUnreadClientMessageCount } from "@/lib/actions/clientPortal";
 import { addDays, addMonths, firstOfMonth, isLateCheckIn, isOffByDefault, mondayOf, vnToday } from "@/lib/constants/attendance";
 import { costBreakdown, CUMULATIVE_START_MONTH } from "@/lib/financeSummary";
 import { isDoneColumnTitle } from "@/lib/taskProgress";
+import { isArchiveColumnTitle } from "@/lib/boardTools";
 import {
   hourlyCost,
   monthlySeries,
@@ -267,7 +268,10 @@ export async function getDashboardData(): Promise<DashboardData> {
     revenueByProject,
   ).sort((a, b) => b.hours - a.hours);
 
-  const doneColumns = new Set(columns.filter((c) => isDoneColumnTitle(c.title as string)).map((c) => c.id as string));
+  // Archived cards (the hidden "📦 Lưu trữ" list) count as finished too.
+  const doneColumns = new Set(
+    columns.filter((c) => isDoneColumnTitle(c.title as string) || isArchiveColumnTitle(c.title as string)).map((c) => c.id as string),
+  );
   const openTasks = tasks.filter((t) => !doneColumns.has(t.column_id as string));
   const daysFrom = (d: string) => Math.round((Date.parse(`${d}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
   const who = (id: string | null) => (id ? (nameOf.get(id) ?? "—") : "Chưa giao");

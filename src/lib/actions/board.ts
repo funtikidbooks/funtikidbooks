@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/supabase/server";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { Task } from "@/lib/types";
 import { logTaskActivity } from "@/lib/actions/task-detail";
+import { ARCHIVE_COLUMN_TITLE } from "@/lib/boardTools";
 
 export async function createColumn(boardId: string, title: string) {
   const { supabase } = await requireUser();
@@ -298,4 +299,101 @@ export async function reorderTasks(
   );
 
   revalidatePath("/workspace");
+}
+
+// ---------------------------------------------------------------------------
+// Trello-style actions: list order, archive/restore, copy.
+// ---------------------------------------------------------------------------
+
+// Positions of the visible lists after a "move left/right" — the client
+// already reordered locally, this just writes the new order.
+export async function reorderColumns(orderedIds: string[]) {
+  const { supabase } = await requireUser();
+  await Promise.all(orderedIds.map((id, i) => supabase.from("board_columns").update({ position: i }).eq("id", id)));
+  revalidatePath("/workspace");
+}
+
+// The hidden list archived cards live in (see lib/boardTools.ts), created
+// the first time anything on this board is archived.
+async function archiveColumnId(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], boardId: string) {
+  const { data: existing } = await supabase
+    .from("board_columns")
+    .select("id")
+    .eq("board_id", boardId)
+    .eq("title", ARCHIVE_COLUMN_TITLE)
+    .maybeSingle();
+  if (existing) return existing.id as string;
+  const { data: created } = await supabase
+    .from("board_columns")
+    .insert({ board_id: boardId, title: ARCHIVE_COLUMN_TITLE, color: "#78776F", position: 9999 })
+    .select("id")
+    .single();
+  return (created?.id as string) ?? null;
+}
+
+export async function archiveTasks(taskIds: string[]) {
+  const { supabase, user } = await requireUser();
+  if (taskIds.length === 0) return;
+  const { data: tasks } = await supabase.from("tasks").select("id, board_id").in("id", taskIds);
+  const boardId = tasks?.[0]?.board_id as string | undefined;
+  if (!boardId) return;
+  const archiveId = await archiveColumnId(supabase, boardId);
+  if (!archiveId) throw new Error("Không tạo được mục Lưu trữ.");
+  const { count } = await supabase.from("tasks").select("id", { count: "exact", head: true }).eq("column_id", archiveId);
+  await Promise.all(
+    taskIds.map((id, i) => supabase.from("tasks").update({ column_id: archiveId, position: (count ?? 0) + i }).eq("id", id)),
+  );
+  await Promise.all(taskIds.map((id) => logTaskActivity(supabase, id, user.id, "moved", { from: "", to: ARCHIVE_COLUMN_TITLE })));
+  revalidatePath("/workspace");
+  return archiveId;
+}
+
+export async function restoreTask(taskId: string, toColumnId: string) {
+  // Same bookkeeping as any list change (position at the end + activity).
+  await moveTaskColumn(taskId, toColumnId);
+}
+
+// Copies a card into a list (the same one by default): title, description,
+// dates, labels, cover, members and checklist — comments and attachments
+// stay with the original, like Trello's default copy.
+export async function copyTask(taskId: string, toColumnId?: string) {
+  const { supabase, user } = await requireUser();
+  const [{ data: src }, { data: members }, { data: checklist }] = await Promise.all([
+    supabase.from("tasks").select("*").eq("id", taskId).maybeSingle(),
+    supabase.from("task_assignees").select("profile_id").eq("task_id", taskId),
+    supabase.from("task_checklist_items").select("*").eq("task_id", taskId),
+  ]);
+  if (!src) throw new Error("Không tìm thấy thẻ.");
+  const columnId = toColumnId ?? (src.column_id as string);
+  const { count } = await supabase.from("tasks").select("id", { count: "exact", head: true }).eq("column_id", columnId);
+  const { data: copy, error } = await supabase
+    .from("tasks")
+    .insert({
+      board_id: src.board_id,
+      column_id: columnId,
+      code: randomTaskCode(),
+      title: src.title,
+      description: src.description,
+      assignee_id: src.assignee_id,
+      start_date: src.start_date,
+      due_date: src.due_date,
+      cover_image_url: null,
+      labels: src.labels,
+      position: count ?? 0,
+      created_by: user.id,
+    })
+    .select(
+      "id, board_id, column_id, code, title, description, assignee_id, start_date, due_date, progress, position, cover_image_url, labels, created_by, created_at, updated_at",
+    )
+    .single();
+  if (error || !copy) throw new Error("Không sao chép được thẻ.");
+  if (members?.length) await supabase.from("task_assignees").insert(members.map((m) => ({ task_id: copy.id, profile_id: m.profile_id })));
+  if (checklist?.length) {
+    await supabase
+      .from("task_checklist_items")
+      .insert(checklist.map((c) => ({ task_id: copy.id as string, text: c.text, done: c.done, position: c.position })));
+  }
+  await logTaskActivity(supabase, copy.id as string, user.id, "created", { column: "(bản sao)" });
+  revalidatePath("/workspace");
+  return copy;
 }

@@ -217,3 +217,26 @@ test("tổng quan: thời gian trả lời khách và lời/lỗ theo dự án",
   assert.equal(rows[1].revenue, null);
   assert.equal(rows[1].profit, null);
 });
+
+test("bảng công việc: lọc thẻ kiểu Trello và sắp xếp", async () => {
+  const { matchesFilter, sortTasks, fold, EMPTY_FILTER, filterCount, isArchiveColumnTitle, ARCHIVE_COLUMN_TITLE } = await import("../src/lib/boardTools.ts");
+  const t = (o) => ({ title: "Tô màu sách Ryan", code: "#123", description: "<p>Trang 12–16</p>", due_date: null, labels: [], assignees: [], created_at: "2026-09-01", ...o });
+  const today = "2026-09-28";
+  assert.equal(fold("Hoàn Thành Đẹp"), "hoan thanh dep");
+  assert.ok(matchesFilter(t({}), { ...EMPTY_FILTER, text: "to mau ryan" }, today));
+  assert.ok(matchesFilter(t({}), { ...EMPTY_FILTER, text: "trang 12" }, today)); // searches the description too
+  assert.ok(!matchesFilter(t({}), { ...EMPTY_FILTER, text: "daisy" }, today));
+  assert.ok(matchesFilter(t({ assignees: [{ id: "u1" }] }), { ...EMPTY_FILTER, members: ["u1"] }, today));
+  assert.ok(matchesFilter(t({}), { ...EMPTY_FILTER, members: ["none"] }, today));
+  assert.ok(!matchesFilter(t({ assignees: [{ id: "u2" }] }), { ...EMPTY_FILTER, members: ["u1", "none"] }, today));
+  assert.ok(matchesFilter(t({ labels: ["gap"] }), { ...EMPTY_FILTER, labels: ["gap", "pause"] }, today));
+  assert.ok(matchesFilter(t({ due_date: "2026-09-27" }), { ...EMPTY_FILTER, due: "overdue" }, today));
+  assert.ok(!matchesFilter(t({ due_date: "2026-09-28" }), { ...EMPTY_FILTER, due: "overdue" }, today)); // due today isn't overdue yet
+  assert.ok(matchesFilter(t({ due_date: "2026-10-05" }), { ...EMPTY_FILTER, due: "week" }, today));
+  assert.ok(!matchesFilter(t({ due_date: "2026-10-06" }), { ...EMPTY_FILTER, due: "week" }, today));
+  assert.ok(matchesFilter(t({}), { ...EMPTY_FILTER, due: "none" }, today));
+  assert.equal(filterCount({ text: "x", members: ["a", "b"], labels: [], due: "week" }), 4);
+  const sorted = sortTasks([t({ title: "B", due_date: null }), t({ title: "A", due_date: "2026-10-01" }), t({ title: "C", due_date: "2026-09-30" })], "due");
+  assert.deepEqual(sorted.map((x) => x.title), ["C", "A", "B"]);
+  assert.ok(isArchiveColumnTitle(` ${ARCHIVE_COLUMN_TITLE} `));
+});
