@@ -242,12 +242,15 @@ export function DirectMessagesPanel({
           </div>
         ) : (
           <>
-            <div className="flex-none flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+            <div
+              className="flex-none flex items-center gap-2 px-2 sm:px-4 py-1.5 sm:py-3"
+              style={{ borderBottom: "1px solid var(--color-neutral-200)" }}
+            >
               <button
                 type="button"
                 onClick={() => setSelectedPeerId(null)}
                 className="btn-icon sm:hidden flex-none"
-                style={{ width: 28, height: 28, padding: 0 }}
+                style={{ width: 34, height: 34, padding: 0 }}
                 aria-label="Quay lại danh sách"
               >
                 ←
@@ -264,6 +267,16 @@ export function DirectMessagesPanel({
                 )}
               </span>
               <span className="font-bold flex-1 truncate">{selectedPeer.display_name}</span>
+              {/* Phone: the call button sits here instead of in the composer. */}
+              <button
+                type="button"
+                onClick={() => setShowVideoCall(true)}
+                className="btn-icon flex-none sm:hidden"
+                style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
+                aria-label="Gọi video"
+              >
+                📞
+              </button>
             </div>
             {showCallBanner && (
               <div

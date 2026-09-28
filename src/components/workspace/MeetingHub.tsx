@@ -1574,6 +1574,9 @@ export function MeetingHub({
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
   const [shownTranslationIds, setShownTranslationIds] = useState<Set<string>>(new Set());
   const [showSearch, setShowSearch] = useState(false);
+  // Phone header: the room tools (ghim, ảnh & file, thành viên, rời/đóng/
+  // xoá phòng…) live behind one ⋯ button so the header stays one row.
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<MeetingSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -3009,6 +3012,12 @@ export function MeetingHub({
   useEffect(() => {
     const el = textInputRef.current;
     if (!el) return;
+    // Empty box: one row, whatever width it had while measuring (a box
+    // measured before layout settled could lock itself at the cap).
+    if (!text) {
+      el.style.height = "";
+      return;
+    }
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, [text]);
@@ -4178,20 +4187,20 @@ export function MeetingHub({
         ) : (
           <>
             <div
-              className="flex-none flex flex-wrap sm:flex-nowrap items-center gap-2 px-4 py-3"
+              className="flex-none flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-3"
               style={{ borderBottom: "1px solid var(--color-neutral-200)" }}
             >
               <button
                 type="button"
                 onClick={() => setShowRoomListMobile(true)}
                 className="btn-icon sm:hidden flex-none"
-                style={{ width: 28, height: 28, padding: 0 }}
+                style={{ width: 34, height: 34, padding: 0 }}
                 aria-label="Danh sách phòng"
               >
                 ☰
               </button>
-              <span aria-hidden style={{ fontSize: 18 }}>{activeChannel.icon}</span>
-              <span className="flex-1 min-w-0 basis-[calc(100%-64px)] sm:basis-0 flex flex-col">
+              <span aria-hidden className="flex-none" style={{ fontSize: 18 }}>{activeChannel.icon}</span>
+              <span className="flex-1 min-w-0 flex flex-col">
                 {activeChannel.parent_channel_id && (
                   <span className="text-[10px] truncate" style={{ color: "var(--color-neutral-500)" }}>
                     ↳ {channels.find((c) => c.id === activeChannel.parent_channel_id)?.name ?? ""}
@@ -4232,7 +4241,7 @@ export function MeetingHub({
                     setCreateParentId(activeChannel.id);
                     setShowCreate(true);
                   }}
-                  className="btn-icon flex-none"
+                  className="btn-icon flex-none hidden sm:inline-flex"
                   style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
                   aria-label="Tạo phòng con"
                   title="Tạo phòng con trong phòng này"
@@ -4249,7 +4258,7 @@ export function MeetingHub({
                     setShowSearch(false);
                     setShowPinned(false);
                   }}
-                  className="btn-icon flex-none"
+                  className="btn-icon flex-none hidden sm:inline-flex"
                   style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
                   aria-label="Thông tin phòng"
                   title="Thông tin phòng & thành viên"
@@ -4265,7 +4274,7 @@ export function MeetingHub({
                   setShowAddMember(false);
                   setShowPinned(false);
                 }}
-                className="btn-icon flex-none"
+                className="btn-icon flex-none hidden sm:inline-flex"
                 style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
                 aria-label="Ảnh, link & file"
                 title="Ảnh, link & file đã chia sẻ trong phòng"
@@ -4280,7 +4289,7 @@ export function MeetingHub({
                   setShowSearch(false);
                   setShowAddMember(false);
                 }}
-                className="btn-icon flex-none relative"
+                className="btn-icon flex-none relative hidden sm:inline-flex"
                 style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
                 aria-label="Tin đã ghim"
                 title="Tin nhắn đã ghim"
@@ -4319,8 +4328,134 @@ export function MeetingHub({
               >
                 🔍
               </button>
+              {/* Phone: video call lives up here (not in the composer), and
+                  everything else behind ⋯ — one row instead of three. */}
+              <button
+                type="button"
+                onClick={() => setShowVideoCall(true)}
+                className="btn-icon flex-none sm:hidden"
+                style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
+                aria-label="Gọi video"
+              >
+                📞
+              </button>
+              <div className="relative flex-none sm:hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowHeaderMenu((v) => !v)}
+                  className="btn-icon relative"
+                  style={{ width: 34, height: 34, padding: 0, fontSize: 18 }}
+                  aria-label="Thêm tuỳ chọn phòng"
+                  aria-expanded={showHeaderMenu}
+                >
+                  ⋯
+                  {pinnedMessages.length > 0 && (
+                    <span
+                      className="absolute rounded-full"
+                      style={{ top: 2, right: 2, width: 8, height: 8, background: "var(--status-red)" }}
+                      aria-hidden
+                    />
+                  )}
+                </button>
+                {showHeaderMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowHeaderMenu(false)} />
+                    <div
+                      className="card elev-lg absolute right-0 top-full mt-1 z-50 flex flex-col py-1.5 min-w-[220px]"
+                      style={{ borderRadius: 12 }}
+                      role="menu"
+                    >
+                      {(
+                        [
+                          {
+                            key: "pinned",
+                            label: `📌 Tin đã ghim${pinnedMessages.length > 0 ? ` (${pinnedMessages.length})` : ""}`,
+                            show: true,
+                            run: () => {
+                              setShowPinned(true);
+                              setShowMedia(false);
+                              setShowSearch(false);
+                              setShowAddMember(false);
+                            },
+                          },
+                          {
+                            key: "media",
+                            label: "🖼 Ảnh, link & file",
+                            show: true,
+                            run: () => {
+                              setShowMedia(true);
+                              setShowSearch(false);
+                              setShowAddMember(false);
+                              setShowPinned(false);
+                            },
+                          },
+                          {
+                            key: "members",
+                            label: "👥 Thành viên phòng",
+                            show: !activeChannel.is_general && !activeChannel.is_food_room,
+                            run: () => {
+                              setShowAddMember(true);
+                              setShowMedia(false);
+                              setShowSearch(false);
+                              setShowPinned(false);
+                            },
+                          },
+                          {
+                            key: "sub",
+                            label: "➕ Tạo phòng con",
+                            show: !activeChannel.is_general && !activeChannel.parent_channel_id,
+                            run: () => {
+                              setCreateParentId(activeChannel.id);
+                              setShowCreate(true);
+                            },
+                          },
+                          {
+                            key: "leave",
+                            label: "🚪 Rời phòng",
+                            show: !activeChannel.is_general && !activeChannel.is_food_room,
+                            run: () => handleLeave(activeChannel.id),
+                          },
+                          {
+                            key: "close",
+                            label: activeChannel.closed_at ? "🔓 Mở lại dự án" : "🔒 Đóng dự án",
+                            show:
+                              !activeChannel.is_general &&
+                              !activeChannel.is_food_room &&
+                              (activeChannel.created_by === currentUser.id || isDirectorOrPm),
+                            run: () => handleToggleClosed(activeChannel.id, !activeChannel.closed_at),
+                          },
+                          {
+                            key: "delete",
+                            label: "🗑 Xoá phòng",
+                            show:
+                              !activeChannel.is_general && !activeChannel.is_food_room && activeChannel.created_by === currentUser.id,
+                            run: () => handleDelete(activeChannel.id),
+                            danger: true,
+                          },
+                        ] as { key: string; label: string; show: boolean; run: () => void; danger?: boolean }[]
+                      )
+                        .filter((item) => item.show)
+                        .map((item) => (
+                          <button
+                            key={item.key}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setShowHeaderMenu(false);
+                              item.run();
+                            }}
+                            className="text-left px-4 py-2.5 text-[14px] font-semibold"
+                            style={{ color: item.danger ? "var(--status-red)" : "var(--color-text)" }}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                    </div>
+                  </>
+                )}
+              </div>
               {!activeChannel.is_general && !activeChannel.is_food_room && (
-                <>
+                <span className="hidden sm:contents">
                   <button type="button" onClick={() => handleLeave(activeChannel.id)} className="btn btn-ghost btn-sm whitespace-nowrap">
                     Rời phòng
                   </button>
@@ -4338,7 +4473,7 @@ export function MeetingHub({
                       Xoá phòng
                     </button>
                   )}
-                </>
+                </span>
               )}
             </div>
 
@@ -4948,7 +5083,7 @@ export function MeetingHub({
                   )}
                 </div>
               )}
-              <form ref={composerFormRef} onSubmit={handleSend} className={`${activeChannel.closed_at ? "hidden" : "flex"} items-end gap-2 p-3`}>
+              <form ref={composerFormRef} onSubmit={handleSend} className={`${activeChannel.closed_at ? "hidden" : "flex"} items-end gap-2 p-2 sm:p-3`}>
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -4964,7 +5099,9 @@ export function MeetingHub({
                     setReactionPickerFor(null);
                     setShowEmojiPicker((v) => !v);
                   }}
-                  className="btn-icon flex-none"
+                  // Phones have emoji on the keyboard, and the video call
+                  // button moves to the room header there.
+                  className="btn-icon flex-none hidden sm:inline-flex"
                   style={{ width: 34, height: 34, padding: 0, fontSize: 18 }}
                   aria-label="Chọn biểu tượng cảm xúc"
                 >
@@ -4973,7 +5110,7 @@ export function MeetingHub({
                 <button
                   type="button"
                   onClick={() => setShowVideoCall(true)}
-                  className="btn-icon flex-none"
+                  className="btn-icon flex-none hidden sm:inline-flex"
                   style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
                   aria-label="Gọi video"
                   title="Gọi video cả phòng"
@@ -5044,8 +5181,18 @@ export function MeetingHub({
                     }
                   }}
                 />
-                <button type="submit" className="btn btn-primary flex-none">
-                  Gửi
+                <span className="hidden sm:contents">
+                  <button type="submit" className="btn btn-primary flex-none">
+                    Gửi
+                  </button>
+                </span>
+                <button
+                  type="submit"
+                  className="flex-none sm:hidden flex items-center justify-center rounded-full"
+                  style={{ width: 38, height: 38, background: "var(--color-accent-500)", color: "#fff", fontSize: 17 }}
+                  aria-label="Gửi"
+                >
+                  ➤
                 </button>
               </form>
             </div>

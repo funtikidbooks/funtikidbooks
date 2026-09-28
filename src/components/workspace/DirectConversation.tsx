@@ -1623,7 +1623,9 @@ export function DirectConversation({
           <button
             type="button"
             onClick={() => setShowEmojiPicker((v) => !v)}
-            className="btn-icon flex-none"
+            // Phones: emoji come from the keyboard, and the call button is
+            // in the conversation header — keeps the composer one tidy row.
+            className="btn-icon flex-none hidden sm:inline-flex"
             style={{ width: 34, height: 34, padding: 0, fontSize: 18 }}
             aria-label="Chọn biểu tượng cảm xúc"
           >
@@ -1633,7 +1635,7 @@ export function DirectConversation({
             <button
               type="button"
               onClick={onCallClick}
-              className="btn-icon flex-none"
+              className="btn-icon flex-none hidden sm:inline-flex"
               style={{ width: 34, height: 34, padding: 0, fontSize: 16 }}
               aria-label="Gọi video"
               title="Gọi video"
@@ -1681,8 +1683,18 @@ export function DirectConversation({
             }}
             onPaste={handlePaste}
           />
-          <button type="submit" className="btn btn-primary btn-sm flex-none" style={{ padding: "6px 12px" }}>
-            Gửi
+          <span className="hidden sm:contents">
+            <button type="submit" className="btn btn-primary btn-sm flex-none" style={{ padding: "6px 12px" }}>
+              Gửi
+            </button>
+          </span>
+          <button
+            type="submit"
+            className="flex-none sm:hidden flex items-center justify-center rounded-full"
+            style={{ width: 38, height: 38, background: "var(--color-accent-500)", color: "#fff", fontSize: 17 }}
+            aria-label="Gửi"
+          >
+            ➤
           </button>
         </form>
       </div>

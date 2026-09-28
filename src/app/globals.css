@@ -309,17 +309,22 @@ h4 {
 .btn-danger:hover:not(:disabled) {
   background: rgba(192, 82, 79, 0.1);
 }
-.btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 9px;
-  border-radius: var(--radius-pill);
-  background: var(--color-neutral-100);
-  color: var(--color-text);
-}
-.btn-icon:hover:not(:disabled) {
-  background: var(--color-neutral-200);
+/* In the components layer so a utility on the same element wins — outside
+   it, `display: inline-flex` here beat `hidden` / `sm:hidden`, and every
+   "desktop only" icon button still showed on phones. */
+@layer components {
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 9px;
+    border-radius: var(--radius-pill);
+    background: var(--color-neutral-100);
+    color: var(--color-text);
+  }
+  .btn-icon:hover:not(:disabled) {
+    background: var(--color-neutral-200);
+  }
 }
 .btn-block {
   width: 100%;
