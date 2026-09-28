@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { UPWORK_LIVE_CHANNEL, UPWORK_LIVE_EVENT } from "@/lib/upworkLive";
 import { DEFAULT_UPWORK_SOP, normalizeSop, type UpworkSop } from "@/lib/upworkSop";
 import type { UpworkBatch, UpworkLead, UpworkLeadStatus, UpworkProposalTemplate } from "@/lib/types";
 
@@ -41,15 +43,33 @@ export async function listUpworkLeads(batchId: string): Promise<UpworkLead[]> {
   return (data ?? []) as UpworkLead[];
 }
 
+// Tell every open Upwork page to refetch this batch (see lib/upworkLive.ts).
+// Best-effort: a failed ping only means someone reloads by hand.
+async function pingUpworkLive(batchId: string | null | undefined) {
+  if (!batchId) return;
+  const admin = createAdminClient();
+  const channel = admin.channel(UPWORK_LIVE_CHANNEL);
+  try {
+    await channel.httpSend(UPWORK_LIVE_EVENT, { batchId });
+  } catch {
+    // ignore
+  } finally {
+    await admin.removeChannel(channel);
+  }
+}
+
 // "sent" is set by hand once sếp has actually pasted the (possibly edited)
 // draft into Upwork himself and clicked submit there — nothing in this app
 // ever calls Upwork's API to send a proposal.
 export async function updateUpworkLeadStatus(leadId: string, status: UpworkLeadStatus) {
   const { supabase, user } = await requireDirectorOrPM();
-  await supabase
+  const { data } = await supabase
     .from("upwork_leads")
     .update({ status, reviewed_by: user.id, reviewed_at: new Date().toISOString() })
-    .eq("id", leadId);
+    .eq("id", leadId)
+    .select("batch_id")
+    .maybeSingle();
+  await pingUpworkLive(data?.batch_id as string | undefined);
   revalidatePath("/quan-tri/upwork");
 }
 
@@ -57,7 +77,13 @@ export async function updateUpworkLeadDraft(leadId: string, proposalDraft: strin
   const { supabase } = await requireDirectorOrPM();
   const trimmed = proposalDraft.trim();
   if (!trimmed) throw new Error("Nội dung proposal không được để trống.");
-  await supabase.from("upwork_leads").update({ proposal_draft: trimmed }).eq("id", leadId);
+  const { data } = await supabase
+    .from("upwork_leads")
+    .update({ proposal_draft: trimmed })
+    .eq("id", leadId)
+    .select("batch_id")
+    .maybeSingle();
+  await pingUpworkLive(data?.batch_id as string | undefined);
   revalidatePath("/quan-tri/upwork");
 }
 

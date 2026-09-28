@@ -161,8 +161,23 @@ async function report(file = REPORT_FILE) {
     }
   }
   fs.rmSync(file, { force: true });
+  await pingLive(batch.id);
   const notice = await notifyAuto(batch.id);
   console.log(JSON.stringify({ batchId: batch.id, saved: rows.length, skipped: leads.length - rows.length, notice }));
+}
+
+// Open Tìm khách (Upwork) pages refetch the moment this ping arrives —
+// same channel and event as src/lib/upworkLive.ts. Only the batch id goes
+// out; the page loads the details through its own permission checks.
+async function pingLive(batchId) {
+  const channel = db.channel("upwork-live");
+  try {
+    await channel.httpSend("changed", { batchId });
+  } catch {
+    // best-effort
+  } finally {
+    await db.removeChannel(channel);
+  }
 }
 
 // Which notification this check sends, by the hour in Vietnam — decided

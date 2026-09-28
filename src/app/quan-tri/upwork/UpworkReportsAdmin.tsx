@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { updateUpworkLeadDraft, updateUpworkLeadStatus, listUpworkLeads } from "@/lib/actions/upwork";
+import { listUpworkBatches, listUpworkLeads, updateUpworkLeadDraft, updateUpworkLeadStatus } from "@/lib/actions/upwork";
+import { UPWORK_LIVE_CHANNEL, UPWORK_LIVE_EVENT } from "@/lib/upworkLive";
 import type { UpworkBatch, UpworkLead, UpworkLeadStatus, UpworkProposalTemplate } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { ProposalTemplates } from "./ProposalTemplates";
@@ -254,7 +255,17 @@ function mergeLeads(base: UpworkLead[], incoming: UpworkLead[]) {
   return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
-function BatchSection({ batch, live, startOpen }: { batch: UpworkBatch; live: UpworkLead[] | undefined; startOpen: boolean }) {
+function BatchSection({
+  batch,
+  live,
+  startOpen,
+  tick,
+}: {
+  batch: UpworkBatch;
+  live: UpworkLead[] | undefined;
+  startOpen: boolean;
+  tick: number;
+}) {
   const [open, setOpen] = useState(false);
   const [leads, setLeads] = useState<UpworkLead[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -284,6 +295,15 @@ function BatchSection({ batch, live, startOpen }: { batch: UpworkBatch; live: Up
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startOpen]);
+
+  // A live ping for this batch: refetch if its leads are already on screen
+  // (or it's open) so another device's Duyệt / edit shows up here.
+  useEffect(() => {
+    if (tick === 0 || (!open && leads === null)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refetch triggered by an external realtime ping
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick]);
 
   // Leads written or changed elsewhere (the hourly run adding them, the PM
   // pressing Duyệt on another device) show up here without a reload.
@@ -362,13 +382,25 @@ export function UpworkReportsAdmin({
   const [batches, setBatches] = useState(initialBatches);
   const [liveLeads, setLiveLeads] = useState<Map<string, UpworkLead[]>>(() => new Map());
   const [showEmpty, setShowEmpty] = useState(false);
+  const [ticks, setTicks] = useState<Map<string, number>>(() => new Map());
 
   // Realtime: a new check from the hourly run, a lead it drafted, or a
   // status someone changed appears the moment it is saved.
   useEffect(() => {
     const supabase = createClient();
     const channel = supabase
-      .channel("upwork-live")
+      .channel(UPWORK_LIVE_CHANNEL)
+      // Works with no database setup: a ping after every change elsewhere
+      // (lib/upworkLive.ts) → refetch the batch list and that batch's leads.
+      .on("broadcast", { event: UPWORK_LIVE_EVENT }, (msg) => {
+        const batchId = (msg.payload as { batchId?: string } | undefined)?.batchId;
+        void listUpworkBatches()
+          .then((rows) => setBatches(rows))
+          .catch(() => {});
+        if (batchId) setTicks((prev) => new Map(prev).set(batchId, (prev.get(batchId) ?? 0) + 1));
+      })
+      // Also listens to table changes directly once upwork_realtime.sql has
+      // been run — whichever arrives first wins, the merge is idempotent.
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "upwork_batches" }, (payload) => {
         const row = payload.new as UpworkBatch;
         setBatches((prev) => (prev.some((b) => b.id === row.id) ? prev : [row, ...prev]));
@@ -476,7 +508,13 @@ export function UpworkReportsAdmin({
               <p style={{ color: "var(--color-neutral-500)" }}>Chưa có job nào hợp SOP. Có job mới là hiện ở đây ngay.</p>
             )}
             {(showEmpty ? batches : withJobs).map((batch) => (
-              <BatchSection key={batch.id} batch={batch} live={liveLeads.get(batch.id)} startOpen={batch.id === newestWithJobs} />
+              <BatchSection
+                key={batch.id}
+                batch={batch}
+                live={liveLeads.get(batch.id)}
+                startOpen={batch.id === newestWithJobs}
+                tick={ticks.get(batch.id) ?? 0}
+              />
             ))}
           </>
         )}
