@@ -904,6 +904,14 @@ h4 {
   border-radius: var(--radius-md);
   border: 1px solid var(--color-neutral-200);
 }
+/* Anything inside a scrolling flex column scrolls — it must never be
+   squeezed to fit. A child with overflow: hidden (a .card with rounded
+   corners, say) loses flex's content-size floor, so the column shrank it
+   instead of scrolling and its bottom was cut off (Tìm khách (Upwork) on
+   sếp Phúc's iPad). */
+.overflow-y-auto.flex-col > * {
+  flex-shrink: 0;
+}
 .elev-sm {
   box-shadow: var(--shadow-sm);
 }
