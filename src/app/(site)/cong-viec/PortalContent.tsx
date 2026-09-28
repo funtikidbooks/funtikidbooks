@@ -23,6 +23,8 @@ import type { ClientMessage, ClientProfile, ClientProject } from "@/lib/types";
 
 type Stage = "loading" | "signed-out" | "sent-link" | "needs-profile" | "ready";
 
+const PORTAL_RELOAD_KEY = "funti-portal-signin-reload-at";
+
 // After registering a profile, turns whatever guest chat this browser was
 // having (GuestChatPanel, same localStorage keys the floating widget uses)
 // into that new client's first project — best-effort, never blocks sign-up.
@@ -86,14 +88,30 @@ export function PortalContent({ showcaseImages = [] }: { showcaseImages?: string
   // this). A full reload is the simplest safe response — far less to get
   // subtly wrong than re-deriving profile/unread/project state by hand
   // when a fresh mount already does all of that correctly.
+  //
+  // Only from a page that was showing the signed-out / "check your email"
+  // screen — Supabase also emits SIGNED_IN on its own while this page is
+  // still "loading" (a sign-in link's ?code= being exchanged, or a session
+  // re-established when the tab regains focus). Reloading on those reloaded
+  // into the same event again: one signed-in browser in Cần Thơ looped
+  // ~3 reloads/s for two hours on 27/09, logging 10,436 page views of
+  // /cong-viec in GA. The session-storage guard caps it at one reload per
+  // 30s even if something unforeseen triggers it again.
   useEffect(() => {
     const supabase = createClient();
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_IN" && stageRef.current !== "ready") {
-        window.location.reload();
+      if (event !== "SIGNED_IN") return;
+      if (stageRef.current !== "signed-out" && stageRef.current !== "sent-link") return;
+      try {
+        const last = Number(sessionStorage.getItem(PORTAL_RELOAD_KEY) || 0);
+        if (Date.now() - last < 30_000) return;
+        sessionStorage.setItem(PORTAL_RELOAD_KEY, String(Date.now()));
+      } catch {
+        // sessionStorage unavailable — the stage check above still applies
       }
+      window.location.reload();
     });
     return () => subscription.unsubscribe();
   }, []);

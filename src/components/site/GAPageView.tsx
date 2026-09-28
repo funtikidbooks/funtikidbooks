@@ -25,9 +25,23 @@ declare global {
 // so it unmounts the moment a client-side navigation leaves for
 // /workspace or /quan-tri — no more page_view calls after that, same as
 // a full reload landing outside (site) never having loaded gtag at all.
-export function GAPageView() {
+//
+// GA4's enhanced measurement ("page changes based on browser history
+// events", on by default in the GA admin) still counted a client-side hop
+// from a public page into /workspace — a few staff views a day kept
+// showing up after the fix above. Google's own opt-out flag switches every
+// hit off while no (site) page is mounted, and back on when one is.
+export function GAPageView({ measurementId }: { measurementId: string }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const flag = `ga-disable-${measurementId}`;
+    (window as unknown as Record<string, boolean>)[flag] = false;
+    return () => {
+      (window as unknown as Record<string, boolean>)[flag] = true;
+    };
+  }, [measurementId]);
 
   useEffect(() => {
     if (typeof window.gtag !== "function") return;

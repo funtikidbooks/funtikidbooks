@@ -48,7 +48,7 @@ const CHANNEL_LABELS: Record<string, string> = {
 export type AnalyticsOverview = {
   activeNow: number;
   last7Days: { date: string; sessions: number; users: number; pageViews: number }[];
-  topPages: { path: string; views: number }[];
+  topPages: { path: string; views: number; users: number }[];
   channels: { channel: string; sessions: number }[];
 };
 
@@ -80,7 +80,10 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
       property,
       dateRanges: [{ startDate: "7daysAgo", endDate: "today" }],
       dimensions: [{ name: "pagePath" }],
-      metrics: [{ name: "screenPageViews" }],
+      // Users alongside views: a page with thousands of views from one
+      // person is a stuck browser (see PortalContent's reload guard), not
+      // real interest — showing both makes that obvious at a glance.
+      metrics: [{ name: "screenPageViews" }, { name: "totalUsers" }],
       orderBys: [{ metric: { metricName: "screenPageViews" }, desc: true }],
       limit: 6,
     }),
@@ -101,7 +104,7 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
     return { date, sessions: mv(row, 0), users: mv(row, 1), pageViews: mv(row, 2) };
   });
 
-  const topPages = (pagesResp.rows ?? []).map((row) => ({ path: dv(row) || "/", views: mv(row) }));
+  const topPages = (pagesResp.rows ?? []).map((row) => ({ path: dv(row) || "/", views: mv(row, 0), users: mv(row, 1) }));
 
   const channels = (channelsResp.rows ?? []).map((row) => {
     const raw = dv(row);

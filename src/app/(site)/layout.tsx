@@ -38,7 +38,7 @@ export default function SiteLayout({ children }: { children: React.ReactNode }) 
             gtag('config', '${GA_MEASUREMENT_ID}', { send_page_view: false });`}
         </Script>
         <Suspense fallback={null}>
-          <GAPageView />
+          <GAPageView measurementId={GA_MEASUREMENT_ID} />
         </Suspense>
         <Header />
         <main className="flex-1">{children}</main>

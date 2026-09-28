@@ -137,7 +137,12 @@ export default async function AnalyticsPage() {
                           <span className="truncate" style={{ color: "var(--color-neutral-700)" }}>
                             {p.path}
                           </span>
-                          <span className="font-semibold flex-none">{formatNumber(p.views)}</span>
+                          <span className="flex-none flex items-baseline gap-1.5">
+                            <span className="font-semibold">{formatNumber(p.views)}</span>
+                            <span className="text-[11px]" style={{ color: p.users > 0 && p.views / p.users > 50 ? "var(--status-red)" : "var(--color-neutral-500)" }}>
+                              · {formatNumber(p.users)} người
+                            </span>
+                          </span>
                         </div>
                         <div className="rounded-full overflow-hidden" style={{ height: 5, background: "var(--color-surface)" }}>
                           <div
