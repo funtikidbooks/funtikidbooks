@@ -240,3 +240,26 @@ test("bảng công việc: lọc thẻ kiểu Trello và sắp xếp", async () 
   assert.deepEqual(sorted.map((x) => x.title), ["C", "A", "B"]);
   assert.ok(isArchiveColumnTitle(` ${ARCHIVE_COLUMN_TITLE} `));
 });
+
+test("SOP bảng giá: cân ngân sách job theo mức Tốt / Trung bình / Thấp", async () => {
+  const { parsePrice, priceBand } = await import("../src/lib/upworkSop.ts");
+  assert.equal(parsePrice("$1,200"), 1200);
+  assert.equal(parsePrice(" 45.5 "), 45.5);
+  assert.equal(parsePrice(""), null);
+  assert.equal(parsePrice("chưa có"), null);
+  const row = (good, average, low) => ({ name: "", unit: "", good, average, low, note: "" });
+  const rows = [row("150", "100", "60"), row("280", "180", "110"), row("250", "180", "120")]; // page · spread · cover
+  // 12 spreads + 1 cover: good 12×280+250 = 3610, average 2340, low 1440
+  const q = [0, 12, 1];
+  assert.deepEqual(priceBand(4000, rows, q).need, { good: 3610, average: 2340, low: 1440 });
+  assert.equal(priceBand(3610, rows, q).band, "good");
+  assert.equal(priceBand(2500, rows, q).band, "average");
+  assert.equal(priceBand(1440, rows, q).band, "low");
+  assert.equal(priceBand(900, rows, q).band, "below");
+  assert.equal(priceBand(0, rows, q).band, null); // no budget typed yet
+  assert.equal(priceBand(5000, rows, [0, 0, 0]).band, null); // nothing asked for
+  // A tier with a missing price for a used row is skipped, not counted as $0.
+  const partial = [row("", "100", "60")];
+  assert.deepEqual(priceBand(120, partial, [1]), { band: "average", need: { good: null, average: 100, low: 60 } });
+  assert.equal(priceBand(50, [row("150", "100", "")], [1]).band, null); // no floor set → can't call it "below"
+});

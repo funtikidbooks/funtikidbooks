@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import { saveUpworkSop } from "@/lib/actions/upwork";
-import type { SopStep, UpworkSop } from "@/lib/upworkSop";
+import { parsePrice, priceBand, type PriceBand, type PriceRow, type SopStep, type UpworkSop } from "@/lib/upworkSop";
 
 // The deck's own palette (sampled from the SOP-01 slides), so the page reads
 // as the same document — navy for structure, then orange/teal/rose/gold to
@@ -17,7 +17,17 @@ const TONES = [BLUE, TEAL, ORANGE, ROSE, GOLD, NAVY];
 const tone = (i: number) => TONES[i % TONES.length];
 const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-type SectionKey = "cover" | "overview" | "classify" | "criteria" | "realName" | "timing" | "coverLetter" | "decision" | "closing";
+type SectionKey =
+  | "cover"
+  | "overview"
+  | "classify"
+  | "criteria"
+  | "realName"
+  | "timing"
+  | "coverLetter"
+  | "pricing"
+  | "decision"
+  | "closing";
 
 const PARTS: { key: Exclude<SectionKey, "cover" | "overview" | "closing">; anchor: string }[] = [
   { key: "classify", anchor: "sop-classify" },
@@ -25,8 +35,19 @@ const PARTS: { key: Exclude<SectionKey, "cover" | "overview" | "closing">; ancho
   { key: "realName", anchor: "sop-real-name" },
   { key: "timing", anchor: "sop-timing" },
   { key: "coverLetter", anchor: "sop-cover-letter" },
+  { key: "pricing", anchor: "sop-pricing" },
   { key: "decision", anchor: "sop-decision" },
 ];
+
+// Price tiers, best first; "below" is anything under the Thấp floor.
+const PRICE_TIERS: { key: PriceBand; label: string; rule: string; color: string; action: keyof UpworkSop["pricing"] }[] = [
+  { key: "good", label: "Tốt", rule: "Ngân sách từ mức Tốt", color: TEAL, action: "goodAction" },
+  { key: "average", label: "Trung bình", rule: "Từ mức Trung bình", color: BLUE, action: "averageAction" },
+  { key: "low", label: "Thấp", rule: "Từ mức Thấp", color: ORANGE, action: "lowAction" },
+  { key: "below", label: "Dưới mức", rule: "Thấp hơn mức Thấp", color: ROSE, action: "belowAction" },
+];
+const PRICE_COLUMNS = PRICE_TIERS.slice(0, 3) as { key: "good" | "average" | "low"; label: string; color: string }[];
+const usd = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 
 // Text that turns into an input in place while its section is being edited
 // — same spot, same typography, dashed outline — so editing happens on the
@@ -245,7 +266,7 @@ export function UpworkSopView({ initialSop, saved }: { initialSop: UpworkSop; sa
   const ed = (key: SectionKey) => editingKey === key;
   const partNo = (key: SectionKey) => String(PARTS.findIndex((p) => p.key === key) + 1).padStart(2, "0");
 
-  const { cover, classify, criteria, realName, timing, coverLetter, decision, closing } = doc;
+  const { cover, classify, criteria, realName, timing, coverLetter, pricing, decision, closing } = doc;
   const maxScore = criteria.rows.length * 5;
 
   return (
@@ -700,7 +721,148 @@ export function UpworkSopView({ initialSop, saved }: { initialSop: UpworkSop; sa
         </div>
       </SectionShell>
 
-      {/* 06 Quyết định cuối */}
+      {/* 06 Bảng giá */}
+      <SectionShell
+        id="sop-pricing"
+        eyebrow={`Phần ${partNo("pricing")}`}
+        title={pricing.title}
+        onTitle={(v) => patch("pricing", { title: v })}
+        intro={pricing.intro}
+        onIntro={(v) => patch("pricing", { intro: v })}
+        {...shell("pricing")}
+      >
+        <div className="grid gap-2.5 grid-cols-2 lg:grid-cols-4">
+          {PRICE_TIERS.map((t) => (
+            <div key={t.key} className="rounded-[12px] p-3 flex flex-col gap-1.5" style={{ border: "1px solid var(--color-neutral-200)" }}>
+              <span className="flex items-center gap-2 flex-wrap">
+                <span className="rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ background: t.color, color: "#fff" }}>
+                  {t.label}
+                </span>
+                <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                  {t.rule}
+                </span>
+              </span>
+              <Field
+                value={pricing[t.action] as string}
+                onChange={(v) => patch("pricing", { [t.action]: v })}
+                editing={ed("pricing")}
+                multiline
+                className="text-[13px] leading-snug"
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-[12px] overflow-hidden" style={{ border: "1px solid var(--color-neutral-200)" }}>
+          <div
+            className="hidden sm:grid grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] gap-3 px-4 py-2.5 text-sm font-semibold"
+            style={{ background: NAVY, color: "#fff" }}
+          >
+            <span>Hạng mục · đơn vị</span>
+            {PRICE_COLUMNS.map((c) => (
+              <span key={c.key} className="text-center">
+                {c.label} <span className="font-normal opacity-75">(từ)</span>
+              </span>
+            ))}
+          </div>
+          {pricing.rows.map((row, i) => {
+            const set = (v: Partial<PriceRow>) => patch("pricing", { rows: setAt(pricing.rows, i, v) });
+            return (
+              <div
+                key={i}
+                className="grid gap-2.5 sm:gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] sm:items-center"
+                style={{ background: i % 2 ? "var(--color-surface)" : "transparent", borderTop: i ? "1px solid var(--color-neutral-200)" : undefined }}
+              >
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="flex items-baseline gap-1.5 min-w-0">
+                    <Field value={row.name} onChange={(v) => set({ name: v })} editing={ed("pricing")} className="font-semibold text-sm" placeholder="Tên hạng mục" />
+                    {!ed("pricing") && row.unit && (
+                      <span className="text-xs flex-none" style={{ color: "var(--color-neutral-500)" }}>
+                        / {row.unit}
+                      </span>
+                    )}
+                    {ed("pricing") && pricing.rows.length > 1 && (
+                      <button
+                        type="button"
+                        className="text-xs font-bold flex-none self-center px-1"
+                        style={{ color: "var(--status-red)" }}
+                        aria-label="Xoá hạng mục"
+                        title="Xoá hạng mục"
+                        onClick={() => patch("pricing", { rows: removeAt(pricing.rows, i) })}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </span>
+                  {ed("pricing") && (
+                    <Field value={row.unit} onChange={(v) => set({ unit: v })} editing className="text-xs" placeholder="Đơn vị (trang, spread, bìa…)" />
+                  )}
+                  <Field
+                    value={row.note}
+                    onChange={(v) => set({ note: v })}
+                    editing={ed("pricing")}
+                    className="text-xs"
+                    style={{ color: "var(--color-neutral-500)" }}
+                    placeholder="Ghi chú (không bắt buộc)"
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2 sm:contents">
+                  {PRICE_COLUMNS.map((c) => {
+                    const n = parsePrice(row[c.key]);
+                    return (
+                      <div key={c.key} className="flex flex-col items-center gap-0.5 min-w-0">
+                        <span className="sm:hidden text-[10px] font-bold uppercase tracking-[0.08em]" style={{ color: "var(--color-neutral-500)" }}>
+                          {c.label}
+                        </span>
+                        {ed("pricing") ? (
+                          <label className="flex items-center gap-1 w-full max-w-[120px]">
+                            <span className="text-sm font-semibold" style={{ color: "var(--color-neutral-500)" }}>
+                              $
+                            </span>
+                            <input
+                              className="fk-sop-edit text-center tabular-nums text-sm"
+                              inputMode="decimal"
+                              placeholder="0"
+                              value={row[c.key]}
+                              onChange={(e) => set({ [c.key]: e.target.value })}
+                              aria-label={`${row.name || "Hạng mục"} — giá ${c.label}`}
+                            />
+                          </label>
+                        ) : (
+                          <span
+                            className="text-[15px] font-bold tabular-nums"
+                            style={{ color: n === null ? "var(--color-neutral-400)" : "var(--color-text)" }}
+                          >
+                            {n === null ? "—" : usd(n)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+          <div className="px-4 py-2.5 text-sm flex gap-1.5" style={{ background: `${TEAL}14`, borderTop: "1px solid var(--color-neutral-200)" }}>
+            <span className="font-semibold flex-none" style={{ color: TEAL }}>
+              Lưu ý:
+            </span>
+            <Field value={pricing.note} onChange={(v) => patch("pricing", { note: v })} editing={ed("pricing")} multiline className="flex-1" />
+          </div>
+        </div>
+        {ed("pricing") && (
+          <div>
+            <AddButton
+              label="Thêm hạng mục"
+              onClick={() => patch("pricing", { rows: [...pricing.rows, { name: "", unit: "", good: "", average: "", low: "", note: "" }] })}
+            />
+          </div>
+        )}
+
+        <PriceCalculator pricing={pricing} />
+      </SectionShell>
+
+      {/* 07 Quyết định cuối */}
       <SectionShell
         id="sop-decision"
         eyebrow={`Phần ${partNo("decision")}`}
@@ -785,6 +947,83 @@ export function UpworkSopView({ initialSop, saved }: { initialSop: UpworkSop; sa
           />
         </div>
       </SectionShell>
+    </div>
+  );
+}
+
+// "Cân đo nhanh": type a job's budget and how many pages / spreads / covers
+// it asks for, see which tier it lands in against the table above. Nothing
+// here is saved — it's a scratch pad for whoever is reading a job post.
+function PriceCalculator({ pricing }: { pricing: UpworkSop["pricing"] }) {
+  const [budget, setBudget] = useState("");
+  const [qty, setQty] = useState<string[]>([]);
+  const counts = pricing.rows.map((_, i) => Math.max(0, parsePrice(qty[i] ?? "") ?? 0));
+  const budgetN = parsePrice(budget) ?? 0;
+  const { band, need } = priceBand(budgetN, pricing.rows, counts);
+  const used = counts.some((c) => c > 0);
+  const anyNeed = need.good !== null || need.average !== null || need.low !== null;
+  const tier = PRICE_TIERS.find((t) => t.key === band);
+
+  return (
+    <div className="rounded-[12px] p-4 sm:p-5 flex flex-col gap-3" style={{ background: "var(--color-surface)", border: "1px solid var(--color-neutral-200)" }}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="text-sm font-bold">🧮 Cân đo nhanh một job</span>
+        <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+          Job theo giờ: nhập 1 ở dòng giờ và ngân sách là giá mỗi giờ
+        </span>
+      </div>
+      <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+        <label className="field">
+          <span className="text-xs font-semibold">Ngân sách job ($)</span>
+          <input className="input tabular-nums" inputMode="decimal" placeholder="VD: 1500" value={budget} onChange={(e) => setBudget(e.target.value)} />
+        </label>
+        {pricing.rows.map((r, i) => (
+          <label key={i} className="field">
+            <span className="text-xs font-semibold truncate" title={r.name}>
+              Số {r.unit || r.name || "đơn vị"}
+            </span>
+            <input
+              className="input tabular-nums"
+              inputMode="numeric"
+              placeholder="0"
+              value={qty[i] ?? ""}
+              onChange={(e) => setQty((q) => pricing.rows.map((_, k) => (k === i ? e.target.value : (q[k] ?? ""))))}
+            />
+          </label>
+        ))}
+      </div>
+
+      {!used ? (
+        <p className="text-[13px]" style={{ color: "var(--color-neutral-500)" }}>
+          Nhập số trang, spread, bìa… mà job yêu cầu để xem ngân sách đang ở mức nào.
+        </p>
+      ) : !anyNeed ? (
+        <p className="text-[13px]" style={{ color: "var(--color-neutral-500)" }}>
+          Hạng mục đã chọn chưa có giá — bấm ✏️ Sửa ở phần này để nhập bảng giá.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2 text-[12.5px] tabular-nums">
+            {PRICE_COLUMNS.map((c) => (
+              <span key={c.key} className="rounded-full px-2.5 py-1" style={{ background: "var(--color-bg)", border: "1px solid var(--color-neutral-200)" }}>
+                {c.label} cần ≥ <b>{need[c.key] === null ? "—" : usd(need[c.key] as number)}</b>
+              </span>
+            ))}
+          </div>
+          {tier ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full px-3 py-1 text-sm font-bold" style={{ background: tier.color, color: "#fff" }}>
+                {usd(budgetN)} → {tier.label}
+              </span>
+              <span className="text-[13px] font-semibold">{pricing[tier.action] as string}</span>
+            </div>
+          ) : (
+            <p className="text-[13px]" style={{ color: "var(--color-neutral-500)" }}>
+              {budgetN > 0 ? "Chưa đủ giá ở mức Thấp để xếp loại ngân sách này." : "Nhập ngân sách job để xếp loại."}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

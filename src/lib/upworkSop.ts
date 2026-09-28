@@ -5,6 +5,12 @@
 
 export type SopStep = { title: string; description: string };
 
+// One line of the studio's price list, in USD per unit. Each column is the
+// lowest budget that still counts as that tier; kept as text so a half-filled
+// table saves as-is and "$1,200" reads the same as "1200".
+export type PriceRow = { name: string; unit: string; good: string; average: string; low: string; note: string };
+export type PriceBand = "good" | "average" | "low" | "below";
+
 export type UpworkSop = {
   cover: { eyebrow: string; title: string; department: string; docCode: string; scope: string };
   overviewIntro: string;
@@ -39,6 +45,17 @@ export type UpworkSop = {
     steps: SopStep[];
   };
   coverLetter: { title: string; summary: string; intro: string; parts: SopStep[]; tipsTitle: string; tips: string[] };
+  pricing: {
+    title: string;
+    summary: string;
+    intro: string;
+    rows: PriceRow[];
+    goodAction: string;
+    averageAction: string;
+    lowAction: string;
+    belowAction: string;
+    note: string;
+  };
   decision: {
     title: string;
     summary: string;
@@ -154,6 +171,24 @@ export const DEFAULT_UPWORK_SOP: UpworkSop = {
       "Luôn đọc lại toàn bộ nội dung và kiểm tra khung giờ gửi trước khi bấm gửi thật.",
     ],
   },
+  pricing: {
+    title: "Bảng Giá Tham Khảo",
+    summary: "Mức giá tốt, trung bình, thấp để cân ngân sách job trước khi gửi đơn.",
+    intro:
+      "Giá tính bằng USD cho mỗi đơn vị. Ngân sách job đạt mức nào thì xếp vào mức đó; dưới mức Thấp là không nhận. Lượt canh job mỗi giờ đọc bảng này để cân từng job.",
+    rows: [
+      { name: "Single page (trang đơn)", unit: "trang", good: "", average: "", low: "", note: "" },
+      { name: "Double page (spread)", unit: "spread", good: "", average: "", low: "", note: "" },
+      { name: "Cover book (bìa sách)", unit: "bìa", good: "", average: "", low: "", note: "" },
+      { name: "Trọn gói (cả cuốn)", unit: "cuốn", good: "", average: "", low: "", note: "VD: 32 trang + bìa" },
+      { name: "Theo giờ (hourly)", unit: "giờ", good: "", average: "", low: "", note: "" },
+    ],
+    goodAction: "Gửi đơn ngay, đầu tư chất lượng.",
+    averageAction: "Gửi đơn nếu khách đạt điểm SOP.",
+    lowAction: "Chỉ gửi khi khách uy tín hoặc job nhanh gọn.",
+    belowAction: "Không gửi đơn, trừ khi Giám đốc duyệt.",
+    note: "Job không ghi ngân sách hoặc số trang: hỏi lại khách trước khi báo giá.",
+  },
   decision: {
     title: "Quyết Định Cuối Trước Khi Bid",
     summary: "Quy tắc xử lý theo mức connects của giá thầu.",
@@ -215,4 +250,43 @@ export function normalizeSop(raw: unknown): UpworkSop {
     }
   }
   return out as unknown as UpworkSop;
+}
+
+// "$1,200" → 1200; blank or not a number → null (that tier isn't set yet).
+export function parsePrice(text: string): number | null {
+  const digits = String(text ?? "").replace(/[^0-9.]/g, "");
+  if (!digits) return null;
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : null;
+}
+
+const BANDS = ["good", "average", "low"] as const;
+
+// What a job needs to reach each tier for the given quantities (qty[i] units
+// of rows[i]) and which tier its budget lands in. A tier whose price is
+// missing for any row in use is null and skipped; below every set tier is
+// "below" only when the Thấp floor itself is known.
+export function priceBand(
+  budget: number,
+  rows: PriceRow[],
+  qty: number[],
+): { band: PriceBand | null; need: Record<(typeof BANDS)[number], number | null> } {
+  const used = rows.map((r, i) => ({ r, q: qty[i] ?? 0 })).filter((x) => x.q > 0);
+  const need = { good: null, average: null, low: null } as Record<(typeof BANDS)[number], number | null>;
+  if (used.length === 0) return { band: null, need };
+  for (const b of BANDS) {
+    let sum = 0;
+    for (const { r, q } of used) {
+      const p = parsePrice(r[b]);
+      if (p === null) {
+        sum = NaN;
+        break;
+      }
+      sum += p * q;
+    }
+    need[b] = Number.isNaN(sum) ? null : Math.round(sum * 100) / 100;
+  }
+  if (!(budget > 0)) return { band: null, need };
+  for (const b of BANDS) if (need[b] !== null && budget >= (need[b] as number)) return { band: b, need };
+  return { band: need.low !== null ? "below" : null, need };
 }
