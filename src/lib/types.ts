@@ -544,6 +544,16 @@ export type StaffSalary = {
   updated_at: string;
 };
 
+// Thử việc → chính thức (supabase/migrations/staff_probation.sql). No row
+// = not confirmed yet; see src/lib/probation.ts for the rules.
+export type StaffProbation = {
+  profile_id: string;
+  official_at: string;
+  confirmed_by: string | null;
+  emailed_at: string | null;
+  created_at: string;
+};
+
 export type StaffBankInfo = {
   profile_id: string;
   bank_name: string | null;
@@ -1217,6 +1227,12 @@ export type Database = {
         Row: StaffSalary;
         Insert: Partial<StaffSalary> & { profile_id: string };
         Update: Partial<StaffSalary>;
+        Relationships: [];
+      };
+      staff_probation: {
+        Row: StaffProbation;
+        Insert: Partial<StaffProbation> & { profile_id: string; official_at: string };
+        Update: Partial<StaffProbation>;
         Relationships: [];
       };
       staff_bank_info: {

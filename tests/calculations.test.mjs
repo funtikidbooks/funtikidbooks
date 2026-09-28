@@ -132,3 +132,22 @@ test("chat: both people build the same private DM channel name, lower id first",
   assert.equal(roomTopic("x"), "room:x");
   assert.equal(inboxTopic("y"), "inbox:y");
 });
+
+test("thử việc: 2 months from the join date, then due for 30 days, confirmed = official", async () => {
+  const { addMonths, probationStatus, vnDateOf } = await import("../src/lib/probation.ts");
+  assert.equal(addMonths("2026-08-15", 2), "2026-10-15");
+  assert.equal(addMonths("2026-12-31", 2), "2027-02-28");
+  assert.equal(addMonths("2027-12-31", 2), "2028-02-29");
+  // 17:30 UTC on 31/07 is already 01/08 in Vietnam.
+  assert.equal(vnDateOf("2026-07-31T17:30:00Z"), "2026-08-01");
+
+  const staff = { joined_at: "2026-08-15", created_at: "2026-08-01T00:00:00Z", access_role: "staff" };
+  assert.deepEqual(probationStatus(staff, null, "2026-09-28"), { kind: "probation", endsOn: "2026-10-15", daysLeft: 17 });
+  assert.deepEqual(probationStatus(staff, null, "2026-10-15"), { kind: "due", endsOn: "2026-10-15", daysOver: 0 });
+  assert.deepEqual(probationStatus(staff, null, "2026-11-14"), { kind: "due", endsOn: "2026-10-15", daysOver: 30 });
+  assert.equal(probationStatus(staff, null, "2026-11-15").kind, "official");
+  assert.equal(probationStatus(staff, "2026-09-01", "2026-09-28").kind, "official");
+  // Directors never show as thử việc; no joined_at falls back to account creation.
+  assert.equal(probationStatus({ ...staff, access_role: "director" }, null, "2026-09-28").kind, "official");
+  assert.equal(probationStatus({ ...staff, joined_at: null }, null, "2026-09-28").endsOn, "2026-10-01");
+});

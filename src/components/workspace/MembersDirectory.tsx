@@ -9,9 +9,10 @@ import { updateJoinedAt } from "@/lib/actions/admin";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { bankColor, formatAccountNumber } from "@/lib/bankDisplay";
 import { vnToday } from "@/lib/constants/attendance";
+import { formatVnDate, probationStatus } from "@/lib/probation";
 import { StaffBankInfoModal } from "@/components/workspace/StaffBankInfoModal";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
-import type { Profile, StaffBankInfo } from "@/lib/types";
+import type { Profile, StaffBankInfo, StaffProbation } from "@/lib/types";
 
 const CreateAccountDialog = dynamic(
   () => import("@/components/admin/CreateAccountDialog").then((m) => m.CreateAccountDialog),
@@ -39,6 +40,30 @@ function formatJoinDate(iso: string) {
   );
 }
 
+// Yellow "Thử việc" tag for staff in their first 2 months who haven't been
+// confirmed official yet (Quản trị → Nhân sự). See src/lib/probation.ts.
+function ProbationTag({ profile, officialAt, today }: { profile: Profile; officialAt: string | undefined; today: string }) {
+  const status = probationStatus(profile, officialAt, today);
+  if (status.kind === "official") return null;
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2 py-px text-[10px] font-bold whitespace-nowrap flex-none"
+      style={{
+        background: "color-mix(in srgb, var(--status-yellow) 18%, transparent)",
+        border: "1px solid var(--status-yellow)",
+        color: "var(--color-text)",
+      }}
+      title={
+        status.kind === "probation"
+          ? `Thử việc đến ${formatVnDate(status.endsOn)}`
+          : `Hết hạn thử việc ${formatVnDate(status.endsOn)} — chờ xác nhận chính thức`
+      }
+    >
+      Thử việc
+    </span>
+  );
+}
+
 function formatTenure(iso: string) {
   const start = new Date(iso);
   const [ny, nm, nd] = vnToday().split("-").map(Number);
@@ -60,11 +85,13 @@ export function MembersDirectory({
   currentUserId,
   canManage,
   initialBankInfo,
+  initialProbation,
 }: {
   profiles: Profile[];
   currentUserId: string;
   canManage: boolean;
   initialBankInfo: StaffBankInfo[];
+  initialProbation: StaffProbation[];
 }) {
   const router = useRouter();
   const [items, setItems] = useState(profiles);
@@ -78,6 +105,10 @@ export function MembersDirectory({
   );
   const [editingBank, setEditingBank] = useState<Profile | null>(null);
   const [qrLightboxUrl, setQrLightboxUrl] = useState<string | null>(null);
+  const [officialAt, setOfficialAt] = useState<Map<string, string>>(
+    () => new Map(initialProbation.map((r) => [r.profile_id, r.official_at])),
+  );
+  const today = vnToday();
 
   // A colleague's name/avatar/job-title edit, a brand-new staff account, or
   // a removed one now shows up here immediately — this is exactly the kind
@@ -101,6 +132,15 @@ export function MembersDirectory({
       .on("postgres_changes", { event: "DELETE", schema: "public", table: "profiles" }, (payload) => {
         const old = payload.old as { id: string };
         setItems((prev) => prev.filter((p) => p.id !== old.id));
+      })
+      // The tag disappears the moment the director/PM confirms someone.
+      .on("postgres_changes", { event: "*", schema: "public", table: "staff_probation" }, (payload) => {
+        setOfficialAt((prev) => {
+          const next = new Map(prev);
+          if (payload.eventType === "DELETE") next.delete((payload.old as { profile_id: string }).profile_id);
+          else next.set((payload.new as StaffProbation).profile_id, (payload.new as StaffProbation).official_at);
+          return next;
+        });
       })
       .subscribe();
 
@@ -215,9 +255,10 @@ export function MembersDirectory({
                   />
                 </span>
                 <span className="flex flex-col min-w-0">
-                  <span className="text-sm font-bold truncate flex items-center gap-1">
-                    {p.display_name}
+                  <span className="text-sm font-bold flex items-center gap-1 min-w-0">
+                    <span className="truncate">{p.display_name}</span>
                     {p.access_role === "director" && <span aria-label="Giám đốc">👑</span>}
+                    <ProbationTag profile={p} officialAt={officialAt.get(p.id)} today={today} />
                   </span>
                   <span className="text-xs truncate" style={{ color: "var(--color-neutral-500)" }}>
                     {p.role ?? "Chưa có chức danh"}
@@ -275,9 +316,10 @@ export function MembersDirectory({
               </div>
 
               <div className="flex flex-col min-w-0">
-                <span className="text-sm font-bold flex items-center gap-1 truncate">
-                  {p.display_name}
+                <span className="text-sm font-bold flex items-center gap-1 min-w-0">
+                  <span className="truncate">{p.display_name}</span>
                   {p.access_role === "director" && <span aria-label="Giám đốc">👑</span>}
+                  <ProbationTag profile={p} officialAt={officialAt.get(p.id)} today={today} />
                 </span>
                 <span className="text-xs truncate" style={{ color: "var(--color-neutral-500)" }}>
                   {p.role ?? "Chưa có chức danh"}

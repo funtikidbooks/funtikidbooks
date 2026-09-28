@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/supabase/server";
 import { listStaffBankInfo } from "@/lib/actions/admin";
+import { listStaffProbation } from "@/lib/actions/probation";
 import { MembersDirectory } from "@/components/workspace/MembersDirectory";
 import type { Profile } from "@/lib/types";
 
@@ -9,9 +10,10 @@ export const metadata: Metadata = { title: "Thành viên" };
 export default async function MembersPage() {
   const { supabase, user } = await requireUser();
 
-  const [{ data: profiles }, { data: me }] = await Promise.all([
+  const [{ data: profiles }, { data: me }, probation] = await Promise.all([
     supabase.from("profiles").select("*").order("display_name", { ascending: true }),
     supabase.from("profiles").select("access_role").eq("id", user.id).maybeSingle(),
+    listStaffProbation(),
   ]);
 
   const canManage = me?.access_role === "director";
@@ -26,6 +28,7 @@ export default async function MembersPage() {
       currentUserId={user.id}
       canManage={canManage}
       initialBankInfo={bankInfo}
+      initialProbation={probation}
     />
   );
 }

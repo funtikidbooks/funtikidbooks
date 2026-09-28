@@ -271,3 +271,30 @@ Funti Kidbooks Studio`,
     `,
   });
 }
+
+function escapeHtml(text: string) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Thử việc → chính thức (Quản trị → Nhân sự). The body is whatever the
+// director/PM left in the confirm dialog, so it's escaped and its line
+// breaks kept. Returns false when Gmail SMTP isn't configured, so the UI
+// can offer to open Gmail with the same letter instead.
+export async function sendOfficialStaffEmail(input: { to: string; subject: string; message: string }): Promise<boolean> {
+  const transporter = getTransporter();
+  if (!transporter) return false;
+
+  await transporter.sendMail({
+    from: `"Funti Kidbooks Studio" <${process.env.GMAIL_USER}>`,
+    to: input.to,
+    subject: input.subject,
+    text: input.message,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #2b2622;">
+        <p style="font-size: 28px; margin: 0 0 8px;">🎉</p>
+        <div style="font-size: 15px; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(input.message)}</div>
+      </div>
+    `,
+  });
+  return true;
+}

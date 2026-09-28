@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { CreateAccountDialog } from "@/components/admin/CreateAccountDialog";
 import { StaffIdModal } from "@/components/admin/StaffIdModal";
+import { ProbationPanel } from "@/components/admin/ProbationPanel";
 import { deleteStaffAccount, updateAccessRole, updateJobTitle } from "@/lib/actions/admin";
 import { JOB_TITLE_SUGGESTIONS } from "@/lib/constants/staff";
-import type { AccessRole, Profile, StaffIdDocument } from "@/lib/types";
+import type { AccessRole, Profile, StaffIdDocument, StaffProbation } from "@/lib/types";
 
 const ROLE_LABELS: Record<AccessRole, string> = {
   director: "Giám đốc",
@@ -18,11 +19,13 @@ export function StaffRoles({
   currentUserId,
   isDirector,
   initialIdDocuments,
+  initialProbation,
 }: {
   initialProfiles: Profile[];
   currentUserId: string;
   isDirector: boolean;
   initialIdDocuments: StaffIdDocument[];
+  initialProbation: StaffProbation[];
 }) {
   const [profiles, setProfiles] = useState(initialProfiles);
   const [pending, startTransition] = useTransition();
@@ -111,6 +114,7 @@ export function StaffRoles({
             {error}
           </p>
         )}
+        <ProbationPanel profiles={profiles} initialRows={initialProbation} />
         <datalist id="job-title-suggestions">
           {JOB_TITLE_SUGGESTIONS.map((title) => (
             <option key={title} value={title} />
