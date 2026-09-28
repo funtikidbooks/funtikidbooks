@@ -51,6 +51,19 @@ const MORE_NAV_IPHONE_APP = [
   { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐" },
 ];
 
+// Text fields that bring up the on-screen keyboard.
+const TYPING_SELECTOR =
+  'textarea, [contenteditable="true"], input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="file"]):not([type="range"]):not([type="color"])';
+
+function isTypingOnTouch() {
+  const el = document.activeElement;
+  return !!el && el.matches(TYPING_SELECTOR) && window.matchMedia("(pointer: coarse)").matches;
+}
+
+// The on-screen keyboard shrinks the visual viewport by far more than any
+// toolbar animation does.
+const KEYBOARD_MIN_PX = 120;
+
 export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
   const pathname = usePathname();
   const [showMore, setShowMore] = useState(false);
@@ -61,6 +74,10 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
   const moreNav = showsIphoneAppNav ? MORE_NAV_IPHONE_APP : MORE_NAV;
   const navRef = useRef<HTMLElement>(null);
   const [navHeight, setNavHeight] = useState(60);
+  // While the keyboard is up the bar is hidden, like a native app's tab
+  // bar — otherwise sync() below lifts it to sit right on top of the
+  // keyboard, exactly where the chat composer is, and covers it.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   // iOS Safari pins `position: fixed` elements to the *layout* viewport,
   // which doesn't change size as its toolbar/tab-bar chrome animates away —
@@ -76,14 +93,33 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
     if (!vv || !nav) return;
     function sync() {
       const offset = window.innerHeight - (vv!.height + vv!.offsetTop);
-      nav!.style.transform = offset > 0.5 ? `translateY(-${offset}px)` : "";
+      const kb = offset > KEYBOARD_MIN_PX || isTypingOnTouch();
+      setKeyboardOpen(kb);
+      nav!.style.transform = !kb && offset > 0.5 ? `translateY(-${offset}px)` : "";
+    }
+    // Focus hides the bar the moment the keyboard starts sliding up, not
+    // after the viewport has finished resizing; blur waits a beat so
+    // hopping between two fields doesn't flash it back.
+    let blurTimer: ReturnType<typeof setTimeout> | undefined;
+    function onFocusIn() {
+      clearTimeout(blurTimer);
+      sync();
+    }
+    function onFocusOut() {
+      clearTimeout(blurTimer);
+      blurTimer = setTimeout(sync, 150);
     }
     sync();
     vv.addEventListener("resize", sync);
     vv.addEventListener("scroll", sync);
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
     return () => {
+      clearTimeout(blurTimer);
       vv.removeEventListener("resize", sync);
       vv.removeEventListener("scroll", sync);
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
     };
   }, []);
 
@@ -93,7 +129,10 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
-    const ro = new ResizeObserver(() => setNavHeight(nav.offsetHeight));
+    // A hidden bar measures 0 — keep the last real height for its return.
+    const ro = new ResizeObserver(() => {
+      if (nav.offsetHeight > 0) setNavHeight(nav.offsetHeight);
+    });
     ro.observe(nav);
     return () => ro.disconnect();
   }, []);
@@ -102,10 +141,10 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
     <>
       {/* Sits in normal flow purely to reserve the fixed bar's height so
           page content doesn't render underneath it. */}
-      <div className="md:hidden no-print flex-none" style={{ height: navHeight }} aria-hidden />
+      <div className="md:hidden no-print flex-none" style={{ height: keyboardOpen ? 0 : navHeight }} aria-hidden />
       <nav
         ref={navRef}
-        className="md:hidden no-print fixed inset-x-0 bottom-0 z-40 flex items-stretch"
+        className={`md:hidden no-print fixed inset-x-0 bottom-0 z-40 items-stretch ${keyboardOpen ? "hidden" : "flex"}`}
         style={{
           background: "var(--color-panel)",
           borderTop: "1px solid var(--color-neutral-200)",
