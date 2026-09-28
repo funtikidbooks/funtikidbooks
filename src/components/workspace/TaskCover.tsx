@@ -12,10 +12,14 @@ export function TaskCover({
   taskId,
   coverUrl,
   onChange,
+  onRemove,
 }: {
   taskId: string;
   coverUrl: string | null;
   onChange: (url: string | null) => void;
+  // When the card dialog manages removal itself (it knows whether the cover
+  // is one of the card's attachments).
+  onRemove?: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -58,6 +62,7 @@ export function TaskCover({
   }
 
   function handleRemove() {
+    if (onRemove) return onRemove();
     onChange(null);
     removeTaskCover(taskId).catch(() => {
       // Local removal stays as-is (e.g. workspace-demo has no real backend).
@@ -70,14 +75,21 @@ export function TaskCover({
         <div className="relative" style={{ height: 130 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={thumbnailUrl(coverUrl, 640, 260)} alt="" className="w-full h-full object-cover" />
-          <button
-            type="button"
-            onClick={handleRemove}
-            className="absolute bottom-2 right-2 btn btn-sm opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ background: "rgba(20,18,17,.7)", color: "#fff" }}
-          >
-            Xoá ảnh bìa
-          </button>
+          {/* Always shown on touch screens — there's no hover to reveal them. */}
+          <div className="fk-hover-reveal absolute bottom-2 right-2 flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="btn btn-sm"
+              style={{ background: "rgba(20,18,17,.7)", color: "#fff" }}
+            >
+              {uploading ? "Đang tải…" : "Đổi ảnh bìa"}
+            </button>
+            <button type="button" onClick={handleRemove} className="btn btn-sm" style={{ background: "rgba(20,18,17,.7)", color: "#fff" }}>
+              Bỏ ảnh bìa
+            </button>
+          </div>
         </div>
       ) : (
         <button

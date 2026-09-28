@@ -804,6 +804,9 @@ export type Task = {
   assignee_id: string | null;
   start_date: string | null;
   due_date: string | null;
+  // Trello's "hoàn tất" tick on the due date. Optional: the column only
+  // exists once supabase/migrations/board_trello_parity.sql has been run.
+  due_complete?: boolean;
   progress: number;
   position: number;
   cover_image_url: string | null;
@@ -868,7 +871,7 @@ export type TaskLink = {
   created_at: string;
 };
 
-export type TaskActivityType = "created" | "moved" | "assigned" | "attached" | "link_added";
+export type TaskActivityType = "created" | "moved" | "assigned" | "attached" | "link_added" | "due_complete" | "due_incomplete";
 
 export type TaskActivity = {
   id: string;

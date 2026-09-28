@@ -9,7 +9,12 @@ export const ARCHIVE_COLUMN_TITLE = "📦 Lưu trữ";
 
 export const isArchiveColumnTitle = (title: string) => title.trim() === ARCHIVE_COLUMN_TITLE;
 
-export type DueFilter = "any" | "overdue" | "week" | "none";
+// "#1546" ↔ /workspace?the=1546 — a link that opens the board on that card.
+export const CARD_PARAM = "the";
+export const taskLink = (origin: string, code: string) => `${origin}/workspace?${CARD_PARAM}=${encodeURIComponent(code.replace(/^#/, ""))}`;
+export const codeFromParam = (value: string | null) => (value?.trim() ? `#${value.trim().replace(/^#/, "")}` : null);
+
+export type DueFilter = "any" | "overdue" | "week" | "none" | "complete" | "incomplete";
 
 export type BoardFilter = {
   text: string;
@@ -28,6 +33,7 @@ type FilterableTask = {
   code: string;
   description: string | null;
   due_date: string | null;
+  due_complete?: boolean | null;
   labels: string[];
   assignees: { id: string }[];
 };
@@ -58,6 +64,10 @@ export function matchesFilter(task: FilterableTask, f: BoardFilter, today: strin
   if (f.due !== "any") {
     if (f.due === "none") return !task.due_date;
     if (!task.due_date) return false;
+    // Like Trello, a due date ticked "hoàn tất" is never overdue or coming up.
+    if (f.due === "complete") return !!task.due_complete;
+    if (f.due === "incomplete") return !task.due_complete;
+    if (task.due_complete) return false;
     if (f.due === "overdue") return task.due_date < today;
     if (f.due === "week") return task.due_date >= today && task.due_date <= addDaysIso(today, 7);
   }

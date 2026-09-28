@@ -11,6 +11,8 @@ const DUE_OPTIONS: { id: DueFilter; label: string }[] = [
   { id: "overdue", label: "🔴 Quá hạn" },
   { id: "week", label: "🟠 Tới hạn trong 7 ngày" },
   { id: "none", label: "Chưa có hạn chót" },
+  { id: "complete", label: "☑ Đã đánh dấu hoàn tất" },
+  { id: "incomplete", label: "Chưa hoàn tất" },
 ];
 
 export function BoardFilterMenu({
@@ -18,12 +20,14 @@ export function BoardFilterMenu({
   onChange,
   profiles,
   labels,
+  currentUserId,
   onClose,
 }: {
   filter: BoardFilter;
   onChange: (f: BoardFilter) => void;
   profiles: Profile[];
   labels: BoardLabel[];
+  currentUserId: string;
   onClose: () => void;
 }) {
   const toggle = (key: "members" | "labels", id: string) =>
@@ -54,10 +58,17 @@ export function BoardFilterMenu({
           Thành viên
         </div>
         <label className={row}>
+          <input type="checkbox" checked={filter.members.includes(currentUserId)} onChange={() => toggle("members", currentUserId)} />
+          <span className="font-semibold">👤 Thẻ của tôi</span>
+          <span className="ml-auto text-[11px]" style={{ color: "var(--color-neutral-400)" }}>
+            phím Q
+          </span>
+        </label>
+        <label className={row}>
           <input type="checkbox" checked={filter.members.includes("none")} onChange={() => toggle("members", "none")} />
           <span style={{ color: "var(--color-neutral-600)" }}>Chưa giao cho ai</span>
         </label>
-        {profiles.map((p) => (
+        {profiles.filter((p) => p.id !== currentUserId).map((p) => (
           <label key={p.id} className={row}>
             <input type="checkbox" checked={filter.members.includes(p.id)} onChange={() => toggle("members", p.id)} />
             <span

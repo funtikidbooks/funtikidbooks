@@ -57,7 +57,9 @@ export async function getBoardData(boardId: string) {
     supabase
       .from("tasks")
       .select(
-        "id, board_id, column_id, code, title, description, assignee_id, start_date, due_date, progress, position, cover_image_url, labels, created_by, created_at, updated_at, assignee:profiles!tasks_assignee_id_fkey(id, display_name, avatar_url), assignees:task_assignees(profile:profiles(id, display_name, avatar_url)), checklist_items:task_checklist_items(id, done), comment_count:task_comments(count), attachment_count:task_attachments(count)",
+        // "*" rather than a column list: picks up due_complete once its migration
+        // has run, without the board failing to load before that.
+        "*, assignee:profiles!tasks_assignee_id_fkey(id, display_name, avatar_url), assignees:task_assignees(profile:profiles(id, display_name, avatar_url)), checklist_items:task_checklist_items(id, done), comment_count:task_comments(count), attachment_count:task_attachments(count)",
       )
       .eq("board_id", boardId)
       .order("position", { ascending: true }),

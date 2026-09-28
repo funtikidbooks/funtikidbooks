@@ -144,22 +144,28 @@ export async function setTaskCoverUrl(taskId: string, url: string) {
 
   // Old cover is now unreferenced — free the space it was taking up.
   if (currentTask?.cover_image_url && currentTask.cover_image_url !== url) {
-    const oldPath = storagePathFromPublicUrl(currentTask.cover_image_url, "task-attachments");
-    if (oldPath) await supabase.storage.from("task-attachments").remove([oldPath]).catch(() => {});
+    await removeCoverFile(supabase, taskId, currentTask.cover_image_url);
   }
 
   revalidatePath("/workspace");
   return url;
 }
 
+// A cover picked from the card's own attachments ("Đặt làm ảnh bìa") is
+// still that attachment — only a cover uploaded on its own gets deleted
+// from storage when it's replaced or removed.
+async function removeCoverFile(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], taskId: string, url: string) {
+  const { count } = await supabase.from("task_attachments").select("id", { count: "exact", head: true }).eq("task_id", taskId).eq("url", url);
+  if (count) return;
+  const path = storagePathFromPublicUrl(url, "task-attachments");
+  if (path) await supabase.storage.from("task-attachments").remove([path]).catch(() => {});
+}
+
 export async function removeTaskCover(taskId: string) {
   const { supabase } = await requireUser();
   const { data: currentTask } = await supabase.from("tasks").select("cover_image_url").eq("id", taskId).maybeSingle();
   await supabase.from("tasks").update({ cover_image_url: null }).eq("id", taskId);
-  if (currentTask?.cover_image_url) {
-    const path = storagePathFromPublicUrl(currentTask.cover_image_url, "task-attachments");
-    if (path) await supabase.storage.from("task-attachments").remove([path]).catch(() => {});
-  }
+  if (currentTask?.cover_image_url) await removeCoverFile(supabase, taskId, currentTask.cover_image_url);
   revalidatePath("/workspace");
 }
 
@@ -185,22 +191,24 @@ export async function updateTask(
   revalidatePath("/workspace");
 }
 
-// Changing a card's list from within the card detail view — distinct from
+// Changing a card's list from the card or its quick menu — distinct from
 // reorderTasks (drag-and-drop position sync), this always logs an activity
 // entry since a list change is a notable event, unlike an in-list reorder.
+// The card lands on top of the new list, where the studio keeps its newest.
 export async function moveTaskColumn(taskId: string, toColumnId: string) {
   const { supabase, user } = await requireUser();
 
   const { data: task } = await supabase.from("tasks").select("column_id").eq("id", taskId).maybeSingle();
   if (!task || task.column_id === toColumnId) return;
 
-  const [{ data: fromColumn }, { data: toColumn }, { count }] = await Promise.all([
+  const [{ data: fromColumn }, { data: toColumn }, { data: first }] = await Promise.all([
     supabase.from("board_columns").select("title").eq("id", task.column_id).maybeSingle(),
     supabase.from("board_columns").select("title").eq("id", toColumnId).maybeSingle(),
-    supabase.from("tasks").select("id", { count: "exact", head: true }).eq("column_id", toColumnId),
+    supabase.from("tasks").select("position").eq("column_id", toColumnId).order("position", { ascending: true }).limit(1).maybeSingle(),
   ]);
 
-  await supabase.from("tasks").update({ column_id: toColumnId, position: count ?? 0 }).eq("id", taskId);
+  const position = first ? Math.min(0, (first.position as number) - 1) : 0;
+  await supabase.from("tasks").update({ column_id: toColumnId, position }).eq("id", taskId);
   await logTaskActivity(supabase, taskId, user.id, "moved", {
     from: fromColumn?.title ?? "",
     to: toColumn?.title ?? "",
@@ -285,8 +293,9 @@ export async function deleteTask(taskId: string) {
  */
 export async function reorderTasks(
   updates: { id: string; column_id: string; position: number }[],
+  moved?: { taskId: string; from: string; to: string },
 ) {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   if (updates.length === 0) return;
 
   await Promise.all(
@@ -297,7 +306,23 @@ export async function reorderTasks(
         .eq("id", u.id),
     ),
   );
+  // A card dragged to another list shows up in its activity, like Trello.
+  if (moved && moved.from !== moved.to) await logTaskActivity(supabase, moved.taskId, user.id, "moved", { from: moved.from, to: moved.to });
 
+  revalidatePath("/workspace");
+}
+
+export async function setDueComplete(taskId: string, done: boolean) {
+  const { supabase, user } = await requireUser();
+  const { error } = await supabase.from("tasks").update({ due_complete: done }).eq("id", taskId);
+  if (error) {
+    throw new Error(
+      /due_complete/.test(error.message)
+        ? "Cần chạy file SQL board_trello_parity.sql trong Supabase trước khi đánh dấu hoàn tất."
+        : "Không lưu được dấu hoàn tất.",
+    );
+  }
+  await logTaskActivity(supabase, taskId, user.id, done ? "due_complete" : "due_incomplete");
   revalidatePath("/workspace");
 }
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { addComment, getTaskActivity, getTaskComments, updateComment, uploadTaskAttachment } from "@/lib/actions/task-detail";
+import { addComment, getTaskActivity, getTaskComments, updateComment } from "@/lib/actions/task-detail";
+import { uploadTaskFile } from "@/lib/taskUpload";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import type { Profile, TaskActivity, TaskAttachment, TaskComment } from "@/lib/types";
 
@@ -31,6 +32,10 @@ function activityText(a: TaskActivity): string {
       return `${actor} đã đính kèm tệp "${a.metadata.filename ?? ""}"`;
     case "link_added":
       return `${actor} đã thêm liên kết "${a.metadata.label ?? ""}"`;
+    case "due_complete":
+      return `${actor} đã đánh dấu hạn chót là hoàn tất`;
+    case "due_incomplete":
+      return `${actor} đã bỏ dấu hoàn tất hạn chót`;
     default:
       return `${actor} đã cập nhật thẻ này`;
   }
@@ -92,10 +97,8 @@ export function TaskCommentChat({
     setUploading(true);
     try {
       for (const file of Array.from(files)) {
-        const formData = new FormData();
-        formData.append("file", file);
         try {
-          const attachment = await uploadTaskAttachment(taskId, formData);
+          const attachment = await uploadTaskFile(taskId, file);
           setPending((prev) => [...prev, attachment]);
         } catch {
           // skip files that fail validation/upload

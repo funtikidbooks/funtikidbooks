@@ -263,3 +263,30 @@ test("SOP bảng giá: cân ngân sách job theo mức Tốt / Trung bình / Th�
   assert.deepEqual(priceBand(120, partial, [1]), { band: "average", need: { good: null, average: 100, low: 60 } });
   assert.equal(priceBand(50, [row("150", "100", "")], [1]).band, null); // no floor set → can't call it "below"
 });
+
+test("bảng công việc: mô tả kiểu Trello (Markdown) hiện đúng, thẻ hoàn tất hạn không bị tính quá hạn", async () => {
+  const { descriptionToHtml, isHtmlDescription } = await import("../src/lib/descriptionHtml.ts");
+  const { matchesFilter, EMPTY_FILTER, taskLink, codeFromParam } = await import("../src/lib/boardTools.ts");
+  const html = descriptionToHtml(
+    'Hi **Nhân**\nsee [https://docs.google.com/x](https://docs.google.com/x "smartCard-inline")\n\n- one\n- two <b>x</b>\n\n3. three\n\n![image.webp](https://trello.com/a.webp)\n_The Bear_ and file_name_x',
+  );
+  assert.ok(html.startsWith("<p>Hi <strong>Nhân</strong><br>see <a href=\"https://docs.google.com/x\""));
+  assert.ok(html.includes("<ul><li>one</li><li>two &lt;b&gt;x&lt;/b&gt;</li></ul>")); // raw HTML in Markdown is shown, never run
+  assert.ok(html.includes('<ol start="3"><li>three</li></ol>'));
+  assert.ok(html.includes(">🖼 image.webp</a>")); // Trello images need a login — linked, not embedded
+  assert.ok(html.includes("<em>The Bear</em> and file_name_x"));
+  assert.ok(!descriptionToHtml("[x](javascript:alert(1))").includes("href")); // only http(s)/mailto links
+  assert.equal(descriptionToHtml("<p>đã là HTML</p>"), "<p>đã là HTML</p>");
+  assert.equal(descriptionToHtml("   "), "");
+  assert.ok(isHtmlDescription("a<br>b") && !isHtmlDescription("a < b > c"));
+
+  const today = "2026-09-29";
+  const t = (o) => ({ title: "x", code: "#1", description: null, due_date: "2026-09-20", labels: [], assignees: [], ...o });
+  assert.ok(matchesFilter(t({}), { ...EMPTY_FILTER, due: "overdue" }, today));
+  assert.ok(!matchesFilter(t({ due_complete: true }), { ...EMPTY_FILTER, due: "overdue" }, today));
+  assert.ok(matchesFilter(t({ due_complete: true }), { ...EMPTY_FILTER, due: "complete" }, today));
+  assert.ok(!matchesFilter(t({ due_complete: true }), { ...EMPTY_FILTER, due: "incomplete" }, today));
+  assert.equal(taskLink("https://funtikidbooks.com", "#1546"), "https://funtikidbooks.com/workspace?the=1546");
+  assert.equal(codeFromParam("1546"), "#1546");
+  assert.equal(codeFromParam(""), null);
+});

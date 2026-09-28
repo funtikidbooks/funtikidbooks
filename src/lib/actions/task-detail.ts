@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { randomUUID } from "node:crypto";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { mapTaskAssignees } from "@/lib/mapTaskAssignees";
 import type {
@@ -226,25 +225,20 @@ export async function deleteComment(commentId: string) {
   revalidatePath("/workspace");
 }
 
-const ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf"]);
-const MAX_SIZE = 20 * 1024 * 1024;
-
-export async function uploadTaskAttachment(taskId: string, formData: FormData) {
+// The file itself goes browser → Storage (lib/taskUpload.ts): a Server
+// Action body is capped at 4.5MB on Vercel, far below a real illustration
+// file. This only records the upload — its URL is rebuilt from the storage
+// path rather than trusted as sent, and the path must sit under this card.
+export async function recordTaskAttachment(
+  taskId: string,
+  file: { storagePath: string; filename: string; mimeType: string; size: number },
+) {
   const { supabase, user } = await requireUser();
-  const file = formData.get("file");
-  if (!(file instanceof File)) throw new Error("Thiếu tệp tin");
-  if (!ALLOWED_TYPES.has(file.type)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF, WEBP hoặc PDF");
-  if (file.size > MAX_SIZE) throw new Error("Tệp vượt quá 20MB");
+  const path = String(file.storagePath ?? "");
+  if (!path.startsWith(`${taskId}/`) || path.includes("..") || path.split("/").length !== 2) throw new Error("Tệp không hợp lệ");
+  const filename = String(file.filename ?? "").slice(0, 255) || "tep-dinh-kem";
 
-  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
-  const storagePath = `${taskId}/${randomUUID()}.${ext}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from("task-attachments")
-    .upload(storagePath, file, { contentType: file.type });
-  if (uploadError) throw new Error("Không thể tải ảnh lên");
-
-  const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
+  const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(path);
 
   const { data, error } = await supabase
     .from("task_attachments")
@@ -252,16 +246,16 @@ export async function uploadTaskAttachment(taskId: string, formData: FormData) {
       task_id: taskId,
       uploaded_by: user.id,
       url: publicUrlData.publicUrl,
-      storage_path: storagePath,
-      filename: file.name,
-      mime_type: file.type,
-      size: file.size,
+      storage_path: path,
+      filename,
+      mime_type: String(file.mimeType ?? "").slice(0, 120) || "application/octet-stream",
+      size: Math.max(0, Math.round(Number(file.size) || 0)),
     })
     .select(ATTACHMENT_SELECT)
     .single();
 
   if (error || !data) throw new Error("Không thể lưu tệp đính kèm");
-  await logTaskActivity(supabase, taskId, user.id, "attached", { filename: file.name });
+  await logTaskActivity(supabase, taskId, user.id, "attached", { filename });
 
   revalidatePath("/workspace");
   return data as TaskAttachment;

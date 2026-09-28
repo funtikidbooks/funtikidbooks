@@ -480,17 +480,70 @@ h4 {
 /* ---------- Workspace board ---------- */
 .fk-task-card {
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-  /* pan-y (not none): lets iPad scroll a column with a normal swipe, while
-     the Board's TouchSensor delay still gets to see a press-and-hold long
-     enough to start a drag. touch-action: none used to claim the gesture
-     from the very first touch-move, so every scroll attempt on a card got
-     swallowed instead of scrolling the column. */
-  touch-action: pan-y;
+  /* manipulation: a swipe on a card pans the board sideways or the list up
+     and down, whichever way the finger goes; a press-and-hold still starts
+     a drag (the Board's TouchSensor delay). pan-y used to be here, which
+     blocked every sideways swipe that started on a card — i.e. almost the
+     whole screen on an iPad or phone. */
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
 }
-.fk-task-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--color-accent-300);
+/* Hover lift only where there's a real pointer — on iPad a tap left the
+   card stuck "lifted". */
+@media (hover: hover) {
+  .fk-task-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--color-accent-300);
+  }
+  .fk-hover-reveal {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .group:hover .fk-hover-reveal,
+  .fk-hover-reveal:focus-within {
+    opacity: 1;
+  }
+}
+/* Mouse-only controls (the card's ✎ quick edit): absent on touch screens,
+   where a long press drags and a tap opens the card. */
+.fk-hover-only {
+  display: none;
+}
+@media (hover: hover) {
+  .fk-hover-only {
+    display: flex;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .group:hover > .fk-hover-only,
+  .fk-hover-only:focus-visible {
+    opacity: 1;
+  }
+}
+.fk-board-scroll {
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+/* Snapping fights the auto-scroll while a card or list is being dragged. */
+.fk-board-scroll.fk-dragging {
+  scroll-snap-type: none !important;
+}
+.fk-board-scroll.fk-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+.fk-col-scroll {
+  overscroll-behavior-y: contain;
+}
+.fk-chipbar {
+  scrollbar-width: none;
+}
+.fk-chipbar::-webkit-scrollbar {
+  display: none;
+}
+.fk-desc {
+  overflow-wrap: anywhere;
 }
 .fk-staff-card {
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;

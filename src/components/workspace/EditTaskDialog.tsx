@@ -3,9 +3,21 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { Modal } from "@/components/ui/Modal";
-import { addTaskAssignee, moveTaskColumn, removeTaskAssignee, updateTask, updateTaskLabels, deleteTask } from "@/lib/actions/board";
-import { getTaskDetail, uploadTaskAttachment } from "@/lib/actions/task-detail";
-import { computeTaskProgress, taskProgressColor } from "@/lib/taskProgress";
+import {
+  addTaskAssignee,
+  removeTaskAssignee,
+  removeTaskCover,
+  setDueComplete,
+  setTaskCoverUrl,
+  updateTask,
+  updateTaskLabels,
+  deleteTask,
+} from "@/lib/actions/board";
+import { getTaskDetail } from "@/lib/actions/task-detail";
+import { computeTaskProgress, isDoneColumnTitle, taskProgressColor } from "@/lib/taskProgress";
+import { descriptionToHtml } from "@/lib/descriptionHtml";
+import { filesFrom, uploadTaskFile } from "@/lib/taskUpload";
+import { taskLink } from "@/lib/boardTools";
 import { ChecklistSection } from "./ChecklistSection";
 import { LabelPicker } from "./LabelPicker";
 import { TaskAttachments } from "./TaskAttachments";
@@ -40,6 +52,7 @@ export function EditTaskDialog({
   onDeleted,
   onArchive,
   onCopy,
+  onMove,
   onCreateLabel,
   onRenameLabel,
   onRecolorLabel,
@@ -55,6 +68,7 @@ export function EditTaskDialog({
   onDeleted: (taskId: string) => void;
   onArchive?: (taskId: string) => void;
   onCopy?: (taskId: string) => Promise<void>;
+  onMove: (taskId: string, toColumnId: string) => void;
   onCreateLabel: (name: string, color: string) => void;
   onRenameLabel: (labelId: string, name: string) => void;
   onRecolorLabel: (labelId: string, color: string) => void;
@@ -67,6 +81,8 @@ export function EditTaskDialog({
   const [assignees, setAssignees] = useState(task.assignees ?? []);
   const [startDate, setStartDate] = useState(task.start_date ?? "");
   const [dueDate, setDueDate] = useState(task.due_date ?? "");
+  const [dueDone, setDueDone] = useState(!!task.due_complete);
+  const [dueError, setDueError] = useState<string | null>(null);
   const [coverUrl, setCoverUrl] = useState(task.cover_image_url);
   const [labels, setLabels] = useState<string[]>(task.labels ?? []);
   // See toggleLabel below — kept in sync with `labels` state, but also
@@ -86,10 +102,11 @@ export function EditTaskDialog({
   const [showDetails, setShowDetails] = useState(false);
   const [pending, startTransition] = useTransition();
   const columnTitle = columns.find((c) => c.id === columnId)?.title ?? "";
-  const isDone = columnTitle.toLowerCase().includes("hoàn thành");
+  const isDone = isDoneColumnTitle(columnTitle);
   const progressPct = computeTaskProgress(startDate || null, dueDate || null, isDone);
 
   const checklistRef = useRef<HTMLDivElement>(null);
+  const attachmentsRef = useRef<HTMLDivElement>(null);
   const linksRef = useRef<HTMLDivElement>(null);
   const checklistInputRef = useRef<HTMLInputElement>(null);
   const attachmentsInputRef = useRef<HTMLInputElement>(null);
@@ -146,17 +163,24 @@ export function EditTaskDialog({
     });
   }
 
+  // The board moves it (to the top of the new list) and syncs; this only
+  // keeps the dialog's own copy in step.
   function moveToColumn(newColumnId: string) {
+    setColumnMenuOpen(false);
     if (newColumnId === columnId) return;
     setColumnId(newColumnId);
-    setColumnMenuOpen(false);
-    pushUpdate({ column_id: newColumnId });
-    startTransition(async () => {
-      try {
-        await moveTaskColumn(task.id, newColumnId);
-      } catch {
-        // Local move stays as-is (e.g. workspace-demo has no real backend).
-      }
+    currentTaskRef.current = { ...currentTaskRef.current, column_id: newColumnId };
+    onMove(task.id, newColumnId);
+  }
+
+  function toggleDueDone(next: boolean) {
+    setDueDone(next);
+    setDueError(null);
+    pushUpdate({ due_complete: next });
+    setDueComplete(task.id, next).catch((err) => {
+      setDueDone(!next);
+      pushUpdate({ due_complete: !next });
+      setDueError(err instanceof Error ? err.message : "Không lưu được dấu hoàn tất.");
     });
   }
 
@@ -181,6 +205,7 @@ export function EditTaskDialog({
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [links, setLinks] = useState<TaskLink[]>([]);
   const [activity, setActivity] = useState<TaskActivity[]>([]);
+  const commentFilesRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -188,6 +213,7 @@ export function EditTaskDialog({
       .then((detail) => {
         if (cancelled || !detail) return;
         setChecklistItems(detail.checklist_items);
+        commentFilesRef.current = Math.max(0, (task.attachment_count?.[0]?.count ?? 0) - detail.attachments.length);
         setAttachments(detail.attachments);
         setComments(detail.comments);
         setLinks(detail.links);
@@ -200,6 +226,7 @@ export function EditTaskDialog({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loaded once per card; the count is only read as the starting point
   }, [task.id]);
 
   // TaskCard's "☑ X/Y" badge reads task.checklist_items from the board's own
@@ -211,10 +238,87 @@ export function EditTaskDialog({
   }
 
   async function handleDescriptionImageUpload(file: File): Promise<string> {
-    const formData = new FormData();
-    formData.append("file", file);
-    const attachment = await uploadTaskAttachment(task.id, formData);
+    const attachment = await uploadTaskFile(task.id, file);
+    setAttachments((prev) => [...prev, attachment]);
     return attachment.url;
+  }
+
+  // Keeps the card front's 📎 count in step with this dialog (the board
+  // counts comment photos too, which this list leaves out).
+  useEffect(() => {
+    if (detailLoaded) pushUpdate({ attachment_count: [{ count: commentFilesRef.current + attachments.length }] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pushUpdate is a plain function recreated every render
+  }, [attachments, detailLoaded]);
+
+  function setCover(url: string | null) {
+    setCoverUrl(url);
+    pushUpdate({ cover_image_url: url });
+    (url ? setTaskCoverUrl(task.id, url) : removeTaskCover(task.id)).catch(() => {
+      // Local change stays as-is (e.g. workspace-demo has no real backend).
+    });
+  }
+
+  // One way in for the picker, a paste and a drop: files go up one at a
+  // time, and the first image becomes the cover when the card has none —
+  // what Trello does.
+  const [uploadingLabel, setUploadingLabel] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const coverRef = useRef(coverUrl);
+  useEffect(() => {
+    coverRef.current = coverUrl;
+  }, [coverUrl]);
+  async function uploadFiles(files: File[]) {
+    if (files.length === 0 || uploadingLabel) return;
+    setUploadError(null);
+    attachmentsRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const failed: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      setUploadingLabel(files.length > 1 ? `Đang tải ${i + 1}/${files.length}…` : "Đang tải lên…");
+      try {
+        const att = await uploadTaskFile(task.id, files[i]);
+        setAttachments((prev) => [...prev, att]);
+        if (!coverRef.current && (att.mime_type ?? "").startsWith("image/")) {
+          coverRef.current = att.url;
+          setCover(att.url);
+        }
+      } catch (err) {
+        failed.push(err instanceof Error ? err.message : files[i].name);
+      }
+    }
+    setUploadingLabel(null);
+    if (failed.length) setUploadError(failed.join(" · "));
+  }
+
+  const [dropping, setDropping] = useState(false);
+  const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+  function handlePaste(e: React.ClipboardEvent) {
+    // The comment box and the description editor handle their own pastes.
+    if (e.defaultPrevented || (e.target as HTMLElement).closest?.("[contenteditable=true]")) return;
+    const files = filesFrom(e.clipboardData?.files);
+    if (files.length === 0) return;
+    e.preventDefault();
+    uploadFiles(files);
+  }
+
+  const [linkCopied, setLinkCopied] = useState(false);
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(taskLink(window.location.origin, task.code));
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1800);
+    } catch {
+      prompt("Sao chép liên kết thẻ:", taskLink(window.location.origin, task.code));
+    }
+  }
+
+  // Trello saves the title as soon as you leave it.
+  function saveTitle() {
+    const t = title.trim();
+    if (!t || t === currentTaskRef.current.title) return;
+    pushUpdate({ title: t });
+    updateTask(task.id, { title: t }).catch(() => {
+      // Local edit stays as-is (e.g. workspace-demo has no real backend).
+    });
   }
 
   const currentUser = profiles.find((p) => p.id === currentUserId) ?? {
@@ -284,7 +388,32 @@ export function EditTaskDialog({
 
   return (
     <Modal onClose={onClose} maxWidth={1280} sheetOnPhone>
-      <div className="flex flex-col">
+      <div
+        className="relative flex flex-col"
+        onPaste={handlePaste}
+        onDragOver={(e) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          if (!dropping) setDropping(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false);
+        }}
+        onDrop={(e) => {
+          if (!hasFiles(e)) return;
+          e.preventDefault();
+          setDropping(false);
+          uploadFiles(filesFrom(e.dataTransfer.files));
+        }}
+      >
+        {dropping && (
+          <div
+            className="absolute inset-2 z-30 flex items-center justify-center rounded-[14px] text-base font-bold pointer-events-none"
+            style={{ background: "color-mix(in srgb, var(--color-accent-100) 88%, transparent)", border: "2px dashed var(--color-accent-500)", color: "var(--color-accent-800)" }}
+          >
+            Thả tệp vào đây để đính kèm
+          </div>
+        )}
         <div className="relative">
           <TaskCover
             taskId={task.id}
@@ -293,6 +422,7 @@ export function EditTaskDialog({
               setCoverUrl(url);
               pushUpdate({ cover_image_url: url });
             }}
+            onRemove={() => setCover(null)}
           />
 
           <div className="absolute top-3 left-3">
@@ -365,6 +495,11 @@ export function EditTaskDialog({
               style={{ fontSize: 19, fontWeight: 700, border: "none", padding: "3px 0" }}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur();
+              }}
+              aria-label="Tên thẻ"
             />
 
             {columnTitle && (
@@ -545,8 +680,19 @@ export function EditTaskDialog({
                   value={dueDate}
                   onChange={(e) => updateDates({ dueDate: e.target.value })}
                 />
+                {dueDate && (
+                  <label className="flex items-center gap-2 text-[13px] font-semibold cursor-pointer select-none" style={{ color: dueDone ? "var(--status-green)" : "var(--color-neutral-600)" }}>
+                    <input type="checkbox" checked={dueDone} onChange={(e) => toggleDueDone(e.target.checked)} style={{ width: 16, height: 16 }} />
+                    {dueDone ? "✓ Đã hoàn tất" : "Đánh dấu hoàn tất"}
+                  </label>
+                )}
               </div>
             </div>
+            {dueError && (
+              <p className="text-[12px] -mt-2" style={{ color: "var(--status-red)" }}>
+                {dueError}
+              </p>
+            )}
 
             <div className="field">
               <label>
@@ -580,7 +726,7 @@ export function EditTaskDialog({
               </div>
               {descEditing ? (
                 <div className="flex flex-col gap-2">
-                  <RichTextEditor content={description} onChange={setDescription} onUploadImage={handleDescriptionImageUpload} />
+                  <RichTextEditor content={descriptionToHtml(description)} onChange={setDescription} onUploadImage={handleDescriptionImageUpload} />
                   <div className="flex gap-2">
                     <button type="button" onClick={saveDescription} className="btn btn-primary btn-sm">
                       Lưu
@@ -599,10 +745,13 @@ export function EditTaskDialog({
                 </div>
               ) : description ? (
                 <div
-                  onClick={() => setDescEditing(true)}
-                  className="rich-content cursor-text rounded-[8px] px-2.5 py-2 -mx-2.5"
+                  onClick={(e) => {
+                    // A link opens; anywhere else starts editing, like Trello.
+                    if (!(e.target as HTMLElement).closest("a")) setDescEditing(true);
+                  }}
+                  className="rich-content fk-desc cursor-text rounded-[8px] px-2.5 py-2 -mx-2.5"
                   style={{ background: "var(--color-surface)" }}
-                  dangerouslySetInnerHTML={{ __html: description }}
+                  dangerouslySetInnerHTML={{ __html: descriptionToHtml(description) }}
                 />
               ) : (
                 <p
@@ -635,18 +784,27 @@ export function EditTaskDialog({
                     onCancelAdd={() => setAddingLink(false)}
                   />
                 </div>
-                <TaskAttachments
-                  taskId={task.id}
-                  attachments={attachments}
-                  onChange={setAttachments}
-                  inputRef={attachmentsInputRef}
-                  currentUserId={currentUserId}
-                />
+                <div ref={attachmentsRef}>
+                  <TaskAttachments
+                    attachments={attachments}
+                    onChange={setAttachments}
+                    inputRef={attachmentsInputRef}
+                    onPickFiles={uploadFiles}
+                    uploadingLabel={uploadingLabel}
+                    error={uploadError}
+                    currentUserId={currentUserId}
+                    coverUrl={coverUrl}
+                    onSetCover={setCover}
+                  />
+                </div>
               </>
             )}
 
-            {/* Trello's card actions: copy, archive (restorable), delete. */}
+            {/* Trello's card actions: link, copy, archive (restorable), delete. */}
             <div className="flex flex-wrap items-center gap-2 mt-1">
+              <button type="button" onClick={copyLink} className="btn btn-ghost btn-sm" title="Gửi link này cho đồng đội để mở thẳng thẻ">
+                {linkCopied ? "✓ Đã chép liên kết" : "🔗 Sao chép liên kết"}
+              </button>
               {onCopy && (
                 <button type="button" onClick={copy} className="btn btn-ghost btn-sm">
                   {copied ? "✓ Đã sao chép" : "⧉ Sao chép thẻ"}
