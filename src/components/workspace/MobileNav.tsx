@@ -74,9 +74,9 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
   const moreNav = showsIphoneAppNav ? MORE_NAV_IPHONE_APP : MORE_NAV;
   const navRef = useRef<HTMLElement>(null);
   const [navHeight, setNavHeight] = useState(60);
-  // While the keyboard is up the bar is hidden, like a native app's tab
-  // bar — otherwise sync() below lifts it to sit right on top of the
-  // keyboard, exactly where the chat composer is, and covers it.
+  // While the on-screen keyboard is up the bar is hidden, like a native
+  // app's tab bar — otherwise sync() below lifts it to sit right on top of
+  // the keyboard, exactly where the chat composer is, and covers it.
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   // iOS Safari pins `position: fixed` elements to the *layout* viewport,
@@ -91,33 +91,50 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
     const vv = window.visualViewport;
     const nav = navRef.current;
     if (!vv || !nav) return;
+    // The bar hides only while the on-screen keyboard is really up — the
+    // visual viewport shrinks by its height. A focused field alone isn't
+    // enough: the chat keeps its composer focused after sending, focuses it
+    // itself, and an iPad with a hardware keyboard never shows one, and in
+    // all of those the bar must stay.
+    //
+    // A tap on a field hides the bar straight away (EARLY_MS) so it doesn't
+    // ride up on the keyboard while it slides in; if the viewport hasn't
+    // shrunk by then, there's no keyboard and the bar comes back.
+    const EARLY_MS = 800;
+    let touchAt = 0;
+    let tapFocusAt = 0;
     function sync() {
       const offset = window.innerHeight - (vv!.height + vv!.offsetTop);
-      const kb = offset > KEYBOARD_MIN_PX || isTypingOnTouch();
+      const early = isTypingOnTouch() && Date.now() - tapFocusAt < EARLY_MS;
+      const kb = offset > KEYBOARD_MIN_PX || early;
       setKeyboardOpen(kb);
       nav!.style.transform = !kb && offset > 0.5 ? `translateY(-${offset}px)` : "";
     }
-    // Focus hides the bar the moment the keyboard starts sliding up, not
-    // after the viewport has finished resizing; blur waits a beat so
-    // hopping between two fields doesn't flash it back.
-    let blurTimer: ReturnType<typeof setTimeout> | undefined;
+    let recheck: ReturnType<typeof setTimeout> | undefined;
+    function onPointerDown() {
+      touchAt = Date.now();
+    }
     function onFocusIn() {
-      clearTimeout(blurTimer);
+      if (Date.now() - touchAt < EARLY_MS && isTypingOnTouch()) tapFocusAt = Date.now();
       sync();
+      clearTimeout(recheck);
+      recheck = setTimeout(sync, EARLY_MS + 50);
     }
     function onFocusOut() {
-      clearTimeout(blurTimer);
-      blurTimer = setTimeout(sync, 150);
+      clearTimeout(recheck);
+      recheck = setTimeout(sync, 150);
     }
     sync();
     vv.addEventListener("resize", sync);
     vv.addEventListener("scroll", sync);
+    document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
     return () => {
-      clearTimeout(blurTimer);
+      clearTimeout(recheck);
       vv.removeEventListener("resize", sync);
       vv.removeEventListener("scroll", sync);
+      document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", onFocusOut);
     };
