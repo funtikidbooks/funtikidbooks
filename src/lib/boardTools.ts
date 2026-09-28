@@ -62,11 +62,12 @@ export function matchesFilter(task: FilterableTask, f: BoardFilter, today: strin
   }
   if (f.labels.length && !f.labels.some((l) => task.labels.includes(l))) return false;
   if (f.due !== "any") {
-    if (f.due === "none") return !task.due_date;
-    if (!task.due_date) return false;
-    // Like Trello, a due date ticked "hoàn tất" is never overdue or coming up.
+    // Trello's card completion — a card can be ticked with or without a date.
     if (f.due === "complete") return !!task.due_complete;
     if (f.due === "incomplete") return !task.due_complete;
+    if (f.due === "none") return !task.due_date;
+    if (!task.due_date) return false;
+    // A ticked card is never overdue or coming up.
     if (task.due_complete) return false;
     if (f.due === "overdue") return task.due_date < today;
     if (f.due === "week") return task.due_date >= today && task.due_date <= addDaysIso(today, 7);

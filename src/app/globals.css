@@ -479,7 +479,7 @@ h4 {
 
 /* ---------- Workspace board ---------- */
 .fk-task-card {
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition: box-shadow 0.12s ease;
   /* manipulation: a swipe on a card pans the board sideways or the list up
      and down, whichever way the finger goes; a press-and-hold still starts
      a drag (the Board's TouchSensor delay). pan-y used to be here, which
@@ -488,13 +488,121 @@ h4 {
   touch-action: manipulation;
   -webkit-touch-callout: none;
 }
-/* Hover lift only where there's a real pointer — on iPad a tap left the
-   card stuck "lifted". */
+/* The board, Trello-style: a gradient canvas (inline, per board) with a
+   translucent bar on top, grey lists and white cards floating on it. Its own
+   tokens so the lists read the same whatever colour the canvas is. */
+.fk-board {
+  --list-bg: #f1f2f4;
+  --list-fg: #172b4d;
+  --list-muted: #44546f;
+  --list-hover: rgba(9, 30, 66, 0.1);
+  --card-bg: #ffffff;
+  --card-fg: #172b4d;
+  --card-muted: #44546f;
+  --card-shadow: 0 1px 1px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31);
+  --card-ring: #388bff;
+  --bar-bg: rgba(0, 0, 0, 0.24);
+  --bar-fg: #ffffff;
+  --bar-btn: rgba(255, 255, 255, 0.18);
+  --bar-btn-hover: rgba(255, 255, 255, 0.3);
+}
+:root[data-theme="dark"] .fk-board {
+  --list-bg: #101204;
+  --list-fg: #b6c2cf;
+  --list-muted: #9fadbc;
+  --list-hover: rgba(166, 197, 226, 0.12);
+  --card-bg: #22272b;
+  --card-fg: #b6c2cf;
+  --card-muted: #9fadbc;
+  --card-shadow: 0 1px 1px rgba(3, 4, 4, 0.5), 0 0 1px rgba(3, 4, 4, 0.5);
+  --card-ring: #85b8ff;
+  --bar-bg: rgba(0, 0, 0, 0.42);
+}
+.fk-board-bar {
+  background: var(--bar-bg);
+  color: var(--bar-fg);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.fk-bar-btn {
+  background: var(--bar-btn);
+  color: var(--bar-fg);
+  transition: background-color 0.12s ease;
+}
+.fk-bar-btn:hover,
+.fk-bar-btn[aria-expanded="true"] {
+  background: var(--bar-btn-hover);
+}
+.fk-bar-btn.is-on {
+  background: #ffffff;
+  color: #172b4d;
+}
+.fk-bar-search {
+  height: 32px;
+  padding: 0 10px 0 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--bar-fg);
+  font-size: 14px;
+  outline: none;
+  min-width: 0;
+}
+.fk-bar-search::placeholder {
+  color: rgba(255, 255, 255, 0.8);
+}
+.fk-bar-search:focus {
+  background: #ffffff;
+  color: #172b4d;
+  border-color: #388bff;
+}
+.fk-bar-search:focus::placeholder {
+  color: #626f86;
+}
+.fk-list {
+  background: var(--list-bg);
+  color: var(--list-fg);
+  box-shadow: 0 1px 1px rgba(9, 30, 66, 0.25), 0 0 1px rgba(9, 30, 66, 0.31);
+}
+.fk-list-btn {
+  color: var(--list-muted);
+  transition: background-color 0.12s ease;
+}
+.fk-list-btn:hover {
+  background: var(--list-hover);
+  color: var(--list-fg);
+}
+.fk-task-card {
+  background: var(--card-bg);
+  color: var(--card-fg);
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+}
+.fk-task-card .fk-muted {
+  color: var(--card-muted);
+}
+/* The round "hoàn thành" tick before a card's title (Trello's card
+   completion). Hidden until hover on a mouse; always there once ticked. */
+.fk-complete {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: width 0.15s ease, opacity 0.15s ease, margin 0.15s ease;
+}
+.fk-complete.is-done {
+  width: 16px;
+  opacity: 1;
+  margin-right: 6px;
+}
 @media (hover: hover) {
+  .group:hover .fk-complete {
+    width: 16px;
+    opacity: 1;
+    margin-right: 6px;
+  }
   .fk-task-card:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-    border-color: var(--color-accent-300);
+    box-shadow: var(--card-shadow), inset 0 0 0 2px var(--card-ring);
   }
   .fk-hover-reveal {
     opacity: 0;

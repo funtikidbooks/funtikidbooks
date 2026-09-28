@@ -27,6 +27,8 @@ import { EditTaskDialog } from "./EditTaskDialog";
 import { BoardFilterMenu } from "./BoardFilterMenu";
 import { ArchiveDrawer } from "./ArchiveDrawer";
 import { QuickCardMenu } from "./QuickCardMenu";
+import { BoardActivityPanel, BoardMenu } from "./BoardMenu";
+import { boardBackground } from "@/lib/boardBackgrounds";
 import {
   addTaskAssignee,
   archiveTasks,
@@ -42,6 +44,7 @@ import {
   reorderColumns,
   reorderTasks,
   restoreTask,
+  setBoardBackground,
   setDueComplete,
   updateBoardLabel,
   updateTaskLabels,
@@ -133,7 +136,11 @@ export function WorkspaceBoard({
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [quick, setQuick] = useState<{ taskId: string; at: { x: number; y: number } } | null>(null);
   const [collapsed, setCollapsed] = useState<string[]>([]);
-  const [showLabelNames, setShowLabelNames] = useState(true);
+  const [showLabelNames, setShowLabelNames] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [boardColor, setBoardColor] = useState(board.color);
+  const background = boardBackground(boardColor);
   const [inView, setInView] = useState<string[]>([]);
   const [, startTransition] = useTransition();
 
@@ -147,7 +154,7 @@ export function WorkspaceBoard({
     // Per-browser prefs only exist after mount (reading them during render
     // would mismatch the server's HTML).
     setCollapsed(readPref<string[]>(collapsedKey, []));
-    setShowLabelNames(readPref("funti-board-label-names", true));
+    setShowLabelNames(readPref("funti-board-label-names", false));
   }, [collapsedKey]);
   function toggleCollapsed(columnId: string) {
     setCollapsed((prev) => {
@@ -155,6 +162,11 @@ export function WorkspaceBoard({
       writePref(collapsedKey, next);
       return next;
     });
+  }
+  function handlePickBackground(key: string) {
+    const prev = boardColor;
+    setBoardColor(key);
+    setBoardBackground(board.id, key).catch(() => setBoardColor(prev));
   }
   function toggleLabelNames() {
     setShowLabelNames((v) => {
@@ -745,6 +757,9 @@ export function WorkspaceBoard({
         const old = payload.old as { id: string };
         handleTaskDeleted(old.id);
       })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "boards", filter: `id=eq.${board.id}` }, (payload) => {
+        setBoardColor((payload.new as Board).color);
+      })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "board_columns", filter: `board_id=eq.${board.id}` }, (payload) => {
         const row = payload.new as BoardColumn;
         setColumns((prev) => (prev.some((c) => c.id === row.id) ? prev : [...prev, row].sort((a, b) => a.position - b.position)));
@@ -917,10 +932,11 @@ export function WorkspaceBoard({
       if (e.key === "Escape") {
         setFilterOpen(false);
         setShortcutsOpen(false);
+        setMenuOpen(false);
         setQuick(null);
         return;
       }
-      if (editingTask || archiveOpen || quick) return;
+      if (editingTask || archiveOpen || quick || activityOpen) return;
       const hovered = hoveredTaskRef.current;
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (key === "/") {
@@ -955,33 +971,36 @@ export function WorkspaceBoard({
   const dragging = !!activeTaskId || !!activeColumnId;
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      {/* Compact Trello-style bar: name, progress, search, filter, archive. */}
-      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-3 flex-none" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-        <h1 className="text-base sm:text-xl truncate min-w-0">{board.title}</h1>
-        <span className="hidden md:inline text-sm whitespace-nowrap" style={{ color: "var(--color-neutral-600)" }}>
+    <div className="fk-board flex-1 flex flex-col min-h-0" style={{ background: background.css }}>
+      {/* Trello's board bar: translucent over the background — name, search,
+          filter, the board menu. */}
+      <div className="fk-board-bar flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2 flex-none">
+        <h1 className="text-base sm:text-lg font-bold truncate min-w-0" style={{ color: "var(--bar-fg)" }}>
+          {board.title}
+        </h1>
+        <span className="hidden md:inline text-[13px] whitespace-nowrap opacity-90">
           ✅ {headerDoneCount}/{headerTotalCount}
         </span>
         {yearStats.length > 0 && (
-          <span className="hidden xl:flex items-center gap-4 text-sm whitespace-nowrap" style={{ color: "var(--color-neutral-600)" }}>
+          <span className="hidden xl:flex items-center gap-3 text-[13px] whitespace-nowrap opacity-90">
             {yearStats.map((y) => (
               <span key={y.year}>
-                Năm {y.year}: <strong style={{ color: "var(--color-neutral-800)" }}>{y.count}</strong>
+                Năm {y.year}: <strong>{y.count}</strong>
               </span>
             ))}
           </span>
         )}
         <span className="flex-1" />
         <label className="relative flex items-center flex-none">
-          <span aria-hidden className="absolute left-2.5 text-[13px]" style={{ color: "var(--color-neutral-500)" }}>
+          <span aria-hidden className="absolute left-2.5 text-[13px] pointer-events-none">
             🔍
           </span>
           <input
             ref={searchRef}
             id="board-search"
             type="search"
-            className="input font-normal"
-            style={{ width: "min(200px, 34vw)", padding: "7px 10px 7px 30px", borderRadius: 999 }}
+            className="fk-bar-search"
+            style={{ width: "min(200px, 32vw)" }}
             placeholder="Tìm thẻ…"
             value={filter.text}
             onChange={(e) => setFilter((f) => ({ ...f, text: e.target.value }))}
@@ -995,12 +1014,7 @@ export function WorkspaceBoard({
           <button
             type="button"
             onClick={() => setFilterOpen((v) => !v)}
-            className="btn btn-sm flex-none"
-            style={{
-              background: nFilters ? "var(--color-accent-100)" : "var(--color-neutral-100)",
-              color: nFilters ? "var(--color-accent-700)" : "var(--color-text)",
-              padding: "7px 12px",
-            }}
+            className={`fk-bar-btn rounded-[8px] px-3 h-8 text-[13px] font-semibold ${nFilters ? "is-on" : ""}`}
             aria-expanded={filterOpen}
           >
             ⚲ Lọc{nFilters ? ` · ${nFilters}` : ""}
@@ -1016,31 +1030,54 @@ export function WorkspaceBoard({
             />
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setArchiveOpen(true)}
-          className="btn-icon flex-none"
-          style={{ width: 34, height: 34, padding: 0 }}
-          aria-label="Thẻ đã lưu trữ"
-          title="Thẻ đã lưu trữ"
-        >
-          📦
-        </button>
-        <div className="relative hidden lg:block flex-none">
+        <div className="hidden lg:flex items-center -space-x-2 flex-none">
+          {profiles.slice(0, 6).map((p) => (
+            <div
+              key={p.id}
+              title={p.display_name}
+              className="flex items-center justify-center rounded-full font-bold flex-none"
+              style={{ width: 28, height: 28, fontSize: 11, background: "var(--color-accent-100)", color: "var(--color-accent-700)", border: "2px solid rgba(255,255,255,.9)" }}
+            >
+              {p.display_name.charAt(0).toUpperCase()}
+            </div>
+          ))}
+          {profiles.length > 6 && (
+            <div
+              className="flex items-center justify-center rounded-full font-bold flex-none"
+              style={{ width: 28, height: 28, fontSize: 10, background: "rgba(255,255,255,.9)", color: "#172b4d", border: "2px solid rgba(255,255,255,.9)" }}
+            >
+              +{profiles.length - 6}
+            </div>
+          )}
+        </div>
+        <div className="relative flex-none">
           <button
             type="button"
-            onClick={() => setShortcutsOpen((v) => !v)}
-            className="btn-icon"
-            style={{ width: 34, height: 34, padding: 0 }}
-            aria-label="Phím tắt"
-            title="Phím tắt (?)"
+            onClick={() => setMenuOpen((v) => !v)}
+            className="fk-bar-btn rounded-[8px] w-8 h-8 flex items-center justify-center text-[15px] font-bold"
+            aria-expanded={menuOpen}
+            aria-label="Menu bảng"
+            title="Menu bảng"
           >
-            ⌨
+            ⋯
           </button>
+          {menuOpen && (
+            <BoardMenu
+              boardColor={boardColor}
+              archivedCount={archivedTasks.length}
+              showLabelNames={showLabelNames}
+              onOpenActivity={() => setActivityOpen(true)}
+              onOpenArchive={() => setArchiveOpen(true)}
+              onPickBackground={handlePickBackground}
+              onToggleLabelNames={toggleLabelNames}
+              onOpenShortcuts={() => setShortcutsOpen(true)}
+              onClose={() => setMenuOpen(false)}
+            />
+          )}
           {shortcutsOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setShortcutsOpen(false)} />
-              <div className="card elev-md absolute right-0 top-full mt-1.5 z-40 p-3 flex flex-col gap-1.5" style={{ width: 300 }}>
+              <div className="card elev-md absolute right-0 top-full mt-1.5 z-40 p-3 flex flex-col gap-1.5" style={{ width: 300, color: "var(--color-text)" }}>
                 <span className="text-sm font-bold pb-1">Phím tắt</span>
                 {SHORTCUTS.map(([k, label]) => (
                   <span key={k} className="flex items-center gap-3 text-[13px]">
@@ -1060,34 +1097,13 @@ export function WorkspaceBoard({
             </>
           )}
         </div>
-        <div className="hidden lg:flex items-center -space-x-2 flex-none">
-          {profiles.slice(0, 6).map((p) => (
-            <div
-              key={p.id}
-              title={p.display_name}
-              className="flex items-center justify-center rounded-full font-bold flex-none"
-              style={{ width: 28, height: 28, fontSize: 11, background: "var(--color-accent-100)", color: "var(--color-accent-700)", border: "2px solid var(--color-bg)" }}
-            >
-              {p.display_name.charAt(0).toUpperCase()}
-            </div>
-          ))}
-          {profiles.length > 6 && (
-            <div
-              className="flex items-center justify-center rounded-full font-bold flex-none"
-              style={{ width: 28, height: 28, fontSize: 10, background: "var(--color-neutral-200)", color: "var(--color-neutral-700)", border: "2px solid var(--color-bg)" }}
-            >
-              +{profiles.length - 6}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Every list by name — tap one to slide straight to it instead of
           swiping past the others. Lit up: the lists on screen now. */}
       <div
         ref={chipBarRef}
-        className="fk-chipbar relative flex items-center gap-1.5 px-3 sm:px-6 py-1.5 overflow-x-auto flex-none"
-        style={{ borderBottom: "1px solid var(--color-neutral-200)" }}
+        className="fk-chipbar relative flex items-center gap-1.5 px-3 sm:px-5 pt-2 pb-0.5 overflow-x-auto flex-none"
         aria-label="Chuyển nhanh tới danh sách"
       >
         {visibleColumns.map((c) => {
@@ -1098,8 +1114,7 @@ export function WorkspaceBoard({
               type="button"
               data-chip={c.id}
               onClick={() => jumpTo(c.id)}
-              className="flex-none rounded-full px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap"
-              style={on ? { background: "var(--color-accent-100)", color: "var(--color-accent-800)" } : { background: "var(--color-neutral-100)", color: "var(--color-neutral-600)" }}
+              className={`fk-bar-btn flex-none rounded-full px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap ${on ? "is-on" : ""}`}
             >
               {collapsed.includes(c.id) && <span aria-hidden>⇔ </span>}
               {c.title} <span className="tabular-nums opacity-70">{(filtering ? visibleTasksOf(c.id) : (tasksByColumn[c.id] ?? [])).length}</span>
@@ -1264,6 +1279,19 @@ export function WorkspaceBoard({
           onRecolorLabel={handleRecolorLabel}
           onDeleteLabel={handleDeleteLabel}
           onClose={closeTask}
+        />
+      )}
+
+      {activityOpen && (
+        <BoardActivityPanel
+          boardId={board.id}
+          onOpenTask={(taskId) => {
+            const task = allTasks.find((t) => t.id === taskId);
+            if (!task) return;
+            setActivityOpen(false);
+            openTask(task);
+          }}
+          onClose={() => setActivityOpen(false)}
         />
       )}
 

@@ -112,7 +112,7 @@ export function Column({
           setDropRef(el);
         }}
         data-col-id={column.id}
-        style={{ ...sortStyle, background: "var(--color-bg)", border: "1px solid var(--color-neutral-200)" }}
+        style={sortStyle}
         className="fk-list flex-none w-11 max-h-full rounded-[12px] snap-start"
         {...attributes}
         {...listeners}
@@ -120,15 +120,15 @@ export function Column({
         <button
           type="button"
           onClick={onToggleCollapse}
-          className="ws-nav-link w-full h-full flex flex-col items-center gap-2 py-3 rounded-[12px]"
+          className="fk-list-btn w-full h-full flex flex-col items-center gap-2 py-3 rounded-[12px]"
           title={`Mở rộng "${column.title}"`}
           aria-label={`Mở rộng danh sách ${column.title}`}
         >
           <span className="text-[13px]" aria-hidden>
             ⇔
           </span>
-          <span className="tag tag-neutral tabular-nums text-[11px]">{totalCount}</span>
-          <span className="text-[13px] font-bold whitespace-nowrap" style={{ writingMode: "vertical-rl", color: column.color }}>
+          <span className="tabular-nums text-[12px]" style={{ color: "var(--list-muted)" }}>{totalCount}</span>
+          <span className="text-[14px] font-semibold whitespace-nowrap" style={{ writingMode: "vertical-rl", color: "var(--list-fg)" }}>
             {column.title}
           </span>
         </button>
@@ -144,11 +144,11 @@ export function Column({
       ref={setSortRef}
       data-col-id={column.id}
       className="fk-list flex flex-col flex-none w-[84vw] max-w-[300px] sm:w-[272px] max-h-full rounded-[12px] snap-center"
-      style={{ ...sortStyle, background: "var(--color-bg)", border: "1px solid var(--color-neutral-200)" }}
+      style={sortStyle}
     >
       {/* The header is the handle for dragging the whole list (hold on a
           phone/iPad, like a card). */}
-      <div className="relative flex items-center gap-2 px-3 pt-2.5 pb-1.5 touch-manipulation" style={{ cursor: "grab" }} {...attributes} {...listeners}>
+      <div className="relative flex items-center gap-1 pl-3 pr-1.5 pt-2 pb-1 touch-manipulation" style={{ cursor: "grab" }} {...attributes} {...listeners}>
         <span
           contentEditable
           suppressContentEditableWarning
@@ -169,19 +169,19 @@ export function Column({
           onMouseDown={(e) => {
             if (document.activeElement === e.currentTarget) e.stopPropagation();
           }}
-          className="text-[13.5px] font-bold outline-none flex-1 min-w-0 break-words cursor-text"
-          style={{ color: column.color }}
+          className="text-[14px] font-semibold outline-none flex-1 min-w-0 break-words cursor-text py-1"
+          style={{ color: "var(--list-fg)" }}
         >
           {title}
         </span>
-        <span className="tag tag-neutral flex-none tabular-nums" title={filtering ? "Thẻ khớp bộ lọc / tổng" : "Số thẻ"}>
+        <span className="flex-none tabular-nums text-[12px] px-1" style={{ color: "var(--list-muted)" }} title={filtering ? "Thẻ khớp bộ lọc / tổng" : "Số thẻ"}>
           {filtering ? `${tasks.length}/${totalCount}` : totalCount}
         </span>
         <button
           type="button"
           onClick={onToggleCollapse}
-          className="ws-nav-link hidden sm:flex items-center justify-center rounded-[6px] flex-none"
-          style={{ width: 28, height: 28, color: "var(--color-neutral-500)" }}
+          className="fk-list-btn hidden sm:flex items-center justify-center rounded-[8px] flex-none"
+          style={{ width: 32, height: 32 }}
           aria-label="Thu gọn danh sách"
           title="Thu gọn danh sách"
         >
@@ -190,8 +190,8 @@ export function Column({
         <button
           type="button"
           onClick={() => setMenu((m) => (m ? null : "main"))}
-          className="ws-nav-link flex items-center justify-center rounded-[6px] flex-none"
-          style={{ width: 28, height: 28, color: "var(--color-neutral-500)" }}
+          className="fk-list-btn flex items-center justify-center rounded-[8px] flex-none"
+          style={{ width: 32, height: 32 }}
           aria-label="Tuỳ chọn danh sách"
         >
           ⋯
@@ -324,8 +324,7 @@ export function Column({
           <button
             type="button"
             onClick={() => setLimit((l) => l + PAGE)}
-            className="ws-add-btn text-[12.5px] font-semibold py-2 rounded-[8px]"
-            style={{ color: "var(--color-accent-700)", border: "1px dashed var(--color-neutral-300)" }}
+            className="fk-list-btn text-[13px] font-semibold py-2 rounded-[8px]"
           >
             Hiện thêm {Math.min(PAGE, hidden)} thẻ ({hidden} thẻ nữa)
           </button>
@@ -376,8 +375,7 @@ export function Column({
         <button
           type="button"
           onClick={() => setAdding(true)}
-          className="ws-add-btn text-[13px] font-semibold text-left mx-2 mb-2 mt-1 px-2 py-2 rounded-[8px]"
-          style={{ color: "var(--color-neutral-500)" }}
+          className="fk-list-btn text-[14px] font-medium text-left mx-2 mb-2 mt-1 px-2 py-1.5 rounded-[8px]"
         >
           + Thêm thẻ
         </button>

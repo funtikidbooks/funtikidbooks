@@ -4,7 +4,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { BoardLabel, TaskWithAssignee } from "@/lib/types";
 import { computeTaskProgress, taskProgressColor } from "@/lib/taskProgress";
-import { thumbnailUrl } from "@/lib/imageTransform";
+import { resizedUrl } from "@/lib/imageTransform";
 
 // dueDate is a plain calendar date with no time-of-day meaning — parsed
 // and read/formatted both as UTC (paired "Z" + timeZone: "UTC") below so
@@ -24,13 +24,13 @@ function formatDueDate(dueDate: string | null) {
 // Trello-style due-date badge: green once ticked "hoàn tất" (or the card is
 // in a done list), red once overdue, orange within the next 24h.
 function dueDateTone(dueDate: string | null, complete: boolean): { bg: string; fg: string } {
-  if (complete) return { bg: "var(--status-green)", fg: "#fff" };
-  if (!dueDate) return { bg: "var(--color-neutral-100)", fg: "var(--color-neutral-600)" };
+  if (complete) return { bg: "#22a06b", fg: "#fff" };
+  if (!dueDate) return { bg: "transparent", fg: "var(--card-muted)" };
   const due = new Date(dueDate + "T23:59:59Z").getTime();
   const now = Date.now();
   if (due < now) return { bg: "var(--badge-red-bg)", fg: "var(--badge-red-fg)" };
   if (due - now < 24 * 60 * 60 * 1000) return { bg: "var(--badge-orange-bg)", fg: "var(--badge-orange-fg)" };
-  return { bg: "var(--color-neutral-100)", fg: "var(--color-neutral-600)" };
+  return { bg: "transparent", fg: "var(--card-muted)" };
 }
 
 type CardProps = {
@@ -66,11 +66,13 @@ export function TaskCardOverlay(props: Pick<CardProps, "task" | "boardLabels" | 
   return <CardBody {...props} onOpen={() => {}} style={{ transform: "rotate(3deg)", boxShadow: "var(--shadow-lg)", cursor: "grabbing" }} />;
 }
 
+const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+
 function CardBody({
   task,
   boardLabels = [],
   isDone = false,
-  showLabelNames = true,
+  showLabelNames = false,
   onOpen,
   onToggleDue,
   onQuickEdit,
@@ -84,7 +86,6 @@ function CardBody({
   dragProps?: Record<string, unknown>;
   style: React.CSSProperties;
 }) {
-
   const complete = isDone || !!task.due_complete;
   const dueLabel = formatDueDate(task.due_date);
   const dueTone = dueDateTone(task.due_date, complete);
@@ -94,6 +95,10 @@ function CardBody({
   const commentCount = task.comment_count?.[0]?.count ?? 0;
   const attachmentCount = task.attachment_count?.[0]?.count ?? 0;
   const labels = task.labels.map((id) => boardLabels.find((l) => l.id === id)).filter((l): l is BoardLabel => !!l);
+  const hasDescription = !!task.description && task.description.replace(/<[^>]+>/g, "").trim().length > 0;
+  const showProgress = !!task.start_date && !!task.due_date && !complete;
+  const hasBadges =
+    !!dueLabel || checklistTotal > 0 || commentCount > 0 || attachmentCount > 0 || hasDescription || task.assignees.length > 0;
 
   return (
     <div
@@ -112,14 +117,14 @@ function CardBody({
       }
       onMouseEnter={onHover ? () => onHover(task.id) : undefined}
       onMouseLeave={onHover ? () => onHover(null) : undefined}
-      className="fk-task-card group relative card elev-sm p-2.5 flex flex-col gap-1.5 cursor-pointer select-none"
+      className="fk-task-card group relative flex flex-col cursor-pointer select-none"
     >
       {onQuickEdit && (
         <button
           type="button"
-          className="fk-hover-only absolute top-1.5 right-1.5 z-[1] items-center justify-center rounded-[6px]"
-          style={{ width: 26, height: 26, background: "var(--color-panel)", boxShadow: "var(--shadow-sm)", color: "var(--color-neutral-600)" }}
-          onPointerDown={(e) => e.stopPropagation()}
+          className="fk-hover-only absolute top-1.5 right-1.5 z-[1] items-center justify-center rounded-full"
+          style={{ width: 28, height: 28, background: "var(--card-bg)", boxShadow: "var(--card-shadow)", color: "var(--card-fg)" }}
+          onPointerDown={stop}
           onClick={(e) => {
             e.stopPropagation();
             const r = e.currentTarget.getBoundingClientRect();
@@ -132,128 +137,149 @@ function CardBody({
         </button>
       )}
       {task.cover_image_url && (
+        // The whole cover, the way Trello shows it — not a cropped strip.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={thumbnailUrl(task.cover_image_url, 480, 180)}
+          src={resizedUrl(task.cover_image_url, 540)}
           alt=""
           draggable={false}
-          className="rounded-[6px] w-full object-cover"
-          style={{ height: 96 }}
+          loading="lazy"
+          className="block w-full object-cover"
+          style={{ maxHeight: 260, minHeight: 64, background: "var(--list-hover)" }}
         />
       )}
-      {labels.length > 0 && (
-        // Like Trello: tap a label to show or hide label names on every card.
-        <div
-          className="flex flex-wrap gap-1"
-          onClick={
-            onToggleLabelNames
-              ? (e) => {
-                  e.stopPropagation();
-                  onToggleLabelNames();
-                }
-              : undefined
-          }
-        >
-          {labels.map((label) =>
-            showLabelNames && label.name ? (
-              <span
-                key={label.id}
-                title={label.name}
-                className="rounded-[4px] px-1.5 text-[10.5px] font-bold leading-[17px] max-w-full truncate"
-                style={{ background: label.color, color: "#fff" }}
-              >
-                {label.name}
-              </span>
-            ) : (
-              <span key={label.id} title={label.name} className="rounded-[4px]" style={{ width: 36, height: 8, background: label.color }} />
-            ),
-          )}
-        </div>
-      )}
-      <h4 className="text-[13.5px] font-semibold leading-snug break-words">{task.title}</h4>
-      {/* One Trello-style badge row: due · checklist · comments · files ·
-          description, members on the right, the card code last. */}
-      <div className="flex items-center gap-2 text-[11px] min-w-0" style={{ color: "var(--color-neutral-500)" }}>
-        {dueLabel &&
-          (onToggleDue && !isDone ? (
+      <div className="flex flex-col gap-1 px-3 pt-2 pb-2">
+        {labels.length > 0 && (
+          // Like Trello: tap a label to show or hide label names on every card.
+          <div
+            className="flex flex-wrap gap-1"
+            onClick={
+              onToggleLabelNames
+                ? (e) => {
+                    e.stopPropagation();
+                    onToggleLabelNames();
+                  }
+                : undefined
+            }
+          >
+            {labels.map((label) =>
+              showLabelNames && label.name ? (
+                <span
+                  key={label.id}
+                  title={label.name}
+                  className="rounded-[4px] px-2 text-[12px] font-semibold leading-4 max-w-full truncate"
+                  style={{ background: label.color, color: "#fff", minWidth: 40 }}
+                >
+                  {label.name}
+                </span>
+              ) : (
+                <span key={label.id} title={label.name} className="rounded-[4px]" style={{ width: 40, height: 8, background: label.color }} />
+              ),
+            )}
+          </div>
+        )}
+        <div className="flex items-start">
+          {onToggleDue && (
             <button
               type="button"
-              className="flex-none rounded-[4px] px-1.5 py-0.5 font-semibold"
-              style={{ background: dueTone.bg, color: dueTone.fg }}
-              onPointerDown={(e) => e.stopPropagation()}
+              className={`fk-complete ${task.due_complete ? "is-done" : ""} flex-none mt-[2px] flex items-center justify-center rounded-full text-[10px] font-bold`}
+              style={{
+                height: 16,
+                background: task.due_complete ? "#22a06b" : "transparent",
+                border: task.due_complete ? "none" : "1.5px solid var(--card-muted)",
+                color: "#fff",
+              }}
+              onPointerDown={stop}
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleDue();
               }}
-              title={task.due_complete ? "Bỏ dấu hoàn tất" : "Đánh dấu hoàn tất"}
+              aria-label={task.due_complete ? "Bỏ đánh dấu hoàn thành" : "Đánh dấu hoàn thành"}
+              title={task.due_complete ? "Bỏ đánh dấu hoàn thành" : "Đánh dấu hoàn thành"}
             >
-              {task.due_complete ? "☑" : "🕐"} {dueLabel}
+              {task.due_complete ? "✓" : ""}
             </button>
-          ) : (
-            <span className="flex-none rounded-[4px] px-1.5 py-0.5 font-semibold" style={{ background: dueTone.bg, color: dueTone.fg }}>
-              {complete ? "☑" : "🕐"} {dueLabel}
-            </span>
-          ))}
-        {checklistTotal > 0 && (
-          <span className="flex-none" style={checklistDone === checklistTotal ? { color: "var(--status-green)", fontWeight: 700 } : undefined}>
-            ☑ {checklistDone}/{checklistTotal}
-          </span>
-        )}
-        {commentCount > 0 && <span className="flex-none">💬 {commentCount}</span>}
-        {attachmentCount > 0 && <span className="flex-none">📎 {attachmentCount}</span>}
-        {!!task.description && task.description.replace(/<[^>]+>/g, "").trim().length > 0 && (
-          <span className="flex-none" title="Có mô tả">
-            ≡
-          </span>
-        )}
-        <span className="flex-1" />
-        {task.assignees.length > 0 && (
-          <div className="flex items-center -space-x-1.5 flex-none">
-            {task.assignees.slice(0, 3).map((a) => (
-              <span
-                key={a.id}
-                title={a.display_name}
-                className="flex items-center justify-center rounded-full font-bold flex-none"
-                style={{
-                  width: 20,
-                  height: 20,
-                  fontSize: 9,
-                  background: "var(--color-accent-100)",
-                  color: "var(--color-accent-700)",
-                  border: "1.5px solid var(--color-panel)",
-                }}
-              >
-                {a.display_name.charAt(0).toUpperCase()}
+          )}
+          <h4 className="text-[14px] leading-5 font-normal break-words min-w-0">{task.title}</h4>
+        </div>
+        {hasBadges && (
+          <div className="fk-muted flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12px] min-w-0 pt-0.5">
+            {dueLabel &&
+              (onToggleDue && !isDone ? (
+                <button
+                  type="button"
+                  className="flex-none rounded-[4px] px-1.5 py-px font-semibold"
+                  style={{ background: dueTone.bg, color: dueTone.fg }}
+                  onPointerDown={stop}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleDue();
+                  }}
+                  title={task.due_complete ? "Bỏ dấu hoàn tất" : "Đánh dấu hoàn tất"}
+                >
+                  {task.due_complete ? "☑" : "🕐"} {dueLabel}
+                </button>
+              ) : (
+                <span className="flex-none rounded-[4px] px-1.5 py-px font-semibold" style={{ background: dueTone.bg, color: dueTone.fg }}>
+                  {complete ? "☑" : "🕐"} {dueLabel}
+                </span>
+              ))}
+            {hasDescription && (
+              <span className="flex-none" title="Có mô tả">
+                ≡
               </span>
-            ))}
-            {task.assignees.length > 3 && (
+            )}
+            {commentCount > 0 && <span className="flex-none">💬 {commentCount}</span>}
+            {attachmentCount > 0 && <span className="flex-none">📎 {attachmentCount}</span>}
+            {checklistTotal > 0 && (
               <span
-                className="flex items-center justify-center rounded-full font-bold flex-none"
-                style={{
-                  width: 20,
-                  height: 20,
-                  fontSize: 8,
-                  background: "var(--color-neutral-200)",
-                  color: "var(--color-neutral-700)",
-                  border: "1.5px solid var(--color-panel)",
-                }}
+                className="flex-none rounded-[4px] px-1"
+                style={checklistDone === checklistTotal ? { background: "#22a06b", color: "#fff", fontWeight: 600 } : undefined}
               >
-                +{task.assignees.length - 3}
+                ☑ {checklistDone}/{checklistTotal}
               </span>
+            )}
+            {task.assignees.length > 0 && (
+              <div className="flex items-center -space-x-1.5 flex-none ml-auto">
+                {task.assignees.slice(0, 3).map((a) => (
+                  <span
+                    key={a.id}
+                    title={a.display_name}
+                    className="flex items-center justify-center rounded-full font-bold flex-none"
+                    style={{
+                      width: 24,
+                      height: 24,
+                      fontSize: 10,
+                      background: "var(--color-accent-100)",
+                      color: "var(--color-accent-700)",
+                      border: "2px solid var(--card-bg)",
+                    }}
+                  >
+                    {a.display_name.charAt(0).toUpperCase()}
+                  </span>
+                ))}
+                {task.assignees.length > 3 && (
+                  <span
+                    className="flex items-center justify-center rounded-full font-bold flex-none"
+                    style={{ width: 24, height: 24, fontSize: 9, background: "var(--list-hover)", color: "var(--card-fg)", border: "2px solid var(--card-bg)" }}
+                  >
+                    +{task.assignees.length - 3}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         )}
-        <span className="flex-none text-[10px] tabular-nums" style={{ color: "var(--color-neutral-400)" }}>
-          {task.code}
-        </span>
       </div>
-      <div
-        className="h-[3px] rounded-full overflow-hidden"
-        style={{ background: "var(--color-neutral-200)" }}
-        title={`Tiến độ theo thời hạn: ${progressPct}%`}
-      >
-        <div className="h-full rounded-full" style={{ width: `${progressPct}%`, background: taskProgressColor(progressPct) }} />
-      </div>
+      {showProgress && (
+        <div
+          className="h-[3px] mx-3 mb-2 -mt-1 rounded-full overflow-hidden"
+          style={{ background: "var(--list-hover)" }}
+          title={`Tiến độ theo thời hạn: ${progressPct}%`}
+        >
+          <div className="h-full rounded-full" style={{ width: `${progressPct}%`, background: taskProgressColor(progressPct) }} />
+        </div>
+      )}
     </div>
   );
 }

@@ -11,8 +11,8 @@ const DUE_OPTIONS: { id: DueFilter; label: string }[] = [
   { id: "overdue", label: "🔴 Quá hạn" },
   { id: "week", label: "🟠 Tới hạn trong 7 ngày" },
   { id: "none", label: "Chưa có hạn chót" },
-  { id: "complete", label: "☑ Đã đánh dấu hoàn tất" },
-  { id: "incomplete", label: "Chưa hoàn tất" },
+  { id: "complete", label: "✓ Đã hoàn thành" },
+  { id: "incomplete", label: "Chưa hoàn thành" },
 ];
 
 export function BoardFilterMenu({
@@ -98,7 +98,7 @@ export function BoardFilterMenu({
         )}
 
         <div className={head} style={{ color: "var(--color-neutral-500)" }}>
-          Hạn chót
+          Hạn chót · hoàn thành
         </div>
         {DUE_OPTIONS.map((o) => (
           <label key={o.id} className={row}>

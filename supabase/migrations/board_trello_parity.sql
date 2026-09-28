@@ -15,3 +15,8 @@ where due_date is not null and due_complete = false and code in (
   '#1509','#1511','#1512','#1514','#1517','#1518','#1519','#1520','#1522','#1523','#1524','#1528','#1529','#1535','#1536',
   '#1537','#1539','#1540','#1541','#1543','#1544','#1545','#1558'
 );
+
+-- Trello's card completion works without a due date too (the round tick in
+-- front of a card's title) — these 8 were ticked on Trello with no date.
+update public.tasks set due_complete = true
+where due_complete = false and code in ('#1024','#1026','#1133','#1148','#1158','#1425','#1522','#1558');

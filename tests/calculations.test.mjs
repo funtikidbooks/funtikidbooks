@@ -286,6 +286,7 @@ test("bảng công việc: mô tả kiểu Trello (Markdown) hiện đúng, th�
   assert.ok(!matchesFilter(t({ due_complete: true }), { ...EMPTY_FILTER, due: "overdue" }, today));
   assert.ok(matchesFilter(t({ due_complete: true }), { ...EMPTY_FILTER, due: "complete" }, today));
   assert.ok(!matchesFilter(t({ due_complete: true }), { ...EMPTY_FILTER, due: "incomplete" }, today));
+  assert.ok(matchesFilter(t({ due_date: null, due_complete: true }), { ...EMPTY_FILTER, due: "complete" }, today)); // ticked without a date, like Trello
   assert.equal(taskLink("https://funtikidbooks.com", "#1546"), "https://funtikidbooks.com/workspace?the=1546");
   assert.equal(codeFromParam("1546"), "#1546");
   assert.equal(codeFromParam(""), null);

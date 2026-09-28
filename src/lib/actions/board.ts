@@ -422,3 +422,64 @@ export async function copyTask(taskId: string, toColumnId?: string) {
   revalidatePath("/workspace");
   return copy;
 }
+
+// Trello's "Đổi hình nền": one background for everyone on the board.
+export async function setBoardBackground(boardId: string, key: string) {
+  const { supabase } = await requireUser();
+  if (!/^bg:[a-z]{2,20}$/.test(key)) throw new Error("Hình nền không hợp lệ");
+  await supabase.from("boards").update({ color: key }).eq("id", boardId);
+  revalidatePath("/workspace");
+}
+
+export type BoardActivityItem = {
+  id: string;
+  kind: "activity" | "comment";
+  created_at: string;
+  actor: string;
+  type?: string;
+  metadata?: Record<string, string>;
+  text?: string;
+  task: { id: string; code: string; title: string };
+};
+
+// The board menu's "Hoạt động": the latest moves, attachments and comments
+// across every card on this board, newest first.
+export async function getBoardActivity(boardId: string): Promise<BoardActivityItem[]> {
+  const { supabase } = await requireUser();
+  const [{ data: acts }, { data: comments }] = await Promise.all([
+    supabase
+      .from("task_activity")
+      .select("id, type, metadata, created_at, actor:profiles(display_name), task:tasks!inner(id, code, title, board_id)")
+      .eq("task.board_id", boardId)
+      .order("created_at", { ascending: false })
+      .limit(60),
+    supabase
+      .from("task_comments")
+      .select("id, content, created_at, author:profiles(display_name), task:tasks!inner(id, code, title, board_id)")
+      .eq("task.board_id", boardId)
+      .order("created_at", { ascending: false })
+      .limit(40),
+  ]);
+  type Row = { id: string; created_at: string; task: { id: string; code: string; title: string } };
+  const name = (p: unknown) => (p as { display_name?: string } | null)?.display_name ?? "Ai đó";
+  const items: BoardActivityItem[] = [
+    ...((acts ?? []) as unknown as (Row & { type: string; metadata: Record<string, string>; actor: unknown })[]).map((a) => ({
+      id: a.id,
+      kind: "activity" as const,
+      created_at: a.created_at,
+      actor: name(a.actor),
+      type: a.type,
+      metadata: a.metadata ?? {},
+      task: { id: a.task.id, code: a.task.code, title: a.task.title },
+    })),
+    ...((comments ?? []) as unknown as (Row & { content: string; author: unknown })[]).map((c) => ({
+      id: c.id,
+      kind: "comment" as const,
+      created_at: c.created_at,
+      actor: name(c.author),
+      text: c.content,
+      task: { id: c.task.id, code: c.task.code, title: c.task.title },
+    })),
+  ];
+  return items.sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 80);
+}

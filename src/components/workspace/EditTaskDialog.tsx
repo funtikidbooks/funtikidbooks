@@ -409,7 +409,11 @@ export function EditTaskDialog({
         {dropping && (
           <div
             className="absolute inset-2 z-30 flex items-center justify-center rounded-[14px] text-base font-bold pointer-events-none"
-            style={{ background: "color-mix(in srgb, var(--color-accent-100) 88%, transparent)", border: "2px dashed var(--color-accent-500)", color: "var(--color-accent-800)" }}
+            style={{
+              background: "color-mix(in srgb, var(--color-accent-100) 88%, transparent)",
+              border: "2px dashed var(--color-accent-500)",
+              color: "var(--color-accent-800)",
+            }}
           >
             Thả tệp vào đây để đính kèm
           </div>
@@ -490,17 +494,37 @@ export function EditTaskDialog({
               </div>
             )}
 
-            <input
-              className="input"
-              style={{ fontSize: 19, fontWeight: 700, border: "none", padding: "3px 0" }}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={saveTitle}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur();
-              }}
-              aria-label="Tên thẻ"
-            />
+            <div className="flex items-center gap-2.5">
+              {/* Trello's "Đánh dấu thẻ hoàn thành" circle in front of the title. */}
+              <button
+                type="button"
+                onClick={() => toggleDueDone(!dueDone)}
+                className="flex-none flex items-center justify-center rounded-full text-[13px] font-bold"
+                style={{
+                  width: 22,
+                  height: 22,
+                  background: dueDone ? "#22a06b" : "transparent",
+                  border: dueDone ? "none" : "2px solid var(--color-neutral-400)",
+                  color: "#fff",
+                }}
+                aria-pressed={dueDone}
+                aria-label={dueDone ? "Bỏ đánh dấu hoàn thành" : "Đánh dấu thẻ hoàn thành"}
+                title={dueDone ? "Bỏ đánh dấu hoàn thành" : "Đánh dấu thẻ hoàn thành"}
+              >
+                {dueDone ? "✓" : ""}
+              </button>
+              <input
+                className="input flex-1 min-w-0"
+                style={{ fontSize: 19, fontWeight: 700, border: "none", padding: "3px 0" }}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={saveTitle}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur();
+                }}
+                aria-label="Tên thẻ"
+              />
+            </div>
 
             {columnTitle && (
               <p className="text-xs -mt-3" style={{ color: "var(--color-neutral-500)" }}>
@@ -596,11 +620,7 @@ export function EditTaskDialog({
               >
                 ☑ Việc cần làm
               </button>
-              <button
-                type="button"
-                onClick={() => attachmentsInputRef.current?.click()}
-                className="btn btn-ghost btn-sm"
-              >
+              <button type="button" onClick={() => attachmentsInputRef.current?.click()} className="btn btn-ghost btn-sm">
                 📎 Đính kèm
               </button>
             </div>
@@ -622,7 +642,13 @@ export function EditTaskDialog({
                         key={a.id}
                         title={a.display_name}
                         className="flex items-center justify-center rounded-full font-bold flex-none"
-                        style={{ width: 22, height: 22, fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-700)" }}
+                        style={{
+                          width: 22,
+                          height: 22,
+                          fontSize: 10,
+                          background: "var(--color-accent-100)",
+                          color: "var(--color-accent-700)",
+                        }}
                       >
                         {a.display_name.charAt(0).toUpperCase()}
                       </span>
@@ -635,7 +661,10 @@ export function EditTaskDialog({
                 {assigneeMenuOpen && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setAssigneeMenuOpen(false)} />
-                    <div className="card elev-md absolute left-0 top-[68px] z-20 flex flex-col gap-0.5 p-1" style={{ width: 220 }}>
+                    <div
+                      className="card elev-md absolute left-0 top-[68px] z-20 flex flex-col gap-0.5 p-1"
+                      style={{ width: 220 }}
+                    >
                       {profiles.map((p) => (
                         <button
                           key={p.id}
@@ -645,7 +674,13 @@ export function EditTaskDialog({
                         >
                           <span
                             className="flex items-center justify-center rounded-full font-bold flex-none"
-                            style={{ width: 22, height: 22, fontSize: 10, background: "var(--color-accent-100)", color: "var(--color-accent-700)" }}
+                            style={{
+                              width: 22,
+                              height: 22,
+                              fontSize: 10,
+                              background: "var(--color-accent-100)",
+                              color: "var(--color-accent-700)",
+                            }}
                           >
                             {p.display_name.charAt(0).toUpperCase()}
                           </span>
@@ -681,8 +716,16 @@ export function EditTaskDialog({
                   onChange={(e) => updateDates({ dueDate: e.target.value })}
                 />
                 {dueDate && (
-                  <label className="flex items-center gap-2 text-[13px] font-semibold cursor-pointer select-none" style={{ color: dueDone ? "var(--status-green)" : "var(--color-neutral-600)" }}>
-                    <input type="checkbox" checked={dueDone} onChange={(e) => toggleDueDone(e.target.checked)} style={{ width: 16, height: 16 }} />
+                  <label
+                    className="flex items-center gap-2 text-[13px] font-semibold cursor-pointer select-none"
+                    style={{ color: dueDone ? "var(--status-green)" : "var(--color-neutral-600)" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={dueDone}
+                      onChange={(e) => toggleDueDone(e.target.checked)}
+                      style={{ width: 16, height: 16 }}
+                    />
                     {dueDone ? "✓ Đã hoàn tất" : "Đánh dấu hoàn tất"}
                   </label>
                 )}
@@ -726,7 +769,11 @@ export function EditTaskDialog({
               </div>
               {descEditing ? (
                 <div className="flex flex-col gap-2">
-                  <RichTextEditor content={descriptionToHtml(description)} onChange={setDescription} onUploadImage={handleDescriptionImageUpload} />
+                  <RichTextEditor
+                    content={descriptionToHtml(description)}
+                    onChange={setDescription}
+                    onUploadImage={handleDescriptionImageUpload}
+                  />
                   <div className="flex gap-2">
                     <button type="button" onClick={saveDescription} className="btn btn-primary btn-sm">
                       Lưu
@@ -802,7 +849,12 @@ export function EditTaskDialog({
 
             {/* Trello's card actions: link, copy, archive (restorable), delete. */}
             <div className="flex flex-wrap items-center gap-2 mt-1">
-              <button type="button" onClick={copyLink} className="btn btn-ghost btn-sm" title="Gửi link này cho đồng đội để mở thẳng thẻ">
+              <button
+                type="button"
+                onClick={copyLink}
+                className="btn btn-ghost btn-sm"
+                title="Gửi link này cho đồng đội để mở thẳng thẻ"
+              >
                 {linkCopied ? "✓ Đã chép liên kết" : "🔗 Sao chép liên kết"}
               </button>
               {onCopy && (
@@ -811,7 +863,12 @@ export function EditTaskDialog({
                 </button>
               )}
               {onArchive && (
-                <button type="button" onClick={archive} className="btn btn-ghost btn-sm" title="Cất thẻ khỏi bảng, khôi phục được ở mục 📦">
+                <button
+                  type="button"
+                  onClick={archive}
+                  className="btn btn-ghost btn-sm"
+                  title="Cất thẻ khỏi bảng, khôi phục được ở mục 📦"
+                >
                   📦 Lưu trữ
                 </button>
               )}
