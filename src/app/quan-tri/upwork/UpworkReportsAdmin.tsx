@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { updateUpworkLeadDraft, updateUpworkLeadStatus, listUpworkLeads } from "@/lib/actions/upwork";
 import type { UpworkBatch, UpworkLead, UpworkLeadStatus, UpworkProposalTemplate } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
 import { ProposalTemplates } from "./ProposalTemplates";
 import { UpworkSopView } from "./UpworkSopView";
 import type { UpworkSop } from "@/lib/upworkSop";
@@ -245,10 +246,25 @@ function LeadCard({ lead, onChanged }: { lead: UpworkLead; onChanged: (next: Upw
   );
 }
 
-function BatchSection({ batch }: { batch: UpworkBatch }) {
+// Oldest first; a lead the realtime feed just delivered replaces the
+// fetched copy of the same id.
+function mergeLeads(base: UpworkLead[], incoming: UpworkLead[]) {
+  const byId = new Map(base.map((l) => [l.id, l]));
+  for (const l of incoming) byId.set(l.id, { ...byId.get(l.id), ...l });
+  return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
+function BatchSection({ batch, live, startOpen }: { batch: UpworkBatch; live: UpworkLead[] | undefined; startOpen: boolean }) {
   const [open, setOpen] = useState(false);
   const [leads, setLeads] = useState<UpworkLead[] | null>(null);
   const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    const rows = await listUpworkLeads(batch.id);
+    setLeads((prev) => mergeLeads(rows, prev ?? []));
+    setLoading(false);
+  }
 
   async function toggle() {
     if (open) {
@@ -256,13 +272,26 @@ function BatchSection({ batch }: { batch: UpworkBatch }) {
       return;
     }
     setOpen(true);
-    if (leads === null) {
-      setLoading(true);
-      const rows = await listUpworkLeads(batch.id);
-      setLeads(rows);
-      setLoading(false);
-    }
+    if (leads === null) await load();
   }
+
+  // The newest batch with jobs opens by itself, including one that just
+  // arrived while the page was open.
+  useEffect(() => {
+    if (!startOpen) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- opening the newest batch once it appears
+    setOpen(true);
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startOpen]);
+
+  // Leads written or changed elsewhere (the hourly run adding them, the PM
+  // pressing Duyệt on another device) show up here without a reload.
+  useEffect(() => {
+    if (!live || live.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- merging a realtime push into local state
+    setLeads((prev) => mergeLeads(prev ?? [], live));
+  }, [live]);
 
   const pendingCount = leads?.filter((l) => l.status === "pending").length ?? null;
 
@@ -330,6 +359,39 @@ export function UpworkReportsAdmin({
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [templates, setTemplates] = useState(initialTemplates);
+  const [batches, setBatches] = useState(initialBatches);
+  const [liveLeads, setLiveLeads] = useState<Map<string, UpworkLead[]>>(() => new Map());
+  const [showEmpty, setShowEmpty] = useState(false);
+
+  // Realtime: a new check from the hourly run, a lead it drafted, or a
+  // status someone changed appears the moment it is saved.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("upwork-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "upwork_batches" }, (payload) => {
+        const row = payload.new as UpworkBatch;
+        setBatches((prev) => (prev.some((b) => b.id === row.id) ? prev : [row, ...prev]));
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "upwork_batches" }, (payload) => {
+        const row = payload.new as UpworkBatch;
+        setBatches((prev) => prev.map((b) => (b.id === row.id ? row : b)));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "upwork_leads" }, (payload) => {
+        if (payload.eventType === "DELETE") return;
+        const row = payload.new as UpworkLead;
+        setLiveLeads((prev) => new Map(prev).set(row.batch_id, [...(prev.get(row.batch_id) ?? []), row]));
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const withJobs = batches.filter((b) => b.leads_drafted > 0 || (liveLeads.get(b.id)?.length ?? 0) > 0);
+  const emptyCount = batches.length - withJobs.length;
+  const newestWithJobs = withJobs[0]?.id ?? null;
+  const lastCheck = batches[0]?.ran_at ?? null;
 
   function switchTab(next: Tab) {
     setTab(next);
@@ -342,7 +404,7 @@ export function UpworkReportsAdmin({
   }
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
-    { id: "batches", label: "Đợt tìm khách", count: initialBatches.length },
+    { id: "batches", label: "Đợt tìm khách", count: withJobs.length },
     { id: "templates", label: "Mẫu proposal", count: templates.length },
     { id: "sop", label: "SOP" },
   ];
@@ -393,12 +455,30 @@ export function UpworkReportsAdmin({
           <UpworkSopView initialSop={sop.sop} saved={sop.saved} />
         ) : tab === "templates" ? (
           <ProposalTemplates templates={templates} onTemplatesChange={setTemplates} />
-        ) : initialBatches.length === 0 ? (
-          <p style={{ color: "var(--color-neutral-500)" }}>
-            Chưa có đợt báo cáo nào. Khi lịch tìm khách ban đêm được thiết lập, kết quả sẽ hiện ở đây.
-          </p>
         ) : (
-          initialBatches.map((batch) => <BatchSection key={batch.id} batch={batch} />)
+          <>
+            {/* Every hourly check lands here; the ones with no new job fold
+                into one line so the list only shows real work. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style={{ color: "var(--color-neutral-500)" }}>
+              <span>{lastCheck ? <>Kiểm tra Gmail mỗi giờ · lần gần nhất {fmtDateTime(lastCheck)}</> : "Chưa có lượt kiểm tra nào."}</span>
+              {emptyCount > 0 && (
+                <button
+                  type="button"
+                  className="underline font-semibold"
+                  style={{ color: "var(--color-accent-700)" }}
+                  onClick={() => setShowEmpty((v) => !v)}
+                >
+                  {showEmpty ? "Ẩn" : "Xem"} {emptyCount} lượt không có job mới
+                </button>
+              )}
+            </div>
+            {withJobs.length === 0 && !showEmpty && (
+              <p style={{ color: "var(--color-neutral-500)" }}>Chưa có job nào hợp SOP. Có job mới là hiện ở đây ngay.</p>
+            )}
+            {(showEmpty ? batches : withJobs).map((batch) => (
+              <BatchSection key={batch.id} batch={batch} live={liveLeads.get(batch.id)} startOpen={batch.id === newestWithJobs} />
+            ))}
+          </>
         )}
       </div>
     </div>
