@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
-import { listAllProfiles } from "@/lib/actions/admin";
+import { listAllProfiles, listProfileChanges } from "@/lib/actions/admin";
 import { listStaffIdDocuments } from "@/lib/actions/staffId";
 import { listStaffProbation } from "@/lib/actions/probation";
 import { StaffRoles } from "./StaffRoles";
@@ -21,7 +21,12 @@ export default async function AdminStaffPage() {
     redirect("/quan-tri");
   }
 
-  const [profiles, idDocuments, probation] = await Promise.all([listAllProfiles(), listStaffIdDocuments(), listStaffProbation()]);
+  const [profiles, idDocuments, probation, changes] = await Promise.all([
+    listAllProfiles(),
+    listStaffIdDocuments(),
+    listStaffProbation(),
+    isDirector ? listProfileChanges() : Promise.resolve([]),
+  ]);
   return (
     <StaffRoles
       initialProfiles={profiles}
@@ -29,6 +34,7 @@ export default async function AdminStaffPage() {
       isDirector={isDirector}
       initialIdDocuments={idDocuments}
       initialProbation={probation}
+      profileChanges={changes}
     />
   );
 }

@@ -6,7 +6,17 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendStaffWelcomeEmail } from "@/lib/mail";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
-import type { AccessRole, EmploymentType, JobPosting, NewsPost, Profile, Project, Review, StaffBankInfo } from "@/lib/types";
+import type {
+  AccessRole,
+  EmploymentType,
+  JobPosting,
+  NewsPost,
+  Profile,
+  ProfileChange,
+  Project,
+  Review,
+  StaffBankInfo,
+} from "@/lib/types";
 
 async function requireDirector() {
   const { supabase, user } = await requireUser();
@@ -589,6 +599,19 @@ export async function listAllProfiles() {
     .select("*")
     .order("display_name", { ascending: true });
   return (data ?? []) as Profile[];
+}
+
+// Who changed whose chức danh / quyền / ngày tham gia / email, newest
+// first. Empty until profiles_self_update_guard.sql has been run.
+export async function listProfileChanges(limit = 40): Promise<ProfileChange[]> {
+  const { supabase } = await requireDirector();
+  const { data, error } = await supabase
+    .from("profile_changes")
+    .select("*")
+    .order("changed_at", { ascending: false })
+    .limit(limit);
+  if (error) return [];
+  return (data ?? []) as ProfileChange[];
 }
 
 export async function updateAccessRole(profileId: string, accessRole: AccessRole) {

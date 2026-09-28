@@ -556,6 +556,19 @@ export type ProjectFinance = {
   updated_at: string;
 };
 
+// One logged change to someone's chức danh / quyền / ngày tham gia /
+// email — written only by the profiles trigger (supabase/migrations/
+// profiles_self_update_guard.sql), readable by the director.
+export type ProfileChange = {
+  id: number;
+  profile_id: string;
+  changed_by: string | null;
+  field: "role" | "access_role" | "joined_at" | "email";
+  old_value: string | null;
+  new_value: string | null;
+  changed_at: string;
+};
+
 export type StaffSalary = {
   profile_id: string;
   monthly_salary: number;
@@ -1246,6 +1259,12 @@ export type Database = {
         Row: StaffSalary;
         Insert: Partial<StaffSalary> & { profile_id: string };
         Update: Partial<StaffSalary>;
+        Relationships: [];
+      };
+      profile_changes: {
+        Row: ProfileChange;
+        Insert: never;
+        Update: never;
         Relationships: [];
       };
       project_finance: {

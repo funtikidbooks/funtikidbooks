@@ -4,9 +4,10 @@ import { useState, useTransition } from "react";
 import { CreateAccountDialog } from "@/components/admin/CreateAccountDialog";
 import { StaffIdModal } from "@/components/admin/StaffIdModal";
 import { ProbationPanel } from "@/components/admin/ProbationPanel";
+import { ProfileChangeLog } from "@/components/admin/ProfileChangeLog";
 import { deleteStaffAccount, updateAccessRole, updateJobTitle } from "@/lib/actions/admin";
 import { JOB_TITLE_SUGGESTIONS } from "@/lib/constants/staff";
-import type { AccessRole, Profile, StaffIdDocument, StaffProbation } from "@/lib/types";
+import type { AccessRole, Profile, ProfileChange, StaffIdDocument, StaffProbation } from "@/lib/types";
 
 const ROLE_LABELS: Record<AccessRole, string> = {
   director: "Giám đốc",
@@ -20,12 +21,14 @@ export function StaffRoles({
   isDirector,
   initialIdDocuments,
   initialProbation,
+  profileChanges,
 }: {
   initialProfiles: Profile[];
   currentUserId: string;
   isDirector: boolean;
   initialIdDocuments: StaffIdDocument[];
   initialProbation: StaffProbation[];
+  profileChanges: ProfileChange[];
 }) {
   const [profiles, setProfiles] = useState(initialProfiles);
   const [pending, startTransition] = useTransition();
@@ -200,6 +203,7 @@ export function StaffRoles({
             </div>
           ))}
         </div>
+        {isDirector && <ProfileChangeLog changes={profileChanges} profiles={profiles} />}
       </div>
 
       {showCreate && (
