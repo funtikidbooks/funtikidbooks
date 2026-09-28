@@ -1,257 +1,209 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import type { DashboardData } from "@/lib/actions/dashboard";
-import { compactVnd, shortMonthLabel, type MonthPoint } from "@/lib/dashboardMath";
+import { useState, useTransition } from "react";
+import { setProjectRevenue, type DashboardData } from "@/lib/actions/dashboard";
+import { compactVnd, formatDuration, type ProjectProfitRow } from "@/lib/dashboardMath";
 import { formatVnd } from "@/lib/financeSummary";
+import {
+  BarList,
+  Card,
+  COST,
+  CumulativeChart,
+  formatHours,
+  Funnel,
+  MonthColumns,
+  REVENUE,
+  RevenueCostChart,
+  SectionTitle,
+  signed,
+  Tile,
+} from "./charts";
 
-// Quản trị → Tổng quan. The numbers come from the same actions as Tài chính,
-// Chấm công and Báo cáo giờ; this page only draws them.
-//
-// Colours: thu = accent-2 blue, chi = accent orange (the site's two brand
-// ramps, far apart for colour-blind readers too); green/red only ever mean
-// lãi/lỗ and always come with a sign and ▲/▼.
+// Quản trị → Tổng quan. Four sections — Tiền, Dự án, Đội ngũ, Khách hàng —
+// each card answering one question, with a jump bar on top so a phone
+// doesn't have to scroll through everything to reach one part.
 
-const REVENUE = "var(--color-accent-2-600)";
-const COST = "var(--color-accent-400)";
+const SECTIONS = [
+  { id: "tien", label: "💰 Tiền" },
+  { id: "du-an", label: "📁 Dự án" },
+  { id: "doi-ngu", label: "👥 Đội ngũ" },
+  { id: "khach-hang", label: "🤝 Khách hàng" },
+];
 
-function Card({
-  title,
-  href,
-  hrefLabel = "Xem chi tiết",
-  children,
-  className = "",
-}: {
-  title: string;
-  href?: string;
-  hrefLabel?: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
+// Salary above this share of revenue is squeezing profit (a service studio
+// usually wants it under ~60%).
+const SALARY_SHARE_CEILING = 0.6;
+// One client over half of revenue is a concentration risk.
+const CLIENT_SHARE_WARN = 0.5;
+
+function Muted({ children }: { children: React.ReactNode }) {
   return (
-    <section className={`card elev-sm p-4 flex flex-col gap-3 min-w-0 ${className}`}>
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-[15px]">{title}</h2>
-        {href && (
-          <Link href={href} className="text-xs font-semibold whitespace-nowrap" style={{ color: "var(--color-accent-700)" }}>
-            {hrefLabel} →
-          </Link>
-        )}
-      </div>
+    <p className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
       {children}
-    </section>
+    </p>
   );
 }
 
-function Tile({
-  label,
-  value,
-  sub,
-  tone,
-  href,
-}: {
-  label: string;
-  value: string;
-  sub?: React.ReactNode;
-  tone?: "good" | "bad" | "warn";
-  href?: string;
-}) {
-  const color =
+function Pill({ tone, children }: { tone: "good" | "bad" | "warn" | "neutral"; children: React.ReactNode }) {
+  const c =
     tone === "good"
       ? "var(--status-green)"
       : tone === "bad"
         ? "var(--status-red)"
         : tone === "warn"
-          ? "var(--color-accent-700)"
-          : "var(--color-text)";
-  const body = (
-    <>
-      <span className="text-[11px] font-bold tracking-[0.06em] uppercase" style={{ color: "var(--color-neutral-500)" }}>
-        {label}
-      </span>
-      <span className="text-[22px] sm:text-[26px] font-bold leading-tight tabular-nums" style={{ color }}>
-        {value}
-      </span>
-      {sub && (
-        <span className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
-          {sub}
-        </span>
+          ? "var(--status-yellow)"
+          : "var(--color-neutral-400)";
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap"
+      style={{ background: `color-mix(in srgb, ${c} 16%, transparent)`, border: `1px solid ${c}`, color: "var(--color-text)" }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function ProjectProfitCard({ rows: initial, ready }: { rows: ProjectProfitRow[]; ready: boolean }) {
+  const [rows, setRows] = useState(initial);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [showAll, setShowAll] = useState(false);
+
+  function save(id: string) {
+    const amount = Number(value.replace(/[^\d]/g, ""));
+    setError(null);
+    startTransition(async () => {
+      try {
+        await setProjectRevenue(id, amount);
+        setRows((list) => list.map((r) => (r.id === id ? { ...r, revenue: amount, profit: amount - r.laborCost } : r)));
+        setEditing(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Không lưu được.");
+      }
+    });
+  }
+
+  const shown = showAll ? rows : rows.slice(0, 8);
+  const unpriced = rows.reduce((s, r) => s + r.unpricedHours, 0);
+
+  return (
+    <Card title="Lời/lỗ theo từng dự án" href="/workspace/bao-cao-gio" hrefLabel="Báo cáo giờ">
+      <Muted>
+        Tiền thu − chi phí công (giờ từng người báo × lương theo giờ của người đó). Bấm <b>Nhập tiền</b> để ghi số tiền khách trả
+        cho dự án.
+      </Muted>
+      {!ready && (
+        <p className="text-xs font-semibold" style={{ color: "var(--status-red)" }}>
+          Cần chạy file SQL dashboard_extras.sql trên Supabase để lưu được tiền dự án.
+        </p>
       )}
-    </>
-  );
-  return href ? (
-    <Link href={href} className="card elev-sm p-3.5 flex flex-col gap-1 min-w-0">
-      {body}
-    </Link>
-  ) : (
-    <div className="card elev-sm p-3.5 flex flex-col gap-1 min-w-0">{body}</div>
-  );
-}
-
-// Charts draw at the box's real pixel width, so text stays 11–12px on a
-// phone and on a wide screen alike instead of scaling with a fixed viewBox.
-function useWidth<T extends HTMLElement>(fallback: number) {
-  const ref = useRef<T>(null);
-  const [width, setWidth] = useState(fallback);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const measure = () => setWidth(Math.max(240, Math.round(el.clientWidth)));
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return [ref, width] as const;
-}
-
-function signed(n: number) {
-  return `${n > 0 ? "+" : ""}${compactVnd(n)}`;
-}
-
-// A max that lands on a round number, so the three gridlines read cleanly.
-function niceMax(v: number) {
-  if (v <= 0) return 1;
-  const pow = 10 ** Math.floor(Math.log10(v));
-  const step = [1, 2, 2.5, 5, 10].find((s) => s * pow >= v) ?? 10;
-  return step * pow;
-}
-
-function RevenueCostChart({ months, onPick, picked }: { months: MonthPoint[]; onPick: (i: number) => void; picked: number }) {
-  const [box, W] = useWidth<HTMLDivElement>(420);
-  const H = 220;
-  const pad = { l: 44, r: 8, t: 12, b: 44 };
-  const max = niceMax(Math.max(...months.flatMap((m) => [m.revenue, m.cost])));
-  const y = (v: number) => pad.t + (H - pad.t - pad.b) * (1 - v / max);
-  const slot = (W - pad.l - pad.r) / months.length;
-  const barW = Math.min(22, slot * 0.28);
-  const ticks = [0, max / 2, max];
-
-  return (
-    <div ref={box}>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        width={W}
-        height={H}
-        className="block max-w-full"
-        role="img"
-        aria-label="Biểu đồ thu và chi 6 tháng"
-      >
-        {ticks.map((t) => (
-          <g key={t}>
-            <line x1={pad.l} x2={W - pad.r} y1={y(t)} y2={y(t)} stroke="var(--color-neutral-200)" strokeWidth={1} />
-            <text x={pad.l - 6} y={y(t) + 4} textAnchor="end" fontSize={11} fill="var(--color-neutral-500)">
-              {compactVnd(t)}
-            </text>
-          </g>
-        ))}
-        {months.map((m, i) => {
-          const cx = pad.l + slot * i + slot / 2;
-          const active = i === picked;
-          return (
-            <g key={m.month} onMouseEnter={() => onPick(i)} onClick={() => onPick(i)} style={{ cursor: "pointer" }}>
-              <rect
-                x={cx - slot / 2}
-                y={pad.t}
-                width={slot}
-                height={H - pad.t - pad.b}
-                fill={active ? "var(--color-neutral-100)" : "transparent"}
-              />
-              <rect
-                x={cx - barW - 1}
-                y={y(m.revenue)}
-                width={barW}
-                height={Math.max(0, y(0) - y(m.revenue))}
-                rx={4}
-                fill={REVENUE}
-              />
-              <rect x={cx + 1} y={y(m.cost)} width={barW} height={Math.max(0, y(0) - y(m.cost))} rx={4} fill={COST} />
-              <text
-                x={cx}
-                y={H - pad.b + 16}
-                textAnchor="middle"
-                fontSize={12}
-                fontWeight={active ? 700 : 500}
-                fill="var(--color-text)"
+      {error && (
+        <p className="text-xs font-semibold" style={{ color: "var(--status-red)" }}>
+          {error}
+        </p>
+      )}
+      {rows.length === 0 ? (
+        <Muted>Chưa có dự án nào được báo giờ.</Muted>
+      ) : (
+        <div className="flex flex-col">
+          {shown.map((r) => {
+            const margin = r.revenue && r.profit !== null ? r.profit / r.revenue : null;
+            return (
+              <div
+                key={r.id}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2.5"
+                style={{ borderTop: "1px solid var(--color-neutral-200)" }}
               >
-                {shortMonthLabel(m.month)}
-              </text>
-              <text
-                x={cx}
-                y={H - pad.b + 33}
-                textAnchor="middle"
-                fontSize={11}
-                fontWeight={600}
-                fill={m.net >= 0 ? "var(--status-green)" : "var(--status-red)"}
-              >
-                {m.revenue === 0 && m.cost === 0 ? "—" : `${m.net >= 0 ? "▲" : "▼"} ${compactVnd(Math.abs(m.net))}`}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
+                <div className="flex flex-col min-w-0 flex-1 basis-[200px]">
+                  <span className="text-[13px] font-bold truncate" title={r.name}>
+                    {r.name}
+                  </span>
+                  <span className="text-xs tabular-nums" style={{ color: "var(--color-neutral-500)" }}>
+                    {formatHours(r.hours)} · công {compactVnd(r.laborCost)}
+                    {r.unpricedHours > 0 && ` · ${formatHours(r.unpricedHours)} chưa có lương`}
+                  </span>
+                </div>
+                {editing === r.id ? (
+                  <form
+                    className="flex items-center gap-1.5"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      save(r.id);
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      inputMode="numeric"
+                      className="input font-normal"
+                      style={{ width: 140, padding: "6px 10px" }}
+                      placeholder="Số tiền (đ)"
+                      value={value}
+                      onChange={(e) => setValue(e.target.value)}
+                    />
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={pending}>
+                      Lưu
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>
+                      Huỷ
+                    </button>
+                  </form>
+                ) : (
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {r.revenue === null ? (
+                      <Pill tone="neutral">Chưa nhập tiền</Pill>
+                    ) : (
+                      <>
+                        <span className="text-xs tabular-nums" style={{ color: "var(--color-neutral-600)" }}>
+                          thu {compactVnd(r.revenue)}
+                        </span>
+                        <Pill tone={(r.profit ?? 0) >= 0 ? "good" : "bad"}>
+                          {(r.profit ?? 0) >= 0 ? "▲ lãi" : "▼ lỗ"} {compactVnd(Math.abs(r.profit ?? 0))}
+                          {margin !== null && ` · ${Math.round(margin * 100)}%`}
+                        </Pill>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      className="text-xs font-semibold underline"
+                      style={{ color: "var(--color-accent-700)" }}
+                      onClick={() => {
+                        setEditing(r.id);
+                        setValue(r.revenue ? String(r.revenue) : "");
+                      }}
+                    >
+                      {r.revenue === null ? "Nhập tiền" : "Sửa"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {rows.length > 8 && (
+            <button
+              type="button"
+              className="text-xs font-semibold pt-2 self-start"
+              style={{ color: "var(--color-accent-700)" }}
+              onClick={() => setShowAll((v) => !v)}
+            >
+              {showAll ? "Thu gọn" : `Xem thêm ${rows.length - 8} dự án`}
+            </button>
+          )}
+        </div>
+      )}
+      {unpriced > 0 && (
+        <Muted>
+          Có {formatHours(unpriced)} do người chưa có lương cố định báo — chưa tính vào chi phí công (nhập ở Bảng lương).
+        </Muted>
+      )}
+    </Card>
   );
-}
-
-function CumulativeChart({ points }: { points: { month: string; value: number }[] }) {
-  const [box, W] = useWidth<HTMLDivElement>(320);
-  const H = 170;
-  const pad = { l: 44, r: 56, t: 16, b: 26 };
-  const vals = points.map((p) => p.value);
-  const hi = Math.max(0, ...vals);
-  const lo = Math.min(0, ...vals);
-  const span = hi - lo || 1;
-  const y = (v: number) => pad.t + (H - pad.t - pad.b) * (1 - (v - lo) / span);
-  const x = (i: number) =>
-    points.length === 1 ? (pad.l + W - pad.r) / 2 : pad.l + ((W - pad.l - pad.r) * i) / (points.length - 1);
-  const last = points[points.length - 1];
-  const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(p.value)}`).join(" ");
-  const area = `${path} L${x(points.length - 1)},${y(0)} L${x(0)},${y(0)} Z`;
-
-  return (
-    <div ref={box}>
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="block max-w-full" role="img" aria-label="Biểu đồ luỹ kế">
-        <line x1={pad.l} x2={W - pad.r} y1={y(0)} y2={y(0)} stroke="var(--color-neutral-300)" strokeWidth={1} />
-        <text x={pad.l - 6} y={y(0) + 4} textAnchor="end" fontSize={11} fill="var(--color-neutral-500)">
-          0
-        </text>
-        <path d={area} fill="var(--color-accent-2-500)" opacity={0.12} />
-        <path d={path} fill="none" stroke="var(--color-accent-2-700)" strokeWidth={2} strokeLinejoin="round" />
-        {points.map((p, i) => (
-          <g key={p.month}>
-            <circle
-              cx={x(i)}
-              cy={y(p.value)}
-              r={4}
-              fill="var(--color-panel)"
-              stroke="var(--color-accent-2-700)"
-              strokeWidth={2}
-            />
-            <text x={x(i)} y={H - 6} textAnchor="middle" fontSize={12} fill="var(--color-text)">
-              {shortMonthLabel(p.month)}
-            </text>
-          </g>
-        ))}
-        {last && (
-          <text x={x(points.length - 1) + 8} y={y(last.value) + 4} fontSize={12} fontWeight={700} fill="var(--color-text)">
-            {compactVnd(last.value)}
-          </text>
-        )}
-      </svg>
-    </div>
-  );
-}
-
-function formatHours(h: number) {
-  const whole = Math.floor(h);
-  const min = Math.round((h - whole) * 60);
-  return min ? `${whole}h${String(min).padStart(2, "0")}` : `${whole}h`;
 }
 
 export function DashboardView({ data, cumulativeStartMonth }: { data: DashboardData; cumulativeStartMonth: string }) {
-  const { months, attendance, hours, salaryPending } = data;
+  const { months, attendance, hours, salaryPending, forecast, costs, revenueSources, lateness, people, work, upwork, response } =
+    data;
   const current = months[months.length - 1];
   const previous = months[months.length - 2];
   const [picked, setPicked] = useState(months.length - 1);
@@ -262,11 +214,31 @@ export function DashboardView({ data, cumulativeStartMonth }: { data: DashboardD
     .map((m) => ({ month: m.month, value: m.cumulative as number }));
   const [y, mo, d] = data.today.split("-");
   const startLabel = `T${Number(cumulativeStartMonth.slice(5, 7))}/${cumulativeStartMonth.slice(0, 4)}`;
-  const maxHours = Math.max(1, ...hours.projects.map((pr) => Math.max(pr.hours, pr.cap ?? 0)));
+  const topSource = revenueSources.items[0];
+  const topShare = topSource && revenueSources.total > 0 ? topSource.amount / revenueSources.total : 0;
+  const salaryShare = current.revenue > 0 ? current.salary / current.revenue : null;
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-      <div className="max-w-[1080px] flex flex-col gap-4">
+    <div className="flex-1 overflow-y-auto">
+      {/* Jump bar — sticks under the top edge so any section is one tap away. */}
+      <nav
+        className="sticky top-0 z-10 flex gap-1 sm:gap-1.5 overflow-x-auto px-2 sm:px-6 py-2 [scrollbar-width:none]"
+        style={{ background: "var(--color-bg)", borderBottom: "1px solid var(--color-neutral-200)" }}
+        aria-label="Các phần của trang Tổng quan"
+      >
+        {SECTIONS.map((s) => (
+          <a
+            key={s.id}
+            href={`#${s.id}`}
+            className="rounded-full px-2.5 sm:px-3 py-1.5 text-[12px] sm:text-[13px] font-semibold whitespace-nowrap"
+            style={{ background: "var(--color-neutral-100)", color: "var(--color-text)" }}
+          >
+            {s.label}
+          </a>
+        ))}
+      </nav>
+
+      <div className="max-w-[1080px] flex flex-col gap-4 p-4 sm:p-6">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
           <h1 className="text-xl">Tổng quan</h1>
           <span className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
@@ -311,6 +283,9 @@ export function DashboardView({ data, cumulativeStartMonth }: { data: DashboardD
           />
         </div>
 
+        {/* ------------------------------------------------------------ TIỀN */}
+        <SectionTitle id="tien" icon="💰" title="Tiền" hint="tháng này lời hay lỗ, tiền đi đâu, đến từ đâu" />
+
         <div className="grid lg:grid-cols-[3fr_2fr] gap-4">
           <Card title="Thu – chi 6 tháng" href="/quan-tri/tai-chinh">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" style={{ color: "var(--color-neutral-600)" }}>
@@ -339,106 +314,311 @@ export function DashboardView({ data, cumulativeStartMonth }: { data: DashboardD
               </span>
               <span>
                 {p.net >= 0 ? "Lãi" : "Lỗ"}:{" "}
-                <b
-                  style={{
-                    color: p.net >= 0 ? "var(--status-green)" : "var(--status-red)",
-                  }}
-                >
-                  {formatVnd(p.net)}
-                </b>
+                <b style={{ color: p.net >= 0 ? "var(--status-green)" : "var(--status-red)" }}>{formatVnd(p.net)}</b>
               </span>
               <span>
                 Luỹ kế: <b>{p.cumulative === null ? "—" : formatVnd(p.cumulative)}</b>
               </span>
             </div>
-            {salaryPending.count > 0 && (
-              <p className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
-                Lương tháng này còn <b>{salaryPending.count} phiếu chưa trả</b> ({formatVnd(salaryPending.amount)}) — chưa tính
-                vào chi cho tới khi bấm &quot;Đã trả&quot;.
-              </p>
-            )}
           </Card>
 
-          <Card title={`Luỹ kế từ ${startLabel}`} href="/quan-tri/tai-chinh">
-            {cumulativePoints.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
-                Luỹ kế bắt đầu tính từ {startLabel}.
-              </p>
-            ) : (
-              <>
-                <CumulativeChart points={cumulativePoints} />
-                <p className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
-                  Cộng dồn tiền thực còn lại mỗi tháng (thu − chi − lương đã trả). Đường đi lên là studio đang để dành được tiền.
-                </p>
-              </>
+          {/* (4) Dự kiến cuối tháng */}
+          <Card title="Dự kiến cuối tháng">
+            <Muted>Nếu từ giờ tới cuối tháng không có thêm khoản thu nào:</Muted>
+            <div className="flex flex-col text-[13px] tabular-nums">
+              <div className="flex justify-between py-1.5">
+                <span>Lãi hiện tại</span>
+                <b>{formatVnd(forecast.netNow)}</b>
+              </div>
+              <div className="flex justify-between py-1.5" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+                <span>− Lương chưa trả ({salaryPending.count} phiếu)</span>
+                <b>{formatVnd(forecast.unpaidSalary)}</b>
+              </div>
+              {forecast.missingFixed.map((m) => (
+                <div
+                  key={m.name}
+                  className="flex justify-between gap-3 py-1.5"
+                  style={{ borderTop: "1px solid var(--color-neutral-200)" }}
+                >
+                  <span className="flex flex-col min-w-0">
+                    <span className="truncate">− {m.name}</span>
+                    <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                      tháng trước có, tháng này chưa nhập
+                    </span>
+                  </span>
+                  <b className="whitespace-nowrap">{formatVnd(m.amount)}</b>
+                </div>
+              ))}
+              <div
+                className="flex justify-between items-baseline py-2 mt-1"
+                style={{ borderTop: "2px solid var(--color-neutral-300)" }}
+              >
+                <span className="font-bold">= Dự kiến cuối tháng</span>
+                <span
+                  className="text-[20px] font-bold"
+                  style={{ color: forecast.projected >= 0 ? "var(--status-green)" : "var(--status-red)" }}
+                >
+                  {forecast.projected >= 0 ? "▲ " : "▼ "}
+                  {formatVnd(forecast.projected)}
+                </span>
+              </div>
+            </div>
+            {forecast.projected < 0 && (
+              <Muted>
+                Cần thêm khoảng <b>{formatVnd(-forecast.projected)}</b> doanh thu trong tháng để hoà vốn.
+              </Muted>
             )}
           </Card>
         </div>
 
-        <Card title={`Giờ làm tuần này · ${formatHours(hours.totalHours)}`} href="/workspace/bao-cao-gio">
-          {hours.projects.length === 0 ? (
-            <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
-              Tuần này chưa ai báo giờ.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2.5">
-              {hours.projects.slice(0, 8).map((pr) => {
-                const over = pr.cap !== null && pr.hours > pr.cap;
-                return (
-                  <div
-                    key={pr.id ?? "none"}
-                    className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[220px_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
+        <div className="grid lg:grid-cols-2 gap-4">
+          {/* (2) Chi phí lớn nhất */}
+          <Card title={`Tiền chi vào đâu · tháng ${Number(mo)}`} href="/quan-tri/tai-chinh">
+            <BarList
+              emptyText="Tháng này chưa nhập khoản chi nào."
+              color={COST}
+              rows={costs.items.slice(0, 7).map((c) => ({
+                key: `${c.type}-${c.name}`,
+                label: c.name,
+                value: c.amount,
+                display: compactVnd(c.amount),
+                sub: costs.total > 0 ? `${Math.round((c.amount / costs.total) * 100)}%` : undefined,
+              }))}
+            />
+            {costs.items.length > 7 && <Muted>và {costs.items.length - 7} khoản nhỏ hơn.</Muted>}
+          </Card>
+
+          {/* (3) Doanh thu theo nguồn */}
+          <Card title="Tiền đến từ đâu · 6 tháng" href="/quan-tri/tai-chinh">
+            {topSource && topShare > CLIENT_SHARE_WARN && (
+              <p
+                className="text-xs font-semibold rounded-[8px] px-2.5 py-2"
+                style={{ background: "color-mix(in srgb, var(--status-yellow) 16%, transparent)" }}
+              >
+                ⚠ &quot;{topSource.name}&quot; chiếm {Math.round(topShare * 100)}% doanh thu — nếu nguồn này dừng, studio mất hơn
+                nửa thu nhập.
+              </p>
+            )}
+            <BarList
+              emptyText="6 tháng qua chưa có khoản thu nào."
+              rows={revenueSources.items.slice(0, 7).map((r) => ({
+                key: r.name,
+                label: r.name,
+                value: r.amount,
+                display: compactVnd(r.amount),
+                sub: revenueSources.total > 0 ? `${Math.round((r.amount / revenueSources.total) * 100)}%` : undefined,
+              }))}
+            />
+            <Muted>Theo tên khoản thu nhập ở Tài chính — ghi tên khách/nguồn vào tên khoản để xem đúng từng khách.</Muted>
+          </Card>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-4">
+          <Card title={`Luỹ kế từ ${startLabel}`} href="/quan-tri/tai-chinh">
+            {cumulativePoints.length === 0 ? (
+              <Muted>Luỹ kế bắt đầu tính từ {startLabel}.</Muted>
+            ) : (
+              <>
+                <CumulativeChart points={cumulativePoints} />
+                <Muted>Cộng dồn tiền thực còn lại mỗi tháng. Đường đi lên là studio đang để dành được tiền.</Muted>
+              </>
+            )}
+          </Card>
+
+          {/* (7) Lương / doanh thu */}
+          <Card title="Lương / doanh thu" href="/quan-tri/bang-luong" hrefLabel="Bảng lương">
+            <MonthColumns
+              ariaLabel="Tỉ lệ lương trên doanh thu theo tháng"
+              points={months.map((m) => ({ month: m.month, value: m.revenue > 0 ? m.salary / m.revenue : null }))}
+              color={(v) => (v > SALARY_SHARE_CEILING ? "var(--status-red)" : REVENUE)}
+              reference={{ value: SALARY_SHARE_CEILING, text: "nên dưới 60%" }}
+              label={(v) => `${Math.round(v * 100)}%`}
+            />
+            <Muted>
+              {salaryShare === null
+                ? "Tháng này chưa có doanh thu."
+                : `Tháng này lương đã trả = ${Math.round(salaryShare * 100)}% doanh thu${salaryShare > SALARY_SHARE_CEILING ? " — đang cao, lợi nhuận bị ép." : " — ổn."}`}
+              {salaryPending.count > 0 && ` Còn ${salaryPending.count} phiếu chưa trả chưa tính vào.`}
+            </Muted>
+          </Card>
+        </div>
+
+        {/* ---------------------------------------------------------- DỰ ÁN */}
+        <SectionTitle id="du-an" icon="📁" title="Dự án" hint="dự án nào đáng làm, việc nào sắp trễ" />
+
+        <ProjectProfitCard rows={data.projectProfit} ready={data.projectFinanceReady} />
+
+        {/* (10) Dự án & hạn chót */}
+        <Card title="Việc sắp tới hạn" href="/workspace" hrefLabel="Bảng công việc">
+          <div className="flex flex-wrap gap-2">
+            <Pill tone="neutral">{work.openProjects} dự án đang mở</Pill>
+            <Pill tone={work.overdue.length > 0 ? "bad" : "good"}>
+              {work.overdue.length > 0 ? `⚠ ${work.overdue.length} việc trễ hạn` : "Không có việc trễ hạn"}
+            </Pill>
+            <Pill tone={work.dueSoon.length > 0 ? "warn" : "neutral"}>{work.dueSoon.length} việc tới hạn trong 3 ngày</Pill>
+          </div>
+          {work.overdue.length + work.dueSoon.length > 0 && (
+            <div className="flex flex-col">
+              {[
+                ...work.overdue.slice(0, 6).map((t) => ({ ...t, tag: `trễ ${t.daysLate} ngày`, bad: true })),
+                ...work.dueSoon.slice(0, 6).map((t) => ({
+                  ...t,
+                  tag: t.dueIn === 0 ? "hạn hôm nay" : `còn ${t.dueIn} ngày`,
+                  bad: false,
+                })),
+              ].map((t, i) => (
+                <div
+                  key={`${t.title}-${i}`}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-[13px]"
+                  style={{ borderTop: "1px solid var(--color-neutral-200)" }}
+                >
+                  {/* Phone: the task gets its own line; who + deadline below. */}
+                  <span className="basis-full sm:basis-0 sm:flex-1 min-w-0 font-semibold" title={t.title}>
+                    {t.title}
+                  </span>
+                  <span
+                    className="text-xs truncate flex-1 sm:flex-none sm:max-w-[140px]"
+                    style={{ color: "var(--color-neutral-500)" }}
                   >
-                    <span className="text-[13px] font-semibold truncate" title={pr.name}>
-                      {pr.name}
-                    </span>
-                    <span className="text-[13px] tabular-nums text-right sm:order-3 whitespace-nowrap">
-                      <b>{formatHours(pr.hours)}</b>
-                      {pr.cap !== null && (
-                        <span
-                          style={{
-                            color: over ? "var(--status-red)" : "var(--color-neutral-500)",
-                          }}
-                        >
-                          {" "}
-                          / {pr.cap}h{over ? " ⚠" : ""}
-                        </span>
-                      )}
-                    </span>
-                    <div
-                      className="relative h-2.5 rounded-full col-span-2 sm:col-span-1 sm:order-2"
-                      style={{ background: "var(--color-neutral-100)" }}
-                    >
-                      <div
-                        className="absolute inset-y-0 left-0 rounded-full"
-                        style={{
-                          width: `${(pr.hours / maxHours) * 100}%`,
-                          background: over ? "var(--status-red)" : REVENUE,
-                        }}
-                      />
-                      {pr.cap !== null && (
-                        <div
-                          className="absolute -inset-y-1"
-                          style={{
-                            left: `${(pr.cap / maxHours) * 100}%`,
-                            width: 2,
-                            background: "var(--color-neutral-700)",
-                          }}
-                          title={`Giới hạn ${pr.cap}h/tuần`}
-                        />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              {hours.projects.length > 8 && (
-                <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-                  và {hours.projects.length - 8} dự án khác
-                </span>
-              )}
+                    {t.who}
+                  </span>
+                  <Pill tone={t.bad ? "bad" : "warn"}>{t.tag}</Pill>
+                </div>
+              ))}
             </div>
           )}
         </Card>
+
+        {/* -------------------------------------------------------- ĐỘI NGŨ */}
+        <SectionTitle id="doi-ngu" icon="👥" title="Đội ngũ" hint="giờ làm tuần này, ai bận ai trống, đi trễ" />
+
+        <div className="grid lg:grid-cols-2 gap-4">
+          <Card title={`Giờ theo dự án · ${formatHours(hours.totalHours)}`} href="/workspace/bao-cao-gio">
+            <BarList
+              emptyText="Tuần này chưa ai báo giờ."
+              rows={hours.projects.slice(0, 8).map((pr) => {
+                const over = pr.cap !== null && pr.hours > pr.cap;
+                return {
+                  key: pr.id ?? "none",
+                  label: pr.name,
+                  value: pr.hours,
+                  display: formatHours(pr.hours),
+                  sub: pr.cap !== null ? `/ ${pr.cap}h${over ? " ⚠" : ""}` : undefined,
+                  color: over ? "var(--status-red)" : undefined,
+                  marker: pr.cap ?? undefined,
+                };
+              })}
+            />
+          </Card>
+
+          {/* (5) Giờ theo người */}
+          <Card title="Giờ theo người" href="/workspace/bao-cao-gio">
+            <BarList
+              emptyText="Tuần này chưa ai báo giờ."
+              rows={people.rows.map((r) => ({ key: r.name, label: r.name, value: r.hours, display: formatHours(r.hours) }))}
+            />
+            {people.notReported.length > 0 && (
+              <Muted>
+                Chưa báo giờ tuần này: <b>{people.notReported.join(", ")}</b>
+              </Muted>
+            )}
+          </Card>
+        </div>
+
+        {/* (6) Đi trễ */}
+        <Card title="Đi trễ theo tháng" href="/quan-tri/cham-cong">
+          <div className="grid md:grid-cols-[3fr_2fr] gap-4 items-start">
+            <MonthColumns
+              ariaLabel="Số lần đi trễ theo tháng"
+              points={lateness.months.map((m) => ({ month: m.month, value: m.days > 0 ? m.late : null }))}
+              color={() => COST}
+              label={(v) => String(v)}
+            />
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-bold" style={{ color: "var(--color-neutral-500)" }}>
+                TRỄ NHIỀU NHẤT THÁNG NÀY
+              </span>
+              {lateness.topThisMonth.length === 0 ? (
+                <Muted>Tháng này chưa ai đi trễ 🎉</Muted>
+              ) : (
+                lateness.topThisMonth.map((t) => (
+                  <div key={t.name} className="flex justify-between text-[13px]">
+                    <span className="truncate">{t.name}</span>
+                    <b className="tabular-nums">{t.late} lần</b>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+          <Muted>Số lần check-in sau giờ vào làm, không tính ngày tăng ca.</Muted>
+        </Card>
+
+        {/* ----------------------------------------------------- KHÁCH HÀNG */}
+        <SectionTitle id="khach-hang" icon="🤝" title="Khách hàng" hint="có đủ việc cho tháng sau không, khách có phải chờ lâu" />
+
+        <div className="grid lg:grid-cols-2 gap-4 pb-6">
+          {/* (8) Phễu Upwork */}
+          <Card title="Phễu Upwork · 30 ngày" href="/quan-tri/upwork">
+            <Funnel
+              stages={[
+                { label: "Tìm thấy job", value: upwork.found },
+                { label: "Soạn nháp", value: upwork.drafted },
+                { label: "Đã duyệt", value: upwork.approved },
+                { label: "Đã gửi", value: upwork.sent },
+                { label: "Khách trả lời", value: upwork.replied },
+                { label: "Chốt được", value: upwork.hired },
+              ]}
+            />
+            <Muted>
+              Số % là tỉ lệ đi tiếp từ bước trước. Trên trang Upwork, bấm &quot;Khách đã trả lời&quot; / &quot;Đã chốt&quot; để
+              phễu đủ số.
+            </Muted>
+          </Card>
+
+          {/* (9) Thời gian trả lời khách */}
+          <Card title="Khách chờ bao lâu" href="/workspace/khach-hang" hrefLabel="Tin nhắn khách">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: "var(--color-neutral-500)" }}>
+                  Thường trả lời sau
+                </span>
+                <span className="text-[22px] font-bold">
+                  {response.medianMinutes === null ? "—" : formatDuration(response.medianMinutes)}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[11px] font-bold uppercase tracking-[0.06em]" style={{ color: "var(--color-neutral-500)" }}>
+                  Trả lời trong 1 giờ
+                </span>
+                <span
+                  className="text-[22px] font-bold"
+                  style={{
+                    color:
+                      response.withinHourPct === null
+                        ? "var(--color-text)"
+                        : response.withinHourPct >= 0.8
+                          ? "var(--status-green)"
+                          : "var(--color-accent-700)",
+                  }}
+                >
+                  {response.withinHourPct === null ? "—" : `${Math.round(response.withinHourPct * 100)}%`}
+                </span>
+              </div>
+            </div>
+            {response.waitingNow > 0 ? (
+              <p className="text-[13px] font-semibold" style={{ color: "var(--status-red)" }}>
+                ⚠ {response.waitingNow} khách đang chờ trả lời
+                {response.oldestWaitingMinutes !== null && ` — lâu nhất ${formatDuration(response.oldestWaitingMinutes)}`}
+              </p>
+            ) : (
+              <Muted>Không có khách nào đang chờ.</Muted>
+            )}
+            <Muted>
+              30 ngày qua, tính trên {response.answered} lần trả lời ở mục Công việc (khách nước ngoài). Khách thường mong được
+              trả lời trong vài giờ.
+            </Muted>
+          </Card>
+        </div>
       </div>
     </div>
   );

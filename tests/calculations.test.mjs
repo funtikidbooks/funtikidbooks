@@ -175,3 +175,45 @@ test("tổng quan: monthly thu/chi/lãi match the Tài chính page, luỹ kế s
   assert.equal(compactVnd(850_000), "850k");
   assert.equal(shortMonthLabel("2027-01-01"), "T1/27");
 });
+
+test("tổng quan: thời gian trả lời khách và lời/lỗ theo dự án", async () => {
+  const { responseStats, formatDuration, projectProfit, hourlyCost } = await import("../src/lib/dashboardMath.ts");
+  const at = (h, m = 0) => `2026-09-28T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00Z`;
+  const msgs = [
+    // Project A: two client messages, answered 30 min after the first.
+    { project_id: "A", sender_type: "client", created_at: at(1) },
+    { project_id: "A", sender_type: "client", created_at: at(1, 10) },
+    { project_id: "A", sender_type: "staff", created_at: at(1, 30) },
+    // …then asked again and answered after 2 hours.
+    { project_id: "A", sender_type: "client", created_at: at(3) },
+    { project_id: "A", sender_type: "staff", created_at: at(5) },
+    // Project B: still waiting since 06:00.
+    { project_id: "B", sender_type: "client", created_at: at(6) },
+  ];
+  const s = responseStats(msgs, Date.parse(at(8)));
+  assert.equal(s.answered, 2);
+  assert.equal(s.medianMinutes, 30);
+  assert.equal(s.withinHourPct, 0.5);
+  assert.equal(s.waitingNow, 1);
+  assert.equal(s.oldestWaitingMinutes, 120);
+  assert.equal(formatDuration(45), "45 phút");
+  assert.equal(formatDuration(190), "3 giờ 10 phút");
+  assert.equal(formatDuration(60 * 52), "2 ngày 4 giờ");
+
+  // 8.320.000đ / 26 ngày / 8 giờ = 40.000đ/giờ.
+  assert.equal(hourlyCost(8_320_000, 26), 40_000);
+  const rows = projectProfit(
+    [{ id: "p1", name: "Ryan" }, { id: "p2", name: "Daisy" }, { id: "p3", name: "Trống" }],
+    [
+      { project_channel_id: "p1", profile_id: "u1", hours: 10, minutes: 30 },
+      { project_channel_id: "p1", profile_id: "u2", hours: 2, minutes: 0 }, // no salary set
+      { project_channel_id: "p2", profile_id: "u1", hours: 5, minutes: 0 },
+    ],
+    new Map([["u1", 40_000]]),
+    new Map([["p1", 1_000_000]]),
+  );
+  assert.equal(rows.length, 2); // p3 has neither hours nor revenue
+  assert.deepEqual(rows[0], { id: "p1", name: "Ryan", hours: 12.5, laborCost: 420_000, unpricedHours: 2, revenue: 1_000_000, profit: 580_000 });
+  assert.equal(rows[1].revenue, null);
+  assert.equal(rows[1].profit, null);
+});

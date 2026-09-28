@@ -430,7 +430,9 @@ export type UpworkProposalTemplate = {
   updated_at: string;
 };
 
-export type UpworkLeadStatus = "pending" | "approved" | "rejected" | "sent";
+// "replied" / "hired" — the client answered / the job was won
+// (supabase/migrations/dashboard_extras.sql).
+export type UpworkLeadStatus = "pending" | "approved" | "rejected" | "sent" | "replied" | "hired";
 
 export type UpworkLead = {
   id: string;
@@ -534,6 +536,15 @@ export type PayrollRecord = {
   status: PayrollStatus;
   created_by: string | null;
   created_at: string;
+  updated_at: string;
+};
+
+// Tiền thu của một dự án (phòng họp) — director-only, see
+// supabase/migrations/dashboard_extras.sql.
+export type ProjectFinance = {
+  channel_id: string;
+  revenue_vnd: number;
+  updated_by: string | null;
   updated_at: string;
 };
 
@@ -1227,6 +1238,12 @@ export type Database = {
         Row: StaffSalary;
         Insert: Partial<StaffSalary> & { profile_id: string };
         Update: Partial<StaffSalary>;
+        Relationships: [];
+      };
+      project_finance: {
+        Row: ProjectFinance;
+        Insert: Partial<ProjectFinance> & { channel_id: string };
+        Update: Partial<ProjectFinance>;
         Relationships: [];
       };
       staff_probation: {

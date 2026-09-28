@@ -12,6 +12,8 @@ const STATUS_LABEL: Record<UpworkLeadStatus, string> = {
   approved: "Đã duyệt — sẵn sàng gửi",
   rejected: "Đã bỏ qua",
   sent: "Đã gửi",
+  replied: "Khách đã trả lời",
+  hired: "Đã chốt 🎉",
 };
 
 const STATUS_COLOR: Record<UpworkLeadStatus, string> = {
@@ -19,6 +21,8 @@ const STATUS_COLOR: Record<UpworkLeadStatus, string> = {
   approved: "var(--status-green)",
   rejected: "var(--color-neutral-400)",
   sent: "var(--color-accent-700)",
+  replied: "var(--color-accent-2-700)",
+  hired: "var(--status-green)",
 };
 
 function fmtDateTime(iso: string) {
@@ -148,6 +152,22 @@ function LeadCard({ lead, onChanged }: { lead: UpworkLead; onChanged: (next: Upw
         {lead.status === "approved" && (
           <button type="button" className="btn btn-secondary btn-sm" disabled={pending} onClick={() => setStatus("sent")}>
             Đánh dấu đã gửi trên Upwork
+          </button>
+        )}
+        {/* Past "Đã gửi": mark how far it got, for the Tổng quan funnel. */}
+        {lead.status === "sent" && (
+          <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => setStatus("replied")}>
+            Khách đã trả lời
+          </button>
+        )}
+        {lead.status === "replied" && (
+          <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => setStatus("hired")}>
+            Đã chốt hợp đồng 🎉
+          </button>
+        )}
+        {(lead.status === "replied" || lead.status === "hired") && (
+          <button type="button" className="btn btn-secondary btn-sm" disabled={pending} onClick={() => setStatus("sent")}>
+            Quay lại &quot;Đã gửi&quot;
           </button>
         )}
         {(lead.status === "rejected" || lead.status === "sent") && (
