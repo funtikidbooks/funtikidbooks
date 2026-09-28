@@ -65,7 +65,11 @@ export function BoardMenu({
               )}
             </button>
             <button type="button" className={item} onClick={() => setView("background")}>
-              <span className="inline-block rounded-[4px] flex-none" style={{ width: 22, height: 16, background: boardBackground(boardColor).css }} aria-hidden />
+              <span
+                className="inline-block rounded-[4px] flex-none"
+                style={{ width: 22, height: 16, background: boardBackground(boardColor).css, border: "1px solid var(--color-neutral-300)" }}
+                aria-hidden
+              />
               Đổi hình nền
             </button>
             <button type="button" className={item} onClick={onToggleLabelNames}>
@@ -87,10 +91,16 @@ export function BoardMenu({
                   type="button"
                   onClick={() => onPickBackground(backgroundKey(b.id))}
                   className="relative rounded-[8px] h-16 flex items-end p-1.5 text-[12px] font-bold"
-                  style={{ background: b.css, color: "#fff", outline: current === b.id ? "2.5px solid var(--color-accent-500)" : "none", outlineOffset: 2 }}
+                  style={{
+                    background: b.css,
+                    color: b.plain ? "var(--color-text)" : "#fff",
+                    border: b.plain ? "1px solid var(--color-neutral-300)" : "none",
+                    outline: current === b.id ? "2.5px solid var(--color-accent-500)" : "none",
+                    outlineOffset: 2,
+                  }}
                   aria-pressed={current === b.id}
                 >
-                  <span style={{ textShadow: "0 1px 2px rgba(0,0,0,.45)" }}>{b.name}</span>
+                  <span style={b.plain ? undefined : { textShadow: "0 1px 2px rgba(0,0,0,.45)" }}>{b.name}</span>
                   {current === b.id && (
                     <span className="absolute top-1.5 right-2" aria-hidden>
                       ✓

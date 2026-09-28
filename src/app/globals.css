@@ -505,6 +505,7 @@ h4 {
   --bar-fg: #ffffff;
   --bar-btn: rgba(255, 255, 255, 0.18);
   --bar-btn-hover: rgba(255, 255, 255, 0.3);
+  --bar-ring: rgba(255, 255, 255, 0.9);
 }
 :root[data-theme="dark"] .fk-board {
   --list-bg: #101204;
@@ -517,6 +518,36 @@ h4 {
   --card-shadow: 0 1px 1px rgba(3, 4, 4, 0.5), 0 0 1px rgba(3, 4, 4, 0.5);
   --card-ring: #85b8ff;
   --bar-bg: rgba(0, 0, 0, 0.42);
+}
+/* Default background: the site's own page colour, so the bar and its
+   buttons use the ordinary light/dark tokens instead of white-on-colour. */
+.fk-board.is-plain {
+  --bar-bg: transparent;
+  --bar-fg: var(--color-text);
+  --bar-btn: var(--color-neutral-100);
+  --bar-btn-hover: var(--color-neutral-200);
+  --bar-ring: var(--color-bg);
+}
+.fk-board.is-plain .fk-board-bar {
+  border-bottom: 1px solid var(--color-neutral-200);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.fk-board.is-plain .fk-bar-btn.is-on {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+.fk-board.is-plain .fk-bar-search {
+  background: var(--color-neutral-100);
+  border-color: var(--color-neutral-200);
+  color: var(--color-text);
+}
+.fk-board.is-plain .fk-bar-search::placeholder {
+  color: var(--color-neutral-500);
+}
+.fk-board.is-plain .fk-bar-search:focus {
+  background: var(--color-panel);
+  border-color: var(--color-accent-500);
 }
 .fk-board-bar {
   background: var(--bar-bg);

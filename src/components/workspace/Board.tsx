@@ -971,7 +971,7 @@ export function WorkspaceBoard({
   const dragging = !!activeTaskId || !!activeColumnId;
 
   return (
-    <div className="fk-board flex-1 flex flex-col min-h-0" style={{ background: background.css }}>
+    <div className={`fk-board flex-1 flex flex-col min-h-0 ${background.plain ? "is-plain" : ""}`} style={{ background: background.css }}>
       {/* Trello's board bar: translucent over the background — name, search,
           filter, the board menu. */}
       <div className="fk-board-bar flex items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2 flex-none">
@@ -1036,7 +1036,7 @@ export function WorkspaceBoard({
               key={p.id}
               title={p.display_name}
               className="flex items-center justify-center rounded-full font-bold flex-none"
-              style={{ width: 28, height: 28, fontSize: 11, background: "var(--color-accent-100)", color: "var(--color-accent-700)", border: "2px solid rgba(255,255,255,.9)" }}
+              style={{ width: 28, height: 28, fontSize: 11, background: "var(--color-accent-100)", color: "var(--color-accent-700)", border: "2px solid var(--bar-ring)" }}
             >
               {p.display_name.charAt(0).toUpperCase()}
             </div>
@@ -1044,7 +1044,7 @@ export function WorkspaceBoard({
           {profiles.length > 6 && (
             <div
               className="flex items-center justify-center rounded-full font-bold flex-none"
-              style={{ width: 28, height: 28, fontSize: 10, background: "rgba(255,255,255,.9)", color: "#172b4d", border: "2px solid rgba(255,255,255,.9)" }}
+              style={{ width: 28, height: 28, fontSize: 10, background: "var(--bar-btn)", color: "var(--bar-fg)", border: "2px solid var(--bar-ring)" }}
             >
               +{profiles.length - 6}
             </div>
