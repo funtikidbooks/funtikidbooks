@@ -225,7 +225,7 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
                 onClick={toggleTheme}
                 className="ws-nav-link flex-1 flex items-center justify-center gap-2 py-2.5 rounded-[10px] text-[13px] font-semibold"
               >
-                <span aria-hidden>{theme === "dark" ? "☀️" : "🌙"}</span> {theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
+                <span aria-hidden>{theme === "dark" ? "☀️" : "🌙"}</span> {theme === "dark" ? "Chuyển ban ngày" : "Chuyển ban đêm"}
               </button>
               <form action={signOut} onSubmit={resetThemeOnSignOut} className="flex-1">
                 <button

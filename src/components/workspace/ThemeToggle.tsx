@@ -5,7 +5,9 @@ import { useTheme } from "@/lib/useTheme";
 export function ThemeToggle({ compact = false }: { compact?: boolean }) {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
-  const switchLabel = isDark ? "Chế độ tối, bấm để chuyển sang sáng" : "Chế độ sáng, bấm để chuyển sang tối";
+  // Named by what's on now — "Ban ngày" (light) or "Ban đêm" (dark).
+  const modeLabel = isDark ? "Ban đêm" : "Ban ngày";
+  const switchLabel = isDark ? "Đang ban đêm, bấm để chuyển sang ban ngày" : "Đang ban ngày, bấm để chuyển sang ban đêm";
 
   if (compact) {
     return (
@@ -14,18 +16,18 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
         onClick={toggleTheme}
         className="btn-icon flex-none"
         style={{ width: 30, height: 30, padding: 0 }}
-        title="Chế độ"
+        title={modeLabel}
         aria-label={switchLabel}
       >
-        {isDark ? "☀️" : "🌙"}
+        {isDark ? "🌙" : "☀️"}
       </button>
     );
   }
 
   return (
     <div className="flex items-center gap-2 px-2 py-2 text-[13px] font-semibold" style={{ color: "var(--color-neutral-600)" }}>
-      <span aria-hidden>{isDark ? "☀️" : "🌙"}</span>
-      <span className="flex-1">Chế độ</span>
+      <span aria-hidden>{isDark ? "🌙" : "☀️"}</span>
+      <span className="flex-1">{modeLabel}</span>
       <button
         type="button"
         role="switch"

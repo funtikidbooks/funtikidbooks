@@ -11,7 +11,7 @@ export function SiteThemeToggle() {
       onClick={toggleTheme}
       className="btn-icon flex-none"
       aria-label={theme === "dark" ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
-      title={theme === "dark" ? "Chế độ sáng" : "Chế độ tối"}
+      title={theme === "dark" ? "Chuyển ban ngày" : "Chuyển ban đêm"}
     >
       {theme === "dark" ? "☀️" : "🌙"}
     </button>
