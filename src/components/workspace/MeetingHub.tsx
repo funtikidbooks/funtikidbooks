@@ -5187,7 +5187,13 @@ export function MeetingHub({
         </div>
       )}
       {lightbox && (
-        <ImageLightbox url={lightbox.url} filename={lightbox.filename} onClose={() => setLightbox(null)} />
+        <ImageLightbox
+          url={lightbox.url}
+          filename={lightbox.filename}
+          // Every photo in this room, oldest first — swipe / ‹ › through them.
+          items={channelMedia.images.map((m) => ({ url: m.attachment_url as string, filename: m.attachment_filename }))}
+          onClose={() => setLightbox(null)}
+        />
       )}
       {showBrowse && (
         <BrowseRoomsModal rooms={browsableRooms} onClose={() => setShowBrowse(false)} onJoined={handleJoined} />

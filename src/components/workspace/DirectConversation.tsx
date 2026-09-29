@@ -1703,7 +1703,16 @@ export function DirectConversation({
         </form>
       </div>
       {lightbox && (
-        <ImageLightbox url={lightbox.url} filename={lightbox.filename} onClose={() => setLightbox(null)} />
+        <ImageLightbox
+          url={lightbox.url}
+          filename={lightbox.filename}
+          // Every photo in this conversation, oldest first — swipe / ‹ › through them.
+          items={[...messages]
+            .filter((m) => m.attachment_url && isImage(m.attachment_mime))
+            .sort((x, y) => x.created_at.localeCompare(y.created_at))
+            .map((m) => ({ url: m.attachment_url as string, filename: m.attachment_filename }))}
+          onClose={() => setLightbox(null)}
+        />
       )}
     </>
   );
