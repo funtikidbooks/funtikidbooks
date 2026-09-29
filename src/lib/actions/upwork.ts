@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { UPWORK_LIVE_CHANNEL, UPWORK_LIVE_EVENT } from "@/lib/upworkLive";
 import { DEFAULT_UPWORK_SOP, normalizeSop, type UpworkSop } from "@/lib/upworkSop";
+import { DEFAULT_UPWORK_FILTERS, normalizeFilters, type UpworkFilters } from "@/lib/upworkFilters";
 import type { UpworkBatch, UpworkLead, UpworkLeadStatus, UpworkProposalTemplate } from "@/lib/types";
 
 // Director, or any staff whose chức danh is exactly "Project Manager" —
@@ -53,20 +54,64 @@ export async function listUpworkLeadsForBatches(batchIds: string[]): Promise<Upw
   return (data ?? []) as UpworkLead[];
 }
 
-// Just what the Hiệu quả tab counts, for every lead so far.
+// Just what the Hiệu quả tab counts (and its filter preview reads), for every lead so far.
 export async function listUpworkLeadStats(): Promise<
-  { batch_id: string; status: string; fit_score: number | null; template_name: string | null; created_at: string }[]
+  {
+    batch_id: string;
+    status: string;
+    fit_score: number | null;
+    template_name: string | null;
+    created_at: string;
+    job_title: string;
+    budget_text: string | null;
+  }[]
 > {
   const { supabase } = await requireDirectorOrPM();
   const full = await supabase
     .from("upwork_leads")
-    .select("batch_id, status, fit_score, template_name, created_at")
+    .select("batch_id, status, fit_score, template_name, created_at, job_title, budget_text")
     .order("created_at", { ascending: false })
     .limit(5000);
   if (!full.error) return (full.data ?? []) as Awaited<ReturnType<typeof listUpworkLeadStats>>;
   // fit_score / template_name not added yet (upwork_night_email.sql) — count the rest.
-  const plain = await supabase.from("upwork_leads").select("batch_id, status, created_at").order("created_at", { ascending: false }).limit(5000);
-  return (plain.data ?? []).map((l) => ({ ...(l as { batch_id: string; status: string; created_at: string }), fit_score: null, template_name: null }));
+  const plain = await supabase
+    .from("upwork_leads")
+    .select("batch_id, status, created_at, job_title, budget_text")
+    .order("created_at", { ascending: false })
+    .limit(5000);
+  return (plain.data ?? []).map((l) => ({
+    ...(l as { batch_id: string; status: string; created_at: string; job_title: string; budget_text: string | null }),
+    fit_score: null,
+    template_name: null,
+  }));
+}
+
+// Yêu cầu đầu vào — sếp's numbers for which jobs get a proposal. Kept in
+// site_settings (read by scripts/upwork-night.mjs each hour); written with
+// the service role so the Project Manager can set them too.
+const FILTERS_KEY = "upwork_filters";
+
+export async function getUpworkFilters(): Promise<UpworkFilters> {
+  const { supabase } = await requireDirectorOrPM();
+  const { data } = await supabase.from("site_settings").select("value").eq("key", FILTERS_KEY).maybeSingle();
+  if (!data?.value) return DEFAULT_UPWORK_FILTERS;
+  try {
+    return normalizeFilters(JSON.parse(data.value));
+  } catch {
+    return DEFAULT_UPWORK_FILTERS;
+  }
+}
+
+export async function saveUpworkFilters(input: UpworkFilters): Promise<UpworkFilters> {
+  await requireDirectorOrPM();
+  const filters = normalizeFilters(input);
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("site_settings")
+    .upsert({ key: FILTERS_KEY, value: JSON.stringify(filters), updated_at: new Date().toISOString() });
+  if (error) throw new Error("Không lưu được yêu cầu.");
+  revalidatePath("/quan-tri/upwork");
+  return filters;
 }
 
 // Tell every open Upwork page to refetch this batch (see lib/upworkLive.ts).

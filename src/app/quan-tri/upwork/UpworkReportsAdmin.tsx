@@ -9,6 +9,7 @@ import { ProposalTemplates } from "./ProposalTemplates";
 import { UpworkSopView } from "./UpworkSopView";
 import { UpworkStats } from "./UpworkStats";
 import type { UpworkSop } from "@/lib/upworkSop";
+import type { UpworkFilters } from "@/lib/upworkFilters";
 
 const STATUS_LABEL: Record<UpworkLeadStatus, string> = {
   pending: "Chờ duyệt",
@@ -438,11 +439,13 @@ export function UpworkReportsAdmin({
   initialBatches,
   initialTemplates,
   sop,
+  filters,
   initialTab,
 }: {
   initialBatches: UpworkBatch[];
   initialTemplates: UpworkProposalTemplate[];
   sop: { sop: UpworkSop; saved: boolean };
+  filters: UpworkFilters;
   initialTab: Tab;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -565,7 +568,7 @@ export function UpworkReportsAdmin({
         {tab === "sop" ? (
           <UpworkSopView initialSop={sop.sop} saved={sop.saved} />
         ) : tab === "stats" ? (
-          <UpworkStats batches={batches} />
+          <UpworkStats batches={batches} initialFilters={filters} />
         ) : tab === "templates" ? (
           <ProposalTemplates templates={templates} onTemplatesChange={setTemplates} />
         ) : (

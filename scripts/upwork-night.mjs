@@ -31,6 +31,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_UPWORK_SOP, normalizeSop } from "../src/lib/upworkSop.ts";
+import { DEFAULT_UPWORK_FILTERS, filterReason, normalizeFilters } from "../src/lib/upworkFilters.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const env = Object.fromEntries(
@@ -63,6 +64,16 @@ function jobKey(url) {
   return m ? m[0].toLowerCase() : url.split("?")[0].replace(/\/+$/, "").toLowerCase();
 }
 
+// Yêu cầu đầu vào, set on Tìm khách (Upwork) → Hiệu quả.
+async function loadFilters() {
+  const { data } = await db.from("site_settings").select("value").eq("key", "upwork_filters").maybeSingle();
+  try {
+    return data?.value ? normalizeFilters(JSON.parse(data.value)) : DEFAULT_UPWORK_FILTERS;
+  } catch {
+    return DEFAULT_UPWORK_FILTERS;
+  }
+}
+
 async function context() {
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
   const [sopRes, tplRes, leadsRes, lastRes] = await Promise.all([
@@ -73,12 +84,16 @@ async function context() {
   ]);
   if (tplRes.error) fail("Không đọc được mẫu proposal: " + tplRes.error.message);
   const now = vietnamNow();
+  const filters = await loadFilters();
   console.log(
     JSON.stringify(
       {
         sop: sopRes.data ? normalizeSop(sopRes.data.content) : DEFAULT_UPWORK_SOP,
         sopNote: sopRes.data ? `Bản studio, sửa lần cuối ${sopRes.data.updated_at}` : "Bản gốc SOP-01 (studio chưa sửa trên web)",
         templates: tplRes.data ?? [],
+        filters,
+        filtersNote:
+          "Yêu cầu đầu vào của sếp — chỉ soạn proposal cho job đạt đủ: minFixedBudget (USD, job giá cố định; trống = không đặt), minHourlyRate (USD/giờ), minFitScore (số sao tối thiểu), noBudget ('skip' = bỏ job không ghi ngân sách), excludeKeywords (bỏ job có từ này trong tên). Lệnh report cũng tự loại job không đạt.",
         alreadyReportedJobKeys: [...new Set((leadsRes.data ?? []).map((l) => jobKey(l.job_url)))],
         lastRunAt: lastRes.data?.ran_at ?? null,
         vietnamNow: now.iso,
@@ -104,6 +119,8 @@ async function report(file = REPORT_FILE) {
   const { data: recent } = await db.from("upwork_leads").select("job_url").gte("created_at", since);
   const seen = new Set((recent ?? []).map((l) => jobKey(l.job_url)));
 
+  const filters = await loadFilters();
+  const dropped = [];
   const rows = [];
   for (const l of leads) {
     const job_url = str(l.job_url, 500);
@@ -115,6 +132,12 @@ async function report(file = REPORT_FILE) {
     const proposal_draft = str(l.proposal_draft, 6000);
     if (!job_title || !proposal_draft) continue;
     const fit = Number(l.fit_score);
+    // Sếp's numbers are enforced here too, whatever the run decided.
+    const why = filterReason({ job_title, budget_text: str(l.budget_text, 200), fit_score: Number.isInteger(fit) ? fit : null }, filters);
+    if (why) {
+      dropped.push(why);
+      continue;
+    }
     const posted = typeof l.posted_at === "string" && !Number.isNaN(Date.parse(l.posted_at)) ? new Date(l.posted_at).toISOString() : null;
     rows.push({
       job_title,
@@ -137,7 +160,10 @@ async function report(file = REPORT_FILE) {
     .insert({
       jobs_found: Number.isFinite(input.jobsFound) ? Math.max(0, Math.round(input.jobsFound)) : rows.length,
       leads_drafted: rows.length,
-      note: str(input.note, 2000) || null,
+      note:
+        [str(input.note, 1800), dropped.length ? `Theo yêu cầu của sếp, bỏ thêm ${dropped.length} job (${[...new Set(dropped)].slice(0, 4).join("; ")}).` : ""]
+          .filter(Boolean)
+          .join(" ") || null,
     })
     .select("id")
     .single();
@@ -163,7 +189,7 @@ async function report(file = REPORT_FILE) {
   fs.rmSync(file, { force: true });
   await pingLive(batch.id);
   const notice = await notifyAuto(batch.id);
-  console.log(JSON.stringify({ batchId: batch.id, saved: rows.length, skipped: leads.length - rows.length, notice }));
+  console.log(JSON.stringify({ batchId: batch.id, saved: rows.length, skipped: leads.length - rows.length, droppedByFilters: dropped, notice }));
 }
 
 // Open Tìm khách (Upwork) pages refetch the moment this ping arrives —
@@ -182,13 +208,20 @@ async function pingLive(batchId) {
 
 // Which notification this check sends, by the hour in Vietnam — decided
 // here so the scheduled run never has to:
-//   07:xx          one summary of the night (22:00 → now)
-//   08:00–21:59    an instant push if this check found jobs
-//   22:00–06:59    nothing (nobody gets woken)
+//   first check from 07:00   one summary of the night (22:00 → now)
+//   later, until 21:59       an instant push if this check found jobs
+//   22:00–06:59              nothing (nobody gets woken)
+// The checks run every few minutes by day, so "first from 07:00" is the
+// one with no other check since 07:00 — later 07:xx checks push as usual.
 async function notifyAuto(batchId) {
   const { hour } = vietnamNow();
-  if (hour === 7) return notifyNight({ quiet: true });
-  if (hour >= 8 && hour < 22) return notifyBatch(batchId, { quiet: true });
+  if (hour >= 7 && hour < 22) {
+    const vnNow = new Date(Date.now() + 7 * 3600 * 1000);
+    const today7 = new Date(Date.UTC(vnNow.getUTCFullYear(), vnNow.getUTCMonth(), vnNow.getUTCDate(), 7) - 7 * 3600 * 1000).toISOString();
+    const { count } = await db.from("upwork_batches").select("id", { count: "exact", head: true }).gte("ran_at", today7).neq("id", batchId);
+    if (!count) return notifyNight({ quiet: true });
+    return notifyBatch(batchId, { quiet: true });
+  }
   return "giờ nghỉ 22:00–07:00 — không gửi thông báo";
 }
 

@@ -459,6 +459,34 @@ test("upwork hiệu quả: chạy đều mỗi giờ, phễu, tỉ lệ sếp gi
   assert.equal(s.byDay.reduce((n, d) => n + d.checks, 0), 24);
 });
 
+test("upwork yêu cầu đầu vào: đọc ngân sách, lọc job, thử trên job cũ", async () => {
+  const { parseBudget, filterReason, previewFilters, normalizeFilters, DEFAULT_UPWORK_FILTERS } = await import("../src/lib/upworkFilters.ts");
+  assert.deepEqual(parseBudget("$1,500 fixed · Intermediate"), { type: "fixed", min: 1500, max: 1500 });
+  assert.deepEqual(parseBudget("$25–40/hr"), { type: "hourly", min: 25, max: 40 });
+  assert.deepEqual(parseBudget("Hourly: $15.00 - $30.00"), { type: "hourly", min: 15, max: 30 });
+  assert.deepEqual(parseBudget("$2k budget"), { type: "fixed", min: 2000, max: 2000 });
+  assert.deepEqual(parseBudget("Not specified"), { type: null, min: null, max: null });
+  const f = normalizeFilters({ minFixedBudget: "$500", minHourlyRate: "20", minFitScore: 4, noBudget: "skip", excludeKeywords: "logo, NFT" });
+  const job = (job_title, budget_text, fit_score = 4) => ({ job_title, budget_text, fit_score });
+  assert.equal(filterReason(job("Children's picture book", "$1,500 fixed"), f), null);
+  assert.equal(filterReason(job("Picture book", "$300 fixed"), f), "ngân sách $300 < $500");
+  assert.equal(filterReason(job("Picture book", "$12–18/hr"), f), "$18/giờ < $20/giờ");
+  assert.equal(filterReason(job("Picture book", "$25–40/hr"), f), null);
+  assert.equal(filterReason(job("Picture book", ""), f), "chưa ghi ngân sách");
+  assert.equal(filterReason(job("Mascot LOGO for bakery", "$900"), f), 'có từ "logo"');
+  assert.equal(filterReason(job("Picture book", "$900", 3), f), "dưới 4★");
+  assert.equal(filterReason(job("Picture book", "$900", null), f), null); // unscored older job: not judged on stars
+  // With nothing set, everything passes (today's behaviour)
+  assert.equal(filterReason(job("Anything", "", 3), DEFAULT_UPWORK_FILTERS), null);
+  const p = previewFilters([job("A", "$1,500"), job("B", "$300"), job("C", "$200"), job("D", "$900", 3)], f);
+  assert.equal(p.kept, 1);
+  assert.equal(p.dropped, 3);
+  assert.deepEqual(p.reasons[0], { reason: "ngân sách thấp", count: 2 });
+  // Junk from the database is tidied
+  assert.equal(normalizeFilters({ minFitScore: 9, noBudget: "maybe" }).minFitScore, 3);
+  assert.equal(normalizeFilters({ noBudget: "maybe" }).noBudget, "keep");
+});
+
 test("báo giá: “anh/chị” tự đổi thành tên khách (chỉ báo giá tiếng Việt)", async () => {
   const { personalize } = await import("../src/lib/quote.ts");
   const intro = "Cảm ơn anh/chị đã tin tưởng Funti Kidbooks. Anh/chị chọn phương án phù hợp nhất nhé, anh / chị nhé.";
