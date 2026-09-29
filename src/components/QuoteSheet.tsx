@@ -79,6 +79,7 @@ export function QuoteSheet({ quote }: { quote: QuoteDraft & Pick<Quote, "code" |
           <Meta label={L.to} value={quote.client_contact ? `${quote.client_name} · ${quote.client_contact}` : quote.client_name} />
         )}
         {quote.title && <Meta label={L.project} value={quote.title} />}
+        {quote.book_size?.trim() && <Meta label={L.bookSize} value={quote.book_size.trim()} />}
         <Meta label={L.date} value={dateText(quote.created_at, quote.language)} />
         <Meta label={L.validUntil} value={dateText(quote.created_at, quote.language, quote.valid_days)} />
       </section>

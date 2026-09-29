@@ -16,8 +16,20 @@ async function requireQuoteEditor() {
 }
 
 const SQL_HINT = "Cần chạy file SQL quotes.sql trong Supabase trước khi dùng Báo giá.";
-const COLUMNS =
-  "id, code, title, client_name, client_contact, language, currency, tier_names, tier_notes, intro, items, terms, valid_days, prepared_by, status, created_by, created_at, updated_at";
+// "*" rather than a column list, so a column added later (book_size) never
+// stops the page loading before its SQL has run.
+const COLUMNS = "*";
+
+// Until the book_size column exists, save everything else rather than fail
+// the whole quote (the form says what to run).
+function isMissingColumn(error: { code?: string; message?: string } | null) {
+  return !!error && (error.code === "42703" || error.code === "PGRST204" || /book_size/.test(error.message ?? ""));
+}
+const withoutBookSize = <T extends { book_size?: string }>(row: T) => {
+  const { book_size: _drop, ...rest } = row;
+  void _drop;
+  return rest;
+};
 
 export async function listQuotes(): Promise<{ quotes: Quote[]; ready: boolean }> {
   const { supabase } = await requireQuoteEditor();
@@ -45,11 +57,9 @@ async function nextCode(supabase: Awaited<ReturnType<typeof requireUser>>["supab
 export async function createQuote(presetId: string, language: QuoteLang): Promise<string> {
   const { supabase, user, displayName } = await requireQuoteEditor();
   const draft = draftFromPreset(presetId, language === "en" ? "en" : "vi", displayName);
-  const { data, error } = await supabase
-    .from("quotes")
-    .insert({ ...draft, code: await nextCode(supabase), created_by: user.id })
-    .select("id")
-    .single();
+  const row = { ...draft, code: await nextCode(supabase), created_by: user.id };
+  let { data, error } = await supabase.from("quotes").insert(row).select("id").single();
+  if (isMissingColumn(error)) ({ data, error } = await supabase.from("quotes").insert(withoutBookSize(row)).select("id").single());
   if (error || !data) throw new Error(error?.code === "42P01" ? SQL_HINT : "Không tạo được báo giá.");
   revalidatePath("/quan-tri/bao-gia");
   return data.id as string;
@@ -74,6 +84,7 @@ function clean(input: QuoteDraft): QuoteDraft {
     title: str(input.title, 300),
     client_name: str(input.client_name, 200),
     client_contact: str(input.client_contact, 300),
+    book_size: str(input.book_size, 80),
     language: input.language === "en" ? "en" : "vi",
     currency: input.currency === "USD" ? "USD" : "VND",
     tier_names: Array.from({ length: tiers }, (_, t) => str(input.tier_names?.[t], 60)),
@@ -90,10 +101,12 @@ function clean(input: QuoteDraft): QuoteDraft {
 export async function saveQuote(id: string, input: QuoteDraft): Promise<string> {
   const { supabase } = await requireQuoteEditor();
   const updated_at = new Date().toISOString();
-  const { error } = await supabase
-    .from("quotes")
-    .update({ ...clean(input), updated_at })
-    .eq("id", id);
+  const row = { ...clean(input), updated_at };
+  let { error } = await supabase.from("quotes").update(row).eq("id", id);
+  if (isMissingColumn(error)) {
+    ({ error } = await supabase.from("quotes").update(withoutBookSize(row)).eq("id", id));
+    if (!error && row.book_size) throw new Error("Đã lưu, trừ Khổ sách — cần chạy SQL thêm cột book_size.");
+  }
   if (error) throw new Error("Không lưu được báo giá.");
   revalidatePath("/quan-tri/bao-gia");
   return updated_at;
@@ -105,11 +118,9 @@ export async function duplicateQuote(id: string): Promise<string> {
   if (!src) throw new Error("Không tìm thấy báo giá.");
   const { id: _id, code: _code, created_at: _c, updated_at: _u, created_by: _b, ...rest } = src;
   void [_id, _code, _c, _u, _b];
-  const { data, error } = await supabase
-    .from("quotes")
-    .insert({ ...clean({ ...rest, status: "draft" }), title: rest.title ? `${rest.title} (bản sao)` : "", code: await nextCode(supabase), created_by: user.id })
-    .select("id")
-    .single();
+  const row = { ...clean({ ...rest, book_size: rest.book_size ?? "", status: "draft" }), title: rest.title ? `${rest.title} (bản sao)` : "", code: await nextCode(supabase), created_by: user.id };
+  let { data, error } = await supabase.from("quotes").insert(row).select("id").single();
+  if (isMissingColumn(error)) ({ data, error } = await supabase.from("quotes").insert(withoutBookSize(row)).select("id").single());
   if (error || !data) throw new Error("Không nhân bản được báo giá.");
   revalidatePath("/quan-tri/bao-gia");
   return data.id as string;

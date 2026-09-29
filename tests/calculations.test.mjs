@@ -324,7 +324,8 @@ test("báo giá: tổng từng mức, một giá cho mọi mức, tuỳ chọn k
   assert.equal(d.tier_names.length, 2);
   assert.equal(d.currency, "VND");
   assert.ok(d.items.some((x) => x.optional));
-  const text = quoteAsText({ ...d, code: "BG-2026-001", client_name: "Chị Thảo", items });
+  const text = quoteAsText({ ...d, code: "BG-2026-001", client_name: "Chị Thảo", book_size: "21 × 21 cm", items });
+  assert.ok(text.includes("Khổ sách: 21 × 21 cm"));
   assert.ok(text.startsWith("BÁO GIÁ · BG-2026-001\nGửi: Chị Thảo"));
   assert.ok(text.includes("Tuỳ chọn thêm:"));
 });

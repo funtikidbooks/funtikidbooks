@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { deleteQuote, duplicateQuote, saveQuote } from "@/lib/actions/quotes";
 import {
+  BOOK_SIZE_SUGGESTIONS,
   DEFAULT_INTRO,
   DEFAULT_TERMS,
   STATUS_LABELS,
@@ -33,6 +34,7 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
     title: quote.title,
     client_name: quote.client_name,
     client_contact: quote.client_contact,
+    book_size: quote.book_size ?? "",
     language: quote.language,
     currency: quote.currency,
     tier_names: quote.tier_names.length ? quote.tier_names : ["Trọn gói"],
@@ -207,9 +209,40 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
               </Field>
             </div>
             <Field label="Tên dự án">
-              <input className="input" value={draft.title} onChange={(e) => patch({ title: e.target.value })} placeholder="VD: Sách tô màu 21×21, 40 trang" />
+              <input className="input" value={draft.title} onChange={(e) => patch({ title: e.target.value })} placeholder="VD: Sách tô màu 40 trang" />
             </Field>
-            <div className="grid gap-3 grid-cols-2">
+            <Field label="Khổ sách">
+              <input
+                className="input"
+                list="quote-book-sizes"
+                value={draft.book_size}
+                onChange={(e) => patch({ book_size: e.target.value })}
+                placeholder="VD: 21 × 21 cm, 8.5 × 8.5 in — bỏ trống nếu chưa chốt"
+              />
+              <datalist id="quote-book-sizes">
+                {BOOK_SIZE_SUGGESTIONS[draft.language].map((x) => (
+                  <option key={x} value={x} />
+                ))}
+              </datalist>
+              <div className="flex flex-wrap gap-1.5">
+                {BOOK_SIZE_SUGGESTIONS[draft.language].slice(0, 6).map((x) => (
+                  <button
+                    key={x}
+                    type="button"
+                    onClick={() => patch({ book_size: x })}
+                    className="rounded-full px-2.5 py-1 text-[12px] font-semibold"
+                    style={
+                      draft.book_size === x
+                        ? { background: "var(--color-accent-100)", color: "var(--color-accent-800)" }
+                        : { background: "var(--color-neutral-100)", color: "var(--color-neutral-700)" }
+                    }
+                  >
+                    {x}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <div className="flex flex-wrap gap-x-6 gap-y-3">
               <Field label="Ngôn ngữ">
                 <Segmented
                   value={draft.language}
@@ -380,7 +413,7 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
           role="radio"
           aria-checked={value === v}
           onClick={() => onChange(v)}
-          className="rounded-[8px] px-3 py-1.5 text-[13px] font-semibold"
+          className="rounded-[8px] px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap"
           style={value === v ? { background: "var(--color-panel)", boxShadow: "var(--shadow-sm)" } : { color: "var(--color-neutral-600)" }}
         >
           {label}

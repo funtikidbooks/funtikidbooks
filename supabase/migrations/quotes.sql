@@ -35,3 +35,6 @@ create policy "director manages quotes" on public.quotes
   for all to authenticated
   using (public.current_access_role() = 'director')
   with check (public.current_access_role() = 'director');
+
+-- Added 2026-09-29: khổ sách on the quote ("21 × 21 cm", "8.5 × 8.5 in").
+alter table public.quotes add column if not exists book_size text not null default '';

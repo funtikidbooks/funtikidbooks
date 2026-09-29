@@ -30,6 +30,8 @@ export type Quote = {
   title: string;
   client_name: string;
   client_contact: string;
+  // Khổ sách — "21 × 21 cm", "8.5 × 8.5 in"… free text, "" = not given.
+  book_size: string;
   language: QuoteLang;
   currency: QuoteCurrency;
   tier_names: string[];
@@ -48,6 +50,13 @@ export type Quote = {
 export type QuoteDraft = Omit<Quote, "id" | "code" | "created_by" | "created_at" | "updated_at">;
 
 export const MAX_TIERS = 3;
+
+// Quick picks for Khổ sách: Vietnamese print sizes first, then the Amazon
+// KDP trims the studio designs for most (same list as Công cụ → Tính khổ sách).
+export const BOOK_SIZE_SUGGESTIONS: Record<QuoteLang, string[]> = {
+  vi: ["21 × 21 cm", "20 × 20 cm", "25 × 25 cm", "A4 (21 × 29,7 cm)", "A5 (14,8 × 21 cm)", "8.5 × 8.5 in", "8 × 10 in", "8.5 × 11 in"],
+  en: ["8.5 × 8.5 in", "8 × 10 in", "8.5 × 11 in", "8.25 × 8.25 in", "6 × 9 in", "7 × 10 in", "21 × 21 cm", "A4 (21 × 29.7 cm)"],
+};
 
 export const STATUS_LABELS: Record<QuoteStatus, string> = {
   draft: "Nháp",
@@ -197,6 +206,7 @@ export function draftFromPreset(presetId: string, language: QuoteLang, preparedB
     title: preset.title[language],
     client_name: "",
     client_contact: "",
+    book_size: "",
     language,
     currency: language === "vi" ? "VND" : "USD",
     tier_names: tiers.names.map((n) => n[language]),
@@ -281,6 +291,7 @@ export const LABELS = {
     doc: "BÁO GIÁ",
     to: "Gửi",
     project: "Dự án",
+    bookSize: "Khổ sách",
     date: "Ngày",
     validUntil: "Hiệu lực đến",
     item: "Hạng mục",
@@ -298,6 +309,7 @@ export const LABELS = {
     doc: "QUOTATION",
     to: "For",
     project: "Project",
+    bookSize: "Book size",
     date: "Date",
     validUntil: "Valid until",
     item: "Item",
@@ -321,6 +333,7 @@ export function quoteAsText(q: Pick<Quote, keyof QuoteDraft | "code">): string {
   const lines: string[] = [`${L.doc} · ${q.code}`];
   if (q.client_name) lines.push(`${L.to}: ${q.client_name}`);
   if (q.title) lines.push(`${L.project}: ${q.title}`);
+  if (q.book_size?.trim()) lines.push(`${L.bookSize}: ${q.book_size.trim()}`);
   lines.push("");
   const priceText = (it: QuoteItem) => {
     if (it.flat || tiers === 1) {
