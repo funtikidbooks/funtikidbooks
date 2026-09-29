@@ -354,3 +354,60 @@ test("báo giá: “anh/chị” tự đổi thành tên khách (chỉ báo giá
   assert.equal(personalize(intro, "  ", "vi"), intro); // no name yet: stays anh/chị
   assert.equal(personalize("Thank you anh/chị", "Anna", "en"), "Thank you anh/chị"); // English quotes untouched
 });
+
+test("quản lý dự án: phòng ↔ thẻ, giai đoạn, ai trống / sắp xong / nhiều việc", async () => {
+  const { buildPm, matchTask, stageOf, clientKey } = await import("../src/lib/pmMath.ts");
+  assert.equal(stageOf("Sketch Story Board"), "sketch");
+  assert.equal(stageOf("Color"), "color");
+  assert.equal(stageOf("Final 2026"), "final");
+  assert.equal(stageOf("Theo Giờ"), "hourly");
+  assert.equal(stageOf("Sample"), "sample");
+  assert.equal(clientKey("Dự án Martina"), "martina");
+  const task = (title, column_title, o = {}) => ({ id: title, code: "#1", title, column_title, due_date: null, due_complete: false, created_at: "2026-09-01", ...o });
+  const tasks = [
+    task("Kelly Dorval- Canadian Backyard Adventure- Nhân", "Sketch Story Board", { due_date: "2026-10-03" }),
+    task("Carrie Lipson-test page- Bích", "Color"),
+    task("Kelly Dorval- old book", "Final 2025", { created_at: "2025-01-01" }),
+  ];
+  assert.equal(matchTask("Kelly Dorval- Nhân", tasks).title, "Kelly Dorval- Canadian Backyard Adventure- Nhân"); // not the Final one
+  assert.equal(matchTask("Carrie Liípon - Bích", tasks).title, "Carrie Lipson-test page- Bích"); // typo tolerated
+  assert.equal(matchTask("Tamped Book- Lan", tasks), null);
+  const room = (id, name, memberIds, o = {}) => ({ id, name, icon: "💬", billing_type: "milestone", weekly_hour_cap: null, last_message_at: "2026-09-28T10:00:00Z", created_at: "2026-09-01", memberIds, ...o });
+  const staff = ["Nhân", "Bích", "Lan", "Vy"].map((n) => ({ id: n, display_name: n, role: "Artist", avatar_url: null }));
+  const pm = buildPm({
+    today: "2026-09-29",
+    weekStart: "2026-09-28",
+    rooms: [
+      room("r1", "Kelly Dorval- Nhân", ["Nhân", "boss"]),
+      room("r2", "Carrie Liípon - Bích", ["Bích"]),
+      room("r3", "Tamped Book- Lan", ["Lan", "Nhân"], { billing_type: "hourly", weekly_hour_cap: 20, last_message_at: "2026-09-20T10:00:00Z" }),
+      room("r4", "A- Lan", ["Lan"]), room("r5", "B- Lan", ["Lan"]), room("r6", "C- Lan", ["Lan"]),
+    ],
+    tasks,
+    staff,
+    hours: [
+      { profile_id: "Lan", project_channel_id: "r3", work_date: "2026-09-29", hours: 3, minutes: 30 },
+      { profile_id: "Lan", project_channel_id: "r3", work_date: "2026-09-26", hours: 5, minutes: 0 }, // last week
+    ],
+  });
+  const byId = Object.fromEntries(pm.projects.map((p) => [p.id, p]));
+  assert.equal(byId.r1.stage, "sketch");
+  assert.equal(byId.r1.dueInDays, 4);
+  assert.ok(byId.r1.flags.dueSoon);
+  assert.deepEqual(byId.r1.leadIds, ["Nhân"]);
+  assert.deepEqual(byId.r1.memberIds, ["Nhân"]); // non-staff members (managers) left out
+  assert.ok(byId.r2.flags.nearlyDone);
+  assert.equal(byId.r3.stage, "hourly");
+  assert.equal(byId.r3.weekMinutes, 210);
+  assert.equal(byId.r3.capMinutes, 1200);
+  assert.ok(byId.r3.flags.quiet);
+  const status = Object.fromEntries(pm.staff.map((s) => [s.person.id, s.status]));
+  assert.equal(status.Vy, "free");
+  assert.equal(status["Bích"], "finishing");
+  assert.equal(status.Lan, "busy");
+  assert.equal(status["Nhân"], "normal");
+  assert.equal(pm.staff[0].person.id, "Vy"); // free people first
+  assert.equal(pm.projects[0].id, "r1"); // most urgent first
+  assert.equal(pm.totals.free, 1);
+  assert.equal(pm.totals.weekMinutes, 210);
+});

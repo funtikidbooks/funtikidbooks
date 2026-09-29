@@ -9,8 +9,9 @@ export default async function AdminHomePage() {
   const { supabase, user } = await requireUser();
   const { data: profile } = await supabase.from("profiles").select("access_role, role").eq("id", user.id).maybeSingle();
 
+  // A Project Manager lands on Quản lý dự án — who is on which project.
   if (profile?.access_role === "staff" && profile.role === "Project Manager") {
-    redirect("/quan-tri/nhan-su");
+    redirect("/quan-tri/quan-ly-du-an");
   }
   // The director lands on Tổng quan — the one page with everything at a glance.
   if (profile?.access_role === "director") redirect("/quan-tri/tong-quan");

@@ -22,6 +22,8 @@ type NavGroup = { id: string; label: string; icon: string; items: NavItem[] };
 // Tổng quan sits on its own at the top; everything else is folded into a
 // handful of groups so the menu stays short (sếp Phúc: "nhiều mục quá").
 const OVERVIEW: NavItem = { href: "/quan-tri/tong-quan", label: "Tổng quan", icon: "📊", who: "director" };
+// Right under Tổng quan: the PM's board of who is on which project.
+const PROJECT_MANAGER: NavItem = { href: "/quan-tri/quan-ly-du-an", label: "Quản lý dự án", icon: "🗂️", who: "hr" };
 
 const GROUPS: NavGroup[] = [
   {
@@ -216,7 +218,12 @@ export function AdminSidebar({
   const navSections = (
     <div className="flex flex-col gap-0.5">
       {workspaceButton}
-      {canSee(OVERVIEW.who) && <div className="mb-2">{renderLink(OVERVIEW)}</div>}
+      {(canSee(OVERVIEW.who) || canSee(PROJECT_MANAGER.who)) && (
+        <div className="mb-2 flex flex-col gap-0.5">
+          {canSee(OVERVIEW.who) && renderLink(OVERVIEW)}
+          {canSee(PROJECT_MANAGER.who) && renderLink(PROJECT_MANAGER)}
+        </div>
+      )}
       {visibleGroups.map((g) => {
         const holdsActive = g.items.some((i) => isActive(i.href));
         const open = holdsActive || openGroups.has(g.id);
