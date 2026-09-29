@@ -108,8 +108,13 @@ function Avatar({ name, url, size = 32, ring }: { name: string; url: string | nu
 
 const roomHref = (id: string) => `/workspace/hop?room=${id}`;
 
+// Projects shown on a person's card before "+ N dự án nữa".
+const PREVIEW = 3;
+
 export function PmView({ data }: { data: PmData }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const allOpen = data.staff.filter((s) => s.projectIds.length > PREVIEW).every((s) => expanded.has(s.person.id));
   const projectsById = useMemo(() => new Map(data.projects.map((p) => [p.id, p])), [data.projects]);
   const people = useMemo(() => new Map(data.staff.map((s) => [s.person.id, s.person])), [data.staff]);
   const [y, mo, d] = data.today.split("-");
@@ -179,21 +184,38 @@ export function PmView({ data }: { data: PmData }) {
         </div>
 
         {/* ------------------------------------------------------ NHÂN VIÊN */}
-        <SectionTitle id="nhan-vien" icon="👥" title="Nhân viên" hint="mỗi cột một người · ai trống việc lên đầu · ★ = phụ trách chính" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-3 items-start">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <SectionTitle id="nhan-vien" icon="👥" title="Nhân viên" hint="mỗi thẻ một người · ai trống việc lên đầu · ★ = phụ trách chính" />
+          {data.staff.some((s) => s.projectIds.length > PREVIEW) && (
+            <button
+              type="button"
+              onClick={() => setExpanded(allOpen ? new Set() : new Set(data.staff.map((s) => s.person.id)))}
+              className="text-[12.5px] font-semibold rounded-full px-3 py-1.5"
+              style={{ background: "var(--color-neutral-100)" }}
+            >
+              {allOpen ? "Thu gọn tất cả" : "Mở rộng tất cả"}
+            </button>
+          )}
+        </div>
+        {/* Same-height cards in a row (grid stretch); each project one line;
+            the first PREVIEW shown, the rest behind "+ N dự án nữa". */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-3">
           {data.staff.map((s) => {
             const tone = STATUS_TONE[s.status];
             const mine = s.projectIds
               .map((id) => projectsById.get(id))
               .filter((p): p is PmProject => !!p)
               .sort((a, b) => Number(b.leadIds.includes(s.person.id)) - Number(a.leadIds.includes(s.person.id)));
+            const open = expanded.has(s.person.id);
+            const visible = open ? mine : mine.slice(0, PREVIEW);
+            const more = mine.length - visible.length;
             return (
-              <section key={s.person.id} className="card elev-sm p-3 flex flex-col gap-2.5 min-w-0">
+              <section key={s.person.id} className="card elev-sm p-3 flex flex-col gap-2 min-w-0">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Avatar name={s.person.display_name} url={s.person.avatar_url} size={36} />
+                  <Avatar name={s.person.display_name} url={s.person.avatar_url} size={34} />
                   <div className="flex flex-col min-w-0 flex-1">
-                    <span className="text-[14px] font-bold truncate">{s.person.display_name}</span>
-                    <span className="text-[11.5px] truncate" style={{ color: "var(--color-neutral-500)" }}>
+                    <span className="text-[14px] font-bold leading-tight truncate">{s.person.display_name}</span>
+                    <span className="text-[11.5px] leading-tight truncate" style={{ color: "var(--color-neutral-500)" }}>
                       {s.person.role || "Nhân viên"}
                     </span>
                   </div>
@@ -201,41 +223,69 @@ export function PmView({ data }: { data: PmData }) {
                     {STATUS_LABELS[s.status]}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] tabular-nums" style={{ color: "var(--color-neutral-600)" }}>
-                  <span>
-                    <b style={{ color: "var(--color-text)" }}>{s.projectIds.length}</b> dự án
+
+                {/* One segment per project, coloured by its stage. */}
+                <div className="flex items-center gap-2">
+                  <div
+                    className="flex flex-1 h-1.5 gap-[2px] rounded-full overflow-hidden"
+                    style={mine.length ? undefined : { background: "var(--color-neutral-100)" }}
+                    aria-hidden
+                  >
+                    {mine.map((p) => (
+                      <span key={p.id} className="flex-1" style={{ background: STAGE_COLOR[p.stage], opacity: p.leadIds.includes(s.person.id) ? 1 : 0.55 }} />
+                    ))}
+                  </div>
+                  <span className="text-[11.5px] tabular-nums whitespace-nowrap" style={{ color: "var(--color-neutral-600)" }}>
+                    <b style={{ color: "var(--color-text)" }}>{mine.length}</b> dự án{s.leadCount ? ` · ★${s.leadCount}` : ""} · ⏱ {minutesText(s.weekMinutes)}
                   </span>
-                  {s.leadCount > 0 && <span>★ chính {s.leadCount}</span>}
-                  <span>⏱ {minutesText(s.weekMinutes)} tuần này</span>
                 </div>
+
                 {mine.length === 0 ? (
-                  <p className="text-[12.5px] rounded-[8px] px-2.5 py-2" style={{ background: "var(--color-surface)", color: "var(--color-neutral-600)" }}>
+                  <p className="flex-1 text-[12.5px] rounded-[8px] px-2.5 py-2" style={{ background: "var(--color-surface)", color: "var(--color-neutral-600)" }}>
                     Chưa ở phòng dự án nào — có thể giao việc.
                   </p>
                 ) : (
-                  <div className="flex flex-col gap-1.5">
-                    {mine.map((p) => (
+                  <div className="flex flex-col flex-1">
+                    {visible.map((p) => (
                       <Link
                         key={p.id}
                         href={roomHref(p.id)}
-                        className="ws-nav-link rounded-[8px] px-2.5 py-2 flex flex-col gap-1 min-w-0"
-                        style={{ background: "var(--color-surface)", borderLeft: `3px solid ${STAGE_COLOR[p.stage]}` }}
+                        className="ws-nav-link flex items-center gap-2 rounded-[6px] px-1.5 py-1.5 min-w-0"
+                        title={`${p.name} · ${stageInfo(p.stage).label}`}
                       >
-                        <span className="text-[13px] font-semibold leading-snug line-clamp-2 break-words">
-                          {p.leadIds.includes(s.person.id) && (
-                            <span style={{ color: "var(--color-accent-600)" }} title="Phụ trách chính">
-                              ★{" "}
-                            </span>
-                          )}
-                          {p.name}
+                        <span className="rounded-full flex-none" style={{ width: 8, height: 8, background: STAGE_COLOR[p.stage] }} aria-hidden />
+                        <span className="text-[13px] truncate flex-1 min-w-0">
+                          {p.leadIds.includes(s.person.id) && <span style={{ color: "var(--color-accent-600)" }}>★ </span>}
+                          <span className={p.leadIds.includes(s.person.id) ? "font-semibold" : undefined}>{p.name}</span>
                         </span>
-                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <StageChip stage={p.stage} />
+                        {dueText(p) && (p.flags.overdue || p.flags.dueSoon) ? (
                           <DueChip p={p} />
-                        </span>
+                        ) : (
+                          <span className="text-[11px] whitespace-nowrap flex-none" style={{ color: "var(--color-neutral-500)" }}>
+                            {stageInfo(p.stage).label}
+                          </span>
+                        )}
                       </Link>
                     ))}
                   </div>
+                )}
+
+                {(more > 0 || (open && mine.length > PREVIEW)) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpanded((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(s.person.id)) next.delete(s.person.id);
+                        else next.add(s.person.id);
+                        return next;
+                      })
+                    }
+                    className="self-start text-[12px] font-semibold rounded-full px-2.5 py-1"
+                    style={{ background: "var(--color-neutral-100)", color: "var(--color-accent-700)" }}
+                  >
+                    {open ? "Thu gọn" : `+ ${more} dự án nữa`}
+                  </button>
                 )}
               </section>
             );
