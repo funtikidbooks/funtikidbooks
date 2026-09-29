@@ -14,6 +14,8 @@ import {
   formatMoney,
   lineTotal,
   parseMoney,
+  qtyFor,
+  unitPrice,
   quoteAsText,
   resizeTiers,
   tierTotals,
@@ -202,7 +204,7 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
           <Card title="Khách hàng & dự án">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Tên khách">
-                <input className="input" value={draft.client_name} onChange={(e) => patch({ client_name: e.target.value })} placeholder="VD: Chị Thảo" />
+                <input className="input" value={draft.client_name} onChange={(e) => patch({ client_name: e.target.value })} placeholder="Tên khách hàng" />
               </Field>
               <Field label="Liên hệ (Zalo / email)">
                 <input className="input" value={draft.client_contact} onChange={(e) => patch({ client_contact: e.target.value })} />
@@ -454,6 +456,8 @@ function MoneyInput({ value, currency, onChange, label }: { value: number | null
   );
 }
 
+const toQty = (text: string) => Math.max(0, Number(text.replace(",", ".").replace(/[^\d.]/g, "")) || 0);
+
 function ItemEditor({
   item,
   tierNames,
@@ -524,16 +528,42 @@ function ItemEditor({
         value={item.description}
         onChange={(e) => onChange({ description: e.target.value })}
       />
-      <div className="grid gap-2 grid-cols-[88px_minmax(0,1fr)]">
-        <input
-          className="input tabular-nums text-center"
-          inputMode="decimal"
-          value={item.qty}
-          aria-label="Số lượng"
-          onChange={(e) => onChange({ qty: Math.max(0, Number(e.target.value.replace(",", ".").replace(/[^\d.]/g, "")) || 0) })}
-        />
-        <input className="input" value={item.unit} placeholder="Đơn vị (trang, spread, bìa, cuốn…)" onChange={(e) => onChange({ unit: e.target.value })} />
-      </div>
+      {item.qtys && tierNames.length > 1 ? (
+        // A quantity per tier (the tiers are the client's options).
+        <div className="flex flex-col gap-2">
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${tierNames.length}, minmax(0, 1fr))` }}>
+            {tierNames.map((name, t) => (
+              <label key={t} className="flex flex-col gap-1 min-w-0">
+                <span className="text-[11.5px] font-semibold truncate" style={{ color: "var(--color-neutral-600)" }}>
+                  SL · {name}
+                </span>
+                <input
+                  className="input tabular-nums text-center"
+                  inputMode="decimal"
+                  value={item.qtys?.[t] ?? item.qty}
+                  aria-label={`Số lượng ${name}`}
+                  onChange={(e) => {
+                    const v = toQty(e.target.value);
+                    onChange({ qtys: tierNames.map((_, k) => (k === t ? v : (item.qtys?.[k] ?? item.qty))) });
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+          <input className="input" value={item.unit} placeholder="Đơn vị (trang, spread, bìa, cuốn…)" onChange={(e) => onChange({ unit: e.target.value })} />
+        </div>
+      ) : (
+        <div className="grid gap-2 grid-cols-[88px_minmax(0,1fr)]">
+          <input
+            className="input tabular-nums text-center"
+            inputMode="decimal"
+            value={item.qty}
+            aria-label="Số lượng"
+            onChange={(e) => onChange({ qty: toQty(e.target.value) })}
+          />
+          <input className="input" value={item.unit} placeholder="Đơn vị (trang, spread, bìa, cuốn…)" onChange={(e) => onChange({ unit: e.target.value })} />
+        </div>
+      )}
       <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${priceTiers.length}, minmax(0, 1fr))` }}>
         {priceTiers.map((t) => (
           <label key={t} className="flex flex-col gap-1 min-w-0">
@@ -546,10 +576,18 @@ function ItemEditor({
               label={`Giá ${tierNames[t] ?? ""}`}
               onChange={(v) => onChange({ prices: item.prices.map((p, k) => (k === t ? v : p)) })}
             />
-            {item.qty !== 1 && lineTotal(item, t) !== null && (
+            {item.qtys && priceTiers.length === 1 && tierNames.length > 1 ? (
+              // One unit price, a different quantity per tier: each tier's line.
               <span className="text-[11.5px] tabular-nums text-right" style={{ color: "var(--color-neutral-500)" }}>
-                = {formatMoney(lineTotal(item, t) as number, currency)}
+                {unitPrice(item, 0) === null ? "" : `= ${tierNames.map((_, k) => formatMoney(lineTotal(item, k) as number, currency)).join(" / ")}`}
               </span>
+            ) : (
+              (item.qtys ? qtyFor(item, t) : item.qty) !== 1 &&
+              lineTotal(item, t) !== null && (
+                <span className="text-[11.5px] tabular-nums text-right" style={{ color: "var(--color-neutral-500)" }}>
+                  = {formatMoney(lineTotal(item, t) as number, currency)}
+                </span>
+              )
             )}
           </label>
         ))}
@@ -559,6 +597,15 @@ function ItemEditor({
           <label className="flex items-center gap-1.5 cursor-pointer">
             <input type="checkbox" checked={item.flat} onChange={(e) => onChange({ flat: e.target.checked })} />
             Một giá cho mọi mức
+          </label>
+        )}
+        {tierNames.length > 1 && (
+          <label
+            className="flex items-center gap-1.5 cursor-pointer"
+            title="Khi mỗi mức là một phương án của khách, VD: 16 trang + 6 sticker / 20 trang + 4 sticker"
+          >
+            <input type="checkbox" checked={!!item.qtys} onChange={(e) => onChange({ qtys: e.target.checked ? tierNames.map(() => item.qty) : null })} />
+            Số lượng khác nhau theo mức
           </label>
         )}
         <label className="flex items-center gap-1.5 cursor-pointer">

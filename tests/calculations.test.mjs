@@ -329,3 +329,20 @@ test("báo giá: tổng từng mức, một giá cho mọi mức, tuỳ chọn k
   assert.ok(text.startsWith("BÁO GIÁ · BG-2026-001\nGửi: Chị Thảo"));
   assert.ok(text.includes("Tuỳ chọn thêm:"));
 });
+
+test("báo giá: số lượng khác nhau theo từng phương án (16+6 / 20+4)", async () => {
+  const { tierTotals, qtyText, quoteAsText, draftFromPreset } = await import("../src/lib/quote.ts");
+  const it = (o) => ({ id: "x", kind: "item", name: "", description: "", qty: 1, unit: "trang", prices: [null, null], flat: true, optional: false, ...o });
+  const items = [
+    it({ name: "Thiết kế nhân vật", prices: [1_000_000, null] }), // one flat price, qty 1 in both
+    it({ name: "Trang ruột", qtys: [16, 20], prices: [200_000, null] }),
+    it({ name: "Trang sticker", qtys: [6, 4], prices: [300_000, null] }),
+  ];
+  // A: 1.000.000 + 16×200.000 + 6×300.000 = 6.000.000 · B: 1.000.000 + 20×200.000 + 4×300.000 = 6.200.000
+  assert.deepEqual(tierTotals(items, 2).map((t) => t.total), [6_000_000, 6_200_000]);
+  assert.equal(qtyText(items[1], 2), "16 / 20");
+  assert.equal(qtyText(items[0], 2), "1");
+  const text = quoteAsText({ ...draftFromPreset("blank", "vi", ""), code: "BG-1", tier_names: ["PA A", "PA B"], tier_notes: ["", ""], items });
+  assert.ok(text.includes("• Trang ruột — 16 / 20 trang"));
+  assert.ok(text.includes("PA A: 3.200.000 ₫ · PA B: 4.000.000 ₫"));
+});

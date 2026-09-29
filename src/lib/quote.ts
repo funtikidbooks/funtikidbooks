@@ -13,6 +13,10 @@ export type QuoteItem = {
   name: string;
   description: string;
   qty: number;
+  // A quantity per tier instead of one for all — when the tiers are the
+  // client's options rather than quality levels ("16 trang ruột + 6 sticker"
+  // vs "20 + 4"). null/absent = qty applies to every tier.
+  qtys?: number[] | null;
   unit: string;
   // One price per tier, in the quote's currency; null = not quoted yet.
   prices: (number | null)[];
@@ -229,6 +233,18 @@ export function draftFromPreset(presetId: string, language: QuoteLang, preparedB
   };
 }
 
+export function qtyFor(item: QuoteItem, tier: number): number {
+  const q = item.qtys?.[tier];
+  return typeof q === "number" && Number.isFinite(q) ? q : Number(item.qty) || 0;
+}
+
+// "16 / 20" when the quantity differs by tier, otherwise the one number.
+export function qtyText(item: QuoteItem, tierCount: number): string {
+  if (!item.qtys) return String(item.qty);
+  const all = Array.from({ length: tierCount }, (_, t) => qtyFor(item, t));
+  return all.every((q) => q === all[0]) ? String(all[0]) : all.join(" / ");
+}
+
 // Changing how many tiers a quote has keeps the prices already typed.
 export function resizeTiers(q: Pick<QuoteDraft, "tier_names" | "tier_notes" | "items" | "language">, count: number) {
   const n = Math.min(MAX_TIERS, Math.max(1, Math.round(count))) as 1 | 2 | 3;
@@ -237,7 +253,11 @@ export function resizeTiers(q: Pick<QuoteDraft, "tier_names" | "tier_notes" | "i
   return {
     tier_names: Array.from({ length: n }, (_, i) => q.tier_names[i] ?? preset.names[i][lang]),
     tier_notes: Array.from({ length: n }, (_, i) => q.tier_notes[i] ?? preset.notes[i][lang]),
-    items: q.items.map((it) => ({ ...it, prices: Array.from({ length: n }, (_, i) => it.prices[i] ?? null) })),
+    items: q.items.map((it) => ({
+      ...it,
+      prices: Array.from({ length: n }, (_, i) => it.prices[i] ?? null),
+      qtys: it.qtys ? Array.from({ length: n }, (_, i) => it.qtys?.[i] ?? it.qty) : it.qtys,
+    })),
   };
 }
 
@@ -248,7 +268,7 @@ export function unitPrice(item: QuoteItem, tier: number): number | null {
 
 export function lineTotal(item: QuoteItem, tier: number): number | null {
   const p = unitPrice(item, tier);
-  return p === null ? null : Math.round(p * (Number(item.qty) || 0) * 100) / 100;
+  return p === null ? null : Math.round(p * qtyFor(item, tier) * 100) / 100;
 }
 
 // The total a client pays for each tier: every priced, non-optional line.
@@ -336,9 +356,17 @@ export function quoteAsText(q: Pick<Quote, keyof QuoteDraft | "code">): string {
   if (q.book_size?.trim()) lines.push(`${L.bookSize}: ${q.book_size.trim()}`);
   lines.push("");
   const priceText = (it: QuoteItem) => {
-    if (it.flat || tiers === 1) {
+    if ((it.flat && !it.qtys) || tiers === 1) {
       const p = unitPrice(it, 0);
       return p === null ? "—" : `${money(p)}${it.unit ? ` ${L.perUnit} ${it.unit}` : ""}`;
+    }
+    if (it.qtys) {
+      return q.tier_names
+        .map((name, t) => {
+          const line = lineTotal(it, t);
+          return `${name}: ${line === null ? "—" : money(line)}`;
+        })
+        .join(" · ");
     }
     return q.tier_names
       .map((name, t) => {
@@ -354,7 +382,7 @@ export function quoteAsText(q: Pick<Quote, keyof QuoteDraft | "code">): string {
       lines.push(`— ${it.name.toUpperCase()} —`);
       continue;
     }
-    lines.push(`• ${it.name}${it.qty ? ` — ${it.qty} ${it.unit}`.trimEnd() : ""}`);
+    lines.push(`• ${it.name}${it.qty || it.qtys ? ` — ${qtyText(it, tiers)} ${it.unit}`.trimEnd() : ""}`);
     if (it.description) lines.push(`  ${it.description}`);
     lines.push(`  ${priceText(it)}`);
   }

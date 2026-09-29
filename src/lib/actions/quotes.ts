@@ -75,6 +75,7 @@ function clean(input: QuoteDraft): QuoteDraft {
     name: str(it.name, 300),
     description: str(it.description, 2000),
     qty: Math.max(0, Math.min(100000, Number(it.qty) || 0)),
+    qtys: Array.isArray(it.qtys) ? Array.from({ length: tiers }, (_, t) => Math.max(0, Math.min(100000, Number(it.qtys?.[t]) || 0))) : null,
     unit: str(it.unit, 40),
     prices: Array.from({ length: tiers }, (_, t) => num(it.prices?.[t])),
     flat: !!it.flat,

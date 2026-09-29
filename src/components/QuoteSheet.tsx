@@ -1,5 +1,5 @@
 import type { Quote, QuoteDraft, QuoteItem } from "@/lib/quote";
-import { LABELS, formatMoney, lineTotal, tierTotals, unitPrice } from "@/lib/quote";
+import { LABELS, formatMoney, lineTotal, qtyFor, qtyText, tierTotals, unitPrice } from "@/lib/quote";
 
 // The quote as the client sees it — the editor's live preview, the public
 // link (/bao-gia/<token>) and the printed PDF all render this. Always on
@@ -34,19 +34,19 @@ export function QuoteSheet({ quote }: { quote: QuoteDraft & Pick<Quote, "code" |
   const cols = { "--cols": `minmax(0,1.7fr) repeat(${n}, minmax(0,1fr))` } as React.CSSProperties;
 
   const priceCells = (it: QuoteItem) => {
-    if (it.flat && n > 1) {
+    if (it.flat && n > 1 && !it.qtys) {
       const line = lineTotal(it, 0);
       const unit = unitPrice(it, 0);
       return (
         <div className="fk-q-prices" style={{ "--span": n } as React.CSSProperties}>
-          <PriceCell line={line} unit={unit} it={it} money={money} centered />
+          <PriceCell line={line} unit={unit} qty={it.qty} it={it} money={money} centered />
         </div>
       );
     }
     return quote.tier_names.map((name, t) => (
       <div key={t} className="fk-q-price">
         <span className="fk-q-tiername">{name}</span>
-        <PriceCell line={lineTotal(it, t)} unit={unitPrice(it, t)} it={it} money={money} />
+        <PriceCell line={lineTotal(it, t)} unit={unitPrice(it, t)} qty={qtyFor(it, t)} it={it} money={money} />
       </div>
     ));
   };
@@ -129,7 +129,7 @@ export function QuoteSheet({ quote }: { quote: QuoteDraft & Pick<Quote, "code" |
             </div>
           ) : (
             <div key={it.id} className="fk-q-row" style={cols}>
-              <ItemName it={it} qtyLabel={L.qty} />
+              <ItemName it={it} qtyLabel={L.qty} tiers={n} />
               {priceCells(it)}
             </div>
           ),
@@ -155,7 +155,7 @@ export function QuoteSheet({ quote }: { quote: QuoteDraft & Pick<Quote, "code" |
           </div>
           {extras.map((it) => (
             <div key={it.id} className="fk-q-row" style={cols}>
-              <ItemName it={it} qtyLabel={L.qty} />
+              <ItemName it={it} qtyLabel={L.qty} tiers={n} />
               {priceCells(it)}
             </div>
           ))}
@@ -204,7 +204,7 @@ function Meta({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ItemName({ it, qtyLabel }: { it: QuoteItem; qtyLabel: string }) {
+function ItemName({ it, qtyLabel, tiers }: { it: QuoteItem; qtyLabel: string; tiers: number }) {
   return (
     <div className="flex flex-col gap-0.5 min-w-0">
       <span className="text-[14px] font-semibold leading-snug break-words">{it.name || "—"}</span>
@@ -214,7 +214,7 @@ function ItemName({ it, qtyLabel }: { it: QuoteItem; qtyLabel: string }) {
         </span>
       )}
       <span className="text-[12px] tabular-nums" style={{ color: MUTED }}>
-        {qtyLabel}: {it.qty} {it.unit}
+        {qtyLabel}: {qtyText(it, tiers)} {it.unit}
       </span>
     </div>
   );
@@ -223,12 +223,14 @@ function ItemName({ it, qtyLabel }: { it: QuoteItem; qtyLabel: string }) {
 function PriceCell({
   line,
   unit,
+  qty,
   it,
   money,
   centered,
 }: {
   line: number | null;
   unit: number | null;
+  qty: number;
   it: QuoteItem;
   money: (n: number) => string;
   centered?: boolean;
@@ -237,7 +239,7 @@ function PriceCell({
   return (
     <span className={`flex flex-col ${centered ? "sm:items-center" : ""}`}>
       <b className="text-[14px] tabular-nums">{money(line)}</b>
-      {it.qty !== 1 && unit !== null && (
+      {qty !== 1 && unit !== null && (
         <span className="text-[11.5px] tabular-nums" style={{ color: MUTED }}>
           {money(unit)} / {it.unit || "1"}
         </span>
