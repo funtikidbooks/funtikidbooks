@@ -21,7 +21,26 @@ self.addEventListener("push", (event) => {
 
   const title = payload.title || "Tin nhắn mới";
   const url = payload.url || "/workspace";
-  event.waitUntil(
+  event.waitUntil(Promise.all([bumpAppBadge().catch(() => {}), showMessageNotification(title, url, payload)]));
+});
+
+// The unread number on the installed app's icon (Windows taskbar, Dock,
+// home screen). A Funti window that's open and in view keeps the exact count
+// itself (lib/appBadge.ts); otherwise count this message on top of the last
+// number it saved, in the same Cache Storage slot.
+async function bumpAppBadge() {
+  if (!self.navigator.setAppBadge) return;
+  const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  if (windows.some((c) => c.visibilityState === "visible" && c.focused)) return;
+  const cache = await caches.open("funti-badge");
+  const saved = await cache.match("/__funti-badge-count");
+  const count = (saved ? parseInt(await saved.text(), 10) || 0 : 0) + 1;
+  await cache.put("/__funti-badge-count", new Response(String(count)));
+  await self.navigator.setAppBadge(count);
+}
+
+function showMessageNotification(title, url, payload) {
+  return (
     self.registration.showNotification(title, {
       body: payload.body || "",
       icon: "/brand/funti-logo.jpg",
@@ -37,9 +56,9 @@ self.addEventListener("push", (event) => {
       // iOS ignores this option.
       requireInteraction: Boolean(payload.requireInteraction),
       data: { senderId: payload.senderId || null, url },
-    }),
+    })
   );
-});
+}
 
 // How long an open page gets to say "taken" before the link is loaded
 // outright — long enough for a live tab, short enough not to feel stuck

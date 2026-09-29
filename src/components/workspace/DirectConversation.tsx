@@ -31,6 +31,7 @@ import { vnToday } from "@/lib/constants/attendance";
 import { translateMessage } from "@/lib/actions/translate";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import type { DirectMessage, DirectMessageReaction, Profile } from "@/lib/types";
+import { FlipPopover } from "./FlipPopover";
 
 // How long the peer's "typing…" indicator stays up after their last
 // keystroke broadcast, and the minimum gap between our own outgoing
@@ -1260,10 +1261,11 @@ export function DirectConversation({
                 😊
               </button>
               {reactionPickerFor === m.id && (
-                <div
-                  ref={popoverRef}
+                <FlipPopover
+                  preferRight={mine}
+                  popoverRef={popoverRef}
                   className="card elev-lg flex items-center gap-1 p-1.5"
-                  style={{ position: "absolute", bottom: "100%", [mine ? "right" : "left"]: 0, marginBottom: 6, zIndex: 10 }}
+                  style={{ position: "absolute", bottom: "100%", marginBottom: 6, zIndex: 10 }}
                 >
                   {QUICK_REACTIONS.map((emoji) => (
                     <button
@@ -1292,7 +1294,7 @@ export function DirectConversation({
                       📋
                     </button>
                   )}
-                </div>
+                </FlipPopover>
               )}
             </span>
           );

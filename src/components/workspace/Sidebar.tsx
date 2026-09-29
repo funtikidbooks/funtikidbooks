@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/actions/auth";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { ThemeToggle } from "@/components/workspace/ThemeToggle";
+import { InstallAppButton } from "@/components/workspace/InstallAppButton";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { resetThemeOnSignOut } from "@/lib/useTheme";
 import { STANDALONE_ALLOWED_HREFS, useShowsIphoneAppNav } from "@/lib/useIsStandalone";
@@ -268,6 +269,7 @@ export function Sidebar({
       </div>
 
       <div className="mt-auto flex flex-col gap-3">
+        <InstallAppButton />
         <ThemeToggle />
         <div className="flex items-center gap-2 px-2">
           <div

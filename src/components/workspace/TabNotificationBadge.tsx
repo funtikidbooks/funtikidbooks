@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useChatManager } from "@/components/workspace/ChatManager";
+import { setAppUnreadBadge } from "@/lib/appBadge";
 
 const BASE_FAVICON = "/favicon.ico";
 
@@ -87,6 +88,20 @@ export function TabNotificationBadge() {
     return () => {
       cancelled = true;
     };
+  }, [totalUnreadCount]);
+
+  // The same count on the app icon itself — the Windows taskbar once Funti
+  // is installed as an app — so unread messages show while working in
+  // another program or website (asked for by Maily). sw.js may bump it for
+  // messages that land while this page is out of view; seeing the page
+  // again puts the real count back.
+  useEffect(() => {
+    setAppUnreadBadge(totalUnreadCount);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") setAppUnreadBadge(totalUnreadCount);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [totalUnreadCount]);
 
   return null;
