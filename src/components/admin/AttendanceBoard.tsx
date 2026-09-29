@@ -21,10 +21,13 @@ export function AttendanceBoard({
   initialEntries,
   initialOffDates,
   staff,
+  clock,
 }: {
   initialEntries: AttendanceEntry[];
   initialOffDates: string[];
   staff: Profile[];
+  // The fingerprint machine's panel, when the viewer runs it.
+  clock?: React.ReactNode;
 }) {
   const offDateSet = useMemo(() => new Set(initialOffDates), [initialOffDates]);
   // Rows the realtime subscription below has seen since mount, keyed by id
@@ -115,9 +118,12 @@ export function AttendanceBoard({
       <div>
         <h1 className="text-xl">Chấm công</h1>
         <p className="text-sm mt-1" style={{ color: "var(--color-neutral-500)" }}>
-          Giờ vào làm ghi nhận tự động theo lần đăng nhập đầu tiên trong ngày của từng nhân viên. Giờ làm việc: {WORK_HOURS_LABEL}. Bấm vào một thẻ để xem chi tiết theo tháng.
+          Giờ vào làm lấy từ máy chấm công vân tay; ai chưa chấm vân tay thì lấy lần mở workspace đầu tiên trong ngày (nếu đang bật). Giờ làm việc:{" "}
+          {WORK_HOURS_LABEL}. Bấm vào một thẻ để xem chi tiết theo tháng.
         </p>
       </div>
+
+      {clock}
 
       {staff.length === 0 ? (
         <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>
@@ -176,11 +182,19 @@ export function AttendanceBoard({
             } else if (entry?.check_in_at) {
               const late = isLateCheckIn(entry.check_in_at);
               statusNode = (
-                <span className="flex items-center gap-1.5">
-                  <span className="text-sm font-bold">🕐 {formatCheckInTime(entry.check_in_at)}</span>
-                  <span className="text-[11px] font-bold" style={{ color: late ? "var(--status-yellow)" : "var(--status-green)" }}>
-                    {late ? "Trễ" : "Đúng giờ"}
+                <span className="flex flex-col items-center gap-0.5">
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-sm font-bold">🕐 {formatCheckInTime(entry.check_in_at)}</span>
+                    <span className="text-[11px] font-bold" style={{ color: late ? "var(--status-yellow)" : "var(--status-green)" }}>
+                      {late ? "Trễ" : "Đúng giờ"}
+                    </span>
                   </span>
+                  {(entry.check_out_at || entry.check_in_source === "device") && (
+                    <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                      {entry.check_in_source === "device" ? "🖐 " : ""}
+                      {entry.check_out_at ? `Về ${formatCheckInTime(entry.check_out_at)}` : "Vân tay"}
+                    </span>
+                  )}
                 </span>
               );
             } else if (!weekday) {

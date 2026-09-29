@@ -157,9 +157,14 @@ export function AttendanceMonthDetail({
                   } else if (entry?.check_in_at) {
                     const late = isLateCheckIn(entry.check_in_at);
                     badge = (
-                      <span style={{ color: late ? "var(--status-yellow)" : "var(--status-green)" }}>
-                        {formatCheckInTime(entry.check_in_at)}
-                      </span>
+                      <>
+                        <span style={{ color: late ? "var(--status-yellow)" : "var(--status-green)" }}>{formatCheckInTime(entry.check_in_at)}</span>
+                        {entry.check_out_at && (
+                          <span className="block" style={{ color: "var(--color-neutral-500)" }} title="Giờ về">
+                            →{formatCheckInTime(entry.check_out_at)}
+                          </span>
+                        )}
+                      </>
                     );
                   } else if (inMonth && !isFuture && weekday) {
                     badge = <span style={{ color: "var(--color-neutral-400)" }}>·</span>;

@@ -164,9 +164,14 @@ export function MyAttendance({
     if (entry?.check_in_at) {
       const late = isLateCheckIn(entry.check_in_at);
       return (
-        <span style={{ color: late ? "var(--status-yellow)" : "var(--status-green)" }}>
-          {formatCheckInTime(entry.check_in_at)}
-        </span>
+        <>
+          <span style={{ color: late ? "var(--status-yellow)" : "var(--status-green)" }}>{formatCheckInTime(entry.check_in_at)}</span>
+          {entry.check_out_at && (
+            <span className="block" style={{ color: "var(--color-neutral-500)" }} title="Giờ về">
+              →{formatCheckInTime(entry.check_out_at)}
+            </span>
+          )}
+        </>
       );
     }
     if (inMonth && !isFuture && weekday) return <span style={{ color: "var(--color-neutral-400)" }}>Chưa vào làm</span>;

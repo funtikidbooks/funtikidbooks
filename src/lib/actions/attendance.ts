@@ -4,6 +4,7 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 import {
   addDays,
   firstOfMonth,
+  WEB_CHECKIN_KEY,
   isBeforeCheckInWindow,
   lastDayOfMonth,
   mondayOf,
@@ -82,6 +83,10 @@ export async function checkInIfNeeded() {
   // page load, so it just tries again on whatever page they open next,
   // recording the first one that lands at or after the check-in window.
   if (isBeforeCheckInWindow(now.toISOString())) return;
+
+  // Turned off once the fingerprint machine does the checking in.
+  const { data: webCheckIn } = await supabase.from("site_settings").select("value").eq("key", WEB_CHECKIN_KEY).maybeSingle();
+  if (webCheckIn?.value === "off") return;
 
   // Best-effort: a duplicate insert from a race between two concurrent
   // requests just hits the (profile_id, work_date) unique constraint and

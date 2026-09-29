@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { listAllAttendance, listOffDates } from "@/lib/actions/attendance";
 import { AttendanceBoard } from "@/components/admin/AttendanceBoard";
+import { ClockPanel } from "@/components/admin/ClockPanel";
 import type { Profile } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Quản trị — Chấm công" };
@@ -37,5 +38,6 @@ export default async function AdminAttendancePage() {
       .order("display_name", { ascending: true }),
   ]);
 
-  return <AttendanceBoard initialEntries={entries} initialOffDates={offDates} staff={(profiles ?? []) as Profile[]} />;
+  const staff = (profiles ?? []) as Profile[];
+  return <AttendanceBoard initialEntries={entries} initialOffDates={offDates} staff={staff} clock={<ClockPanel staff={staff} />} />;
 }

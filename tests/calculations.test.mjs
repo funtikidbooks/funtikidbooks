@@ -378,6 +378,49 @@ test("báo giá: các đợt thanh toán tính theo tổng từng mức, cộng 
   assert.ok(text.includes("Các đợt thanh toán:\n1. Đặt cọc khi bắt đầu (50%): Cơ bản 500.000 ₫ · Chi tiết 1.000.000 ₫"));
 });
 
+test("máy chấm công vân tay: vào, về, chạm lại, giờ web bị thay, quét bù khi mất mạng", async () => {
+  const { planScan, scanTime, lateMinutes, screenFor, asciiFold, vnDate } = await import("../src/lib/clockMath.ts");
+  const at = (hhmm, day = "2026-09-29") => new Date(`${day}T${hhmm}:00+07:00`);
+  const rules = { workStartMinutes: 9 * 60, graceMinutes: 5 };
+  // First finger of the day → check-in
+  const first = planScan(null, at("08:57"));
+  assert.equal(first.action, "check_in");
+  assert.equal(first.insert, true);
+  assert.equal(first.patch.check_in_source, "device");
+  // A web check-in from home at 08:40, then the finger at 09:20 → the finger's time wins
+  const web = { id: "a", status: "present", check_in_at: at("08:40").toISOString(), check_in_source: "web" };
+  const replaced = planScan(web, at("09:20"));
+  assert.equal(replaced.action, "check_in");
+  assert.equal(replaced.patch.check_in_at, at("09:20").toISOString());
+  // …but a first finger after noon with only a web check-in is someone leaving
+  assert.equal(planScan(web, at("18:31")).action, "check_out");
+  // Machine check-in, touched again a minute later → nothing changes
+  const dev = { id: "b", status: "present", check_in_at: at("08:57").toISOString(), check_in_source: "device", check_out_at: null };
+  assert.equal(planScan(dev, at("08:58")).action, "repeat");
+  // …evening touch → giờ về; a later one moves giờ về later
+  const out = planScan(dev, at("18:35"));
+  assert.equal(out.action, "check_out");
+  assert.equal(out.patch.check_out_at, at("18:35").toISOString());
+  assert.equal(planScan({ ...dev, check_out_at: at("18:35").toISOString() }, at("19:10")).action, "check_out");
+  // Marked absent in advance, then came in → present
+  assert.equal(planScan({ id: "c", status: "absent", check_in_at: null }, at("09:02")).patch.status, "present");
+  // An 08:50 scan sent late (Wi-Fi was down) after a 09:30 one → 08:50 is the arrival, 09:30 becomes giờ về
+  const late = planScan({ ...dev, check_in_at: at("09:30").toISOString() }, at("08:50"));
+  assert.equal(late.patch.check_in_at, at("08:50").toISOString());
+  assert.equal(late.patch.check_out_at, at("09:30").toISOString());
+  // The machine's own clock is believed for the last 3 days, not the future
+  const now = at("10:00");
+  assert.equal(scanTime(Math.floor(at("08:50").getTime() / 1000), now).toISOString(), at("08:50").toISOString());
+  assert.equal(scanTime(Math.floor(at("10:30").getTime() / 1000), now), now);
+  assert.equal(scanTime(0, now), now);
+  assert.equal(vnDate(new Date("2026-09-29T17:30:00Z")), "2026-09-30"); // 00:30 VN time is the next day
+  // Late: 09:05 on time, 09:12 → 12 minutes
+  assert.equal(lateMinutes(at("09:05"), rules), 0);
+  assert.equal(lateMinutes(at("09:12"), rules), 12);
+  assert.deepEqual(screenFor(first, "Nhật Vy", at("09:12"), rules, false), { title: "Chao Nhat Vy", big: "Vao 09:12", note: "Tre 12 phut", tone: "warn" });
+  assert.equal(asciiFold("Đỗ Thuỳ Dung"), "Do Thuy Dung");
+});
+
 test("báo giá: “anh/chị” tự đổi thành tên khách (chỉ báo giá tiếng Việt)", async () => {
   const { personalize } = await import("../src/lib/quote.ts");
   const intro = "Cảm ơn anh/chị đã tin tưởng Funti Kidbooks. Anh/chị chọn phương án phù hợp nhất nhé, anh / chị nhé.";

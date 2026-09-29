@@ -22,6 +22,10 @@ export const LATE_GRACE_MINUTES = 5;
 // lands at or after this hour. There's no upper bound: showing up late
 // still checks in fine, just flagged "Trễ" via isLateCheckIn above.
 export const EARLIEST_CHECK_IN_HOUR = 8;
+// site_settings key: "off" once the fingerprint machine is the only way to
+// check in (Quản trị → Chấm công); absent or "on" = opening the workspace
+// still checks people in.
+export const WEB_CHECKIN_KEY = "attendance_web_checkin";
 export const EARLIEST_CHECK_IN_MINUTE = 30;
 
 // "Ngày làm việc" always follows Vietnam local time, not the server's UTC

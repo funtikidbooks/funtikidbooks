@@ -494,11 +494,47 @@ export type Review = {
   updated_at: string;
 };
 
+// Máy chấm công vân tay — see supabase/migrations/fingerprint_clock.sql.
+export type ClockDevice = {
+  id: string;
+  name: string;
+  token_hash: string;
+  capacity: number;
+  last_seen_at: string | null;
+  firmware: string;
+  created_at: string;
+};
+export type ClockFinger = { id: string; device_id: string; slot: number; profile_id: string; created_at: string };
+export type ClockCommand = {
+  id: string;
+  device_id: string;
+  kind: "enroll" | "delete";
+  slot: number;
+  profile_id: string | null;
+  status: "pending" | "running" | "done" | "failed" | "cancelled";
+  step: string;
+  created_at: string;
+  updated_at: string;
+};
+export type ClockScan = {
+  id: string;
+  device_id: string | null;
+  slot: number | null;
+  profile_id: string | null;
+  scanned_at: string;
+  received_at: string;
+  result: string;
+};
+
 export type AttendanceEntry = {
   id: string;
   profile_id: string;
   work_date: string;
   check_in_at: string | null;
+  // Giờ về — only the fingerprint machine records one (fingerprint_clock.sql).
+  check_out_at?: string | null;
+  // "web" (opening the workspace) or "device" (the fingerprint machine).
+  check_in_source?: string;
   status: "present" | "absent" | "leave" | "off" | "paid_leave" | "half_day";
   note: string | null;
   // Director/PM marked this person as working on a day that's off by
@@ -1229,6 +1265,30 @@ export type Database = {
         Row: Review;
         Insert: Partial<Review> & { customer_name: string; content: string };
         Update: Partial<Review>;
+        Relationships: [];
+      };
+      clock_devices: {
+        Row: ClockDevice;
+        Insert: Partial<ClockDevice> & { token_hash: string };
+        Update: Partial<ClockDevice>;
+        Relationships: [];
+      };
+      clock_fingers: {
+        Row: ClockFinger;
+        Insert: Partial<ClockFinger> & { device_id: string; slot: number; profile_id: string };
+        Update: Partial<ClockFinger>;
+        Relationships: [];
+      };
+      clock_commands: {
+        Row: ClockCommand;
+        Insert: Partial<ClockCommand> & { device_id: string; kind: ClockCommand["kind"]; slot: number };
+        Update: Partial<ClockCommand>;
+        Relationships: [];
+      };
+      clock_scans: {
+        Row: ClockScan;
+        Insert: Partial<ClockScan> & { scanned_at: string };
+        Update: Partial<ClockScan>;
         Relationships: [];
       };
       attendance: {
