@@ -42,7 +42,7 @@ export function FaqSection({ title, items }: { title: string; items: FaqEntry[] 
   return (
     <section className="site-container py-14">
       <h2 className="text-3xl text-center mb-10">{title}</h2>
-      <div className="grid gap-x-12 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-12 md:grid-cols-2">
         {columns.map((col, ci) => (
           <div key={ci} className="flex flex-col">
             {col.map((item) => (

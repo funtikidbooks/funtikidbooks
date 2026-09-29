@@ -65,7 +65,7 @@ export function NewsGrid({ initialPosts, canEdit }: { initialPosts: NewsPost[]; 
       </div>
 
       {showFallback ? (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {FALLBACK_ARTICLES.map((a) => (
             <article key={a.title} className="card elev-sm overflow-hidden flex flex-col">
               <ImagePlaceholder emoji="📰" style={{ minHeight: 170, borderRadius: 0 }} />
@@ -82,7 +82,7 @@ export function NewsGrid({ initialPosts, canEdit }: { initialPosts: NewsPost[]; 
       ) : filtered.length === 0 ? (
         <p style={{ color: "var(--color-neutral-500)" }}>{t.news.noResults}</p>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((post, i) => (
             <Reveal key={post.id} delay={(i % 3) * 80} y={20}>
               <Link

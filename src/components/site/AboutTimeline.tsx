@@ -229,7 +229,7 @@ function TimelineEditDialog({
           ))}
         </div>
 
-        <div className="grid gap-3">
+        <div className="grid grid-cols-1 gap-3">
           {lang === "vi" ? (
             <div className="field">
               <label>{t.about.fieldYear}</label>

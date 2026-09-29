@@ -57,7 +57,7 @@ export function ReviewsSection({ reviews, canEdit = false }: { reviews: Review[]
           <span className="text-xs font-bold">{t.reviews.addFirst}</span>
         </button>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 w-full text-left">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 w-full text-left">
           {items.map((r) => (
             <div key={r.id} className="relative card elev-sm p-6 flex flex-col gap-3" style={{ opacity: r.published ? 1 : 0.55 }}>
               <div className="flex items-center gap-3">

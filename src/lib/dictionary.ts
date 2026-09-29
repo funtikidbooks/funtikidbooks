@@ -76,7 +76,7 @@ export const dictionary = {
       ctaSecondary: "Xem quy trình làm việc",
       previewKicker: "XEM THỬ",
       previewTitle: "Minh hoạ sách thiếu nhi trông như thế nào?",
-      previewSubtitle: "Bấm mũi tên hoặc kéo trang để lật thử — như đang cầm một cuốn sách tranh thật.",
+      previewSubtitle: "Kéo góc trang, vuốt hoặc bấm mũi tên để lật thử — như đang cầm một cuốn sách tranh thật.",
       previewAlt: "Minh hoạ sách thiếu nhi",
       list: [
         { icon: "📖", title: "Minh hoạ sách thiếu nhi", desc: "Minh hoạ nội dung sách truyện, sách giáo dục, sách song ngữ theo phong cách phù hợp từng độ tuổi." },
@@ -466,7 +466,7 @@ export const dictionary = {
       ctaSecondary: "See our process",
       previewKicker: "PREVIEW",
       previewTitle: "What does a children's book illustration look like?",
-      previewSubtitle: "Click the arrows or drag a page to flip through — just like holding a real picture book.",
+      previewSubtitle: "Drag a page corner, swipe or tap the arrows to turn the pages — just like holding a real picture book.",
       previewAlt: "Children's book illustration",
       list: [
         { icon: "📖", title: "Children's Book Illustration", desc: "Illustrations for storybooks, educational books, and bilingual books, in a style suited to each age group." },
