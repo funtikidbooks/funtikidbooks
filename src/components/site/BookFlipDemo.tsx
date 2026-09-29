@@ -522,70 +522,52 @@ export function BookFlipDemo({ pages, alt, backCover = null }: { pages: string[]
     animate(from, to, reducedRef.current ? 0 : 200, easeOutCubic, () => {});
   }
 
-  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
+  // One gesture, whatever reports it: the mouse through pointer events,
+  // fingers and pens through touch events (below).
+  function gestureStart(id: number, x: number, y: number) {
     finishNow();
-    const hit = hitTest(e.clientX, e.clientY);
-    if (!hit) return;
-    if (e.pointerType === "mouse") e.preventDefault();
+    const hit = hitTest(x, y);
+    if (!hit) return false;
     stopTween();
     const cur = motionRef.current;
     const from = sameTurn(cur, hit.leaf, hit.dir) ? cur : restOf(hit.leaf, hit.dir, hit.corner);
-    dragRef.current = {
-      id: e.pointerId,
-      x0: e.clientX,
-      y0: e.clientY,
-      from,
-      dir: hit.dir,
-      started: false,
-      samples: [{ t: performance.now(), x: e.clientX }],
-      W,
-      H,
-    };
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      // the pointer is already gone
-    }
+    dragRef.current = { id, x0: x, y0: y, from, dir: hit.dir, started: false, samples: [{ t: performance.now(), x }], W, H };
+    return true;
   }
 
-  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
+  // Returns whether the gesture is the book's — a sideways pull — so a
+  // finger's move can be kept from scrolling the page.
+  function gestureMove(id: number, x: number, y: number) {
     const d = dragRef.current;
-    if (!d) {
-      if (e.pointerType === "mouse" && e.buttons === 0) {
-        const hit = hitTest(e.clientX, e.clientY);
-        peelTo(hit?.zone ? hit : null);
-      }
-      return;
-    }
-    if (e.pointerId !== d.id) return;
-    const dx = e.clientX - d.x0;
-    const dy = e.clientY - d.y0;
+    if (!d || d.id !== id) return false;
+    const dx = x - d.x0;
+    const dy = y - d.y0;
     if (!d.started) {
       // Mostly up or down: the reader is scrolling past, not turning.
       if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx) * 1.2) {
         dragRef.current = null;
         settle();
-        return;
+        return false;
       }
-      if (Math.abs(dx) < DRAG_START) return;
+      if (Math.abs(dx) < DRAG_START) return Math.abs(dx) >= 3 && Math.abs(dx) > Math.abs(dy);
       d.started = true;
       peelRef.current = null;
       setDragging(true);
     }
     const now = performance.now();
-    d.samples.push({ t: now, x: e.clientX });
+    d.samples.push({ t: now, x });
     while (d.samples.length > 2 && now - d.samples[0].t > 90) d.samples.shift();
 
     const f = d.from;
     if (f.kind === "hard") queue({ ...f, p: clamp(f.p - dx / (d.W * 1.2), 0, 1) });
     else if (f.kind === "soft")
       queue({ ...f, u: clamp(f.u + (d.dir === 1 ? dx : -dx) / d.W, -1, 1), v: clamp(f.v + dy / d.H, 0, 1) });
+    return true;
   }
 
-  function onPointerUp(e: PointerEvent<HTMLDivElement>) {
+  function gestureEnd(id: number, x: number) {
     const d = dragRef.current;
-    if (!d || e.pointerId !== d.id) return;
+    if (!d || d.id !== id) return;
     dragRef.current = null;
     const corner: Corner = d.from.kind === "soft" ? d.from.corner : 1;
     if (!d.started) {
@@ -594,24 +576,96 @@ export function BookFlipDemo({ pages, alt, backCover = null }: { pages: string[]
     }
     setDragging(false);
     const now = performance.now();
-    d.samples.push({ t: now, x: e.clientX });
+    d.samples.push({ t: now, x });
     while (d.samples.length > 2 && now - d.samples[0].t > 90) d.samples.shift();
     const first = d.samples[0];
     const last = d.samples[d.samples.length - 1];
     const v = last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0;
     const toward = d.dir === 1 ? -v : v; // px/ms in the direction of the turn
-    const swiped = toward > FLICK && Math.abs(e.clientX - d.x0) > FLICK_MIN;
+    const swiped = toward > FLICK && Math.abs(x - d.x0) > FLICK_MIN;
     if (swiped || (travelOf(motionRef.current) > 0.3 && toward > -FLICK)) turn(d.dir, corner, "release");
     else settle();
   }
 
-  function onPointerCancel(e: PointerEvent<HTMLDivElement>) {
+  function gestureCancel(id: number | null) {
     const d = dragRef.current;
-    if (!d || e.pointerId !== d.id) return;
+    if (!d || (id !== null && d.id !== id)) return;
     dragRef.current = null;
     setDragging(false);
     settle();
   }
+
+  // Mouse only — a finger's pointer events are left alone: Safari on
+  // iPhone/iPad takes a moving finger for its own scrolling and cancels
+  // them, so touch is read from touch events instead.
+  function onPointerDown(e: PointerEvent<HTMLDivElement>) {
+    if (e.pointerType !== "mouse" || e.button !== 0) return;
+    if (!gestureStart(e.pointerId, e.clientX, e.clientY)) return;
+    e.preventDefault();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // the pointer is already gone
+    }
+  }
+  function onPointerMove(e: PointerEvent<HTMLDivElement>) {
+    if (e.pointerType !== "mouse") return;
+    if (dragRef.current) gestureMove(e.pointerId, e.clientX, e.clientY);
+    else if (e.buttons === 0) {
+      const hit = hitTest(e.clientX, e.clientY);
+      peelTo(hit?.zone ? hit : null);
+    }
+  }
+  function onPointerUp(e: PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse") gestureEnd(e.pointerId, e.clientX);
+  }
+  function onPointerCancel(e: PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === "mouse") gestureCancel(e.pointerId);
+  }
+
+  // Touch listeners are bound by hand: the move handler has to be allowed
+  // to stop the page scrolling once a finger is pulling a page sideways
+  // (React's touch handlers are passive). They call the latest gesture
+  // functions through a ref, since those close over this render's sizes.
+  const gestureRef = useRef({ gestureStart, gestureMove, gestureEnd, gestureCancel });
+  useEffect(() => {
+    gestureRef.current = { gestureStart, gestureMove, gestureEnd, gestureCancel };
+  });
+  const ready = avail > 0;
+  useEffect(() => {
+    const el = bookRef.current;
+    if (!ready || !el) return;
+    const touchId = (t: Touch) => 1_000_000 + t.identifier; // apart from pointer ids
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length > 1) {
+        gestureRef.current.gestureCancel(null); // a pinch
+        return;
+      }
+      const t = e.changedTouches[0];
+      if (t) gestureRef.current.gestureStart(touchId(t), t.clientX, t.clientY);
+    };
+    const onMove = (e: TouchEvent) => {
+      for (const t of Array.from(e.changedTouches)) {
+        if (gestureRef.current.gestureMove(touchId(t), t.clientX, t.clientY) && e.cancelable) e.preventDefault();
+      }
+    };
+    const onEnd = (e: TouchEvent) => {
+      for (const t of Array.from(e.changedTouches)) gestureRef.current.gestureEnd(touchId(t), t.clientX);
+    };
+    const onCancel = (e: TouchEvent) => {
+      for (const t of Array.from(e.changedTouches)) gestureRef.current.gestureCancel(touchId(t));
+    };
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    el.addEventListener("touchend", onEnd);
+    el.addEventListener("touchcancel", onCancel);
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+      el.removeEventListener("touchend", onEnd);
+      el.removeEventListener("touchcancel", onCancel);
+    };
+  }, [ready]);
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
@@ -713,7 +767,7 @@ export function BookFlipDemo({ pages, alt, backCover = null }: { pages: string[]
               height: H,
               perspective: `${Math.round(W * 4)}px`,
               perspectiveOrigin: `${W}px 50%`,
-              touchAction: "pan-y pinch-zoom",
+              touchAction: "pan-y",
               WebkitTouchCallout: "none",
               WebkitUserSelect: "none",
               cursor: dragging ? "grabbing" : "grab",
