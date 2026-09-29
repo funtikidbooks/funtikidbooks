@@ -270,7 +270,7 @@ export function UpworkSopView({ initialSop, saved }: { initialSop: UpworkSop; sa
   const maxScore = criteria.rows.length * 5;
 
   return (
-    <div className="flex flex-col gap-5 max-w-[1100px] w-full mx-auto">
+    <div className="flex flex-col gap-5 w-full">
       {!savedOnce && (
         <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
           Đang hiển thị bản gốc từ file SOP-01. Bấm &quot;✏️ Sửa&quot; ở từng phần để chỉnh — lần lưu đầu tiên sẽ tạo bản của studio.

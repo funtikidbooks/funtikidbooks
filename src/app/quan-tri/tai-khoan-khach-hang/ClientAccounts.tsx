@@ -86,7 +86,7 @@ export function ClientAccounts({ initialAccounts, isDirector }: { initialAccount
             Chưa có khách hàng nào đăng nhập.
           </p>
         ) : (
-          <div className="flex flex-col gap-2 max-w-[820px]">
+          <div className="grid gap-2 xl:grid-cols-2">
             {accounts.map((a) => (
               <div key={a.id} className="card elev-sm p-3 flex flex-wrap items-center gap-3">
                 <div

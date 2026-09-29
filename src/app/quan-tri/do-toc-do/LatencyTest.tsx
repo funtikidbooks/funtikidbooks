@@ -127,7 +127,7 @@ export function LatencyTest({ userId }: { userId: string }) {
   const dbStats = stats(dbTimes);
 
   return (
-    <div className="flex-1 flex flex-col gap-5 p-4 sm:p-6 overflow-y-auto max-w-[900px]">
+    <div className="flex-1 flex flex-col gap-5 p-4 sm:p-6 overflow-y-auto">
       <div>
         <h1 className="text-xl">Đo tốc độ chat</h1>
         <p className="text-sm mt-1 max-w-[65ch]" style={{ color: "var(--color-neutral-500)" }}>

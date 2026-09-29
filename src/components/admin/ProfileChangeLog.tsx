@@ -43,7 +43,7 @@ export function ProfileChangeLog({ changes, profiles }: { changes: ProfileChange
   const shown = open ? changes : changes.slice(0, 5);
 
   return (
-    <section className="card elev-sm p-4 mt-6 max-w-[820px] flex flex-col gap-2">
+    <section className="card elev-sm p-4 mt-6 xl:mt-0 flex flex-col gap-2">
       <h2 className="text-base">📜 Lịch sử đổi chức danh & quyền</h2>
       <p className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
         Chỉ Giám đốc đổi được chức danh, quyền, ngày tham gia và email. Mọi lần đổi đều được ghi lại ở đây.

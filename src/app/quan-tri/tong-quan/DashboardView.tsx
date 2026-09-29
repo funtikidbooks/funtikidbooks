@@ -238,7 +238,7 @@ export function DashboardView({ data, cumulativeStartMonth }: { data: DashboardD
         ))}
       </nav>
 
-      <div className="max-w-[1080px] flex flex-col gap-4 p-4 sm:p-6">
+      <div className="w-full flex flex-col gap-4 p-4 sm:p-6">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
           <h1 className="text-xl">Tổng quan</h1>
           <span className="text-sm" style={{ color: "var(--color-neutral-500)" }}>

@@ -277,7 +277,7 @@ export function ProbationPanel({
   }
 
   return (
-    <section className="card elev-sm p-4 mb-6 max-w-[820px] flex flex-col gap-3">
+    <section className="card elev-sm p-4 mb-6 flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-base flex-1 min-w-[180px]">🌱 Thử việc</h2>
         {dueCount > 0 && <Pill tone="red">{dueCount} người hết hạn thử việc</Pill>}

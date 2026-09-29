@@ -287,7 +287,7 @@ export function DocumentsLibraryPanel({ initialItems }: { initialItems: Document
           {visibleItems.length === 0 ? (
             <p style={{ color: "var(--color-neutral-500)" }}>Chưa có tài liệu nào ở đây. Bấm &quot;+ Tải tài liệu lên&quot; để bắt đầu.</p>
           ) : (
-            <div className="flex flex-col gap-2 max-w-[720px]">
+            <div className="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
               {visibleItems.map((it) => (
                 <div key={it.id} className="card elev-sm p-3 flex items-center gap-3">
                   <span className="text-2xl flex-none" aria-hidden>

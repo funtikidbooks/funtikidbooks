@@ -145,7 +145,7 @@ export function DocumentsAdminPanel({
           Chưa có văn bản nào.
         </p>
       ) : (
-        <div className="flex flex-col gap-6 max-w-[700px]">
+        <div className="grid gap-6 xl:grid-cols-2 items-start">
           {TYPE_OPTIONS.map((type) => {
             const docs = initialDocuments.filter((d) => d.type === type);
             if (docs.length === 0) return null;
