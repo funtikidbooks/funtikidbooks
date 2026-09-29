@@ -346,3 +346,11 @@ test("báo giá: số lượng khác nhau theo từng phương án (16+6 / 20+4)
   assert.ok(text.includes("• Trang ruột — 16 / 20 trang"));
   assert.ok(text.includes("PA A: 3.200.000 ₫ · PA B: 4.000.000 ₫"));
 });
+
+test("báo giá: “anh/chị” tự đổi thành tên khách (chỉ báo giá tiếng Việt)", async () => {
+  const { personalize } = await import("../src/lib/quote.ts");
+  const intro = "Cảm ơn anh/chị đã tin tưởng Funti Kidbooks. Anh/chị chọn phương án phù hợp nhất nhé, anh / chị nhé.";
+  assert.equal(personalize(intro, "Trí Việt", "vi"), "Cảm ơn Trí Việt đã tin tưởng Funti Kidbooks. Trí Việt chọn phương án phù hợp nhất nhé, Trí Việt nhé.");
+  assert.equal(personalize(intro, "  ", "vi"), intro); // no name yet: stays anh/chị
+  assert.equal(personalize("Thank you anh/chị", "Anna", "en"), "Thank you anh/chị"); // English quotes untouched
+});

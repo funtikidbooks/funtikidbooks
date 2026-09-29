@@ -353,7 +353,7 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
           </Card>
 
           <Card title="Lời mở đầu & điều khoản">
-            <Field label="Lời mở đầu">
+            <Field label={draft.language === "vi" ? "Lời mở đầu — chữ “anh/chị” tự đổi thành tên khách" : "Lời mở đầu"}>
               <textarea className="input" rows={3} value={draft.intro} onChange={(e) => patch({ intro: e.target.value })} />
             </Field>
             <Field label="Điều khoản (mỗi dòng một ý)">

@@ -1,5 +1,5 @@
 import type { Quote, QuoteDraft, QuoteItem } from "@/lib/quote";
-import { LABELS, formatMoney, lineTotal, qtyFor, qtyText, tierTotals, unitPrice } from "@/lib/quote";
+import { LABELS, formatMoney, lineTotal, personalize, qtyFor, qtyText, tierTotals, unitPrice } from "@/lib/quote";
 
 // The quote as the client sees it — the editor's live preview, the public
 // link (/bao-gia/<token>) and the printed PDF all render this. Always on
@@ -86,7 +86,7 @@ export function QuoteSheet({ quote }: { quote: QuoteDraft & Pick<Quote, "code" |
 
       {quote.intro.trim() && (
         <p className="text-[14px] leading-relaxed whitespace-pre-line pb-4" style={{ color: INK }}>
-          {quote.intro}
+          {personalize(quote.intro, quote.client_name, quote.language)}
         </p>
       )}
 
@@ -166,7 +166,7 @@ export function QuoteSheet({ quote }: { quote: QuoteDraft & Pick<Quote, "code" |
         <section className="pt-5 text-[13px]">
           <h3 className="text-[14px] font-bold pb-1.5">{L.terms}</h3>
           <ul className="flex flex-col gap-1 pl-4" style={{ listStyle: "disc", color: INK }}>
-            {quote.terms
+            {personalize(quote.terms, quote.client_name, quote.language)
               .split("\n")
               .map((t) => t.replace(/^\s*[-•]\s*/, "").trim())
               .filter(Boolean)

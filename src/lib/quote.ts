@@ -233,6 +233,16 @@ export function draftFromPreset(presetId: string, language: QuoteLang, preparedB
   };
 }
 
+// "anh/chị" in the intro and terms becomes the client's name once it's
+// filled in ("Cảm ơn Trí Việt đã tin tưởng…") — the text is written once,
+// generic, and reads as personal on every quote. Vietnamese quotes only;
+// with no name yet it stays "anh/chị".
+export function personalize(text: string, clientName: string, language: QuoteLang): string {
+  const name = clientName.trim();
+  if (language !== "vi" || !name) return text;
+  return text.replace(/anh\s*\/\s*chị/giu, name);
+}
+
 export function qtyFor(item: QuoteItem, tier: number): number {
   const q = item.qtys?.[tier];
   return typeof q === "number" && Number.isFinite(q) ? q : Number(item.qty) || 0;
