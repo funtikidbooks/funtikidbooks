@@ -120,17 +120,29 @@ function clean(input: QuoteDraft): QuoteDraft {
   };
 }
 
-export async function saveQuote(id: string, input: QuoteDraft): Promise<string> {
+// What a column still waiting for its SQL needs — shown in the editor, with
+// the line to paste into Supabase, instead of a bare "couldn't save".
+const COLUMN_SQL: Record<LaterColumn, { label: string; sql: string }> = {
+  book_size: { label: "Khổ sách", sql: "alter table public.quotes add column if not exists book_size text not null default '';" },
+  payments: { label: "Các đợt thanh toán", sql: "alter table public.quotes add column if not exists payments jsonb not null default '[]'::jsonb;" },
+};
+export type QuoteSaveResult = { updatedAt: string; unsaved: { label: string; sql: string }[] };
+
+export async function saveQuote(id: string, input: QuoteDraft): Promise<QuoteSaveResult> {
   const { supabase } = await requireQuoteEditor();
   const updated_at = new Date().toISOString();
   const row = { ...clean(input), updated_at };
-  const { error, dropped } = await writeQuote(row, (r) => supabase.from("quotes").update(r).eq("id", id).select("id"));
+  // Read the row back: the API quietly leaves out a key the table has no
+  // column for yet, so "no error" doesn't mean every part was stored.
+  const { data, error, dropped } = await writeQuote(row, (r) => supabase.from("quotes").update(r).eq("id", id).select("*"));
   if (error) throw new Error("Không lưu được báo giá.");
-  const lost = dropped.filter((c) => (c === "book_size" ? !!row.book_size : row.payments.length > 0));
-  if (lost.length)
-    throw new Error(`Đã lưu, trừ ${lost.map((c) => (c === "book_size" ? "Khổ sách" : "Các đợt thanh toán")).join(" và ")} — cần chạy SQL trong quotes.sql.`);
+  const stored = ((data ?? [])[0] ?? null) as Record<string, unknown> | null;
+  if (!stored) throw new Error("Không tìm thấy báo giá để lưu.");
+  const lost = LATER_COLUMNS.filter(
+    (c) => (dropped.includes(c) || !(c in stored)) && (c === "book_size" ? !!row.book_size : row.payments.length > 0),
+  );
   revalidatePath("/quan-tri/bao-gia");
-  return updated_at;
+  return { updatedAt: updated_at, unsaved: lost.map((c) => COLUMN_SQL[c]) };
 }
 
 export async function duplicateQuote(id: string): Promise<string> {

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { deleteQuote, duplicateQuote, saveQuote } from "@/lib/actions/quotes";
+import { deleteQuote, duplicateQuote, saveQuote, type QuoteSaveResult } from "@/lib/actions/quotes";
 import {
   BOOK_SIZE_SUGGESTIONS,
   DEFAULT_INTRO,
@@ -56,6 +56,9 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
     status: quote.status,
   }));
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
+  // Parts the database can't hold yet (a column whose SQL hasn't been run).
+  const [unsaved, setUnsaved] = useState<QuoteSaveResult["unsaved"]>([]);
+  const [sqlCopied, setSqlCopied] = useState(false);
   const [tab, setTab] = useState<"edit" | "preview">("edit");
   const [copied, setCopied] = useState(false);
   const firstRender = useRef(true);
@@ -75,15 +78,23 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
     setSaveState("saving");
     const t = setTimeout(() => {
       saveQuote(id, latest.current)
-        .then(() => setSaveState("saved"))
+        .then((r) => {
+          setUnsaved(r.unsaved);
+          setSaveState("saved");
+        })
         .catch(() => setSaveState("error"));
     }, 700);
     return () => clearTimeout(t);
   }, [draft, id]);
 
   async function flush() {
-    await saveQuote(id, latest.current).catch(() => setSaveState("error"));
-    setSaveState("saved");
+    try {
+      const r = await saveQuote(id, latest.current);
+      setUnsaved(r.unsaved);
+      setSaveState("saved");
+    } catch {
+      setSaveState("error");
+    }
   }
 
   function setItem(itemId: string, p: Partial<QuoteItem>) {
@@ -195,7 +206,7 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
           ))}
         </select>
         <span className="text-[12px]" style={{ color: saveState === "error" ? "var(--status-red)" : "var(--color-neutral-500)" }}>
-          {saveState === "saving" ? "Đang lưu…" : saveState === "error" ? "Chưa lưu được" : "✓ Đã lưu"}
+          {saveState === "saving" ? "Đang lưu…" : saveState === "error" ? "Chưa lưu được" : unsaved.length ? "⚠ Lưu thiếu" : "✓ Đã lưu"}
         </span>
         <span className="flex-1" />
         <button type="button" className="btn btn-secondary btn-sm" onClick={copyText} aria-label="Chép báo giá dạng tin nhắn">
@@ -212,6 +223,42 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
           🗑
         </button>
       </div>
+
+      {unsaved.length > 0 && (
+        <div
+          className="no-print mx-3 sm:mx-5 mt-3 rounded-[12px] px-3.5 py-3 flex flex-col gap-2 text-[13px]"
+          style={{ background: "var(--badge-orange-bg)", color: "var(--badge-orange-fg)" }}
+        >
+          <span>
+            <b>Chưa lưu được {unsaved.map((u) => u.label).join(" và ")}</b> — cơ sở dữ liệu chưa có chỗ chứa. Chạy đoạn SQL này trong Supabase (SQL
+            Editor → dán → Run), các phần khác vẫn đã lưu:
+          </span>
+          <code className="block rounded-[8px] px-2.5 py-2 text-[12px] break-all" style={{ background: "var(--color-panel)", color: "var(--color-text)" }}>
+            {unsaved.map((u) => u.sql).join("\n")}
+          </code>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={async () => {
+                const sql = unsaved.map((u) => u.sql).join("\n");
+                try {
+                  await navigator.clipboard.writeText(sql);
+                  setSqlCopied(true);
+                  setTimeout(() => setSqlCopied(false), 1800);
+                } catch {
+                  prompt("Chép SQL:", sql);
+                }
+              }}
+            >
+              {sqlCopied ? "✓ Đã chép" : "📋 Chép SQL"}
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => flush()}>
+              ↻ Chạy xong rồi — lưu lại
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Phone / iPad: switch between the form and the finished sheet. */}
       <div className="no-print xl:hidden flex gap-1 px-3 pt-3">
