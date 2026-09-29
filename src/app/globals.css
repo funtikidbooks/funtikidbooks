@@ -1092,6 +1092,114 @@ h4 {
   }
 }
 
+/* ---------- Báo giá (QuoteSheet) ----------
+   Rows are a table (item | one column per price tier) on a wide screen and
+   on paper; on a phone each row stacks, one "tier ····· price" line per
+   tier, so nothing has to scroll sideways. */
+.fk-quote-sheet {
+  padding: 28px 30px;
+  border-radius: 14px;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.fk-q-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid #ece6df;
+  align-items: start;
+}
+.fk-q-head {
+  display: none;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6b625b;
+  padding: 8px 0;
+}
+.fk-q-headprice {
+  text-align: right;
+}
+.fk-q-price {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: right;
+}
+.fk-q-prices {
+  display: flex;
+  justify-content: flex-end;
+  text-align: right;
+}
+.fk-q-tiername {
+  font-size: 12px;
+  color: #6b625b;
+  text-align: left;
+}
+.fk-q-section {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 16px 0 4px;
+  border-bottom: 1px solid #ece6df;
+}
+.fk-q-total {
+  border-bottom: none;
+  background: #fdf1ec;
+  border-radius: 8px;
+  padding: 10px 10px;
+  margin-top: 8px;
+  font-weight: 700;
+}
+@media (max-width: 639px) {
+  .fk-quote-sheet {
+    padding: 18px 16px;
+  }
+}
+@media (min-width: 640px), print {
+  .fk-q-row {
+    grid-template-columns: var(--cols);
+  }
+  .fk-q-head {
+    display: grid;
+  }
+  .fk-q-price {
+    display: block;
+  }
+  .fk-q-price .fk-q-tiername {
+    display: none;
+  }
+  .fk-q-prices {
+    grid-column: span var(--span);
+    justify-content: center;
+    text-align: center;
+  }
+}
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  .fk-quote-sheet {
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .fk-q-row {
+    break-inside: avoid;
+  }
+  .fk-quote-paper {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    max-width: none !important;
+  }
+}
+
 /* ---------- Print (invoice view etc.) ---------- */
 @media print {
   aside,

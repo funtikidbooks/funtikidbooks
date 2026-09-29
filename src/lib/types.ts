@@ -549,6 +549,9 @@ export type PayrollRecord = {
 
 // Tiền thu của một dự án (phòng họp) — director-only, see
 // supabase/migrations/dashboard_extras.sql.
+// Báo giá — see lib/quote.ts for the shape and supabase/migrations/quotes.sql.
+export type QuoteRow = import("./quote").Quote;
+
 export type ProjectFinance = {
   channel_id: string;
   revenue_vnd: number;
@@ -1268,6 +1271,12 @@ export type Database = {
         Row: ProfileChange;
         Insert: never;
         Update: never;
+        Relationships: [];
+      };
+      quotes: {
+        Row: QuoteRow;
+        Insert: Partial<QuoteRow> & { code: string };
+        Update: Partial<QuoteRow>;
         Relationships: [];
       };
       project_finance: {

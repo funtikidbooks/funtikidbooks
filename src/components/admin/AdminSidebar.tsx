@@ -55,6 +55,7 @@ const GROUPS: NavGroup[] = [
       // redirect covering old bookmarks to the previous location.
       { href: "/workspace/khach-hang", label: "Tin nhắn khách hàng", icon: "💬", who: "inbox" },
       { href: "/quan-tri/tin-nhan", label: "Form liên hệ", icon: "✉️", who: "content" },
+      { href: "/quan-tri/bao-gia", label: "Báo giá", icon: "📝", who: "director" },
       { href: "/quan-tri/tai-khoan-khach-hang", label: "Tài khoản khách hàng", icon: "🤝", who: "hr" },
       { href: "/quan-tri/danh-gia", label: "Đánh giá khách hàng", icon: "⭐", who: "content" },
       { href: "/quan-tri/upwork", label: "Tìm khách (Upwork)", icon: "🎯", who: "hr" },

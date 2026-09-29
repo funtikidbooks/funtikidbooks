@@ -291,3 +291,40 @@ test("bảng công việc: mô tả kiểu Trello (Markdown) hiện đúng, th�
   assert.equal(codeFromParam("1546"), "#1546");
   assert.equal(codeFromParam(""), null);
 });
+
+test("báo giá: tổng từng mức, một giá cho mọi mức, tuỳ chọn không cộng vào tổng", async () => {
+  const { tierTotals, lineTotal, parseMoney, formatMoney, resizeTiers, draftFromPreset, quoteAsText } = await import("../src/lib/quote.ts");
+  const it = (o) => ({ id: "x", kind: "item", name: "", description: "", qty: 1, unit: "trang", prices: [null, null, null], flat: false, optional: false, ...o });
+  const items = [
+    it({ qty: 40, prices: [150000, 200000, 280000] }), // 40 trang tô màu
+    it({ qty: 1, prices: [500000, 700000, 900000] }), // bìa
+    it({ kind: "section", name: "PHẦN THÊM", qty: 0 }),
+    it({ qty: 1, prices: [300000, null, null], flat: true }), // dàn trang — một giá
+    it({ qty: 1, prices: [250000, null, null], flat: true, optional: true }), // bài test — không cộng
+  ];
+  assert.deepEqual(tierTotals(items, 3), [
+    { total: 6_800_000, missing: false },
+    { total: 9_000_000, missing: false },
+    { total: 12_400_000, missing: false },
+  ]);
+  assert.equal(lineTotal(items[0], 1), 8_000_000);
+  assert.deepEqual(tierTotals([it({ prices: [100, null, null] })], 3).map((x) => x.missing), [false, true, true]);
+  assert.equal(parseMoney("1.500.000", "VND"), 1500000);
+  assert.equal(parseMoney("1,500,000 ₫", "VND"), 1500000);
+  assert.equal(parseMoney("$1,250.50", "USD"), 1250.5);
+  assert.equal(parseMoney("", "USD"), null);
+  assert.equal(formatMoney(6800000, "VND"), "6.800.000 ₫");
+  assert.equal(formatMoney(1250.5, "USD"), "$1,250.50");
+  assert.equal(formatMoney(900, "USD"), "$900");
+  // 3 → 2 mức keeps the prices already typed for the first two
+  const two = resizeTiers({ tier_names: ["A", "B", "C"], tier_notes: ["", "", ""], items, language: "vi" }, 2);
+  assert.deepEqual(two.tier_names, ["A", "B"]);
+  assert.deepEqual(two.items[0].prices, [150000, 200000]);
+  const d = draftFromPreset("coloring", "vi", "Phúc");
+  assert.equal(d.tier_names.length, 2);
+  assert.equal(d.currency, "VND");
+  assert.ok(d.items.some((x) => x.optional));
+  const text = quoteAsText({ ...d, code: "BG-2026-001", client_name: "Chị Thảo", items });
+  assert.ok(text.startsWith("BÁO GIÁ · BG-2026-001\nGửi: Chị Thảo"));
+  assert.ok(text.includes("Tuỳ chọn thêm:"));
+});
