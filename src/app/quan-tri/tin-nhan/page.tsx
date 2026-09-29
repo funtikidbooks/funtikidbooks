@@ -33,7 +33,7 @@ export default async function AdminMessagesPage() {
         {messages.length === 0 ? (
           <p style={{ color: "var(--color-neutral-500)" }}>Chưa có ai gửi form Liên hệ.</p>
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3 items-start">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3 items-start">
             {messages.map((m) => (
               <div key={m.id} className="card elev-sm p-4 flex flex-col gap-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">

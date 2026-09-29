@@ -220,9 +220,12 @@ export function DocumentsLibraryPanel({ initialItems }: { initialItems: Document
   }
 
   return (
-    <div className="flex-1 flex min-h-0">
-      <div className="w-[220px] flex-none flex flex-col gap-1 p-4 overflow-y-auto" style={{ borderRight: "1px solid var(--color-neutral-200)" }}>
-        <h1 className="text-lg mb-2">Tài liệu</h1>
+    // Phone / iPad portrait: the folders become a wrapping row of chips above
+    // the list; from md up they're the column down the left. (A fixed 220px
+    // column beside the list pushed the whole page wider than a phone.)
+    <div className="flex-1 flex flex-col md:flex-row min-h-0 min-w-0">
+      <div className="fk-doc-folders md:w-[220px] md:flex-none flex flex-wrap md:flex-nowrap md:flex-col gap-1 p-3 md:p-4 md:overflow-y-auto">
+        <h1 className="text-lg md:mb-2 basis-full md:basis-auto">Tài liệu</h1>
         <button
           type="button"
           onClick={() => setActiveFolder("all")}
@@ -260,9 +263,9 @@ export function DocumentsLibraryPanel({ initialItems }: { initialItems: Document
         )}
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex items-center justify-between gap-4 px-6 py-4" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
-          <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 sm:px-6 py-3 sm:py-4" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
+          <p className="text-xs flex-1 min-w-[200px]" style={{ color: "var(--color-neutral-500)" }}>
             Lưu SOP, thuế, bảo hiểm, bảng lương gốc… và các tài liệu ngoài khác cho gọn gàng, dễ tìm.
           </p>
           <button
@@ -278,16 +281,16 @@ export function DocumentsLibraryPanel({ initialItems }: { initialItems: Document
         </div>
 
         {error && (
-          <p className="text-xs font-semibold px-6 pt-3" style={{ color: "var(--status-red)" }}>
+          <p className="text-xs font-semibold px-4 sm:px-6 pt-3" style={{ color: "var(--status-red)" }}>
             {error}
           </p>
         )}
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {visibleItems.length === 0 ? (
             <p style={{ color: "var(--color-neutral-500)" }}>Chưa có tài liệu nào ở đây. Bấm &quot;+ Tải tài liệu lên&quot; để bắt đầu.</p>
           ) : (
-            <div className="grid gap-2 lg:grid-cols-2 2xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2 2xl:grid-cols-3">
               {visibleItems.map((it) => (
                 <div key={it.id} className="card elev-sm p-3 flex items-center gap-3">
                   <span className="text-2xl flex-none" aria-hidden>

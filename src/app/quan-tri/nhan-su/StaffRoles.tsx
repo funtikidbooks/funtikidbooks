@@ -159,7 +159,7 @@ export function StaffRoles({
                   <>
                     <input
                       key={`title-${p.id}-${p.role ?? ""}`}
-                      className="input flex-1 min-w-0 sm:flex-none sm:w-[150px]"
+                      className="input fk-input-150"
                       list="job-title-suggestions"
                       placeholder="Chức danh"
                       defaultValue={p.role ?? ""}
@@ -170,7 +170,7 @@ export function StaffRoles({
                       }}
                     />
                     <select
-                      className="input flex-1 min-w-0 sm:flex-none sm:w-[150px]"
+                      className="input fk-input-150"
                       value={p.access_role}
                       disabled={pending}
                       onChange={(e) => changeRole(p.id, e.target.value as AccessRole)}

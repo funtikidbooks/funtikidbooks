@@ -1092,6 +1092,18 @@ h4 {
   }
 }
 
+/* Tài liệu: the folder list sits above the documents on a phone, down the
+   left from md up — the dividing line follows it. */
+.fk-doc-folders {
+  border-bottom: 1px solid var(--color-neutral-200);
+}
+@media (min-width: 768px) {
+  .fk-doc-folders {
+    border-bottom: none;
+    border-right: 1px solid var(--color-neutral-200);
+  }
+}
+
 /* ---------- Báo giá (QuoteSheet) ----------
    Rows are a table (item | one column per price tier) on a wide screen and
    on paper; on a phone each row stacks, one "tier ····· price" line per
@@ -1262,6 +1274,20 @@ select.input {
 }
 .field {
   min-width: 0;
+}
+/* A .input that sits in a row: fills its own line on a phone, a fixed 150px
+   from tablet up (Nhân sự: chức danh / quyền). A Tailwind w-* on a .input
+   never applies — .input's own width: 100% above is unlayered and wins —
+   which is how those two boxes once stretched across the whole row and out
+   of their card on a computer screen. */
+.input.fk-input-150 {
+  flex: 1 1 120px;
+}
+@media (min-width: 640px) {
+  .input.fk-input-150 {
+    flex: none;
+    width: 150px;
+  }
 }
 /* iOS/iPadOS Safari draws date/time inputs as a native control with its own
    intrinsic width that ignores width: 100%, so in a two-column form it ran
