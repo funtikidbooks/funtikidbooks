@@ -3,6 +3,7 @@ import { Be_Vietnam_Pro } from "next/font/google";
 import localFont from "next/font/local";
 import Script from "next/script";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { NotificationClickRouter } from "@/components/NotificationClickRouter";
 import "./globals.css";
 
 // Trying out the director's custom heading typeface — swap back to Baloo_2
@@ -135,6 +136,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-full flex flex-col">
         {children}
+        <NotificationClickRouter />
         {/* Real-user page speed per route — enable under Speed Insights in the
             Vercel dashboard for data to start showing there. */}
         <SpeedInsights />

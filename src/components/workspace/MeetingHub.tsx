@@ -1225,6 +1225,9 @@ export function MeetingHub({
   initialReactions = [],
   initialReads = [],
   initialPinnedMessages = [],
+  openRoomId = null,
+  openDmPeerId = null,
+  openAutoCall = false,
 }: {
   currentUser: { id: string; display_name: string };
   profiles: Profile[];
@@ -1241,6 +1244,10 @@ export function MeetingHub({
   initialReactions?: MeetingReaction[];
   initialReads?: MeetingChannelRead[];
   initialPinnedMessages?: MeetingMessage[];
+  // From the page's ?room= / ?dm= / ?call=1 (see the deep-link block below).
+  openRoomId?: string | null;
+  openDmPeerId?: string | null;
+  openAutoCall?: boolean;
 }) {
   const { setActiveMeetingChannel, unreadCounts: dmUnreadCounts, meetingUnreadCounts } = useChatManager();
   // Patched with any live profile edits (name/avatar) a colleague has made
@@ -1265,80 +1272,76 @@ export function MeetingHub({
         next.delete(id);
         return next;
       });
-    }, 4000);
+    }, 5600); // fk-room-flash: 5 × 1.1s
   }, []);
   const [dmTabLabel, setDmTabLabelState] = useState(initialDmTabLabel);
   const [showLabelsEditor, setShowLabelsEditor] = useState(false);
   const myProfile = profiles.find((p) => p.id === currentUser.id);
   const isDirector = myProfile?.access_role === "director";
   const isDirectorOrPm = isDirector || myProfile?.role === "Project Manager";
-  const [activeId, setActiveId] = useState<string | null>(
-    initialChannels.find((c) => c.is_general)?.id ?? initialChannels[0]?.id ?? null,
+  const [activeId, setActiveId] = useState<string | null>(() =>
+    openDmPeerId
+      ? DM_TAB_ID
+      : (openRoomId ?? initialChannels.find((c) => c.is_general)?.id ?? initialChannels[0]?.id ?? null),
   );
-  // Deep-linking from a push notification click: sw.js sends the browser to
-  // /workspace/hop?room=<id> or ?dm=<peerId>, so a click goes straight to
-  // the room/conversation instead of just opening the workspace generically
-  // to whatever room was open. This has to happen in an effect, not a
-  // useState lazy initializer that reads window.location directly — the
-  // server has no URL to read, so it always renders the default room, and a
-  // lazy initializer that behaves differently on the client's first render
-  // than what the server sent is exactly what causes a hydration mismatch.
-  // Reading it post-mount instead means the first client render still
-  // matches the server, and this effect nudges it over right after.
-  const [initialDmPeerId, setInitialDmPeerId] = useState<string | null>(null);
-  // Danh bạ's phone icon links here with ?dm=<peerId>&call=1 — same deep
-  // link as a push notification's ?dm=, plus this flag so the call starts
-  // itself instead of just opening the conversation.
-  const [initialAutoCall, setInitialAutoCall] = useState(false);
+  // Deep links — a push notification, the corner popup, Danh bạ's call
+  // button: /workspace/hop?room=<id> or ?dm=<peerId>[&call=1]. The page
+  // reads the query on the server and hands it over as openRoomId /
+  // openDmPeerId, so a notification tapped from anywhere lands straight on
+  // its conversation (with that room's messages already fetched) instead of
+  // first showing #Chung and switching over after load.
+  const channelsRef = useRef(channels);
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const dm = params.get("dm");
-    const room = params.get("room");
-    if (!dm && !room) return;
-    // set-state-in-effect normally flags this as a smell because it usually
-    // means state is being needlessly mirrored from other React state — but
-    // here it's genuinely synchronizing with an external system (the URL a
-    // notification click landed on), which has no server-side equivalent to
-    // read during the initial render. It runs once, not on a loop.
+    channelsRef.current = channels;
+  }, [channels]);
+  // Bumped on every open request, so the same link tapped twice (after
+  // wandering off to another room in between) still switches back.
+  const [openSignal, setOpenSignal] = useState(0);
+  const [dmOpen, setDmOpen] = useState<{ peerId: string; call: boolean; n: number } | null>(() =>
+    openDmPeerId ? { peerId: openDmPeerId, call: !!openAutoCall, n: 0 } : null,
+  );
+  const initialDmPeerId = dmOpen?.peerId ?? null;
+  const initialAutoCall = dmOpen?.call ?? false;
+  const openTarget = useCallback((room: string | null, dm: string | null, call: boolean) => {
     if (dm) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setInitialDmPeerId(dm);
-      if (params.get("call") === "1") {
-        setInitialAutoCall(true);
-      }
+      setDmOpen((prev) => ({ peerId: dm, call, n: (prev?.n ?? 0) + 1 }));
       setActiveId(DM_TAB_ID);
-    } else if (room && initialChannels.some((c) => c.id === room)) {
+    } else if (room && channelsRef.current.some((c) => c.id === room)) {
       setActiveId(room);
+    } else {
+      return;
     }
-    // Deliberately only runs once, off the URL the notification click
-    // landed on — not meant to react to later in-app room switches.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setOpenSignal((n) => n + 1);
   }, []);
 
-  // The mount-only effect above misses every notification clicked *after*
-  // this page was already open: sw.js still focuses the tab and posts the
-  // same {type: "notification-click", url} message (see PushSetup.tsx), but
-  // a same-route query-string change doesn't remount this component, so
-  // that first effect never re-runs — the click would silently do nothing.
-  // Listening for the message directly here, on top of PushSetup's own
-  // router.push (which only keeps the address bar in sync), is what
-  // actually switches the open conversation on a click that lands while
-  // already sitting on /workspace/hop.
-  //
-  // The in-app corner popup (MessageToasts) sends the same kind of URL via a
-  // "funti-open-chat" window event, for the same reason.
+  // Rooms that exist on the server but not in this page's list yet (a room
+  // created or joined after it loaded) — merged in when the server re-renders
+  // the page, e.g. on a notification click for that room.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- merging rooms from a fresh server render into live state
+    setChannels((prev) => {
+      const missing = initialChannels.filter((c) => !prev.some((p) => p.id === c.id));
+      return missing.length ? [...prev, ...missing] : prev;
+    });
+  }, [initialChannels]);
+
+  // A new link while this page is already open: the server re-renders with
+  // the new query, this component stays mounted, so follow the props.
+  const lastOpenKeyRef = useRef(`${openRoomId ?? ""}|${openDmPeerId ?? ""}`);
+  useEffect(() => {
+    const key = `${openRoomId ?? ""}|${openDmPeerId ?? ""}`;
+    if (key === lastOpenKeyRef.current) return;
+    lastOpenKeyRef.current = key;
+    openTarget(openRoomId, openDmPeerId, !!openAutoCall);
+  }, [openRoomId, openDmPeerId, openAutoCall, openTarget]);
+
+  // The instant path: sw.js (notification click) and MessageToasts (corner
+  // popup) announce the link directly, so the open conversation switches
+  // before any server round trip — and even when the address is unchanged.
   useEffect(() => {
     function openFromUrl(url: string) {
       const params = new URL(url, window.location.origin).searchParams;
-      const dm = params.get("dm");
-      const room = params.get("room");
-      if (dm) {
-        setInitialDmPeerId(dm);
-        setInitialAutoCall(params.get("call") === "1");
-        setActiveId(DM_TAB_ID);
-      } else if (room && initialChannels.some((c) => c.id === room)) {
-        setActiveId(room);
-      }
+      openTarget(params.get("room"), params.get("dm"), params.get("call") === "1");
     }
     function onMessage(event: MessageEvent) {
       if (event.data?.type !== "notification-click" || typeof event.data.url !== "string") return;
@@ -1355,7 +1358,7 @@ export function MeetingHub({
       window.removeEventListener("funti-open-chat", onOpenChat);
       navigator.serviceWorker.removeEventListener("message", onMessage);
     };
-  }, [initialChannels]);
+  }, [openTarget]);
 
   // Someone else adding this user to a room (an invite) or this user joining
   // a public room from a different device/tab both write a
@@ -1560,6 +1563,12 @@ export function MeetingHub({
   // on phones (no room for it beside the chat panel) — toggled from a
   // hamburger button in the chat panel's own header.
   const [showRoomListMobile, setShowRoomListMobile] = useState(false);
+  // A deep link always lands on the conversation itself, not the phone's
+  // room list.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- follows a deep-link open (openTarget above), once per link
+    if (openSignal) setShowRoomListMobile(false);
+  }, [openSignal]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
   // Reply/translate/forward/pin/recall collapse behind a single "⋯" so the
@@ -4167,6 +4176,7 @@ export function MeetingHub({
             onOpenRoomList={() => setShowRoomListMobile(true)}
             initialPeerId={initialDmPeerId}
             autoStartCall={initialAutoCall}
+            openNonce={dmOpen?.n}
             label={dmTabLabel}
           />
         ) : !activeChannel ? (

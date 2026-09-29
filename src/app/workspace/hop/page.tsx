@@ -6,7 +6,16 @@ import type { Profile } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Trò chuyện & họp" };
 
-export default async function MeetingPage() {
+// ?room=<id> / ?dm=<peerId>[&call=1] — where a notification, the corner
+// popup or Danh bạ's call button wants to land.
+type OpenParams = { room?: string | string[]; dm?: string | string[]; call?: string | string[] };
+const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : null);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export default async function MeetingPage({ searchParams }: { searchParams: Promise<OpenParams> }) {
+  const sp = await searchParams;
+  const askedRoom = one(sp.room);
+  const askedDm = one(sp.dm);
   // The parent layout already redirects an unauthenticated visitor away
   // before this ever renders — requireUser() here just reuses that same
   // per-request-cached auth check (see its comment in lib/supabase/server.ts)
@@ -21,7 +30,10 @@ export default async function MeetingPage() {
   // alongside listChannels/profiles, instead of after all of them finish.
   const generalChannelIdPromise = getGeneralChannelId().catch(() => null);
   const generalSyncPromise = generalChannelIdPromise.then((id) => (id ? getRoomSync(id).catch(() => null) : null));
-  const [channels, { data: profiles }, dmTabLabel, generalChannelId, generalSync] = await Promise.all([
+  // The room a link asks for starts loading in the same batch too, so a
+  // notification opens on that room's messages with no extra wait.
+  const askedSyncPromise = askedRoom && UUID.test(askedRoom) ? getRoomSync(askedRoom).catch(() => null) : Promise.resolve(null);
+  const [channels, { data: profiles }, dmTabLabel, generalChannelId, generalSync, askedSync] = await Promise.all([
     listChannels(),
     supabase
       .from("profiles")
@@ -29,7 +41,10 @@ export default async function MeetingPage() {
     getDmTabLabel().catch(() => "Riêng"),
     generalChannelIdPromise,
     generalSyncPromise,
+    askedSyncPromise,
   ]);
+  const openRoomId = askedRoom && channels.some((c) => c.id === askedRoom) ? askedRoom : null;
+  const openDmPeerId = askedDm && UUID.test(askedDm) ? askedDm : null;
 
   const me = (profiles ?? []).find((p) => p.id === user?.id);
 
@@ -44,12 +59,15 @@ export default async function MeetingPage() {
   // to fetching everything itself, same as before this existed. Falls back
   // to channels[0] only if getGeneralChannelId itself failed/returned null.
   const generalRoomId = generalChannelId ?? channels.find((c) => c.is_general)?.id ?? channels[0]?.id ?? null;
+  const firstRoomId = openRoomId ?? generalRoomId;
   const initialRoomSync =
-    generalChannelId && generalRoomId === generalChannelId
-      ? generalSync
-      : generalRoomId
-        ? await getRoomSync(generalRoomId).catch(() => null)
-        : null;
+    openRoomId && askedSync
+      ? askedSync
+      : generalChannelId && generalRoomId === generalChannelId
+        ? generalSync
+        : generalRoomId
+          ? await getRoomSync(generalRoomId).catch(() => null)
+          : null;
 
   return (
     <MeetingHub
@@ -57,11 +75,14 @@ export default async function MeetingPage() {
       profiles={(profiles ?? []) as Profile[]}
       initialChannels={channels}
       initialDmTabLabel={dmTabLabel}
-      initialRoomId={initialRoomSync ? generalRoomId : null}
+      initialRoomId={initialRoomSync ? (openRoomId && askedSync ? firstRoomId : generalRoomId) : null}
       initialMessages={initialRoomSync?.messages}
       initialReactions={initialRoomSync?.reactions}
       initialReads={initialRoomSync?.reads}
       initialPinnedMessages={initialRoomSync?.pinnedMessages}
+      openRoomId={openRoomId}
+      openDmPeerId={openDmPeerId}
+      openAutoCall={one(sp.call) === "1"}
     />
   );
 }

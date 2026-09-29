@@ -41,24 +41,61 @@ self.addEventListener("push", (event) => {
   );
 });
 
+// How long an open page gets to say "taken" before the link is loaded
+// outright — long enough for a live tab, short enough not to feel stuck
+// when the app was asleep in the background (iPad/iPhone).
+const HANDOFF_MS = 900;
+
+// The page (NotificationClickRouter) answers on the channel once it has
+// taken the link; no answer in time = nobody there to take it.
+function handOff(client, url) {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const timer = setTimeout(() => resolve(false), HANDOFF_MS);
+    channel.port1.onmessage = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    try {
+      client.postMessage({ type: "notification-click", url }, [channel.port2]);
+    } catch {
+      clearTimeout(timer);
+      resolve(false);
+    }
+  });
+}
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url || "/workspace";
+  const target = new URL(event.notification.data?.url || "/workspace", self.location.origin);
+  const url = `${target.pathname}${target.search}${target.hash}`;
 
-  // Prefer focusing the tab that's already open and letting its own router
-  // do a client-side transition — client.navigate() did a full hard reload
-  // of the whole app on every single notification click, even when the
-  // right tab was already sitting right there.
+  // Prefer a window that's already open — first one inside the workspace
+  // (it can switch the conversation without reloading), else any window of
+  // the site — and let its router do an in-app transition. If that page
+  // doesn't take the link (still waking up, or an old tab), load the link
+  // in it outright; with no window at all, open one.
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if ("focus" in client) {
-          client.focus();
-          client.postMessage({ type: "notification-click", url });
+    (async () => {
+      const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const ours = all.filter((c) => new URL(c.url).origin === self.location.origin);
+      const client = ours.find((c) => new URL(c.url).pathname.startsWith("/workspace")) || ours[0];
+      if (!client) return self.clients.openWindow(url);
+      try {
+        await client.focus();
+      } catch {
+        // focus can be refused; the link still gets followed below
+      }
+      if (await handOff(client, url)) return;
+      if ("navigate" in client) {
+        try {
+          await client.navigate(target.href);
           return;
+        } catch {
+          // fall through to a new window
         }
       }
       return self.clients.openWindow(url);
-    }),
+    })(),
   );
 });

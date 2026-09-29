@@ -50,6 +50,7 @@ export function DirectMessagesPanel({
   onOpenRoomList,
   initialPeerId,
   autoStartCall,
+  openNonce,
   label,
 }: {
   currentUser: Pick<Profile, "id" | "display_name">;
@@ -57,6 +58,9 @@ export function DirectMessagesPanel({
   onOpenRoomList: () => void;
   initialPeerId?: string | null;
   autoStartCall?: boolean;
+  // Changes on every deep-link open, so a second tap on a notification from
+  // the same person still brings that conversation back.
+  openNonce?: number;
   label: string;
 }) {
   const { unreadCounts, recentSenderOrder, clearDmUnread, setActiveDmPeer } = useChatManager();
@@ -119,7 +123,7 @@ export function DirectMessagesPanel({
       autoCalledPeerRef.current = initialPeerId;
       setShowVideoCall(true);
     }
-  }, [initialPeerId, autoStartCall, clearDmUnread]);
+  }, [initialPeerId, autoStartCall, clearDmUnread, openNonce]);
   const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");

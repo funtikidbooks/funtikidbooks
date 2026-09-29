@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { getPushStatus, isIos, isStandalone, subscribeToPush, type PushStatus } from "@/lib/pushClient";
 
 // Registers the service worker and keeps this device's Web Push
@@ -10,27 +9,12 @@ import { getPushStatus, isIos, isStandalone, subscribeToPush, type PushStatus } 
 // subscribeToPush's `prompt` option); PushPermissionBanner below is what
 // asks, from a real click.
 export function PushSetup() {
-  const router = useRouter();
-
   useEffect(() => {
     subscribeToPush({ prompt: false });
   }, []);
 
-  // sw.js focuses the existing tab on a notification click instead of doing
-  // a hard client.navigate() (which reloaded the whole app every time) —
-  // this is the other half: it posts the target URL here so we can hand it
-  // to Next's own router for a normal client-side transition instead.
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    function onMessage(event: MessageEvent) {
-      if (event.data?.type === "notification-click" && typeof event.data.url === "string") {
-        router.push(event.data.url);
-      }
-    }
-    navigator.serviceWorker.addEventListener("message", onMessage);
-    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
-  }, [router]);
-
+  // Notification clicks are followed by NotificationClickRouter in the root
+  // layout, so they work from every page, not only the workspace.
   return null;
 }
 
