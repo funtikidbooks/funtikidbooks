@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { listUpworkBatches, listUpworkLeads, updateUpworkLeadDraft, updateUpworkLeadStatus } from "@/lib/actions/upwork";
+import { listUpworkBatches, listUpworkLeadsForBatches, updateUpworkLeadDraft, updateUpworkLeadStatus } from "@/lib/actions/upwork";
 import { UPWORK_LIVE_CHANNEL, UPWORK_LIVE_EVENT } from "@/lib/upworkLive";
 import type { UpworkBatch, UpworkLead, UpworkLeadStatus, UpworkProposalTemplate } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { ProposalTemplates } from "./ProposalTemplates";
 import { UpworkSopView } from "./UpworkSopView";
+import { UpworkStats } from "./UpworkStats";
 import type { UpworkSop } from "@/lib/upworkSop";
 
 const STATUS_LABEL: Record<UpworkLeadStatus, string> = {
@@ -31,7 +32,7 @@ function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
 }
 
-function LeadCard({ lead, onChanged }: { lead: UpworkLead; onChanged: (next: UpworkLead) => void }) {
+function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: string; onChanged: (next: UpworkLead) => void }) {
   const [draft, setDraft] = useState(lead.proposal_draft);
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -77,6 +78,7 @@ function LeadCard({ lead, onChanged }: { lead: UpworkLead; onChanged: (next: Upw
             {lead.job_title}
           </a>
           <div className="text-xs mt-0.5 flex flex-wrap gap-x-3" style={{ color: "var(--color-neutral-500)" }}>
+            {foundAt && <span>🕑 Tìm lúc {foundAt}</span>}
             {lead.budget_text && <span>💰 {lead.budget_text}</span>}
             {lead.client_info && <span>{lead.client_info}</span>}
           </div>
@@ -255,26 +257,52 @@ function mergeLeads(base: UpworkLead[], incoming: UpworkLead[]) {
   return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
 }
 
-function BatchSection({
-  batch,
+// The hourly checks, a day at a time (Vietnam calendar day).
+const VN_OFFSET_MS = 7 * 3600e3;
+const vnDay = (iso: string) => new Date(new Date(iso).getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
+const vnTime = (iso: string) => new Date(new Date(iso).getTime() + VN_OFFSET_MS).toISOString().slice(11, 16);
+const WEEKDAYS = ["Chủ nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+function dayLabel(key: string, todayKey: string) {
+  const d = new Date(`${key}T00:00:00Z`);
+  const date = `${WEEKDAYS[d.getUTCDay()]}, ${key.slice(8, 10)}/${key.slice(5, 7)}`;
+  const diff = Math.round((Date.parse(`${todayKey}T00:00:00Z`) - d.getTime()) / 86400e3);
+  return diff === 0 ? `Hôm nay · ${date}` : diff === 1 ? `Hôm qua · ${date}` : date;
+}
+
+function DaySection({
+  dayKey,
+  todayKey,
+  batches,
   live,
   startOpen,
   tick,
 }: {
-  batch: UpworkBatch;
-  live: UpworkLead[] | undefined;
+  dayKey: string;
+  todayKey: string;
+  batches: UpworkBatch[];
+  live: UpworkLead[];
   startOpen: boolean;
   tick: number;
 }) {
   const [open, setOpen] = useState(false);
   const [leads, setLeads] = useState<UpworkLead[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showLog, setShowLog] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const ids = batches.map((x) => x.id);
+  const timeOf = new Map(batches.map((x) => [x.id, vnTime(x.ran_at)]));
 
   async function load() {
     setLoading(true);
-    const rows = await listUpworkLeads(batch.id);
-    setLeads((prev) => mergeLeads(rows, prev ?? []));
-    setLoading(false);
+    try {
+      const rows = await listUpworkLeadsForBatches(ids);
+      setLeads((prev) => mergeLeads(rows, prev ?? []));
+      setFailed(false);
+    } catch {
+      setFailed(true);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function toggle() {
@@ -286,18 +314,18 @@ function BatchSection({
     if (leads === null) await load();
   }
 
-  // The newest batch with jobs opens by itself, including one that just
-  // arrived while the page was open.
+  // The newest day with jobs opens by itself, including one whose first
+  // job arrived while the page was open.
   useEffect(() => {
     if (!startOpen) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- opening the newest batch once it appears
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- opening the newest day once it has jobs
     setOpen(true);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startOpen]);
 
-  // A live ping for this batch: refetch if its leads are already on screen
-  // (or it's open) so another device's Duyệt / edit shows up here.
+  // A live ping for one of this day's checks: refetch if its leads are on
+  // screen, so another device's Duyệt / edit shows up here.
   useEffect(() => {
     if (tick === 0 || (!open && leads === null)) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- refetch triggered by an external realtime ping
@@ -308,21 +336,35 @@ function BatchSection({
   // Leads written or changed elsewhere (the hourly run adding them, the PM
   // pressing Duyệt on another device) show up here without a reload.
   useEffect(() => {
-    if (!live || live.length === 0) return;
+    if (live.length === 0) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- merging a realtime push into local state
     setLeads((prev) => mergeLeads(prev ?? [], live));
   }, [live]);
 
+  const jobsFound = batches.reduce((n, x) => n + (x.jobs_found ?? 0), 0);
+  const drafted = Math.max(
+    batches.reduce((n, x) => n + (x.leads_drafted ?? 0), 0),
+    leads?.length ?? 0,
+  );
   const pendingCount = leads?.filter((l) => l.status === "pending").length ?? null;
+  const notes = batches.filter((x) => x.note?.trim());
+  // Newest first inside the day.
+  const shown = leads ? [...leads].reverse() : [];
 
   return (
-    <div className="card elev-sm overflow-hidden">
+    <div className="card elev-sm overflow-hidden" style={{ opacity: drafted === 0 ? 0.8 : 1 }}>
       <button type="button" onClick={toggle} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left">
-        <div>
-          <div className="text-sm font-bold">Đợt tìm khách — {fmtDateTime(batch.ran_at)}</div>
-          <div className="text-xs mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
-            {batch.jobs_found} job tìm được · {batch.leads_drafted} proposal đã soạn
-            {pendingCount !== null && pendingCount > 0 && <> · {pendingCount} chờ duyệt</>}
+        <div className="min-w-0">
+          <div className="text-sm font-bold">{dayLabel(dayKey, todayKey)}</div>
+          <div className="text-xs mt-0.5 flex flex-wrap gap-x-2" style={{ color: "var(--color-neutral-500)" }}>
+            <span>{batches.length} lượt kiểm tra</span>
+            <span>· {jobsFound} job mới</span>
+            <span style={{ color: drafted > 0 ? "var(--color-text)" : undefined, fontWeight: drafted > 0 ? 600 : undefined }}>
+              · {drafted} proposal
+            </span>
+            {pendingCount !== null && pendingCount > 0 && (
+              <span style={{ color: "var(--status-yellow)", fontWeight: 600 }}>· {pendingCount} chờ duyệt</span>
+            )}
           </div>
         </div>
         <span aria-hidden style={{ color: "var(--color-neutral-400)" }}>
@@ -332,30 +374,56 @@ function BatchSection({
 
       {open && (
         <div className="flex flex-col gap-3 px-4 pb-4" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
-          {batch.note && (
-            <p className="text-xs pt-3" style={{ color: "var(--color-neutral-500)" }}>
-              {batch.note}
-            </p>
-          )}
-          {loading && (
+          {loading && leads === null && (
             <p className="text-sm pt-3" style={{ color: "var(--color-neutral-500)" }}>
               Đang tải...
             </p>
           )}
-          {leads && leads.length === 0 && (
-            <p className="text-sm pt-3" style={{ color: "var(--color-neutral-500)" }}>
-              Đợt này không tìm được job nào khớp SOP.
+          {failed && !loading && leads === null && (
+            <p className="text-sm pt-3" style={{ color: "var(--status-red)" }}>
+              Không tải được job của ngày này.{" "}
+              <button type="button" className="underline font-semibold" onClick={() => void load()}>
+                Thử lại
+              </button>
             </p>
           )}
-          {leads && leads.length > 0 && (
+          {leads && leads.length === 0 && (
+            <p className="text-sm pt-3" style={{ color: "var(--color-neutral-500)" }}>
+              Hôm đó không có job nào khớp SOP.
+            </p>
+          )}
+          {shown.length > 0 && (
             <div className="flex flex-col gap-3 pt-3">
-              {leads.map((lead) => (
+              {shown.map((lead) => (
                 <LeadCard
                   key={lead.id}
                   lead={lead}
+                  foundAt={timeOf.get(lead.batch_id)}
                   onChanged={(next) => setLeads((prev) => prev?.map((l) => (l.id === next.id ? next : l)) ?? prev)}
                 />
               ))}
+            </div>
+          )}
+          {notes.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <button
+                type="button"
+                className="self-start text-xs font-semibold underline"
+                style={{ color: "var(--color-accent-700)" }}
+                onClick={() => setShowLog((v) => !v)}
+              >
+                {showLog ? "Ẩn" : "Xem"} ghi chú {notes.length} lượt kiểm tra
+              </button>
+              {showLog && (
+                <ul className="flex flex-col gap-1 text-xs" style={{ color: "var(--color-neutral-600)" }}>
+                  {[...notes].reverse().map((x) => (
+                    <li key={x.id} className="flex gap-2">
+                      <span className="tabular-nums flex-none font-semibold">{vnTime(x.ran_at)}</span>
+                      <span className="min-w-0">{x.note}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>
@@ -364,7 +432,7 @@ function BatchSection({
   );
 }
 
-type Tab = "batches" | "templates" | "sop";
+type Tab = "batches" | "stats" | "templates" | "sop";
 
 export function UpworkReportsAdmin({
   initialBatches,
@@ -381,7 +449,6 @@ export function UpworkReportsAdmin({
   const [templates, setTemplates] = useState(initialTemplates);
   const [batches, setBatches] = useState(initialBatches);
   const [liveLeads, setLiveLeads] = useState<Map<string, UpworkLead[]>>(() => new Map());
-  const [showEmpty, setShowEmpty] = useState(false);
   const [ticks, setTicks] = useState<Map<string, number>>(() => new Map());
 
   // Realtime: a new check from the hourly run, a lead it drafted, or a
@@ -420,9 +487,19 @@ export function UpworkReportsAdmin({
     };
   }, []);
 
-  const withJobs = batches.filter((b) => b.leads_drafted > 0 || (liveLeads.get(b.id)?.length ?? 0) > 0);
-  const emptyCount = batches.length - withJobs.length;
-  const newestWithJobs = withJobs[0]?.id ?? null;
+  // Newest day first; each day's hourly checks together.
+  const todayKey = vnDay(new Date().toISOString());
+  const days: { key: string; batches: UpworkBatch[] }[] = [];
+  for (const batch of batches) {
+    const key = vnDay(batch.ran_at);
+    const last = days[days.length - 1];
+    if (last?.key === key) last.batches.push(batch);
+    else days.push({ key, batches: [batch] });
+  }
+  days.sort((x, y) => y.key.localeCompare(x.key));
+  const hasJobs = (d: { batches: UpworkBatch[] }) => d.batches.some((x) => x.leads_drafted > 0 || (liveLeads.get(x.id)?.length ?? 0) > 0);
+  const newestWithJobs = days.find(hasJobs)?.key ?? null;
+  const totalDrafted = batches.reduce((n, x) => n + (x.leads_drafted ?? 0), 0);
   const lastCheck = batches[0]?.ran_at ?? null;
 
   function switchTab(next: Tab) {
@@ -431,12 +508,14 @@ export function UpworkReportsAdmin({
     const url = new URL(window.location.href);
     if (next === "templates") url.searchParams.set("tab", "mau");
     else if (next === "sop") url.searchParams.set("tab", "sop");
+    else if (next === "stats") url.searchParams.set("tab", "hieu-qua");
     else url.searchParams.delete("tab");
     window.history.replaceState(null, "", url);
   }
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
-    { id: "batches", label: "Đợt tìm khách", count: withJobs.length },
+    { id: "batches", label: "Job theo ngày", count: totalDrafted },
+    { id: "stats", label: "📊 Hiệu quả" },
     { id: "templates", label: "Mẫu proposal", count: templates.length },
     { id: "sop", label: "SOP" },
   ];
@@ -451,7 +530,7 @@ export function UpworkReportsAdmin({
             gửi lên Upwork; bấm &quot;Duyệt&quot; rồi tự tay gửi.
           </p>
         </div>
-        <div role="tablist" className="flex gap-5 -mb-px">
+        <div role="tablist" className="flex gap-5 -mb-px overflow-x-auto [scrollbar-width:none]">
           {tabs.map((t) => {
             const active = tab === t.id;
             return (
@@ -461,7 +540,7 @@ export function UpworkReportsAdmin({
                 role="tab"
                 aria-selected={active}
                 onClick={() => switchTab(t.id)}
-                className="pb-2.5 text-sm font-semibold flex items-center gap-1.5"
+                className="pb-2.5 text-sm font-semibold flex items-center gap-1.5 whitespace-nowrap flex-none"
                 style={{
                   color: active ? "var(--color-accent-700)" : "var(--color-neutral-500)",
                   borderBottom: `2px solid ${active ? "var(--color-accent-500)" : "transparent"}`,
@@ -485,35 +564,29 @@ export function UpworkReportsAdmin({
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-3">
         {tab === "sop" ? (
           <UpworkSopView initialSop={sop.sop} saved={sop.saved} />
+        ) : tab === "stats" ? (
+          <UpworkStats batches={batches} />
         ) : tab === "templates" ? (
           <ProposalTemplates templates={templates} onTemplatesChange={setTemplates} />
         ) : (
           <>
-            {/* Every hourly check lands here; the ones with no new job fold
-                into one line so the list only shows real work. */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style={{ color: "var(--color-neutral-500)" }}>
-              <span>{lastCheck ? <>Kiểm tra Gmail mỗi giờ · lần gần nhất {fmtDateTime(lastCheck)}</> : "Chưa có lượt kiểm tra nào."}</span>
-              {emptyCount > 0 && (
-                <button
-                  type="button"
-                  className="underline font-semibold"
-                  style={{ color: "var(--color-accent-700)" }}
-                  onClick={() => setShowEmpty((v) => !v)}
-                >
-                  {showEmpty ? "Ẩn" : "Xem"} {emptyCount} lượt không có job mới
-                </button>
-              )}
-            </div>
-            {withJobs.length === 0 && !showEmpty && (
+            {/* Every hourly check lands in its day; a day opens to that
+                day's jobs, newest first. */}
+            <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
+              {lastCheck ? <>Kiểm tra Gmail mỗi giờ · lần gần nhất {fmtDateTime(lastCheck)}</> : "Chưa có lượt kiểm tra nào."}
+            </p>
+            {days.length > 0 && !newestWithJobs && (
               <p style={{ color: "var(--color-neutral-500)" }}>Chưa có job nào hợp SOP. Có job mới là hiện ở đây ngay.</p>
             )}
-            {(showEmpty ? batches : withJobs).map((batch) => (
-              <BatchSection
-                key={batch.id}
-                batch={batch}
-                live={liveLeads.get(batch.id)}
-                startOpen={batch.id === newestWithJobs}
-                tick={ticks.get(batch.id) ?? 0}
+            {days.map((d) => (
+              <DaySection
+                key={d.key}
+                dayKey={d.key}
+                todayKey={todayKey}
+                batches={d.batches}
+                live={d.batches.flatMap((x) => liveLeads.get(x.id) ?? [])}
+                startOpen={d.key === newestWithJobs}
+                tick={d.batches.reduce((n, x) => n + (ticks.get(x.id) ?? 0), 0)}
               />
             ))}
           </>

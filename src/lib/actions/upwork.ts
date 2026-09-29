@@ -43,6 +43,32 @@ export async function listUpworkLeads(batchId: string): Promise<UpworkLead[]> {
   return (data ?? []) as UpworkLead[];
 }
 
+// Every lead from a set of hourly checks — one day's worth, for the page's
+// day-by-day view.
+export async function listUpworkLeadsForBatches(batchIds: string[]): Promise<UpworkLead[]> {
+  const { supabase } = await requireDirectorOrPM();
+  const ids = batchIds.slice(0, 200);
+  if (ids.length === 0) return [];
+  const { data } = await supabase.from("upwork_leads").select("*").in("batch_id", ids).order("created_at", { ascending: true });
+  return (data ?? []) as UpworkLead[];
+}
+
+// Just what the Hiệu quả tab counts, for every lead so far.
+export async function listUpworkLeadStats(): Promise<
+  { batch_id: string; status: string; fit_score: number | null; template_name: string | null; created_at: string }[]
+> {
+  const { supabase } = await requireDirectorOrPM();
+  const full = await supabase
+    .from("upwork_leads")
+    .select("batch_id, status, fit_score, template_name, created_at")
+    .order("created_at", { ascending: false })
+    .limit(5000);
+  if (!full.error) return (full.data ?? []) as Awaited<ReturnType<typeof listUpworkLeadStats>>;
+  // fit_score / template_name not added yet (upwork_night_email.sql) — count the rest.
+  const plain = await supabase.from("upwork_leads").select("batch_id, status, created_at").order("created_at", { ascending: false }).limit(5000);
+  return (plain.data ?? []).map((l) => ({ ...(l as { batch_id: string; status: string; created_at: string }), fit_score: null, template_name: null }));
+}
+
 // Tell every open Upwork page to refetch this batch (see lib/upworkLive.ts).
 // Best-effort: a failed ping only means someone reloads by hand.
 async function pingUpworkLive(batchId: string | null | undefined) {

@@ -421,6 +421,44 @@ test("máy chấm công vân tay: vào, về, chạm lại, giờ web bị thay,
   assert.equal(asciiFold("Đỗ Thuỳ Dung"), "Do Thuy Dung");
 });
 
+test("upwork hiệu quả: chạy đều mỗi giờ, phễu, tỉ lệ sếp giữ lại, điểm chấm", async () => {
+  const { upworkStats } = await import("../src/lib/upworkStats.ts");
+  const now = Date.parse("2026-09-30T02:30:00Z"); // 09:30 VN
+  // 24 hourly checks over the last day, 3 of them found jobs
+  const batches = Array.from({ length: 24 }, (_, i) => ({
+    id: `b${i}`,
+    ran_at: new Date(now - (i + 0.5) * 3600e3).toISOString(),
+    jobs_found: i % 8 === 0 ? 5 : 0,
+    leads_drafted: 0,
+  }));
+  const lead = (id, status, fit, tpl) => ({ batch_id: id, status, fit_score: fit, template_name: tpl, created_at: batches[0].ran_at });
+  const leads = [
+    lead("b0", "hired", 5, "Sách tranh"),
+    lead("b0", "replied", 5, "Sách tranh"),
+    lead("b8", "sent", 4, "Tô màu"),
+    lead("b8", "rejected", 3, null),
+    lead("b16", "rejected", 3, null),
+    lead("b16", "pending", 4, null),
+  ];
+  const s = upworkStats(batches, leads, 7, now);
+  assert.equal(s.checks, 24);
+  assert.equal(s.found, 15);
+  assert.equal(s.drafted, 6);
+  assert.equal(s.fitRate, 40); // 6 of 15
+  assert.equal(s.kept, 3);
+  assert.equal(s.rejected, 2);
+  assert.equal(s.keptRate, 60); // 3 kept of 5 decided
+  assert.equal(s.replyRate, 67); // 2 of 3 sent
+  assert.deepEqual(s.funnel.map((f) => f.value), [15, 6, 3, 3, 2, 1]);
+  // ★5: 2 of 2 kept; ★3: 0 of 2 — the scoring lines up with sếp's choices
+  assert.equal(s.byScore.find((r) => r.score === 5).keptRate, 100);
+  assert.equal(s.byScore.find((r) => r.score === 3).keptRate, 0);
+  assert.equal(s.byScore.find((r) => r.score === 4).reviewed, 1); // the pending one isn't counted
+  assert.deepEqual(s.templates[0], { name: "Sách tranh", sent: 2, replied: 2 });
+  assert.equal(s.byDay.length, 2); // the checks began yesterday — no empty days before that
+  assert.equal(s.byDay.reduce((n, d) => n + d.checks, 0), 24);
+});
+
 test("báo giá: “anh/chị” tự đổi thành tên khách (chỉ báo giá tiếng Việt)", async () => {
   const { personalize } = await import("../src/lib/quote.ts");
   const intro = "Cảm ơn anh/chị đã tin tưởng Funti Kidbooks. Anh/chị chọn phương án phù hợp nhất nhé, anh / chị nhé.";

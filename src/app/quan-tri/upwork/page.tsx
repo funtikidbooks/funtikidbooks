@@ -11,7 +11,7 @@ export default async function UpworkReportsPage({ searchParams }: { searchParams
       initialBatches={batches}
       initialTemplates={templates}
       sop={sop}
-      initialTab={tab === "mau" ? "templates" : tab === "sop" ? "sop" : "batches"}
+      initialTab={tab === "mau" ? "templates" : tab === "sop" ? "sop" : tab === "hieu-qua" ? "stats" : "batches"}
     />
   );
 }
