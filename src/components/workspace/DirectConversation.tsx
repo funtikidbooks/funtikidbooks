@@ -21,7 +21,7 @@ import {
   replaceIfProvisional,
   type SyncCursor,
 } from "@/lib/chatSyncCursor";
-import { thumbnailUrl } from "@/lib/imageTransform";
+import { resizedUrl, thumbnailUrl } from "@/lib/imageTransform";
 import { addToOutbox, insertWithRetry, removeFromOutbox } from "@/lib/chatOutbox";
 import { onConnectivityRestored } from "@/lib/connectivity";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
@@ -1387,19 +1387,21 @@ export function DirectConversation({
               )}
               {m.attachment_url &&
                 (isImage(m.attachment_mime) ? (
-                  <div className={`flex items-end gap-1 mt-1 ${mine ? "flex-row-reverse" : ""} ${reactionsBadge ? "mb-2" : ""}`}>
-                    <div className="relative">
+                  <div className={`flex items-end gap-1 mt-1 max-w-full ${mine ? "flex-row-reverse" : ""} ${reactionsBadge ? "mb-2" : ""}`}>
+                    <div className="relative min-w-0 max-w-full">
                       <button
                         type="button"
                         onClick={() => setLightbox({ url: m.attachment_url!, filename: m.attachment_filename })}
-                        className="block"
+                        className="block max-w-full"
                       >
+                        {/* The whole picture, scaled — never cropped, never wider
+                            than the message column (a phone's is under 340px). */}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={thumbnailUrl(m.attachment_url, 480)}
+                          src={resizedUrl(m.attachment_url, 680)}
                           alt={m.attachment_filename ?? ""}
-                          className="rounded-[10px] object-cover"
-                          style={{ maxWidth: 340, maxHeight: 340 }}
+                          className="block rounded-[10px]"
+                          style={{ maxWidth: "min(340px, 100%)", maxHeight: 400 }}
                           onLoad={() => stickToBottomIfNear(false)}
                         />
                       </button>

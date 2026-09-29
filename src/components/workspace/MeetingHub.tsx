@@ -29,7 +29,7 @@ import { useCallPresence } from "@/lib/useCallPresence";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 import { usePageVisible } from "@/lib/usePageVisible";
 import { vnToday } from "@/lib/constants/attendance";
-import { thumbnailUrl } from "@/lib/imageTransform";
+import { resizedUrl, thumbnailUrl } from "@/lib/imageTransform";
 import { notifyNewMessage } from "@/lib/chatNotify";
 import { playChatDing } from "@/lib/chatSound";
 import { firstSighting, listenChatTopic, roomTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
@@ -3675,7 +3675,7 @@ export function MeetingHub({
                           burst ? (
                             <div
                               className={`relative mt-1 flex flex-wrap gap-1 ${reactionsBadge ? "mb-2" : ""}`}
-                              style={{ maxWidth: 340 }}
+                              style={{ maxWidth: "min(340px, 100%)" }}
                             >
                               {burst.ids.map((id) => {
                                 const bm = messageById.get(id);
@@ -3701,18 +3701,20 @@ export function MeetingHub({
                               {reactionsBadge}
                             </div>
                           ) : (
-                            <div className={`relative inline-block mt-1 ${reactionsBadge ? "mb-2" : ""}`}>
+                            <div className={`relative inline-block max-w-full mt-1 ${reactionsBadge ? "mb-2" : ""}`}>
                               <button
                                 type="button"
                                 onClick={() => setLightbox({ url: m.attachment_url!, filename: m.attachment_filename })}
-                                className="block"
+                                className="block max-w-full"
                               >
+                                {/* The whole picture, scaled — never cropped, never wider
+                                    than the message column (a phone's is under 340px). */}
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
-                                  src={thumbnailUrl(m.attachment_url, 480)}
+                                  src={resizedUrl(m.attachment_url, 680)}
                                   alt={m.attachment_filename ?? ""}
-                                  className="rounded-[10px] object-cover"
-                                  style={{ maxWidth: 340, maxHeight: 340 }}
+                                  className="block rounded-[10px]"
+                                  style={{ maxWidth: "min(340px, 100%)", maxHeight: 400 }}
                                   onLoad={() => stickToBottomIfNear(false)}
                                 />
                               </button>
