@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { thumbnailUrl } from "@/lib/imageTransform";
 
 // Matches fk-lightbox-backdrop-out/fk-lightbox-image-out's own duration in
 // globals.css — kept as one constant instead of two, so they can't drift
@@ -46,6 +47,7 @@ export function ImageLightbox({
   // Paged away from the photo that was tapped — its zoom-in doesn't replay.
   const [moved, setMoved] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
   const swipedRef = useRef(false);
   const current = list[Math.min(index, list.length - 1)];
   const many = list.length > 1;
@@ -80,6 +82,15 @@ export function ImageLightbox({
       return;
     }
     setHeading(step);
+  }
+
+  // A thumbnail tapped: straight there, no slide across everything between.
+  function jump(i: number) {
+    if (i === index || i < 0 || i >= list.length) return;
+    setHeading(null);
+    setDx(0);
+    setIndex(i);
+    setMoved(true);
   }
 
   // The strip has slid to a neighbour: that photo becomes the middle one.
@@ -139,7 +150,8 @@ export function ImageLightbox({
     let dir: "x" | "y" | null = null;
     const width = () => el.clientWidth || window.innerWidth;
     const onStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) {
+      // The thumbnail strip scrolls on its own; a finger there isn't a swipe.
+      if (e.touches.length !== 1 || (e.target as Element | null)?.closest?.("[data-strip]")) {
         dir = "y"; // a pinch: leave it alone
         return;
       }
@@ -186,13 +198,22 @@ export function ImageLightbox({
     };
   }, [many]);
 
-  // Past either end the strip only gives a little, like a rubber band.
+  // Past either end the photos only give a little, like a rubber band.
   const atEdge = (dx > 0 && index === 0) || (dx < 0 && index === list.length - 1);
   const drag = atEdge ? dx * 0.3 : dx;
   const offset = heading === null ? drag : 0;
   const shift = heading === 1 ? -100 : heading === -1 ? 100 : 0;
 
+  // Keep the photo being looked at in the middle of the thumbnail strip.
+  useEffect(() => {
+    const strip = stripRef.current;
+    const thumb = strip?.querySelector<HTMLElement>(`[data-i="${index}"]`);
+    if (!strip || !thumb) return;
+    strip.scrollTo({ left: thumb.offsetLeft - (strip.clientWidth - thumb.clientWidth) / 2, behavior: moved ? "smooth" : "auto" });
+  }, [index, moved]);
+
   const stop = (e: React.MouseEvent) => e.stopPropagation();
+  const chip = { background: "rgba(255,255,255,.15)", color: "#fff" } as const;
   const navButton = (step: -1 | 1) => {
     const disabled = step === -1 ? index === 0 : index === list.length - 1;
     return (
@@ -205,17 +226,7 @@ export function ImageLightbox({
         disabled={disabled}
         aria-label={step === -1 ? "Ảnh trước" : "Ảnh tiếp theo"}
         className="absolute hidden sm:flex items-center justify-center rounded-full disabled:opacity-25"
-        style={{
-          top: "50%",
-          [step === -1 ? "left" : "right"]: 16,
-          width: 48,
-          height: 48,
-          marginTop: -24,
-          background: "rgba(255,255,255,.15)",
-          color: "#fff",
-          fontSize: 26,
-          zIndex: 2,
-        }}
+        style={{ ...chip, top: "50%", [step === -1 ? "left" : "right"]: 16, width: 48, height: 48, marginTop: -24, fontSize: 26, zIndex: 2 }}
       >
         {step === -1 ? "‹" : "›"}
       </button>
@@ -226,7 +237,7 @@ export function ImageLightbox({
     <div
       ref={rootRef}
       className={`fixed inset-0 z-50 overflow-hidden ${closing ? "fk-lightbox-backdrop-out" : "fk-lightbox-backdrop-in"}`}
-      style={{ background: "rgba(10,9,8,.9)" }}
+      style={{ background: "rgba(10,9,8,.92)" }}
       // Closes on a click anywhere in the lightbox now, image included —
       // sếp Phúc specifically didn't want "only clicking the empty area
       // around the photo" anymore. A swipe isn't a click, though.
@@ -238,70 +249,108 @@ export function ImageLightbox({
         handleClose();
       }}
     >
-      {/* Three slides — previous, this, next — so a neighbour is already
-          loaded and in place while the finger drags. Keyed by position in
-          the list, the next photo's <img> becomes the middle one as is. */}
-      <div
-        className="absolute inset-0 flex"
-        style={{
-          transform: `translateX(calc(${-100 + shift}% + ${offset}px))`,
-          transition: heading === null ? "none" : `transform ${SLIDE_MS}ms cubic-bezier(0.2, 0.8, 0.3, 1)`,
-        }}
-        onTransitionEnd={settle}
-      >
-        {[index - 1, index, index + 1].map((i) => {
-          const it = list[i];
-          return (
-            <div key={it ? `i${i}` : `empty${i - index}`} className="flex-none w-full h-full flex items-center justify-center p-4 sm:px-20">
-              {it && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={it.url}
-                  alt={it.filename ?? ""}
-                  draggable={false}
-                  className={`rounded-[8px] select-none ${
-                    i !== index ? "" : closing ? "fk-lightbox-image-out" : i === opened && !moved ? "fk-lightbox-image-in" : ""
-                  }`}
-                  style={{ maxWidth: "100%", maxHeight: "85vh", objectFit: "contain" }}
-                />
-              )}
-            </div>
-          );
-        })}
+      {/* Top bar: open the original · 3 / 12 · close */}
+      <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-3 px-3 sm:px-4" style={{ height: 64, zIndex: 3 }}>
+        <a
+          href={current.url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={stop}
+          className="flex items-center justify-center rounded-full h-10 px-3 text-[13px] font-semibold"
+          style={chip}
+          aria-label="Mở ảnh gốc trong tab mới"
+        >
+          ↗<span className="hidden sm:inline">&nbsp;Mở trong tab mới</span>
+        </a>
+        {many && (
+          <span className="rounded-full px-3 py-1 text-[13px] font-semibold tabular-nums" style={chip}>
+            {index + 1} / {list.length}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            stop(e);
+            handleClose();
+          }}
+          aria-label="Đóng"
+          className="flex items-center justify-center rounded-full flex-none"
+          style={{ ...chip, width: 40, height: 40, fontSize: 20 }}
+        >
+          ✕
+        </button>
       </div>
 
-      <button
-        type="button"
-        onClick={(e) => {
-          stop(e);
-          handleClose();
-        }}
-        aria-label="Đóng"
-        className="absolute flex items-center justify-center rounded-full"
-        style={{ top: 16, right: 16, width: 40, height: 40, background: "rgba(255,255,255,.15)", color: "#fff", fontSize: 20, zIndex: 2 }}
-      >
-        ✕
-      </button>
-      {many && (
-        <span
-          className="absolute rounded-full px-3 py-1 text-[13px] font-semibold tabular-nums"
-          style={{ top: 20, left: "50%", transform: "translateX(-50%)", background: "rgba(255,255,255,.15)", color: "#fff", zIndex: 2 }}
+      {/* The photos, between the top bar and the thumbnail strip. Three
+          slides — previous, this, next — so a neighbour is already loaded
+          and in place while the finger drags. Keyed by position in the
+          list, the next photo's <img> becomes the middle one as is. */}
+      <div className={`absolute inset-x-0 top-16 overflow-hidden ${many ? "bottom-[76px] sm:bottom-[96px]" : "bottom-4"}`}>
+        <div
+          className="absolute inset-0 flex"
+          style={{
+            transform: `translateX(calc(${-100 + shift}% + ${offset}px))`,
+            transition: heading === null ? "none" : `transform ${SLIDE_MS}ms cubic-bezier(0.2, 0.8, 0.3, 1)`,
+          }}
+          onTransitionEnd={settle}
         >
-          {index + 1} / {list.length}
-        </span>
+          {[index - 1, index, index + 1].map((i) => {
+            const it = list[i];
+            return (
+              <div key={it ? `i${i}` : `empty${i - index}`} className="flex-none w-full h-full flex items-center justify-center px-3 py-2 sm:px-20">
+                {it && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={it.url}
+                    alt={it.filename ?? ""}
+                    draggable={false}
+                    className={`rounded-[8px] select-none max-w-full max-h-full object-contain ${
+                      i !== index ? "" : closing ? "fk-lightbox-image-out" : i === opened && !moved ? "fk-lightbox-image-in" : ""
+                    }`}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {many && navButton(-1)}
+        {many && navButton(1)}
+      </div>
+
+      {/* Thumbnail strip: every photo in the room, the current one lit —
+          tap one to jump straight to it. */}
+      {many && (
+        <div
+          ref={stripRef}
+          data-strip
+          onClick={stop}
+          className="absolute inset-x-0 bottom-0 flex gap-1.5 sm:gap-2 overflow-x-auto px-3 sm:px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          style={{ paddingTop: 10, paddingBottom: "max(12px, env(safe-area-inset-bottom))", zIndex: 3 }}
+        >
+          <span className="flex-1" aria-hidden />
+          {list.map((it, i) => (
+            <button
+              key={`t${i}`}
+              type="button"
+              data-i={i}
+              onClick={() => jump(i)}
+              aria-label={`Ảnh ${i + 1}`}
+              aria-current={i === index}
+              className="flex-none w-12 h-12 sm:w-16 sm:h-16 rounded-[8px] overflow-hidden transition-opacity"
+              style={{
+                opacity: i === index ? 1 : 0.5,
+                outline: i === index ? "2px solid #fff" : "none",
+                outlineOffset: 2,
+                background: "rgba(255,255,255,.1)",
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={thumbnailUrl(it.url, 128)} alt="" loading="lazy" draggable={false} className="w-full h-full object-cover" />
+            </button>
+          ))}
+          <span className="flex-1" aria-hidden />
+        </div>
       )}
-      {many && navButton(-1)}
-      {many && navButton(1)}
-      <a
-        href={current.url}
-        target="_blank"
-        rel="noreferrer"
-        onClick={stop}
-        className="absolute rounded-full px-3 py-1.5 text-[13px] font-semibold"
-        style={{ bottom: 16, right: 16, background: "rgba(255,255,255,.15)", color: "#fff", zIndex: 2 }}
-      >
-        Mở trong tab mới ↗
-      </a>
     </div>,
     document.body,
   );
