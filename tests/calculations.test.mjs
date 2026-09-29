@@ -442,6 +442,10 @@ test("upwork hiệu quả: chạy đều mỗi giờ, phễu, tỉ lệ sếp gi
   ];
   const s = upworkStats(batches, leads, 7, now);
   assert.equal(s.checks, 24);
+  // 10:00 yesterday → 09:xx now, hourly: every working hour (7h–24h) had its check; 00–06 don't count
+  assert.equal(s.expectedHours, 17);
+  assert.equal(s.coveredHours, 17);
+  assert.equal(s.uptime, 100);
   assert.equal(s.found, 15);
   assert.equal(s.drafted, 6);
   assert.equal(s.fitRate, 40); // 6 of 15

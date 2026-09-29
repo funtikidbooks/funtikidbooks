@@ -246,7 +246,7 @@ export function UpworkStats({ batches, initialFilters }: { batches: UpworkBatch[
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-          Mỗi giờ em đọc email báo job của Upwork, lọc theo SOP và soạn proposal; sếp/PM duyệt rồi tự gửi.
+          Mỗi 15 phút (7h–24h) em đọc email báo job của Upwork, lọc theo SOP và yêu cầu của sếp, soạn proposal; sếp/PM duyệt rồi tự gửi.
         </p>
         <div className="inline-flex rounded-[10px] p-0.5" style={{ background: "var(--color-neutral-100)" }} role="radiogroup" aria-label="Khoảng thời gian">
           {RANGES.map((r) => (
@@ -267,10 +267,10 @@ export function UpworkStats({ batches, initialFilters }: { batches: UpworkBatch[
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Tile
-          label="Chạy đều mỗi giờ"
+          label="Canh job đều"
           value={pct(s.uptime)}
           tone={s.uptime !== null && s.uptime < 90 ? "warn" : s.uptime !== null ? "good" : undefined}
-          sub={`${s.checks}/${s.expectedChecks} lượt kiểm tra`}
+          sub={`${s.coveredHours}/${s.expectedHours} giờ (7h–24h) có kiểm tra · ${s.checks} lượt`}
         />
         <Tile label="Job hợp SOP" value={pct(s.fitRate)} sub={`${s.drafted} proposal / ${s.found} job trong email`} />
         <Tile

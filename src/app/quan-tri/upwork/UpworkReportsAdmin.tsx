@@ -576,7 +576,7 @@ export function UpworkReportsAdmin({
             {/* Every hourly check lands in its day; a day opens to that
                 day's jobs, newest first. */}
             <p className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
-              {lastCheck ? <>Kiểm tra Gmail mỗi giờ · lần gần nhất {fmtDateTime(lastCheck)}</> : "Chưa có lượt kiểm tra nào."}
+              {lastCheck ? <>Kiểm tra Gmail mỗi 15 phút (7h–24h) · lần gần nhất {fmtDateTime(lastCheck)}</> : "Chưa có lượt kiểm tra nào."}
             </p>
             {days.length > 0 && !newestWithJobs && (
               <p style={{ color: "var(--color-neutral-500)" }}>Chưa có job nào hợp SOP. Có job mới là hiện ở đây ngay.</p>

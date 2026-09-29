@@ -30,10 +30,25 @@ export function upworkStats(batches: StatsBatch[], leads: StatsLead[], rangeDays
   const ls = leads.filter((l) => batchIds.has(l.batch_id));
   const count = (...statuses: string[]) => ls.filter((l) => statuses.includes(l.status)).length;
 
-  // Every hour since the range (or the first check ever) began.
+  // Did it keep watch? Of the working hours (07:00–23:59 Vietnam time) since
+  // the range — or the first check ever — began, the ones with at least one
+  // check. Night hours don't count: overnight jobs are gathered at 07:00.
   const firstEver = batches.reduce((m, b) => Math.min(m, Date.parse(b.ran_at)), Infinity);
   const start = Math.max(from, firstEver);
-  const expectedChecks = Number.isFinite(start) ? Math.max(inRange.length, Math.floor((now - start) / HOUR)) : 0;
+  const hourSlot = (ms: number) => Math.floor((ms + VN_OFFSET) / HOUR);
+  const covered = new Set(inRange.map((b) => hourSlot(Date.parse(b.ran_at))));
+  let expectedHours = 0;
+  let coveredHours = 0;
+  if (Number.isFinite(start)) {
+    const last = hourSlot(now);
+    for (let h = hourSlot(start); h <= last; h++) {
+      if (h % 24 < 7) continue;
+      // The hour under way counts only once it has had its check.
+      if (h === last && !covered.has(h)) continue;
+      expectedHours += 1;
+      if (covered.has(h)) coveredHours += 1;
+    }
+  }
 
   const found = inRange.reduce((s, b) => s + Number(b.jobs_found ?? 0), 0);
   const drafted = ls.length;
@@ -84,8 +99,9 @@ export function upworkStats(batches: StatsBatch[], leads: StatsLead[], rangeDays
 
   return {
     checks: inRange.length,
-    expectedChecks,
-    uptime: rate(inRange.length, expectedChecks),
+    expectedHours,
+    coveredHours,
+    uptime: rate(coveredHours, expectedHours),
     found,
     drafted,
     pending: count("pending"),
