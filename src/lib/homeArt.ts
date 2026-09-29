@@ -149,6 +149,34 @@ export const HOME_GALLERY: HomeArt[] = [
   }
 ];
 
+// The books standing on the opening shelf, left to right. Flat front covers
+// only — most projects' cover_image_url is a landscape presentation board or
+// a mockup photo, which can't stand in for a book. w × h are the covers' own
+// proportions, so nothing is cropped.
+export const HERO_BOOKS: HomeArt[] = [
+  {
+    projectId: "cffda9ac-eb81-495a-b72b-d28e4512918d",
+    src: "https://ueixkrrdwptymmawwred.supabase.co/storage/v1/object/public/site-content/projects/28c60503-eb88-4c1e-97e8-16afa51d5752.jpg",
+    title: "Freddie the Fox Cub's Big Adventure",
+    w: 4,
+    h: 5,
+  },
+  {
+    projectId: "e2f278ca-322c-4e13-bb66-70bb095f2472",
+    src: "https://ueixkrrdwptymmawwred.supabase.co/storage/v1/object/public/site-content/projects/967d409e-957e-49e4-9bd3-d82409b22c50.png",
+    title: "What's a Kangaburra",
+    w: 3,
+    h: 4,
+  },
+  {
+    projectId: "3795f5c1-10d2-4f13-bddd-1ad7c1ee47ca",
+    src: "https://ueixkrrdwptymmawwred.supabase.co/storage/v1/object/public/site-content/projects/7489c88b-ce6d-4755-86a8-dd79e3acf8c4.jpg",
+    title: "Hank the Highland and the Three Ballerinas",
+    w: 1,
+    h: 1,
+  },
+];
+
 // Service cards with no picture uploaded yet (by index in t.home.services).
 export const SERVICE_ART: Record<number, string> = {
   "1": "https://ueixkrrdwptymmawwred.supabase.co/storage/v1/object/public/site-content/projects/de866b13-ec52-4034-9f16-0c967bb2c3ce.png",

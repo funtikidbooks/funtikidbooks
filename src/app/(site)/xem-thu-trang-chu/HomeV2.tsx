@@ -14,7 +14,7 @@ import { useDict } from "@/components/site/LocaleProvider";
 import { useViewer } from "@/components/site/ViewerProvider";
 import type { ImageTransform } from "@/components/site/EditableImage";
 import { BOOK_DEMO_BACK_COVER, BOOK_DEMO_PAGES } from "@/lib/bookDemo";
-import { HOME_GALLERY, SERVICE_ART, type ComparePair, type HomeArt } from "@/lib/homeArt";
+import { HERO_BOOKS, HOME_GALLERY, SERVICE_ART, type ComparePair, type HomeArt } from "@/lib/homeArt";
 import { resizedUrl } from "@/lib/imageTransform";
 import type { Project, Review } from "@/lib/types";
 
@@ -25,14 +25,15 @@ import type { Project, Review } from "@/lib/types";
 
 const GALLERY_FIRST = 12;
 
-// Where each book lies on the table (percent of the pile's box).
-const BOOK_SLOTS = [
-  { left: "2%", top: "15%", w: 33, r: -11, z: 1 },
-  { left: "65%", top: "11%", w: 33, r: 10, z: 1 },
-  { left: "12%", top: "31%", w: 37, r: -5, z: 2 },
-  { left: "51%", top: "29%", w: 37, r: 6, z: 2 },
-  { left: "28%", top: "16%", w: 44, r: -1.5, z: 3 },
+// How each book stands on the shelf, left to right: its height against the
+// tallest (the middle one, in front), and a slight lean.
+const SHELF = [
+  { height: 0.88, r: -2.5, z: 1 },
+  { height: 1, r: 0, z: 2 },
+  { height: 0.76, r: 2, z: 1 },
 ];
+// Books tuck behind the middle one by this much of the tallest's height.
+const SHELF_OVERLAP = 0.12;
 
 // Each picture to whichever column is shortest so far — an even wall
 // whatever the mix of wide spreads and tall character art.
@@ -64,63 +65,77 @@ function SectionHead({ kicker, title, body, align = "center" }: { kicker: string
   );
 }
 
-function BookPile({ books, alt }: { books: Project[]; alt: string }) {
+// Real covers standing face-out on a shelf, each at its own proportions and
+// bottoms lined up on the board; Funti peeks over the last one.
+function BookShelf({ books, note }: { books: HomeArt[]; note: string }) {
+  const slots = books.slice(0, SHELF.length);
+  const widths = slots.map((b, i) => SHELF[i].height * (b.w / b.h));
+  const total = widths.reduce((a, b) => a + b, 0) - SHELF_OVERLAP * (slots.length - 1);
+  const pct = (v: number) => `${((v / total) * 100).toFixed(2)}%`;
+  const FUNTI = 0.4; // Funti's width against the book it hides behind
+
   return (
-    <div className="relative w-full max-w-[360px] sm:max-w-[440px] lg:max-w-[560px] mx-auto" style={{ aspectRatio: "1 / 0.92" }}>
-      {/* The table: a soft blot of the studio's sky blue. */}
-      <div
-        className="absolute"
-        style={{
-          inset: "10% 3% 4% 5%",
-          background: "var(--color-accent-2-100)",
-          borderRadius: "58% 42% 55% 45% / 48% 55% 45% 52%",
-        }}
-        aria-hidden
-      />
-      <Sparkle size={22} className="absolute" style={{ left: "4%", top: "6%" }} />
-      <Sparkle size={14} color="var(--color-accent-2-500)" className="absolute" style={{ right: "2%", top: "55%" }} />
-      <Sparkle size={16} className="absolute" style={{ left: "46%", bottom: "2%" }} />
-      {books.slice(0, BOOK_SLOTS.length).map((b, i) => {
-        const s = BOOK_SLOTS[i];
-        return (
-          <Link
-            key={b.id}
-            href={`/du-an?p=${b.id}`}
-            aria-label={b.title}
-            className="fk-book absolute block overflow-hidden"
-            style={{
-              left: s.left,
-              top: s.top,
-              width: `${s.w}%`,
-              aspectRatio: "3 / 4",
-              zIndex: s.z,
-              borderRadius: "4px 10px 10px 4px",
-              boxShadow: "var(--shadow-md)",
-              background: "var(--color-neutral-100)",
-              ["--r" as string]: `${s.r}deg`,
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={resizedUrl(b.cover_image_url, 520)}
-              alt={`${alt} — ${b.title}`}
-              className="w-full h-full object-cover"
-              draggable={false}
-              fetchPriority={s.z === 3 ? "high" : undefined}
-            />
-          </Link>
-        );
-      })}
-      {/* Funti, sitting on the pile. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/brand/funti-mascot.png"
-        alt=""
-        aria-hidden
-        className="fk-bob absolute pointer-events-none"
-        style={{ right: "18%", top: "0%", width: "21%", zIndex: 5, filter: "drop-shadow(0 6px 10px rgba(0,0,0,.15))" }}
-      />
-    </div>
+    <figure className="relative w-full max-w-[420px] sm:max-w-[520px] lg:max-w-none mx-auto flex flex-col items-center gap-4">
+      <div className="relative w-full pt-[6%]">
+        {/* The wall behind: one soft round of the studio's sky blue. */}
+        <div
+          className="absolute left-1/2 -translate-x-1/2 rounded-full"
+          style={{ width: "66%", aspectRatio: "1", bottom: "2%", background: "var(--color-accent-2-100)" }}
+          aria-hidden
+        />
+        <Sparkle size={22} className="absolute" style={{ left: "3%", top: "10%" }} />
+        <Sparkle size={14} color="var(--color-accent-2-500)" className="absolute" style={{ right: "4%", top: "4%" }} />
+        <Sparkle size={12} className="absolute" style={{ left: "12%", top: "34%" }} />
+
+        <div className="relative flex items-end justify-center">
+          {slots.map((b, i) => {
+            const s = SHELF[i];
+            const last = i === slots.length - 1;
+            return (
+              <Link
+                key={b.projectId}
+                href={`/du-an?p=${b.projectId}`}
+                title={b.title}
+                aria-label={b.title}
+                className="fk-book relative block shrink-0"
+                style={{
+                  width: pct(widths[i]),
+                  aspectRatio: `${b.w} / ${b.h}`,
+                  marginLeft: i ? pct(-SHELF_OVERLAP) : undefined,
+                  zIndex: s.z,
+                  ["--r" as string]: `${s.r}deg`,
+                }}
+              >
+                {last && (
+                  <span
+                    className="absolute pointer-events-none"
+                    style={{ width: `${FUNTI * 100}%`, right: "9%", top: `${-0.72 * FUNTI * (b.w / b.h) * 100}%`, zIndex: -1 }}
+                    aria-hidden
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/brand/funti-mascot.png" alt="" className="fk-bob block w-full" draggable={false} />
+                  </span>
+                )}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={resizedUrl(b.src, 560)}
+                  alt={b.title}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ borderRadius: "inherit" }}
+                  draggable={false}
+                  fetchPriority={s.z === 2 ? "high" : undefined}
+                />
+              </Link>
+            );
+          })}
+        </div>
+        {/* The shelf board: a lit top edge over its front face. */}
+        <div className="fk-shelf relative" aria-hidden />
+      </div>
+      <figcaption className="text-[12.5px] text-center" style={{ color: "var(--color-neutral-600)" }}>
+        {note}
+      </figcaption>
+    </figure>
   );
 }
 
@@ -144,7 +159,7 @@ export function HomeV2({
 
   const byId = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const titleOf = (p: Project) => (locale === "en" && p.title_en ? p.title_en : p.title);
-  const books = projects.filter((p) => p.cover_image_url && p.tag.startsWith("Sách")).slice(0, 5);
+  const books = HERO_BOOKS.filter((b) => byId.has(b.projectId));
   const gallery = HOME_GALLERY.filter((g) => byId.has(g.projectId));
   const shown = showAll ? gallery : gallery.slice(0, GALLERY_FIRST);
   // Uploaded pictures win; a card nobody has given one gets a real project's.
@@ -166,52 +181,71 @@ export function HomeV2({
 
       {/* ------------------------------------------------------------ HERO */}
       <section className="fk-paper overflow-hidden">
-        <div className="site-container grid grid-cols-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] items-center gap-6 lg:gap-6 pt-6 pb-12 sm:pt-12 lg:pt-16 lg:pb-20">
-          <div className="flex flex-col items-start gap-5 min-w-0">
+        <div className="site-container grid grid-cols-1 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] items-center gap-10 lg:gap-14 pt-8 pb-14 sm:pt-12 lg:py-20">
+          {/* Centred under the books on a phone/iPad; a left-aligned column beside them on a computer. */}
+          <div className="fk-hero-copy flex flex-col items-center text-center lg:items-start lg:text-left min-w-0">
             <span
-              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-bold"
+              className="inline-flex items-center gap-1.5 rounded-full pl-2.5 pr-3.5 py-1.5 text-[12.5px] font-bold"
               style={{ background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
             >
-              ✏️ {h.chip}
+              <StepIcon step={1} size={16} />
+              {h.chip}
             </span>
-            <h1 className="leading-[1.12]" style={{ fontSize: "clamp(34px, 5vw, 60px)", textWrap: "balance" }}>
-              {h.heroTitleA}{" "}
-              <span className="relative inline-block whitespace-nowrap" style={{ color: "var(--color-accent-600)" }}>
-                {h.heroTitleHighlight}
-                <Squiggle />
+            {/* Two lines on a wide column; four even ones on a phone — it only ever breaks between phrases. */}
+            <h1 className="fk-hero-title mt-5">
+              <span className="fk-hero-line">
+                <span className="fk-phrase">{h.heroTitleA}</span>{" "}
+                <span className="fk-phrase">
+                  <span className="relative" style={{ color: "var(--color-accent-600)" }}>
+                    {h.heroTitleHighlight}
+                    <Squiggle />
+                  </span>
+                  ,
+                </span>
+              </span>{" "}
+              <span className="fk-hero-line">
+                <span className="fk-phrase">{h.heroTitleB1}</span> <span className="fk-phrase">{h.heroTitleB2}</span>
               </span>
-              <br className="hidden sm:block" /> {h.heroTitleB}
             </h1>
-            <p className="text-[16.5px] sm:text-[17px] leading-relaxed max-w-[540px]" style={{ color: "var(--color-neutral-700)" }}>
+            <p className="mt-5 text-[16px] sm:text-[17px] leading-relaxed max-w-[34em]" style={{ color: "var(--color-neutral-700)", textWrap: "pretty" }}>
               {t.home.heroBody}
             </p>
-            <div className="flex flex-wrap gap-3">
-              <Link href="/cong-viec" className="btn btn-primary">
+            <div className="mt-8 flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+              <Link href="/cong-viec" className="btn btn-primary btn-lg w-full sm:w-auto">
                 {h.heroCta} →
               </Link>
-              <a href="#lat-sach" className="btn btn-secondary">
-                📖 {h.heroFlip}
+              <a href="#lat-sach" className="btn btn-secondary btn-lg w-full sm:w-auto">
+                <StepIcon step={3} size={20} />
+                {h.heroFlip}
               </a>
             </div>
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13.5px]" style={{ color: "var(--color-neutral-600)" }}>
-              {avg && (
-                <span>
-                  <span style={{ color: "var(--color-accent-500)", letterSpacing: 1 }} aria-hidden>
-                    ★★★★★
-                  </span>{" "}
-                  <b style={{ color: "var(--color-text)" }}>{h.reviewsProof.replace("{avg}", avg).replace("{n}", String(rated.length))}</b>
-                </span>
-              )}
-              {t.home.stats.slice(0, 2).map((s) => (
-                <span key={s.label}>
-                  <b style={{ color: "var(--color-text)" }}>{s.value}</b> {s.label.toLowerCase()}
-                </span>
+            <dl className="fk-hero-stats mt-9 pt-6 w-full max-w-[520px] grid grid-cols-3" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+              {[
+                ...(avg ? [{ value: avg, stars: true, label: h.reviewsCount.replace("{n}", String(rated.length)) }] : []),
+                ...t.home.stats.slice(0, 2).map((s) => ({ value: s.value, stars: false, label: s.label })),
+              ].map((s) => (
+                <div key={s.label} className="flex flex-col-reverse justify-end gap-1.5 px-2 sm:px-4 lg:first:pl-0">
+                  <dt className="text-[12.5px] sm:text-[13px] leading-snug" style={{ color: "var(--color-neutral-600)" }}>
+                    {s.label}
+                  </dt>
+                  <dd className="flex items-center justify-center lg:justify-start gap-1.5 leading-none">
+                    <span className="text-[24px] sm:text-[28px]" style={{ fontFamily: "var(--font-heading)", fontWeight: 700 }}>
+                      {s.value}
+                    </span>
+                    {s.stars && (
+                      <span className="text-[13px] tracking-[1px]" style={{ color: "var(--color-accent-500)" }} aria-hidden>
+                        <span className="sm:hidden">★</span>
+                        <span className="hidden sm:inline">★★★★★</span>
+                      </span>
+                    )}
+                  </dd>
+                </div>
               ))}
-            </div>
+            </dl>
           </div>
           {/* On a phone the books come first, so the opening screen shows art. */}
-          <div className="order-first lg:order-none">
-            <BookPile books={books} alt={t.services.previewAlt} />
+          <div className="order-first lg:order-none min-w-0">
+            <BookShelf books={books} note={h.shelfNote} />
           </div>
         </div>
       </section>
