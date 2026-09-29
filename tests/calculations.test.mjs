@@ -347,6 +347,37 @@ test("báo giá: số lượng khác nhau theo từng phương án (16+6 / 20+4)
   assert.ok(text.includes("PA A: 3.200.000 ₫ · PA B: 4.000.000 ₫"));
 });
 
+test("báo giá: các đợt thanh toán tính theo tổng từng mức, cộng lại đúng bằng tổng", async () => {
+  const { paymentAmounts, paymentsFromPreset, percentTotal, draftFromPreset, quoteAsText } = await import("../src/lib/quote.ts");
+  const p = (percent) => ({ id: String(percent), label: "", percent });
+  // 30/40/30 of 6.800.000 ₫
+  assert.deepEqual(paymentAmounts(6_800_000, [p(30), p(40), p(30)], "VND"), [2_040_000, 2_720_000, 2_040_000]);
+  // Thirds of 10.000.000 ₫: rounded to 1.000 ₫, the last takes the rest so the sum is exact
+  const thirds = paymentAmounts(10_000_000, [p(33.33), p(33.33), p(33.34)], "VND");
+  assert.deepEqual(thirds, [3_333_000, 3_333_000, 3_334_000]);
+  assert.equal(thirds.reduce((s, v) => s + v, 0), 10_000_000);
+  // USD to the cent
+  assert.deepEqual(paymentAmounts(1250.5, [p(50), p(50)], "USD"), [625.25, 625.25]);
+  // Shares that don't add up to 100% are shown as they are (the editor warns)
+  assert.deepEqual(paymentAmounts(1_000_000, [p(30), p(30)], "VND"), [300_000, 300_000]);
+  assert.equal(percentTotal([p(30), p(40), p(30)]), 100);
+  // New quotes start with 50/50; a test piece is paid in one go
+  assert.deepEqual(draftFromPreset("picture", "vi", "").payments.map((x) => x.percent), [50, 50]);
+  assert.deepEqual(draftFromPreset("test", "en", "").payments.map((x) => [x.label, x.percent]), [["Full payment to start", 100]]);
+  assert.equal(paymentsFromPreset("30-40-30", "vi")[1].label, "Khi duyệt xong phác thảo");
+  // In the copied message, per tier
+  const it = { id: "x", kind: "item", name: "Trang", description: "", qty: 10, unit: "trang", prices: [100_000, 200_000], flat: false, optional: false };
+  const text = quoteAsText({
+    ...draftFromPreset("blank", "vi", ""),
+    code: "BG-1",
+    tier_names: ["Cơ bản", "Chi tiết"],
+    tier_notes: ["", ""],
+    items: [it],
+    payments: paymentsFromPreset("50-50", "vi"),
+  });
+  assert.ok(text.includes("Các đợt thanh toán:\n1. Đặt cọc khi bắt đầu (50%): Cơ bản 500.000 ₫ · Chi tiết 1.000.000 ₫"));
+});
+
 test("báo giá: “anh/chị” tự đổi thành tên khách (chỉ báo giá tiếng Việt)", async () => {
   const { personalize } = await import("../src/lib/quote.ts");
   const intro = "Cảm ơn anh/chị đã tin tưởng Funti Kidbooks. Anh/chị chọn phương án phù hợp nhất nhé, anh / chị nhé.";

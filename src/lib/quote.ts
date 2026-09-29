@@ -28,6 +28,10 @@ export type QuoteItem = {
   optional: boolean;
 };
 
+// Đợt thanh toán: a share of the total of whichever tier the client picks
+// ("Đặt cọc khi bắt đầu — 30%"); the amounts are worked out, never typed.
+export type QuotePayment = { id: string; label: string; percent: number };
+
 export type Quote = {
   id: string;
   code: string;
@@ -42,6 +46,8 @@ export type Quote = {
   tier_notes: string[];
   intro: string;
   items: QuoteItem[];
+  // Empty = no schedule shown.
+  payments: QuotePayment[];
   terms: string;
   valid_days: number;
   prepared_by: string;
@@ -100,15 +106,14 @@ export const TIER_PRESETS: Record<1 | 2 | 3, { names: Text[]; notes: Text[] }> =
   },
 };
 
+// Payment lives in the quote's own schedule (PAYMENT_PRESETS), not here.
 export const DEFAULT_TERMS: Text = {
   vi: [
-    "Thanh toán: đặt cọc 50% khi bắt đầu, 50% còn lại khi bàn giao file.",
     "Thời gian: bắt đầu tính từ khi hai bên chốt nội dung và nhận cọc.",
     "Chỉnh sửa: 2 lần ở bước phác thảo, 1 lần ở bước lên màu; chỉnh thêm báo giá riêng.",
     "Bàn giao: file PNG/JPG 300 DPI đúng khổ in, kèm file gốc nếu có yêu cầu.",
   ].join("\n"),
   en: [
-    "Payment: 50% deposit to start, 50% on delivery of the final files.",
     "Timeline: starts once the brief is confirmed and the deposit received.",
     "Revisions: 2 rounds at sketch stage, 1 round at colour stage; more are quoted separately.",
     "Delivery: 300 DPI PNG/JPG at print size, source files on request.",
@@ -120,8 +125,55 @@ export const DEFAULT_INTRO: Text = {
   en: "Thank you for considering Funti Kidbooks. Here is our quote for your project — please pick the option that suits you best.",
 };
 
+type PaymentStep = { label: Text; percent: number };
+export const PAYMENT_PRESETS: { id: string; label: string; steps: PaymentStep[] }[] = [
+  {
+    id: "50-50",
+    label: "2 đợt · 50/50",
+    steps: [
+      { label: { vi: "Đặt cọc khi bắt đầu", en: "Deposit to start" }, percent: 50 },
+      { label: { vi: "Khi bàn giao file hoàn chỉnh", en: "On delivery of the final files" }, percent: 50 },
+    ],
+  },
+  {
+    id: "30-40-30",
+    label: "3 đợt · 30/40/30",
+    steps: [
+      { label: { vi: "Đặt cọc khi bắt đầu", en: "Deposit to start" }, percent: 30 },
+      { label: { vi: "Khi duyệt xong phác thảo", en: "On approval of the sketches" }, percent: 40 },
+      { label: { vi: "Khi bàn giao file hoàn chỉnh", en: "On delivery of the final files" }, percent: 30 },
+    ],
+  },
+  {
+    id: "100",
+    label: "Trả 1 lần · 100%",
+    steps: [{ label: { vi: "Thanh toán toàn bộ khi bắt đầu", en: "Full payment to start" }, percent: 100 }],
+  },
+];
+
+export function paymentsFromPreset(presetId: string, language: QuoteLang): QuotePayment[] {
+  const preset = PAYMENT_PRESETS.find((p) => p.id === presetId) ?? PAYMENT_PRESETS[0];
+  return preset.steps.map((s) => ({ id: newItemId(), label: s.label[language], percent: s.percent }));
+}
+
+export const percentTotal = (payments: QuotePayment[]) => Math.round(payments.reduce((s, p) => s + (Number(p.percent) || 0), 0) * 100) / 100;
+
+// What each instalment comes to on a tier's total. Rounded to the nearest
+// 1.000 ₫ (a cent in USD); when the shares add up to 100% the last one takes
+// what's left, so the instalments always sum to the total exactly.
+export function paymentAmounts(total: number, payments: QuotePayment[], currency: QuoteCurrency): number[] {
+  const step = currency === "VND" ? 1000 : 0.01;
+  const round = (v: number) => Math.round(Math.round(v / step) * step * 100) / 100;
+  const amounts = payments.map((p) => round((total * (Number(p.percent) || 0)) / 100));
+  if (payments.length > 0 && percentTotal(payments) === 100) {
+    const before = amounts.slice(0, -1).reduce((s, v) => s + v, 0);
+    amounts[amounts.length - 1] = Math.round((total - before) * 100) / 100;
+  }
+  return amounts;
+}
+
 type PresetItem = { kind?: "section"; name: Text; unit?: Text; qty?: number; flat?: boolean; optional?: boolean };
-export type QuotePreset = { id: string; label: string; tiers: 1 | 2 | 3; title: Text; items: PresetItem[] };
+export type QuotePreset = { id: string; label: string; tiers: 1 | 2 | 3; title: Text; items: PresetItem[]; payments?: string };
 
 const U = {
   page: { vi: "trang", en: "page" },
@@ -175,6 +227,7 @@ export const QUOTE_PRESETS: QuotePreset[] = [
     tiers: 1,
     title: { vi: "Bài test minh hoạ", en: "Illustration test" },
     items: [{ name: { vi: "Bài test minh hoạ (1 trang)", en: "Illustration test (1 page)" }, unit: U.page, qty: 1 }],
+    payments: "100",
   },
   {
     id: "blank",
@@ -226,6 +279,7 @@ export function draftFromPreset(presetId: string, language: QuoteLang, preparedB
         optional: !!it.optional,
       }),
     ),
+    payments: paymentsFromPreset(preset.payments ?? "50-50", language),
     terms: DEFAULT_TERMS[language],
     valid_days: 14,
     prepared_by: preparedBy,
@@ -329,6 +383,10 @@ export const LABELS = {
     total: "Tổng cộng",
     options: "Tuỳ chọn thêm",
     optionsNote: "Không tính vào tổng — chọn thêm nếu cần.",
+    payments: "Các đợt thanh toán",
+    paymentsNote: "Tính trên tổng của mức anh/chị chọn.",
+    paymentsOne: "Tính trên tổng báo giá.",
+    instalment: "Đợt",
     terms: "Điều khoản",
     preparedBy: "Người báo giá",
     perUnit: "/",
@@ -347,6 +405,10 @@ export const LABELS = {
     total: "Total",
     options: "Optional extras",
     optionsNote: "Not included in the total — add if needed.",
+    payments: "Payment schedule",
+    paymentsNote: "A share of the total of the option you choose.",
+    paymentsOne: "A share of the quoted total.",
+    instalment: "Instalment",
     terms: "Terms",
     preparedBy: "Prepared by",
     perUnit: "/",
@@ -405,6 +467,15 @@ export function quoteAsText(q: Pick<Quote, keyof QuoteDraft | "code">): string {
   if (extras.length) {
     lines.push("", `${L.options}:`);
     for (const it of extras) lines.push(`• ${it.name}: ${priceText(it)}`);
+  }
+  const payments = q.payments ?? [];
+  if (payments.length) {
+    lines.push("", `${L.payments}:`);
+    const byTier = totals.map((t) => paymentAmounts(t.total, payments, q.currency));
+    payments.forEach((p, i) => {
+      const amounts = tiers === 1 ? money(byTier[0][i]) : q.tier_names.map((name, t) => `${name} ${money(byTier[t][i])}`).join(" · ");
+      lines.push(`${i + 1}. ${p.label} (${p.percent}%): ${amounts}`);
+    });
   }
   if (q.terms.trim()) lines.push("", `${L.terms}:`, ...q.terms.trim().split("\n").map((t) => `- ${t.replace(/^[-•]\s*/, "")}`));
   return lines.join("\n");

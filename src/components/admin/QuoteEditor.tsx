@@ -8,12 +8,17 @@ import {
   BOOK_SIZE_SUGGESTIONS,
   DEFAULT_INTRO,
   DEFAULT_TERMS,
+  PAYMENT_PRESETS,
   STATUS_LABELS,
   TIER_PRESETS,
   blankItem,
   formatMoney,
   lineTotal,
   parseMoney,
+  paymentAmounts,
+  paymentsFromPreset,
+  percentTotal,
+  newItemId,
   qtyFor,
   unitPrice,
   quoteAsText,
@@ -23,6 +28,7 @@ import {
   type QuoteCurrency,
   type QuoteDraft,
   type QuoteItem,
+  type QuotePayment,
   type QuoteStatus,
 } from "@/lib/quote";
 import { QuoteSheet } from "@/components/QuoteSheet";
@@ -43,6 +49,7 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
     tier_notes: quote.tier_notes,
     intro: quote.intro,
     items: quote.items,
+    payments: quote.payments ?? [],
     terms: quote.terms,
     valid_days: quote.valid_days,
     prepared_by: quote.prepared_by,
@@ -104,6 +111,30 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
     setDraft((d) => ({ ...d, items: [...d.items, item] }));
   }
 
+  function setPayment(payId: string, p: Partial<QuotePayment>) {
+    setDraft((d) => ({ ...d, payments: d.payments.map((x) => (x.id === payId ? { ...x, ...p } : x)) }));
+  }
+  function movePayment(payId: string, dir: -1 | 1) {
+    setDraft((d) => {
+      const i = d.payments.findIndex((x) => x.id === payId);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= d.payments.length) return d;
+      const payments = [...d.payments];
+      [payments[i], payments[j]] = [payments[j], payments[i]];
+      return { ...d, payments };
+    });
+  }
+  function addPayment() {
+    // A new instalment starts with whatever share is still unassigned.
+    setDraft((d) => ({
+      ...d,
+      payments: [...d.payments, { id: newItemId(), label: "", percent: Math.max(0, Math.round((100 - percentTotal(d.payments)) * 100) / 100) }],
+    }));
+  }
+  function dropPaymentLine() {
+    patch({ terms: draft.terms.split("\n").filter((l) => !PAY_LINE.test(l)).join("\n") });
+  }
+
   async function copyText() {
     const text = quoteAsText({ ...draft, code });
     try {
@@ -134,6 +165,9 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
 
   const totals = tierTotals(draft.items, tiers);
   const money = (n: number) => formatMoney(n, draft.currency);
+  const paid = totals.map((t) => paymentAmounts(t.total, draft.payments, draft.currency));
+  const percentSum = percentTotal(draft.payments);
+  const termsRepeatPayment = draft.payments.length > 0 && draft.terms.split("\n").some((l) => PAY_LINE.test(l));
   const sheet = <QuoteSheet quote={{ ...draft, code, created_at }} />;
 
   return (
@@ -352,6 +386,124 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
             </div>
           </Card>
 
+          <Card title="Các đợt thanh toán">
+            <p className="text-[12.5px]" style={{ color: "var(--color-neutral-600)" }}>
+              Mỗi đợt ghi phần trăm — số tiền tự tính theo tổng{tiers > 1 ? " của từng mức" : ""}.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {PAYMENT_PRESETS.map((pr) => (
+                <button
+                  key={pr.id}
+                  type="button"
+                  onClick={() => patch({ payments: paymentsFromPreset(pr.id, draft.language) })}
+                  className="rounded-full px-2.5 py-1 text-[12px] font-semibold"
+                  style={{ background: "var(--color-neutral-100)", color: "var(--color-neutral-700)" }}
+                >
+                  {pr.label}
+                </button>
+              ))}
+              {draft.payments.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => patch({ payments: [] })}
+                  className="rounded-full px-2.5 py-1 text-[12px] font-semibold"
+                  style={{ color: "var(--color-neutral-500)" }}
+                >
+                  Không ghi đợt
+                </button>
+              )}
+            </div>
+            {draft.payments.map((pay, i) => (
+              <div key={pay.id} className="rounded-[12px] p-3 flex flex-col gap-2" style={{ border: "1px solid var(--color-neutral-300)" }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-[12.5px] font-bold" style={{ color: "var(--color-accent-700)" }}>
+                    Đợt {i + 1}
+                  </span>
+                  <span className="flex-1" />
+                  <div className="flex items-center gap-0.5 flex-none">
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      style={{ width: 28, height: 28, padding: 0 }}
+                      disabled={i === 0}
+                      onClick={() => movePayment(pay.id, -1)}
+                      aria-label="Lên"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      style={{ width: 28, height: 28, padding: 0 }}
+                      disabled={i === draft.payments.length - 1}
+                      onClick={() => movePayment(pay.id, 1)}
+                      aria-label="Xuống"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      style={{ width: 28, height: 28, padding: 0, color: "var(--status-red)" }}
+                      onClick={() => patch({ payments: draft.payments.filter((x) => x.id !== pay.id) })}
+                      aria-label="Xoá đợt"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    className="input"
+                    value={pay.label}
+                    placeholder="VD: Đặt cọc khi bắt đầu"
+                    onChange={(e) => setPayment(pay.id, { label: e.target.value })}
+                    aria-label={`Tên đợt ${i + 1}`}
+                  />
+                  <PercentInput value={pay.percent} onChange={(v) => setPayment(pay.id, { percent: v })} label={`Phần trăm đợt ${i + 1}`} />
+                </div>
+                <span className="text-[12.5px] tabular-nums" style={{ color: "var(--color-neutral-600)" }}>
+                  ={" "}
+                  {tiers === 1 ? (
+                    <b style={{ color: "var(--color-text)" }}>{money(paid[0][i])}</b>
+                  ) : (
+                    draft.tier_names.map((name, t) => (
+                      <span key={t}>
+                        {t > 0 && " · "}
+                        {name} <b style={{ color: "var(--color-text)" }}>{money(paid[t][i])}</b>
+                      </span>
+                    ))
+                  )}
+                </span>
+              </div>
+            ))}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button type="button" className="btn btn-secondary btn-sm" onClick={addPayment}>
+                + Thêm đợt
+              </button>
+              {draft.payments.length > 0 && (
+                <span className="text-[12.5px] font-semibold tabular-nums" style={{ color: percentSum === 100 ? "var(--status-green)" : "var(--status-red)" }}>
+                  {percentSum === 100
+                    ? "✓ Đủ 100%"
+                    : percentSum < 100
+                      ? `Mới ${percentSum}% — còn thiếu ${Math.round((100 - percentSum) * 100) / 100}%`
+                      : `${percentSum}% — dư ${Math.round((percentSum - 100) * 100) / 100}%`}
+                </span>
+              )}
+            </div>
+            {termsRepeatPayment && (
+              <div
+                className="flex flex-wrap items-center gap-2 rounded-[10px] px-3 py-2 text-[12.5px]"
+                style={{ background: "var(--badge-orange-bg)", color: "var(--badge-orange-fg)" }}
+              >
+                <span className="flex-1 min-w-[200px]">Điều khoản đang có dòng “Thanh toán: …” — trùng với các đợt ở đây.</span>
+                <button type="button" className="font-bold underline" onClick={dropPaymentLine}>
+                  Bỏ dòng đó
+                </button>
+              </div>
+            )}
+          </Card>
+
           <Card title="Lời mở đầu & điều khoản">
             <Field label={draft.language === "vi" ? "Lời mở đầu — chữ “anh/chị” tự đổi thành tên khách" : "Lời mở đầu"}>
               <textarea className="input" rows={3} value={draft.intro} onChange={(e) => patch({ intro: e.target.value })} />
@@ -384,6 +536,9 @@ export function QuoteEditor({ quote }: { quote: Quote }) {
     </div>
   );
 }
+
+// An old "Thanh toán: đặt cọc 50%…" line in the terms says the same as the schedule.
+const PAY_LINE = /^\s*[-•]?\s*(thanh toán|payment)\s*:/iu;
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -453,6 +608,38 @@ function MoneyInput({ value, currency, onChange, label }: { value: number | null
         onChange(parseMoney(e.target.value, currency));
       }}
     />
+  );
+}
+
+// "30", "33,5" or "33.5" — kept as typed while the box has focus.
+function PercentInput({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) {
+  const [text, setText] = useState(String(value));
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!focused.current) setText(String(value));
+  }, [value]);
+  return (
+    <div className="flex items-center gap-1 flex-none">
+      <input
+        className="input tabular-nums text-right"
+        style={{ width: 72 }}
+        inputMode="decimal"
+        value={text}
+        aria-label={label}
+        onFocus={() => (focused.current = true)}
+        onBlur={() => {
+          focused.current = false;
+          setText(String(value));
+        }}
+        onChange={(e) => {
+          setText(e.target.value);
+          onChange(Math.max(0, Math.min(100, Number(e.target.value.replace(",", ".").replace(/[^\d.]/g, "")) || 0)));
+        }}
+      />
+      <span className="text-[14px] font-bold" style={{ color: "var(--color-neutral-600)" }}>
+        %
+      </span>
+    </div>
   );
 }
 

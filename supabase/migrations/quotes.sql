@@ -38,3 +38,7 @@ create policy "director manages quotes" on public.quotes
 
 -- Added 2026-09-29: khổ sách on the quote ("21 × 21 cm", "8.5 × 8.5 in").
 alter table public.quotes add column if not exists book_size text not null default '';
+
+-- Added 2026-09-29: các đợt thanh toán — [{ id, label, percent }], each a
+-- share of the total of the tier the client picks; amounts are computed.
+alter table public.quotes add column if not exists payments jsonb not null default '[]'::jsonb;

@@ -1,5 +1,5 @@
 import type { Quote, QuoteDraft, QuoteItem } from "@/lib/quote";
-import { LABELS, formatMoney, lineTotal, personalize, qtyFor, qtyText, tierTotals, unitPrice } from "@/lib/quote";
+import { LABELS, formatMoney, lineTotal, paymentAmounts, personalize, qtyFor, qtyText, tierTotals, unitPrice } from "@/lib/quote";
 
 // The quote as the client sees it — the editor's live preview, the public
 // link (/bao-gia/<token>) and the printed PDF all render this. Always on
@@ -31,6 +31,8 @@ export function QuoteSheet({ quote }: { quote: QuoteDraft & Pick<Quote, "code" |
   const totals = tierTotals(quote.items, n);
   const main = quote.items.filter((it) => !it.optional);
   const extras = quote.items.filter((it) => it.optional && it.kind === "item");
+  const payments = quote.payments ?? [];
+  const paid = totals.map((t) => paymentAmounts(t.total, payments, quote.currency));
   const cols = { "--cols": `minmax(0,1.7fr) repeat(${n}, minmax(0,1fr))` } as React.CSSProperties;
 
   const priceCells = (it: QuoteItem) => {
@@ -157,6 +159,46 @@ export function QuoteSheet({ quote }: { quote: QuoteDraft & Pick<Quote, "code" |
             <div key={it.id} className="fk-q-row" style={cols}>
               <ItemName it={it} qtyLabel={L.qty} tiers={n} />
               {priceCells(it)}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {payments.length > 0 && (
+        <section className="fk-q-table pt-5">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap pb-1.5">
+            <h3 className="text-[14px] font-bold">{L.payments}</h3>
+            <span className="text-[12px]" style={{ color: MUTED }}>
+              {personalize(n > 1 ? L.paymentsNote : L.paymentsOne, quote.client_name, quote.language)}
+            </span>
+          </div>
+          {n > 1 && (
+            <div className="fk-q-row fk-q-head" style={cols}>
+              <span>{L.instalment}</span>
+              {quote.tier_names.map((name, t) => (
+                <span key={t} className="fk-q-headprice">
+                  {name}
+                </span>
+              ))}
+            </div>
+          )}
+          {payments.map((p, i) => (
+            <div key={p.id} className="fk-q-row" style={cols}>
+              <div className="flex items-baseline gap-2 min-w-0">
+                <span className="text-[12px] font-bold tabular-nums flex-none" style={{ color: ACCENT }}>
+                  {i + 1}.
+                </span>
+                <span className="text-[14px] font-semibold leading-snug break-words min-w-0">{p.label || `${L.instalment} ${i + 1}`}</span>
+                <span className="text-[12.5px] font-semibold tabular-nums flex-none" style={{ color: MUTED }}>
+                  {p.percent}%
+                </span>
+              </div>
+              {quote.tier_names.map((name, t) => (
+                <div key={t} className="fk-q-price">
+                  <span className="fk-q-tiername">{name}</span>
+                  <b className="text-[14px] tabular-nums">{money(paid[t]?.[i] ?? 0)}</b>
+                </div>
+              ))}
             </div>
           ))}
         </section>
