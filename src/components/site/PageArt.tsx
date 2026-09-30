@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { Sparkle, Tape } from "@/components/site/Doodles";
 import { resizedUrl } from "@/lib/imageTransform";
@@ -86,6 +87,36 @@ export function ServicesCollage({ labels }: { labels: readonly string[] }) {
         </span>
       </Link>
     </div>
+  );
+}
+
+// A portrait iPad with Procreate open (sếp Phúc's own screenshot of an
+// empty canvas) and the artwork on the canvas — how the studio actually
+// draws. The picture sits where Procreate centres a canvas: below the top
+// toolbar, clear of the brush-size sliders on the left.
+export function ProcreateIpad({ art, alt, className = "" }: { art: PageArt; alt: string; className?: string }) {
+  return (
+    <figure
+      className={`relative mx-auto w-full max-w-[400px] ${className}`}
+      style={{
+        padding: "3.6%",
+        borderRadius: "7% / 5%",
+        background: "linear-gradient(145deg, #3a3a3d, #151517 55%, #2a2a2d)",
+        boxShadow: "0 30px 50px -24px rgba(20,14,8,.55), 0 0 0 1px rgba(255,255,255,.06) inset, 0 2px 0 rgba(255,255,255,.08) inset",
+      }}
+    >
+      {/* front camera */}
+      <span className="absolute left-1/2 -translate-x-1/2 rounded-full" style={{ top: "1.5%", width: "1.6%", aspectRatio: "1", background: "#0b0b0c", boxShadow: "0 0 0 1px #2c2c30" }} aria-hidden />
+      <span className="relative block overflow-hidden" style={{ aspectRatio: "1668 / 2420", borderRadius: "3.2% / 2.2%", background: "#232323" }}>
+        <Image src="/art/procreate-canvas.png" alt="" fill sizes="(max-width: 640px) 90vw, 400px" className="object-cover" />
+        <span className="absolute flex items-center justify-center" style={{ left: "13%", right: "7%", top: "7%", bottom: "4%" }}>
+          <span className="relative block w-full" style={{ aspectRatio: `${art.w} / ${art.h}`, maxHeight: "100%", boxShadow: "0 6px 18px rgba(0,0,0,.45)" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={resizedUrl(art.src, 720)} alt={alt} className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+          </span>
+        </span>
+      </span>
+    </figure>
   );
 }
 

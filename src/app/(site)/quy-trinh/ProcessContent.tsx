@@ -5,7 +5,7 @@ import { PageHero } from "@/components/site/PageHero";
 import { CtaBanner } from "@/components/site/CtaBanner";
 import { FaqSection } from "@/components/site/FaqSection";
 import { Reveal } from "@/components/site/Reveal";
-import { StageStrip } from "@/components/site/PageArt";
+import { ProcreateIpad, StageStrip } from "@/components/site/PageArt";
 import { DrawnIcon, WaveEdge } from "@/components/site/Doodles";
 import { useDict } from "@/components/site/LocaleProvider";
 import { resizedUrl } from "@/lib/imageTransform";
@@ -52,8 +52,13 @@ function StepVisual({ step, title }: { step: number; title: string }) {
       </div>
     );
   }
-  const art = [null, null, a.thumbnails, a.color, a.lettered, a.printed][step]!;
-  return <Picture art={art} alt={`${a.project.title} — ${title}`} className={step === 3 || step === 4 ? "max-w-[300px] mx-auto" : ""} />;
+  // Sketch, colour, lettering: the same portrait canvas on an iPad in
+  // Procreate, the way the studio draws it.
+  if (step >= 2 && step <= 4) {
+    const art = [a.sketch, a.color, a.lettered][step - 2];
+    return <ProcreateIpad art={art} alt={`${a.project.title} — ${title}`} />;
+  }
+  return <Picture art={a.printed} alt={`${a.project.title} — ${title}`} />;
 }
 
 export function ProcessContent() {
