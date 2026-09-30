@@ -166,18 +166,28 @@ export async function upsertStaffSalary(
   profileId: string,
   monthlySalary: number,
   standardWorkDays: number,
+  // Khoản cố định hằng tháng — left out to keep whatever is saved.
+  recurringItems?: PayrollItem[],
 ): Promise<StaffSalary> {
   const { supabase } = await requireHrManager();
-  const { data, error } = await supabase
-    .from("staff_salary")
-    .upsert(
-      { profile_id: profileId, monthly_salary: monthlySalary, standard_work_days: standardWorkDays },
-      { onConflict: "profile_id" },
-    )
-    .select("*")
-    .single();
+  const row: Partial<StaffSalary> & { profile_id: string } = {
+    profile_id: profileId,
+    monthly_salary: monthlySalary,
+    standard_work_days: standardWorkDays,
+  };
+  if (recurringItems) {
+    row.recurring_items = recurringItems
+      .filter((it) => it.label.trim() && Number.isFinite(it.amount))
+      .map((it) => ({ label: it.label.trim(), amount: it.amount }));
+  }
+  const { data, error } = await supabase.from("staff_salary").upsert(row, { onConflict: "profile_id" }).select("*").single();
 
-  if (error || !data) throw new Error("Không thể lưu lương cố định");
+  if (error || !data) {
+    if (recurringItems && (error?.code === "PGRST204" || error?.code === "42703" || /recurring_items/.test(error?.message ?? ""))) {
+      throw new Error("Chưa chạy file SQL payroll_recurring_items.sql trên Supabase — khoản cố định chưa lưu được.");
+    }
+    throw new Error("Không thể lưu lương cố định");
+  }
   return data as StaffSalary;
 }
 

@@ -1095,6 +1095,10 @@ create table if not exists public.staff_salary (
   updated_at timestamptz not null default now()
 );
 
+-- Khoản cố định hằng tháng (migrations/payroll_recurring_items.sql) — copied
+-- onto each new month's draft payslip by sync_payroll_month().
+alter table public.staff_salary add column if not exists recurring_items jsonb not null default '[]'::jsonb;
+
 alter table public.staff_salary enable row level security;
 
 drop policy if exists "director can manage staff salary" on public.staff_salary;

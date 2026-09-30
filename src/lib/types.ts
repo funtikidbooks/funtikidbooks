@@ -615,6 +615,9 @@ export type StaffSalary = {
   profile_id: string;
   monthly_salary: number;
   standard_work_days: number;
+  // Khoản cố định hằng tháng — copied onto each new month's payslip
+  // (supabase/migrations/payroll_recurring_items.sql). Missing before that ran.
+  recurring_items?: PayrollItem[];
   updated_at: string;
 };
 

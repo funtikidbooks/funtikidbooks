@@ -34,6 +34,72 @@ function itemsToDraft(items: PayrollItem[]): ItemDraft[] {
   }));
 }
 
+function draftToItems(items: ItemDraft[]): PayrollItem[] {
+  return items
+    .filter((it) => it.label.trim())
+    .map((it) => ({
+      label: it.label.trim(),
+      amount: (it.kind === "subtract" ? -1 : 1) * (Number(it.amount) || 0),
+    }));
+}
+
+// Lines of "+ phụ cấp / − khấu trừ", each deletable. On a phone the label
+// takes its own line, then Cộng/Trừ, the amount and 🗑 beneath it.
+function ItemRows({
+  items,
+  onChange,
+  placeholder,
+}: {
+  items: ItemDraft[];
+  onChange: (next: ItemDraft[]) => void;
+  placeholder: string;
+}) {
+  const update = (i: number, patch: Partial<ItemDraft>) => onChange(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  return (
+    <>
+      {items.map((it, i) => (
+        <div
+          key={i}
+          className="grid gap-2 items-center grid-cols-[84px_minmax(0,1fr)_32px] sm:grid-cols-[minmax(0,1fr)_90px_140px_32px]"
+        >
+          <input
+            className="input col-span-3 sm:col-span-1"
+            placeholder={placeholder}
+            value={it.label}
+            onChange={(e) => update(i, { label: e.target.value })}
+          />
+          <select
+            className="input"
+            style={{ padding: "6px 8px" }}
+            value={it.kind}
+            onChange={(e) => update(i, { kind: e.target.value as "add" | "subtract" })}
+          >
+            <option value="add">Cộng</option>
+            <option value="subtract">Trừ</option>
+          </select>
+          <input
+            type="number"
+            min={0}
+            className="input"
+            value={it.amount}
+            onChange={(e) => update(i, { amount: e.target.value === "" ? "" : Number(e.target.value) })}
+          />
+          <button
+            type="button"
+            onClick={() => onChange(items.filter((_, idx) => idx !== i))}
+            className="btn-icon"
+            style={{ width: 32, height: 32, padding: 0 }}
+            aria-label="Xoá dòng"
+            title="Xoá dòng"
+          >
+            🗑
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function PayrollEditModal({
   profile,
   month,
@@ -63,6 +129,10 @@ export function PayrollEditModal({
   const [monthlySalary, setMonthlySalary] = useState<number | "">("");
   const [standardWorkDays, setStandardWorkDays] = useState<number | "">(24);
   const [savingSalary, setSavingSalary] = useState(false);
+  // Khoản cố định hằng tháng — this person's standing allowances/deductions.
+  const [recurring, setRecurring] = useState<ItemDraft[]>([]);
+  const [recurringDirty, setRecurringDirty] = useState(false);
+  const [salaryMsg, setSalaryMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [workDaysTouched, setWorkDaysTouched] = useState(false);
 
   const [feedback, setFeedback] = useState<PayrollFeedback[]>([]);
@@ -166,6 +236,10 @@ export function PayrollEditModal({
         if (salary) {
           setMonthlySalary(salary.monthly_salary);
           setStandardWorkDays(salary.standard_work_days);
+          const fixed = salary.recurring_items ?? [];
+          setRecurring(itemsToDraft(fixed));
+          // No payslip yet this month: start it with the fixed lines.
+          if (!record && fixed.length > 0) setItems((prev) => (prev.length > 0 ? prev : itemsToDraft(fixed)));
         }
       })
       .catch(() => {})
@@ -173,7 +247,7 @@ export function PayrollEditModal({
     return () => {
       cancelled = true;
     };
-  }, [profile.id]);
+  }, [profile.id, record]);
 
   // Lương/ngày = lương tháng ÷ số ngày công chuẩn, làm tròn đến đồng gần
   // nhất — VNĐ không có đơn vị lẻ hơn đồng, nên đây là mức chính xác nhất
@@ -201,13 +275,24 @@ export function PayrollEditModal({
 
   async function saveSalarySettings() {
     setSavingSalary(true);
+    setSalaryMsg(null);
     try {
-      await upsertStaffSalary(profile.id, Number(monthlySalary) || 0, Number(standardWorkDays) || 24);
-    } catch {
-      // best effort — the fields keep whatever the director typed either way
+      await upsertStaffSalary(profile.id, Number(monthlySalary) || 0, Number(standardWorkDays) || 24, draftToItems(recurring));
+      setRecurringDirty(false);
+      setSalaryMsg({ ok: true, text: "Đã lưu ✓" });
+    } catch (err) {
+      setSalaryMsg({ ok: false, text: err instanceof Error ? err.message : "Không lưu được" });
     } finally {
       setSavingSalary(false);
     }
+  }
+
+  // Put the fixed lines on this month's payslip — any not already there
+  // (matched by name), so pressing it twice doesn't double them.
+  function applyRecurringToMonth() {
+    const have = new Set(items.map((it) => it.label.trim().toLowerCase()));
+    const missing = recurring.filter((it) => it.label.trim() && !have.has(it.label.trim().toLowerCase()));
+    if (missing.length > 0) setItems((prev) => [...prev, ...missing.map((it) => ({ ...it }))]);
   }
 
   // Base pay is derived, not typed directly — either lương/ngày × số ngày
@@ -228,10 +313,6 @@ export function PayrollEditModal({
     return computedBase + itemsTotal;
   }, [computedBase, items]);
 
-  function updateItem(i: number, patch: Partial<ItemDraft>) {
-    setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
-  }
-
   function applyLateDeduction() {
     if (stats.late === 0 || Number(lateRate) <= 0) return;
     setItems((prev) => [...prev, { label: `Đi trễ ${stats.late} lần`, kind: "subtract", amount: Number(lateRate) * stats.late }]);
@@ -240,16 +321,15 @@ export function PayrollEditModal({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const cleanItems: PayrollItem[] = items
-      .filter((it) => it.label.trim())
-      .map((it) => ({
-        label: it.label.trim(),
-        amount: (it.kind === "subtract" ? -1 : 1) * (Number(it.amount) || 0),
-      }));
+    const cleanItems = draftToItems(items);
 
     setSaving(true);
     setError(null);
     try {
+      if (recurringDirty) {
+        await upsertStaffSalary(profile.id, Number(monthlySalary) || 0, Number(standardWorkDays) || 24, draftToItems(recurring));
+        setRecurringDirty(false);
+      }
       const saved = await upsertPayroll({
         profileId: profile.id,
         month,
@@ -406,6 +486,51 @@ export function PayrollEditModal({
                 ≈ {formatVnd(dailyRate)} / ngày ({Number(standardWorkDays) || 24} ngày công/tháng)
               </span>
             )}
+
+            <div className="flex flex-col gap-2 pt-3 mt-1" style={{ borderTop: "1px dashed var(--color-accent-300)" }}>
+              <div className="flex flex-col">
+                <span className="text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
+                  KHOẢN CỐ ĐỊNH HẰNG THÁNG
+                </span>
+                <span className="text-[11px]" style={{ color: "var(--color-neutral-600)" }}>
+                  Tự có sẵn trong bảng lương mỗi tháng mới — VD trợ cấp bảo hiểm, lương dọn dẹp. Bấm 🗑 để xoá dòng.
+                </span>
+              </div>
+              <ItemRows
+                items={recurring}
+                placeholder="VD: Trợ cấp bảo hiểm"
+                onChange={(next) => {
+                  setRecurring(next);
+                  setRecurringDirty(true);
+                  setSalaryMsg(null);
+                }}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecurring((prev) => [...prev, { label: "", kind: "add", amount: "" }]);
+                    setRecurringDirty(true);
+                  }}
+                  className="btn btn-ghost btn-sm"
+                >
+                  + Thêm khoản cố định
+                </button>
+                {recurring.some((it) => it.label.trim()) && (
+                  <button type="button" onClick={applyRecurringToMonth} className="btn btn-secondary btn-sm">
+                    ↓ Thêm vào bảng lương tháng này
+                  </button>
+                )}
+                <button type="button" onClick={saveSalarySettings} className="btn btn-primary btn-sm" disabled={savingSalary || salaryLoading}>
+                  {savingSalary ? "Đang lưu…" : "Lưu khoản cố định"}
+                </button>
+                {salaryMsg && (
+                  <span className="text-[12px] font-semibold" style={{ color: salaryMsg.ok ? "var(--status-green)" : "var(--status-red)" }}>
+                    {salaryMsg.text}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="card p-3 flex flex-col gap-2" style={{ background: "var(--color-surface)" }}>
@@ -503,41 +628,7 @@ export function PayrollEditModal({
           <div className="field">
             <label>Phụ cấp / thưởng / khấu trừ</label>
             <div className="flex flex-col gap-2 mt-1">
-              {items.map((it, i) => (
-                <div key={i} className="grid gap-2 items-center" style={{ gridTemplateColumns: "1fr 90px 140px 32px" }}>
-                  <input
-                    className="input"
-                    placeholder="VD: Phụ cấp xăng xe"
-                    value={it.label}
-                    onChange={(e) => updateItem(i, { label: e.target.value })}
-                  />
-                  <select
-                    className="input"
-                    style={{ padding: "6px 8px" }}
-                    value={it.kind}
-                    onChange={(e) => updateItem(i, { kind: e.target.value as "add" | "subtract" })}
-                  >
-                    <option value="add">Cộng</option>
-                    <option value="subtract">Trừ</option>
-                  </select>
-                  <input
-                    type="number"
-                    min={0}
-                    className="input"
-                    value={it.amount}
-                    onChange={(e) => updateItem(i, { amount: e.target.value === "" ? "" : Number(e.target.value) })}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setItems((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="btn-icon"
-                    style={{ width: 32, height: 32, padding: 0 }}
-                    aria-label="Xoá dòng"
-                  >
-                    🗑
-                  </button>
-                </div>
-              ))}
+              <ItemRows items={items} onChange={setItems} placeholder="VD: Phụ cấp xăng xe" />
               <button
                 type="button"
                 onClick={() => setItems((prev) => [...prev, { label: "", kind: "add", amount: "" }])}
