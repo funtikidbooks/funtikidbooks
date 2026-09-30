@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Sparkle, Tape } from "@/components/site/Doodles";
@@ -94,10 +95,37 @@ export function ServicesCollage({ labels }: { labels: readonly string[] }) {
 // empty canvas) and the artwork on the canvas — how the studio actually
 // draws. The picture sits where Procreate centres a canvas: below the top
 // toolbar, clear of the brush-size sliders on the left.
+// An Apple Pencil (2nd gen): white, one flat side, a cone and a grey nib —
+// drawn to scale against the iPad (166 mm long, ~9 mm across).
+function ApplePencil({ style }: { style?: React.CSSProperties }) {
+  const id = "fk-pencil-" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  return (
+    <svg viewBox="0 0 20 400" className="absolute" style={{ filter: "drop-shadow(6px 10px 8px rgba(30,20,10,.28))", ...style }} aria-hidden>
+      <defs>
+        <linearGradient id={id} x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stopColor="#d4d4d9" />
+          <stop offset="0.32" stopColor="#ffffff" />
+          <stop offset="0.62" stopColor="#f3f3f5" />
+          <stop offset="1" stopColor="#c9c9cf" />
+        </linearGradient>
+      </defs>
+      <path d="M1 12 Q1 1 10 1 Q19 1 19 12 L19 352 L1 352 Z" fill={`url(#${id})`} />
+      <path d="M15 16 L15 348" stroke="rgba(0,0,0,.07)" strokeWidth="1" />
+      <path d="M1 352 L19 352 L12.3 392 L7.7 392 Z" fill={`url(#${id})`} />
+      <path d="M1 352 L19 352" stroke="rgba(0,0,0,.08)" strokeWidth="0.8" />
+      <path d="M7.7 392 L12.3 392 L10.9 398.6 Q10 400.4 9.1 398.6 Z" fill="#8e8e93" />
+    </svg>
+  );
+}
+
 export function ProcreateIpad({ art, alt, className = "" }: { art: PageArt; alt: string; className?: string }) {
   return (
+    // The pencil stands in the space beside the iPad, inside this box, so
+    // nothing pokes past the edge of a phone screen.
+    <div className={`relative mx-auto w-full max-w-[440px] ${className}`}>
+      <ApplePencil style={{ right: "1.5%", bottom: "9%", width: "4.4%", aspectRatio: "20 / 400", transform: "rotate(-3.5deg)", transformOrigin: "50% 100%" }} />
     <figure
-      className={`relative mx-auto w-full max-w-[400px] ${className}`}
+      className="relative w-[88%]"
       style={{
         padding: "3.6%",
         borderRadius: "7% / 5%",
@@ -117,6 +145,7 @@ export function ProcreateIpad({ art, alt, className = "" }: { art: PageArt; alt:
         </span>
       </span>
     </figure>
+    </div>
   );
 }
 
