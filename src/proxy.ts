@@ -11,6 +11,6 @@ export async function proxy(request: NextRequest) {
 // them pay for a session refresh round trip.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|robots\\.txt|sitemap\\.xml|api/build-id|api/clock/|fonts/|sounds/|emoji/|brand/|placeholders/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mp3|wav|ogg|woff|woff2|ttf|otf)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|robots\\.txt|sitemap\\.xml|api/build-id|api/clock/|api/chat/push-hook|fonts/|sounds/|emoji/|brand/|placeholders/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|mp3|wav|ogg|woff|woff2|ttf|otf)$).*)",
   ],
 };

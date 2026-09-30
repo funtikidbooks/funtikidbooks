@@ -3,7 +3,7 @@
 import { after } from "next/server";
 import { requireUser } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
-import { pushDirectMessage } from "@/lib/chatPush";
+import { pushChatMessageOnce } from "@/lib/chatPushOnce";
 import type { DirectMessage, DirectMessageReaction, DirectMessageSearchResult } from "@/lib/types";
 
 // One "scroll up for more" page older than whatever's currently loaded —
@@ -132,7 +132,7 @@ export async function forwardDirectMessage(
   if (error || !data) throw new Error("Không thể chuyển tiếp tin nhắn");
 
   const sent = data as DirectMessage;
-  after(() => pushDirectMessage(sent).catch(() => {}));
+  after(() => pushChatMessageOnce("dm", sent.id).catch(() => {}));
 
   return sent;
 }

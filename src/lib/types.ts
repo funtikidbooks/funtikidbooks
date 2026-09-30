@@ -1161,6 +1161,12 @@ export type Database = {
         Update: Partial<Invoice>;
         Relationships: [];
       };
+      chat_push_log: {
+        Row: { message_id: string; sent_at: string };
+        Insert: { message_id: string; sent_at?: string };
+        Update: { message_id?: string; sent_at?: string };
+        Relationships: [];
+      };
       push_subscriptions: {
         Row: PushSubscriptionRow;
         Insert: Partial<PushSubscriptionRow> & { user_id: string; endpoint: string; p256dh: string; auth: string };

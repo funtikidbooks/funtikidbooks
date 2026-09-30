@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { sendPushToUser } from "@/lib/push";
-import { pushMeetingMessage } from "@/lib/chatPush";
+import { pushChatMessageOnce } from "@/lib/chatPushOnce";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { MeetingChannel, MeetingChannelPublic, MeetingChannelRead, MeetingMessage, MeetingReaction, MeetingSearchResult, Profile } from "@/lib/types";
 
@@ -588,7 +588,7 @@ export async function forwardMeetingMessage(
   if (error || !data) throw new Error("Không thể chuyển tiếp — bạn cần tham gia phòng trước.");
 
   const sent = data as MeetingMessage;
-  after(() => pushMeetingMessage(sent).catch(() => {}));
+  after(() => pushChatMessageOnce("meeting", sent.id).catch(() => {}));
 
   return sent;
 }
