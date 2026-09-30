@@ -833,6 +833,7 @@ function RoomInfoDropdown({
   hasPassword,
   billingType,
   isOwner,
+  canKickOwner,
   ownerId,
   ownerName,
   profiles,
@@ -846,6 +847,8 @@ function RoomInfoDropdown({
   hasPassword: boolean;
   billingType: "hourly" | "milestone";
   isOwner: boolean;
+  // A director/PM who isn't the room's owner — may kick the owner too.
+  canKickOwner: boolean;
   ownerId: string | null;
   ownerName: string;
   profiles: Profile[];
@@ -1091,8 +1094,9 @@ function RoomInfoDropdown({
           <div className="flex flex-col gap-1">
           {rows.map((p) => {
             const isMember = memberIds.has(p.id);
-            // Never offer to kick the room's own owner.
-            const canKick = isMember && isOwner && p.id !== ownerId;
+            // The owner can't kick themself out; a director/PM can kick
+            // anyone, the room's owner included.
+            const canKick = isMember && (p.id === ownerId ? canKickOwner : isOwner);
             return (
               <div key={p.id} className="flex items-center gap-2 px-1.5 py-1.5 rounded-[8px]" style={{ background: "var(--color-surface)" }}>
                 <span
@@ -1113,8 +1117,21 @@ function RoomInfoDropdown({
                   </span>
                 </span>
                 {p.id === ownerId ? (
-                  <span className="flex-none text-[11px] font-bold" style={{ color: "var(--status-blue)" }}>
-                    Chủ phòng
+                  <span className="flex items-center gap-2 flex-none">
+                    <span className="text-[11px] font-bold" style={{ color: "var(--status-blue)" }}>
+                      Chủ phòng
+                    </span>
+                    {canKick && (
+                      <button
+                        type="button"
+                        onClick={() => handleKickClick(p)}
+                        disabled={removingId === p.id}
+                        className="flex-none text-[11px] font-bold"
+                        style={{ color: "var(--status-red)" }}
+                      >
+                        {removingId === p.id ? "…" : "Mời ra"}
+                      </button>
+                    )}
                   </span>
                 ) : isMember ? (
                   <span className="flex items-center gap-2 flex-none">
@@ -4798,6 +4815,7 @@ export function MeetingHub({
                 hasPassword={activeChannel.has_password}
                 billingType={activeChannel.billing_type}
                 isOwner={activeChannel.created_by === currentUser.id || isDirectorOrPm}
+                canKickOwner={isDirectorOrPm && activeChannel.created_by !== currentUser.id}
                 ownerId={activeChannel.created_by}
                 ownerName={
                   activeChannel.is_general
