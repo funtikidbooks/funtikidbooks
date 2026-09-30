@@ -58,11 +58,24 @@ function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: st
     try {
       await navigator.clipboard.writeText(draft);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setTimeout(() => setCopied(false), 4000);
     } catch {
       // Clipboard blocked (older Safari, no HTTPS) — the textarea below still
       // lets sếp select-all and copy by hand.
     }
+  }
+
+  // Duyệt = approve, copy the proposal, and open the job on Upwork in the
+  // same tap — the link itself opens it (in whatever browser or app sếp is
+  // signed in to), the status saves alongside. An unsaved edit is saved too.
+  function approveAndOpen() {
+    void copyDraft();
+    startTransition(async () => {
+      if (draft !== lead.proposal_draft) await updateUpworkLeadDraft(lead.id, draft);
+      await updateUpworkLeadStatus(lead.id, "approved");
+      onChanged({ ...lead, proposal_draft: draft, status: "approved" });
+      setEditing(false);
+    });
   }
 
   return (
@@ -192,7 +205,7 @@ function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: st
         {/* One tap on the phone: the draft goes to the clipboard and the job
             opens on Upwork, ready to paste. A real link (not window.open
             after an await) so iOS Safari never blocks it as a popup. */}
-        {lead.status !== "rejected" && (
+        {lead.status !== "rejected" && lead.status !== "pending" && (
           <a
             href={lead.job_url}
             target="_blank"
@@ -211,9 +224,22 @@ function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: st
         )}
         {lead.status === "pending" && (
           <>
-            <button type="button" className="btn btn-primary btn-sm" disabled={pending} onClick={() => setStatus("approved")}>
-              Duyệt
-            </button>
+            <a
+              href={lead.job_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => {
+                if (pending) {
+                  e.preventDefault();
+                  return;
+                }
+                approveAndOpen();
+              }}
+              className="btn btn-primary btn-sm"
+              aria-disabled={pending}
+            >
+              Duyệt & mở job ↗
+            </a>
             <button type="button" className="btn btn-secondary btn-sm" disabled={pending} onClick={() => setStatus("rejected")}>
               Bỏ qua
             </button>
@@ -530,7 +556,7 @@ export function UpworkReportsAdmin({
           <h1 className="text-xl">Tìm khách (Upwork)</h1>
           <p className="text-xs mt-1" style={{ color: "var(--color-neutral-500)" }}>
             Báo cáo job tìm được và proposal nháp mỗi đêm — chỉ giám đốc và Project Manager thấy được. Không có gì ở đây tự
-            gửi lên Upwork; bấm &quot;Duyệt&quot; rồi tự tay gửi.
+            gửi lên Upwork; bấm &quot;Duyệt &amp; mở job&quot; — proposal được chép sẵn, job mở trên Upwork, dán vào rồi tự tay gửi.
           </p>
         </div>
         <div role="tablist" className="flex gap-5 -mb-px overflow-x-auto [scrollbar-width:none]">
