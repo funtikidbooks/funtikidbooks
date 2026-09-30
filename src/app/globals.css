@@ -1670,6 +1670,32 @@ select.input:focus {
     z-index: 6 !important;
   }
 }
+/* A sparkle that twinkles: grows, turns a little and brightens, then
+   fades back — each one on its own delay so they never blink together. */
+@keyframes fk-twinkle {
+  0%,
+  100% {
+    transform: scale(0.55) rotate(0deg);
+    opacity: 0.35;
+  }
+  45% {
+    transform: scale(1.12) rotate(18deg);
+    opacity: 1;
+  }
+  60% {
+    transform: scale(0.95) rotate(22deg);
+    opacity: 0.9;
+  }
+}
+.fk-twinkle {
+  transform-origin: 50% 50%;
+  animation: fk-twinkle 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fk-twinkle {
+    animation: none;
+  }
+}
 /* A print pinned up at an angle (inner-page heroes); straightens on hover. */
 .fk-print {
   transform: rotate(var(--r, 0deg));

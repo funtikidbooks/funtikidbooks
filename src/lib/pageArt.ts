@@ -23,8 +23,8 @@ export const PROCESS_ART = {
   printed: { ...PRINCESS, src: P("b3870d1c-d1b2-4bfd-aa67-780ebc97adfb.jpg"), w: 420, h: 280 },
 } satisfies Record<string, unknown>;
 
-// Dịch vụ: a page spread, a cover and a character, pinned up together.
-export const SERVICES_ART: { spread: PageArt; cover: PageArt; character: PageArt } = {
+// Dịch vụ: a page spread, a cover and two characters, pinned up together.
+export const SERVICES_ART: { spread: PageArt; cover: PageArt; characters: [PageArt, PageArt] } = {
   spread: {
     projectId: "717a9293-6c15-46e5-a5fc-8756f9a284bb",
     title: "The Mystical Amulet",
@@ -39,7 +39,8 @@ export const SERVICES_ART: { spread: PageArt; cover: PageArt; character: PageArt
     w: 3,
     h: 4,
   },
-  character: { ...PROCESS_ART.characters[1] },
+  // the princess and the frog, cut out
+  characters: [{ ...PROCESS_ART.characters[0] }, { ...PROCESS_ART.characters[1] }],
 };
 
 // "Xem mẫu" on each service card (in t.home.services order) opens the

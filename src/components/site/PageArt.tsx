@@ -51,37 +51,54 @@ function Print({
   );
 }
 
-// Dịch vụ: a page spread, a cover and a character — the three things most
-// clients come for — pinned up together.
+// Dịch vụ: a page spread, a cover and characters — the three things most
+// clients come for — pinned up together. The characters are the princess
+// and the frog from Princess and The Frog, cut out, bobbing side by side.
 export function ServicesCollage({ labels }: { labels: readonly string[] }) {
-  const { spread, cover, character } = SERVICES_ART;
+  const { spread, cover, characters } = SERVICES_ART;
+  const [princess, frog] = characters;
+  const cutout = (art: PageArt, width: string, delay: string) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={resizedUrl(art.src, 360)}
+      alt=""
+      className="fk-bob block h-auto"
+      style={{ width, animationDelay: delay, filter: "drop-shadow(0 10px 12px rgba(40,28,16,.22))" }}
+      draggable={false}
+    />
+  );
   return (
-    <div className="relative w-full max-w-[560px] mx-auto" style={{ aspectRatio: "1 / 0.86" }}>
+    <div className="relative w-full max-w-[560px] mx-auto" style={{ aspectRatio: "1 / 0.9" }}>
       <div
         className="absolute rounded-full"
         style={{ width: "70%", aspectRatio: "1", left: "18%", top: "6%", background: "var(--color-accent-2-100)" }}
         aria-hidden
       />
-      <Sparkle size={20} className="absolute" style={{ left: "2%", top: "4%" }} />
-      <Sparkle size={13} color="var(--color-accent-2-500)" className="absolute" style={{ right: "3%", top: "58%" }} />
+      {/* Twinkling, each on its own beat. */}
+      {[
+        { size: 22, left: "2%", top: "4%", delay: "0s" },
+        { size: 14, color: "var(--color-accent-2-500)", right: "2%", top: "54%", delay: "-0.8s" },
+        { size: 12, left: "46%", top: "1%", delay: "-1.6s" },
+        { size: 16, color: "var(--color-accent-2-500)", left: "44%", bottom: "4%", delay: "-1.1s" },
+        { size: 10, right: "10%", top: "0%", delay: "-0.4s" },
+      ].map(({ size, color, delay, ...pos }, i) => (
+        <Sparkle key={i} size={size} color={color} className="absolute fk-twinkle" style={{ ...pos, animationDelay: delay, zIndex: 4 }} />
+      ))}
       <Print art={spread} width="70%" rotate={2.5} label={labels[0]} labelRight style={{ right: "1%", top: "5%", zIndex: 1 }} />
-      <Print art={cover} width="40%" rotate={-4} label={labels[1]} style={{ left: "3%", top: "30%", zIndex: 2 }} />
+      <Print art={cover} width="40%" rotate={-4} label={labels[1]} style={{ left: "3%", top: "28%", zIndex: 2 }} />
       <Link
-        href={`/du-an?p=${character.projectId}`}
-        title={character.title}
-        className="absolute block"
-        style={{ width: "27%", right: "8%", bottom: "0%", zIndex: 3 }}
+        href={`/du-an?p=${frog.projectId}`}
+        title={frog.title}
+        aria-label={`${labels[2]} — ${frog.title}`}
+        className="absolute flex flex-col items-center"
+        style={{ width: "50%", right: "0%", bottom: "0%", zIndex: 3 }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={resizedUrl(character.src, 360)}
-          alt={character.title}
-          className="fk-bob block w-full"
-          style={{ filter: "drop-shadow(0 10px 12px rgba(40,28,16,.22))" }}
-          draggable={false}
-        />
+        <span className="flex items-end justify-center w-full">
+          {cutout(princess, "49%", "-1.8s")}
+          {cutout(frog, "45%", "0s")}
+        </span>
         <span
-          className="absolute left-1/2 -translate-x-1/2 -bottom-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[11.5px] font-bold"
+          className="-mt-1 whitespace-nowrap rounded-full px-2.5 py-1 text-[11.5px] font-bold"
           style={{ background: "var(--color-panel)", color: "var(--color-text)", boxShadow: "var(--shadow-sm)" }}
         >
           {labels[2]}
