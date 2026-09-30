@@ -425,8 +425,8 @@ export function HomeContent({
                   <blockquote className="text-[15px] leading-relaxed line-clamp-6" style={{ color: "var(--color-text)" }}>
                     {r.content.replace(/^["“]|["”]$/g, "")}
                   </blockquote>
-                  <figcaption className="text-[13px] font-bold" style={{ color: "var(--color-neutral-600)" }}>
-                    — {r.customer_name}
+                  <figcaption className="text-[12.5px] leading-snug line-clamp-2" style={{ color: "var(--color-neutral-600)" }}>
+                    <b>{t.reviews.projectLabel}:</b> {r.customer_name}
                   </figcaption>
                 </figure>
               </Reveal>

@@ -59,33 +59,34 @@ export function ReviewsSection({ reviews, canEdit = false }: { reviews: Review[]
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 w-full text-left">
           {items.map((r) => (
-            <div key={r.id} className="relative card elev-sm p-6 flex flex-col gap-3" style={{ opacity: r.published ? 1 : 0.55 }}>
-              <div className="flex items-center gap-3">
-                {r.avatar_url ? (
+            // The words first; under them, what the review is about. Most
+            // reviews come from marketplace jobs, whose "name" is the job's
+            // title — shown as the project, not as a person.
+            <figure key={r.id} className="relative card elev-sm p-6 flex flex-col gap-3" style={{ opacity: r.published ? 1 : 0.55 }}>
+              <div className="flex items-center justify-between gap-3">
+                <Stars rating={r.rating} />
+                <span className="font-heading text-[40px] leading-[0.6] h-[18px]" style={{ color: "var(--color-accent-300)" }} aria-hidden>
+                  “
+                </span>
+              </div>
+              <blockquote className="text-[14.5px] leading-relaxed" style={{ color: "var(--color-text)" }}>
+                {r.content.replace(/^["“]|["”]$/g, "")}
+              </blockquote>
+              <figcaption className="mt-auto pt-3 flex items-center gap-2.5 min-w-0" style={{ borderTop: "1px solid var(--color-neutral-200)" }}>
+                {r.avatar_url && (
                   <Image
                     src={isSupabaseStorageUrl(r.avatar_url) ? (resizedUrl(r.avatar_url, 120) ?? r.avatar_url) : r.avatar_url}
-                    alt={r.customer_name}
-                    width={44}
-                    height={44}
+                    alt=""
+                    width={32}
+                    height={32}
                     unoptimized={isSupabaseStorageUrl(r.avatar_url)}
                     className="rounded-full object-cover flex-none"
                   />
-                ) : (
-                  <div
-                    className="flex items-center justify-center rounded-full text-sm font-bold flex-none"
-                    style={{ width: 44, height: 44, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
-                  >
-                    {r.customer_name.charAt(0).toUpperCase()}
-                  </div>
                 )}
-                <div className="min-w-0">
-                  <div className="text-sm font-bold truncate">{r.customer_name}</div>
-                  <Stars rating={r.rating} />
-                </div>
-              </div>
-              <p className="text-sm" style={{ color: "var(--color-neutral-700)" }}>
-                {r.content}
-              </p>
+                <span className="text-[12.5px] leading-snug line-clamp-2 min-w-0" style={{ color: "var(--color-neutral-600)" }}>
+                  <b style={{ color: "var(--color-neutral-700)" }}>{t.reviews.projectLabel}:</b> {r.customer_name}
+                </span>
+              </figcaption>
               {!r.published && <span className="text-[11px] font-semibold w-fit tag tag-neutral">{t.reviews.unpublished}</span>}
 
               {canEdit && (
@@ -98,7 +99,7 @@ export function ReviewsSection({ reviews, canEdit = false }: { reviews: Review[]
                   {t.reviews.edit}
                 </button>
               )}
-            </div>
+            </figure>
           ))}
 
           {canEdit && (

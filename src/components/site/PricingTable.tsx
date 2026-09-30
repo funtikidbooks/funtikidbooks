@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { PricingTable as PricingTableData } from "@/lib/types";
 import { useDict } from "@/components/site/LocaleProvider";
 import { pickLocalized } from "@/lib/i18n";
+import { DrawnIcon } from "@/components/site/Doodles";
 
 const PricingEditDialog = dynamic(
   () => import("@/components/admin/PricingEditDialog").then((m) => m.PricingEditDialog),
@@ -28,7 +29,7 @@ export function PricingTable({ table, canEdit }: { table: PricingTableData; canE
   const { locale, t } = useDict();
 
   return (
-    <section className="site-container py-14">
+    <section id="bang-gia" className="site-container py-14 scroll-mt-20">
       <div className="flex flex-col items-center text-center gap-2 mb-10">
         <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
           {t.pricing.kicker}
@@ -44,8 +45,9 @@ export function PricingTable({ table, canEdit }: { table: PricingTableData; canE
         )}
       </div>
 
-      <div className="overflow-x-auto pt-7">
-        <div className="grid gap-5" style={{ gridTemplateColumns: `repeat(${data.tiers.length}, minmax(240px, 1fr))` }}>
+      {/* One card per row on a phone, two on an iPad, all side by side on a computer. */}
+      <div className="pt-7">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 gap-5 gap-y-8 ${data.tiers.length >= 4 ? "xl:grid-cols-4" : "lg:grid-cols-3"}`}>
           {data.tiers.map((tier, tierIndex) => {
             const vnd = formatVnd(tier.priceVnd);
             const usd = formatUsd(tier.priceUsd);
@@ -93,12 +95,13 @@ export function PricingTable({ table, canEdit }: { table: PricingTableData; canE
                 <div>
                   {vnd || usd ? (
                     <div className="flex items-baseline gap-2 flex-wrap">
-                      {vnd && (
-                        <span className="text-2xl font-heading font-bold" style={{ color: "var(--color-accent-700)" }}>
-                          {vnd}
-                        </span>
-                      )}
-                      {usd && (
+                      <span className="text-sm font-semibold" style={{ color: "var(--color-neutral-600)" }}>
+                        {t.pricing.from}
+                      </span>
+                      <span className="text-[26px] font-heading font-bold leading-none" style={{ color: "var(--color-accent-700)" }}>
+                        {vnd ?? usd}
+                      </span>
+                      {vnd && usd && (
                         <span className="text-sm font-semibold" style={{ color: "var(--color-neutral-500)" }}>
                           (~{usd})
                         </span>
@@ -112,7 +115,7 @@ export function PricingTable({ table, canEdit }: { table: PricingTableData; canE
                 </div>
 
                 <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "var(--color-neutral-600)" }}>
-                  <span aria-hidden>🕐</span>
+                  <DrawnIcon name="clock" size={16} />
                   {tierDelivery}
                 </div>
 
@@ -131,7 +134,7 @@ export function PricingTable({ table, canEdit }: { table: PricingTableData; canE
                   })}
                 </div>
 
-                <Link href="/lien-he" className="btn btn-primary btn-block mt-2">
+                <Link href="/cong-viec" className={`btn ${tier.featured ? "btn-primary" : "btn-secondary"} btn-block mt-2`}>
                   {t.pricing.contactCta}
                 </Link>
               </div>

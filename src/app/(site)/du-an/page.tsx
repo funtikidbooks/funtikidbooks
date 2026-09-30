@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { getPublishedProjects } from "@/lib/data/site-content";
+import { getJsonSetting, getPublishedProjects } from "@/lib/data/site-content";
+import { CARD_ART_KEY, FEATURED_KEY } from "@/lib/projectCards";
 import { ProjectsPageContent } from "./ProjectsPageContent";
 
 const PAGE_DESCRIPTION =
@@ -13,6 +14,11 @@ export const metadata: Metadata = {
 };
 
 export default async function ProjectsPage() {
-  const projects = await getPublishedProjects();
-  return <ProjectsPageContent initialProjects={projects} />;
+  const [projects, featuredIds, cardArt] = await Promise.all([
+    getPublishedProjects(),
+    // null until an editor pins something — then their list, in their order.
+    getJsonSetting<string[] | null>(FEATURED_KEY, null),
+    getJsonSetting<Record<string, string>>(CARD_ART_KEY, {}),
+  ]);
+  return <ProjectsPageContent initialProjects={projects} featuredIds={featuredIds} cardArt={cardArt} />;
 }

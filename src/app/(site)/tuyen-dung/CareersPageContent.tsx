@@ -2,7 +2,8 @@
 
 import { HeroSlideshow } from "@/components/site/HeroSlideshow";
 import { JobPostingsSection } from "@/components/site/JobPostingsSection";
-import { CareersStats } from "@/components/site/CareersStats";
+import { Reveal } from "@/components/site/Reveal";
+import { DrawnIcon, WaveEdge, type DrawnIconName } from "@/components/site/Doodles";
 import { useDict } from "@/components/site/LocaleProvider";
 import { useViewer } from "@/components/site/ViewerProvider";
 import { useEditorSwap } from "@/lib/hooks/useEditorSwap";
@@ -11,6 +12,8 @@ import type { ImageTransform } from "@/components/site/EditableImage";
 import type { JobPosting } from "@/lib/types";
 
 const HERO_KEY = "hero-tuyen-dung";
+const EMAIL = "funtikidbooks.studio@gmail.com";
+const PERK_ICONS: DrawnIconName[] = ["book", "sprout", "users"];
 
 export function CareersPageContent({
   initialPosts,
@@ -21,7 +24,7 @@ export function CareersPageContent({
   heroSlides: string[];
   heroTransforms: Record<string, ImageTransform>;
 }) {
-  const { locale, t: fullT } = useDict();
+  const { t: fullT } = useDict();
   const t = fullT.careers;
   const { canEdit } = useViewer();
   const posts = useEditorSwap(canEdit, fetchAllJobPostingsForEditor, initialPosts);
@@ -52,7 +55,76 @@ export function CareersPageContent({
         <JobPostingsSection initialPosts={posts} canEdit={canEdit} />
       </section>
 
-      <CareersStats locale={locale} />
+      {/* What it's like here, and how to apply — from the studio's own job ads. */}
+      <WaveEdge fill="var(--color-surface)" />
+      <section className="py-14 sm:py-16" style={{ background: "var(--color-surface)" }}>
+        <div className="site-container flex flex-col gap-10">
+          <Reveal className="flex flex-col items-center text-center gap-2">
+            <div className="text-xs font-bold tracking-[0.12em]" style={{ color: "var(--color-accent-2-700)" }}>
+              {t.whyKicker}
+            </div>
+            <h2 className="text-[28px] sm:text-[34px] leading-tight">{t.whyTitle}</h2>
+          </Reveal>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {t.perks.map((p, i) => (
+              <Reveal key={p.title} delay={i * 80} className="h-full">
+                <div className="h-full flex flex-col gap-3 rounded-[18px] p-6" style={{ background: "var(--color-panel)", boxShadow: "var(--shadow-sm)" }}>
+                  <span
+                    className="inline-flex items-center justify-center rounded-full"
+                    style={{
+                      width: 52,
+                      height: 52,
+                      background: i % 2 ? "var(--color-accent-2-100)" : "var(--color-accent-100)",
+                      color: i % 2 ? "var(--color-accent-2-700)" : "var(--color-accent-700)",
+                    }}
+                  >
+                    <DrawnIcon name={PERK_ICONS[i % PERK_ICONS.length]} size={28} />
+                  </span>
+                  <h3 className="text-lg">{p.title}</h3>
+                  <p className="text-[15px] leading-relaxed" style={{ color: "var(--color-neutral-600)" }}>
+                    {p.desc}
+                  </p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] gap-5">
+            <Reveal>
+              <div className="h-full rounded-[18px] p-6 sm:p-8 flex flex-col gap-5" style={{ background: "var(--color-panel)", boxShadow: "var(--shadow-sm)" }}>
+                <h3 className="text-[22px]">{t.applyTitle}</h3>
+                <ol className="flex flex-col gap-4">
+                  {t.applySteps.map((s, i) => (
+                    <li key={s} className="flex items-start gap-3">
+                      <span
+                        className="inline-flex items-center justify-center rounded-full font-heading font-bold flex-none"
+                        style={{ width: 32, height: 32, background: "var(--color-accent-500)", color: "#fff" }}
+                      >
+                        {i + 1}
+                      </span>
+                      <span className="text-[15px] leading-snug pt-1 break-words min-w-0">{s}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </Reveal>
+            <Reveal delay={90}>
+              <div className="h-full rounded-[18px] p-6 sm:p-8 flex flex-col gap-3" style={{ background: "var(--color-accent-100)" }}>
+                <h3 className="text-[22px]">{t.openTitle}</h3>
+                <p className="text-[15px] leading-relaxed" style={{ color: "var(--color-neutral-700)" }}>
+                  {t.openBody}
+                </p>
+                <a href={`mailto:${EMAIL}?subject=${encodeURIComponent(t.applySubject + " Portfolio")}`} className="btn btn-primary w-full sm:w-fit mt-auto">
+                  {t.openCta}
+                </a>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+      <div style={{ background: "var(--color-surface)" }}>
+        <WaveEdge fill="var(--color-bg)" flip />
+      </div>
     </>
   );
 }

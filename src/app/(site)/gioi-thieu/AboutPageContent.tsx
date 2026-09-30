@@ -10,6 +10,10 @@ import { Reveal } from "@/components/site/Reveal";
 import { useDict } from "@/components/site/LocaleProvider";
 import { useViewer } from "@/components/site/ViewerProvider";
 import type { ImageTransform } from "@/components/site/EditableImage";
+import { DrawnIcon, type DrawnIconName } from "@/components/site/Doodles";
+
+// Tận tâm, Sáng tạo, Hợp tác, Chất lượng.
+const CULTURE_ICONS: DrawnIconName[] = ["sprout", "bulb", "hands", "book"];
 
 export function AboutPageContent({
   timeline,
@@ -59,14 +63,14 @@ export function AboutPageContent({
           </Link>
 
           <div className="flex flex-wrap justify-center gap-4 mt-6">
-            {t.about.cultureValues.map((v) => (
+            {t.about.cultureValues.map((v, i) => (
               <div
                 key={v.label}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-full"
+                className="flex items-center gap-2 pl-3 pr-4 py-2 rounded-full"
                 style={{ background: "var(--color-panel)", boxShadow: "var(--shadow-sm)" }}
               >
-                <span className="text-lg leading-none" aria-hidden>
-                  {v.icon}
+                <span style={{ color: i % 2 ? "var(--color-accent-2-700)" : "var(--color-accent-600)" }}>
+                  <DrawnIcon name={CULTURE_ICONS[i % CULTURE_ICONS.length]} size={22} />
                 </span>
                 <span className="text-sm font-bold">{v.label}</span>
               </div>

@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { PageHero } from "@/components/site/PageHero";
 import { ContactForm } from "@/components/site/ContactForm";
 import { ContactOfficePhoto } from "@/components/site/ContactOfficePhoto";
 import { Reveal } from "@/components/site/Reveal";
+import { DrawnIcon, type DrawnIconName } from "@/components/site/Doodles";
 import { useDict } from "@/components/site/LocaleProvider";
 import { useViewer } from "@/components/site/ViewerProvider";
 
@@ -13,56 +15,95 @@ import { useViewer } from "@/components/site/ViewerProvider";
 const OFFICE_LAT = 10.7974838;
 const OFFICE_LNG = 106.6584287;
 
+// One door per kind of visit: a book project goes to Work With Funti (the
+// quote intake); anything else to the message form on this page.
 export function ContactPageContent({ officeImage }: { officeImage: string | null }) {
   const { t } = useDict();
   const { canEdit } = useViewer();
+  const c = t.contact;
 
-  const INFO = [
-    { icon: "✉️", label: t.contact.email, value: "funtikidbooks.studio@gmail.com" },
-    { icon: "📞", label: t.contact.phone, value: "0978 346 851" },
-    { icon: "📍", label: t.contact.address, value: t.contact.addressValue },
+  const INFO: { icon: DrawnIconName; label: string; value: string; href?: string }[] = [
+    { icon: "mail", label: c.email, value: "funtikidbooks.studio@gmail.com", href: "mailto:funtikidbooks.studio@gmail.com" },
+    { icon: "phone", label: c.phone, value: "0978 346 851", href: "tel:0978346851" },
+    { icon: "pin", label: c.address, value: c.addressValue },
   ];
 
   return (
     <>
-      <PageHero kicker={t.contact.kicker} title={t.contact.title} body={t.contact.body} emoji="✉️" hideImage />
-      <section className="site-container pb-16 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
+      <PageHero kicker={c.kicker} title={c.title} body={c.body} hideImage />
+
+      <section className="site-container pb-12 grid grid-cols-1 md:grid-cols-2 gap-5">
+        <Reveal>
+          <div className="h-full flex flex-col gap-3 rounded-[20px] p-6 sm:p-8" style={{ background: "var(--color-accent-100)" }}>
+            <span style={{ color: "var(--color-accent-700)" }}>
+              <DrawnIcon name="book" size={36} />
+            </span>
+            <h2 className="text-[22px] sm:text-[24px]">{c.doorProjectTitle}</h2>
+            <p className="text-[15px] leading-relaxed" style={{ color: "var(--color-neutral-700)" }}>
+              {c.doorProjectBody}
+            </p>
+            <Link href="/cong-viec" className="btn btn-primary btn-lg w-full sm:w-fit mt-auto">
+              {c.doorProjectCta}
+            </Link>
+          </div>
+        </Reveal>
+        <Reveal delay={90}>
+          <div className="h-full flex flex-col gap-3 rounded-[20px] p-6 sm:p-8" style={{ background: "var(--color-accent-2-100)" }}>
+            <span style={{ color: "var(--color-accent-2-700)" }}>
+              <DrawnIcon name="chat" size={36} />
+            </span>
+            <h2 className="text-[22px] sm:text-[24px]">{c.doorOtherTitle}</h2>
+            <p className="text-[15px] leading-relaxed" style={{ color: "var(--color-neutral-700)" }}>
+              {c.doorOtherBody}
+            </p>
+            <a href="#loi-nhan" className="btn btn-secondary btn-lg w-full sm:w-fit mt-auto" style={{ background: "var(--color-panel)" }}>
+              {c.doorOtherCta}
+            </a>
+          </div>
+        </Reveal>
+      </section>
+
+      <section id="loi-nhan" className="site-container pb-16 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] scroll-mt-20">
         <Reveal>
           <ContactForm />
         </Reveal>
         <Reveal delay={130} className="card elev-sm p-7 flex flex-col gap-5 h-fit">
-          <h3 className="text-lg">{t.contact.infoTitle}</h3>
+          <h3 className="text-lg">{c.infoTitle}</h3>
           {INFO.map((item) => (
             <div key={item.label} className="flex items-start gap-3">
               <span
-                className="flex items-center justify-center rounded-full text-base flex-none"
-                style={{ width: 36, height: 36, background: "var(--color-accent-2-100)" }}
-                aria-hidden
+                className="flex items-center justify-center rounded-full flex-none"
+                style={{ width: 40, height: 40, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-700)" }}
               >
-                {item.icon}
+                <DrawnIcon name={item.icon} size={22} />
               </span>
-              <div className="flex flex-col">
+              <div className="flex flex-col min-w-0">
                 <span className="text-xs font-bold" style={{ color: "var(--color-neutral-500)" }}>
                   {item.label}
                 </span>
-                <span className="text-sm font-semibold">{item.value}</span>
+                {item.href ? (
+                  <a href={item.href} className="text-sm font-semibold break-words hover:underline">
+                    {item.value}
+                  </a>
+                ) : (
+                  <span className="text-sm font-semibold">{item.value}</span>
+                )}
               </div>
             </div>
           ))}
           <div className="flex items-start gap-3">
             <span
-              className="flex items-center justify-center rounded-full text-base flex-none"
-              style={{ width: 36, height: 36, background: "var(--color-accent-2-100)" }}
-              aria-hidden
+              className="flex items-center justify-center rounded-full flex-none"
+              style={{ width: 40, height: 40, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-700)" }}
             >
-              🕐
+              <DrawnIcon name="clock" size={22} />
             </span>
             <div className="flex flex-col">
               <span className="text-xs font-bold" style={{ color: "var(--color-neutral-500)" }}>
-                {t.contact.hours}
+                {c.hours}
               </span>
-              <span className="text-sm font-semibold">{t.contact.hoursWeekday}</span>
-              <span className="text-sm font-semibold">{t.contact.hoursSaturday}</span>
+              <span className="text-sm font-semibold">{c.hoursWeekday}</span>
+              <span className="text-sm font-semibold">{c.hoursSaturday}</span>
             </div>
           </div>
 
@@ -98,7 +139,7 @@ export function ContactPageContent({ officeImage }: { officeImage: string | null
             rel="noopener noreferrer"
             className="btn btn-primary btn-sm"
           >
-            📍 {t.contact.directions}
+            {c.directions} →
           </a>
         </div>
       </section>

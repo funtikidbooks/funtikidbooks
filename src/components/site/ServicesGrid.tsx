@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { saveJsonSetting, uploadContentImage } from "@/lib/actions/admin";
 import { DEFAULT_IMAGE_TRANSFORM, type ImageTransform } from "@/components/site/EditableImage";
 
@@ -17,11 +18,14 @@ export function ServicesGrid({
   initialImages,
   initialTransforms,
   canEdit,
+  details,
 }: {
   services: { title: string; desc: string; icon: string }[];
   initialImages: Record<number, string>;
   initialTransforms: Record<number, ImageTransform>;
   canEdit: boolean;
+  // The services page adds who each one suits and a link to examples.
+  details?: { forWhoLabel: string; forWho: readonly string[]; sampleLabel: string; sampleHref: (i: number) => string };
 }) {
   const [images, setImages] = useState(initialImages);
   const [transforms, setTransforms] = useState(initialTransforms);
@@ -45,8 +49,8 @@ export function ServicesGrid({
       setImages(nextImages);
       setTransforms(nextTransforms);
       await Promise.all([
-        saveJsonSetting(IMAGES_KEY, nextImages, ["/"]),
-        saveJsonSetting(TRANSFORMS_KEY, nextTransforms, ["/"]),
+        saveJsonSetting(IMAGES_KEY, nextImages, ["/", "/dich-vu"]),
+        saveJsonSetting(TRANSFORMS_KEY, nextTransforms, ["/", "/dich-vu"]),
       ]);
     } catch {
       // upload/save failed — icon just stays as-is
@@ -59,7 +63,7 @@ export function ServicesGrid({
   function commitTransform(index: number, next: ImageTransform) {
     setTransforms((prev) => {
       const merged = { ...prev, [index]: next };
-      saveJsonSetting(TRANSFORMS_KEY, merged, ["/"]).catch(() => {});
+      saveJsonSetting(TRANSFORMS_KEY, merged, ["/", "/dich-vu"]).catch(() => {});
       return merged;
     });
   }
@@ -84,11 +88,21 @@ export function ServicesGrid({
             uploading={uploadingIndex === i}
             onReplace={() => openPicker(i)}
           />
-          <div className="flex flex-col items-center text-center gap-3 p-7" style={{ background: "var(--color-panel)" }}>
+          <div className="flex flex-col flex-1 items-center text-center gap-3 p-7" style={{ background: "var(--color-panel)" }}>
             <h3 className="text-xl font-bold">{s.title}</h3>
             <p className="text-base leading-relaxed" style={{ color: "var(--color-neutral-600)" }}>
               {s.desc}
             </p>
+            {details?.forWho[i] && (
+              <p className="text-[13.5px] leading-snug rounded-[10px] px-3 py-2 w-full" style={{ background: "var(--color-neutral-100)", color: "var(--color-neutral-700)" }}>
+                <b style={{ color: "var(--color-text)" }}>{details.forWhoLabel}</b> {details.forWho[i]}
+              </p>
+            )}
+            {details && (
+              <Link href={details.sampleHref(i)} className="fk-navlink text-sm font-bold mt-auto">
+                {details.sampleLabel}
+              </Link>
+            )}
           </div>
         </div>
       ))}

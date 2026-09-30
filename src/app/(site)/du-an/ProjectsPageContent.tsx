@@ -9,63 +9,63 @@ import { fetchAllProjectsForEditor } from "@/lib/actions/editorContent";
 import type { Project } from "@/lib/types";
 import { ProjectsGrid } from "./ProjectsGrid";
 
-// The ?p=<id> deep link (e.g. from the homepage carousel) used to be read
-// server-side via `searchParams`, but reading that on the server forces the
-// whole page dynamic just like cookies() does — so it's read client-side
-// here instead, behind the <Suspense> next/navigation's useSearchParams()
-// requires.
-function ProjectsGridWithDeepLink({ projects, canEdit }: { projects: Project[]; canEdit: boolean }) {
+type GridProps = { projects: Project[]; canEdit: boolean; featuredIds: string[] | null; cardArt: Record<string, string> };
+
+// ?p=<id> (open a project) and ?c=<category> (start on a category) are read
+// client-side — reading searchParams on the server would make the whole page
+// dynamic — behind the <Suspense> useSearchParams() requires.
+function ProjectsGridWithDeepLink(props: GridProps) {
   const searchParams = useSearchParams();
-  const initialOpenId = searchParams.get("p") ?? undefined;
-  return <ProjectsGrid projects={projects} canEdit={canEdit} initialOpenId={initialOpenId} />;
+  return <ProjectsGrid {...props} initialOpenId={searchParams.get("p") ?? undefined} initialCategory={searchParams.get("c") ?? undefined} />;
 }
 
-export function ProjectsPageContent({ initialProjects }: { initialProjects: Project[] }) {
+export function ProjectsPageContent({
+  initialProjects,
+  featuredIds,
+  cardArt,
+}: {
+  initialProjects: Project[];
+  featuredIds: string[] | null;
+  cardArt: Record<string, string>;
+}) {
   const { t } = useDict();
   const { canEdit } = useViewer();
   const projects = useEditorSwap(canEdit, fetchAllProjectsForEditor, initialProjects);
-
-  const TAGS = [
-    { icon: "🎨", label: t.projects.tagline1 },
-    { icon: "🏢", label: t.projects.tagline2 },
-    { icon: "📍", label: t.projects.tagline3 },
-  ];
+  const grid: GridProps = { projects, canEdit, featuredIds, cardArt };
 
   return (
     <>
-      <section className="site-container pt-10 pb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/funti-mascot.png" alt="Funti Kidbooks Studio" width={72} height={72} className="flex-none" />
-          <div className="flex flex-col gap-2 flex-1">
-            <h1 className="text-2xl">Funti Kidbooks Studio</h1>
-            <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm" style={{ color: "var(--color-neutral-600)" }}>
-              {TAGS.map((item) => (
-                <span key={item.label} className="flex items-center gap-1.5">
-                  <span aria-hidden>{item.icon}</span>
-                  {item.label}
-                </span>
-              ))}
+      <section className="fk-paper">
+        <div className="site-container pt-10 pb-6 sm:pt-14 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6">
+          <div className="flex flex-col gap-3 max-w-[640px]">
+            <div className="text-xs font-bold tracking-[0.12em]" style={{ color: "var(--color-accent-2-700)" }}>
+              {t.projects.kicker}
             </div>
+            <h1 className="text-[32px] leading-[1.15] sm:text-[42px]" style={{ textWrap: "balance" }}>
+              {t.projects.title}
+            </h1>
+            <p className="text-[16px] sm:text-[17px] leading-relaxed" style={{ color: "var(--color-neutral-700)" }}>
+              {t.projects.body}
+            </p>
           </div>
-          <div className="flex flex-wrap gap-8 flex-none">
+          <dl className="flex gap-6 sm:gap-10">
             {t.projects.stats.map((s) => (
-              <div key={s.label} className="flex flex-col">
-                <span className="text-xl font-heading font-bold" style={{ color: "var(--color-accent-700)" }}>
-                  {s.value}
-                </span>
-                <span className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
+              <div key={s.label} className="flex flex-col-reverse gap-1">
+                <dt className="text-[12.5px]" style={{ color: "var(--color-neutral-600)" }}>
                   {s.label}
-                </span>
+                </dt>
+                <dd className="font-heading font-bold text-[26px] leading-none" style={{ color: "var(--color-accent-600)" }}>
+                  {s.value}
+                </dd>
               </div>
             ))}
-          </div>
+          </dl>
         </div>
       </section>
 
-      <section className="site-container pb-16">
-        <Suspense fallback={<ProjectsGrid projects={projects} canEdit={canEdit} />}>
-          <ProjectsGridWithDeepLink projects={projects} canEdit={canEdit} />
+      <section className="site-container pt-4 pb-16">
+        <Suspense fallback={<ProjectsGrid {...grid} />}>
+          <ProjectsGridWithDeepLink {...grid} />
         </Suspense>
       </section>
     </>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { AboutHeroVideo } from "@/components/site/AboutHeroVideo";
 import { InlineField } from "@/components/site/InlineField";
@@ -33,7 +34,7 @@ export function AboutHero({
 
   return (
     <section className="site-container pt-12 pb-14">
-      <div className="flex flex-col items-center text-center xl:flex-row xl:items-start xl:text-left gap-12">
+      <div className="flex flex-col items-center text-center xl:flex-row xl:items-center xl:text-left gap-12">
         <div className="flex-1 flex flex-col items-center text-center xl:items-start xl:text-left gap-4 max-w-[560px]">
           <div className="text-xs font-bold tracking-[0.1em]" style={{ color: "var(--color-accent-2-700)" }}>
             {kicker}
@@ -73,13 +74,28 @@ export function AboutHero({
           </div>
         </div>
 
-        {/* Hidden from visitors until a real video exists — an empty "coming
-            soon" box reads as an unfinished site. Director/admin still see the
-            upload slot. */}
-        {(videoSrc || canEdit) && (
+        {/* Until a real video exists visitors see the team photo — an empty
+            "coming soon" box reads as an unfinished site. Director/admin
+            still see the upload slot. */}
+        {videoSrc || canEdit ? (
           <div className="flex-1 w-full max-w-[560px]">
             <AboutHeroVideo src={videoSrc} canEdit={canEdit} />
           </div>
+        ) : (
+          <figure
+            className="flex-1 w-full max-w-[560px] p-3 pb-12 relative"
+            style={{ background: "#fff", boxShadow: "var(--shadow-lg)", transform: "rotate(1.5deg)", borderRadius: 6 }}
+          >
+            <span className="block relative w-full overflow-hidden" style={{ aspectRatio: "4 / 3", borderRadius: 3 }}>
+              <Image src="/brand/funti-team.jpg" alt="Funti Kidbooks Studio" fill priority sizes="(min-width: 1280px) 560px, 92vw" className="object-cover" />
+            </span>
+            <figcaption
+              className="absolute left-0 right-0 bottom-2.5 text-center text-[22px]"
+              style={{ fontFamily: "var(--font-funti-wordmark), var(--font-heading)", color: "#f0631f" }}
+            >
+              Funti team ♥
+            </figcaption>
+          </figure>
         )}
       </div>
 
