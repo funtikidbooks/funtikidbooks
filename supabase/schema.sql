@@ -131,6 +131,9 @@ create index if not exists direct_messages_pair_idx
 -- show exactly which of their messages the other person has actually seen.
 alter table public.direct_messages add column if not exists read_at timestamptz;
 
+-- Reply to one specific message (migrations/dm_reply.sql).
+alter table public.direct_messages add column if not exists reply_to_message_id uuid references public.direct_messages (id) on delete set null;
+
 alter table public.direct_messages enable row level security;
 
 drop policy if exists "staff can read their own conversations" on public.direct_messages;

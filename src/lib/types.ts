@@ -133,6 +133,9 @@ export type DirectMessage = {
   attachment_filename: string | null;
   attachment_mime: string | null;
   attachment_size: number | null;
+  // The message this one answers (supabase/migrations/dm_reply.sql) —
+  // missing on rows fetched before that migration ran.
+  reply_to_message_id?: string | null;
   created_at: string;
   read_at: string | null;
   // Client-only, never stored: a message broadcast the instant it was sent,

@@ -22,7 +22,7 @@ import {
   type SyncCursor,
 } from "@/lib/chatSyncCursor";
 import { resizedUrl, thumbnailUrl } from "@/lib/imageTransform";
-import { addToOutbox, insertWithRetry, removeFromOutbox } from "@/lib/chatOutbox";
+import { addToOutbox, insertWithRetry, isMissingColumn, removeFromOutbox } from "@/lib/chatOutbox";
 import { onConnectivityRestored } from "@/lib/connectivity";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 import { usePageVisible } from "@/lib/usePageVisible";
@@ -187,7 +187,7 @@ export function DirectConversation({
   // of waiting on the server round-trip.
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
-  const pendingPayloadsRef = useRef<Map<string, { content: string; file: File | null }>>(new Map());
+  const pendingPayloadsRef = useRef<Map<string, { content: string; file: File | null; replyId: string | null }>>(new Map());
   // Network-only failures, re-sent automatically once the connection is back.
   const networkFailedRef = useRef(new Set<string>());
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -195,6 +195,8 @@ export function DirectConversation({
   const [peerTyping, setPeerTyping] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
+  // The message the next send answers (↩ on a message), shown above the composer.
+  const [replyingTo, setReplyingTo] = useState<DirectMessage | null>(null);
   // Per-message translate-on-demand — cached by message id so toggling a
   // translation back on doesn't re-hit the (free, unofficial) endpoint.
   const [translations, setTranslations] = useState<Record<string, string>>({});
@@ -874,7 +876,7 @@ export function DirectConversation({
   }
 
   const attemptSend = useCallback(
-    async (tempId: string, content: string, file: File | null) => {
+    async (tempId: string, content: string, file: File | null, replyId: string | null) => {
       setFailedIds((prev) => {
         if (!prev.has(tempId)) return prev;
         const next = new Set(prev);
@@ -922,7 +924,7 @@ export function DirectConversation({
           serverId = crypto.randomUUID();
           serverIdsRef.current.set(tempId, serverId);
         }
-        const insertRow = {
+        const insertRow: Record<string, unknown> & { id: string } = {
           id: serverId,
           sender_id: currentUser.id,
           recipient_id: peer.id,
@@ -932,6 +934,7 @@ export function DirectConversation({
           attachment_mime: attachment?.mime ?? null,
           attachment_size: attachment?.size ?? null,
         };
+        if (replyId) insertRow.reply_to_message_id = replyId;
         // Same provisional fast path as rooms (see MeetingHub's attemptSend):
         // text reaches the recipient while the save is still in flight.
         if (!file && !provisionalSentRef.current.has(serverId)) {
@@ -943,7 +946,13 @@ export function DirectConversation({
             provisional: true,
           });
         }
-        const res = await insertWithRetry<DirectMessage>(supabase, "direct_messages", insertRow);
+        let res = await insertWithRetry<DirectMessage>(supabase, "direct_messages", insertRow);
+        // Before migrations/dm_reply.sql runs the reply column doesn't
+        // exist — send the words anyway, just without the quote.
+        if (!res.data && replyId && isMissingColumn(res)) {
+          delete insertRow.reply_to_message_id;
+          res = await insertWithRetry<DirectMessage>(supabase, "direct_messages", insertRow);
+        }
         const sent = res.data;
         if (!sent) {
           if (storagePath) await supabase.storage.from("task-attachments").remove([storagePath]).catch(() => {});
@@ -990,10 +999,12 @@ export function DirectConversation({
     const trimmed = text.trim();
     const files = pendingFiles;
     if (!trimmed && files.length === 0) return;
+    const replyId = replyingTo?.id ?? null;
 
     setError(null);
     setText("");
     setPendingFiles([]);
+    setReplyingTo(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
 
     if (files.length <= 1) {
@@ -1008,19 +1019,20 @@ export function DirectConversation({
         attachment_filename: file?.name ?? null,
         attachment_mime: file?.type ?? null,
         attachment_size: file?.size ?? null,
+        reply_to_message_id: replyId,
         created_at: new Date().toISOString(),
         read_at: null,
       };
-      pendingPayloadsRef.current.set(tempId, { content: trimmed, file });
+      pendingPayloadsRef.current.set(tempId, { content: trimmed, file, replyId });
       if (!file) {
         // Text-only: also kept in localStorage so an unsent message survives
         // the app being closed or reloaded before the network came back.
         const serverId = crypto.randomUUID();
         serverIdsRef.current.set(tempId, serverId);
-        addToOutbox({ kind: "dm", tempId, serverId, recipientId: peer.id, senderId: currentUser.id, content: trimmed });
+        addToOutbox({ kind: "dm", tempId, serverId, recipientId: peer.id, senderId: currentUser.id, content: trimmed, replyId });
       }
       setMessages((prev) => capMessagesForRoom([...prev, optimistic]));
-      attemptSend(tempId, trimmed, file);
+      attemptSend(tempId, trimmed, file, replyId);
       return;
     }
 
@@ -1033,6 +1045,7 @@ export function DirectConversation({
     const entries = files.map((file, i) => ({
       file,
       content: i === 0 ? trimmed : "",
+      replyId: i === 0 ? replyId : null,
       tempId: `temp-${crypto.randomUUID()}`,
     }));
     setMessages((prev) =>
@@ -1048,6 +1061,7 @@ export function DirectConversation({
             attachment_filename: entry.file.name,
             attachment_mime: entry.file.type,
             attachment_size: entry.file.size,
+            reply_to_message_id: entry.replyId,
             created_at: new Date().toISOString(),
             read_at: null,
           }),
@@ -1056,8 +1070,8 @@ export function DirectConversation({
     );
     (async () => {
       for (const entry of entries) {
-        pendingPayloadsRef.current.set(entry.tempId, { content: entry.content, file: entry.file });
-        await attemptSend(entry.tempId, entry.content, entry.file);
+        pendingPayloadsRef.current.set(entry.tempId, { content: entry.content, file: entry.file, replyId: entry.replyId });
+        await attemptSend(entry.tempId, entry.content, entry.file, entry.replyId);
       }
     })();
   }
@@ -1067,7 +1081,7 @@ export function DirectConversation({
       const payload = pendingPayloadsRef.current.get(tempId);
       if (!payload) return;
       networkFailedRef.current.delete(tempId);
-      attemptSend(tempId, payload.content, payload.file);
+      attemptSend(tempId, payload.content, payload.file, payload.replyId);
     },
     [attemptSend],
   );
@@ -1086,7 +1100,7 @@ export function DirectConversation({
           const payload = pendingPayloadsRef.current.get(tempId);
           networkFailedRef.current.delete(tempId);
           if (!payload) continue;
-          await attemptSend(tempId, payload.content, payload.file);
+          await attemptSend(tempId, payload.content, payload.file, payload.replyId);
         }
       } finally {
         flushingRef.current = false;
@@ -1111,6 +1125,8 @@ export function DirectConversation({
   // Messenger-style: only the LAST of my messages the peer has actually
   // seen gets the "Đã xem" label, not every read message — walk from the
   // end since that's the most recent qualifying one.
+  const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+
   const lastSeenMineMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
@@ -1249,6 +1265,32 @@ export function DirectConversation({
               {translatingIds.has(m.id) ? "…" : "🌐"}
             </button>
           );
+          // Reply to this exact message (not for one still being sent).
+          const startReply = () => {
+            setReplyingTo(m);
+            setReactionPickerFor(null);
+            textInputRef.current?.focus();
+          };
+          const replyButton = !m.id.startsWith("temp-") && (
+            <button
+              type="button"
+              onClick={startReply}
+              className="fk-msg-actions btn-icon opacity-0 group-hover:opacity-100 transition-opacity flex-none"
+              style={{ width: 20, height: 20, padding: 0, fontSize: 12 }}
+              aria-label="Trả lời tin nhắn này"
+              title="Trả lời"
+            >
+              ↩
+            </button>
+          );
+          const quoted = m.reply_to_message_id ? messageById.get(m.reply_to_message_id) : undefined;
+          const jumpToQuoted = () => {
+            const el = document.getElementById(`dm-msg-${m.reply_to_message_id}`);
+            if (!el) return;
+            el.scrollIntoView({ behavior: "smooth", block: "center" });
+            el.classList.add("fk-flash-highlight");
+            setTimeout(() => el.classList.remove("fk-flash-highlight"), 1600);
+          };
           const reactionButton = (
             <span className="relative inline-flex flex-none">
               <button
@@ -1279,6 +1321,18 @@ export function DirectConversation({
                       <Emoji emoji={emoji} size={20} />
                     </button>
                   ))}
+                  {!m.id.startsWith("temp-") && (
+                    <button
+                      type="button"
+                      onClick={startReply}
+                      className="btn-icon"
+                      style={{ width: 26, height: 26, padding: 0, fontSize: 14 }}
+                      aria-label="Trả lời"
+                      title="Trả lời"
+                    >
+                      ↩
+                    </button>
+                  )}
                   {m.content && (
                     <button
                       type="button"
@@ -1322,6 +1376,21 @@ export function DirectConversation({
               className={`group flex flex-col min-w-0 ${mine ? "items-end self-end" : "items-start self-start"} max-w-[82%]`}
               style={{ marginTop: isGroupStart ? 12 : 2, opacity: isPending ? 0.6 : 1 }}
             >
+              {m.reply_to_message_id && (
+                <button
+                  type="button"
+                  onClick={jumpToQuoted}
+                  className="flex flex-col text-left rounded-[8px] px-2.5 py-1.5 mb-1 max-w-full min-w-0"
+                  style={{ background: "var(--color-surface)", borderLeft: "3px solid var(--color-accent-500)" }}
+                >
+                  <span className="text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
+                    {quoted ? (quoted.sender_id === currentUser.id ? "Bạn" : peer.display_name) : "Tin nhắn trước đó"}
+                  </span>
+                  <span className="text-[12px] truncate" style={{ color: "var(--color-neutral-500)", maxWidth: 240 }}>
+                    {quoted ? quoted.content || (quoted.attachment_url ? "📎 Tệp đính kèm" : "") : "Kéo lên để xem tin gốc"}
+                  </span>
+                </button>
+              )}
               {m.content && (
                 <div
                   className={`flex items-end gap-1 min-w-0 max-w-full ${mine ? "flex-row-reverse" : ""} ${!m.attachment_url && reactionsBadge ? "mb-2" : ""}`}
@@ -1382,6 +1451,7 @@ export function DirectConversation({
                     {!m.attachment_url && reactionsBadge}
                   </div>
                   {translateButton}
+                  {replyButton}
                   {reactionButton}
                 </div>
               )}
@@ -1407,7 +1477,12 @@ export function DirectConversation({
                       </button>
                       {reactionsBadge}
                     </div>
-                    {!m.content && reactionButton}
+                    {!m.content && (
+                      <>
+                        {replyButton}
+                        {reactionButton}
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div className={`relative inline-block mt-1 ${reactionsBadge ? "mb-2" : ""}`}>
@@ -1475,6 +1550,7 @@ export function DirectConversation({
             }),
           [
             messages,
+            messageById,
             currentUser.id,
             pendingIds,
             failedIds,
@@ -1561,6 +1637,30 @@ export function DirectConversation({
                 <Emoji emoji={emoji} size={20} />
               </button>
             ))}
+          </div>
+        )}
+        {replyingTo && (
+          <div className="flex items-center gap-2 px-2.5 pt-2">
+            <div
+              className="flex flex-col flex-1 min-w-0 rounded-[8px] px-2.5 py-1.5"
+              style={{ background: "var(--color-surface)", borderLeft: "3px solid var(--color-accent-500)" }}
+            >
+              <span className="text-[11px] font-bold" style={{ color: "var(--color-accent-700)" }}>
+                Đang trả lời {replyingTo.sender_id === currentUser.id ? "chính mình" : peer.display_name}
+              </span>
+              <span className="text-[12px] truncate" style={{ color: "var(--color-neutral-500)" }}>
+                {replyingTo.content || (replyingTo.attachment_url ? "📎 Tệp đính kèm" : "")}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              className="btn-icon flex-none"
+              style={{ width: 24, height: 24, padding: 0, fontSize: 12 }}
+              aria-label="Bỏ trả lời"
+            >
+              ✕
+            </button>
           </div>
         )}
         {error && (

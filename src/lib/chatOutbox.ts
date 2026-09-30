@@ -67,12 +67,19 @@ export async function insertWithRetry<T extends { id: string }>(
   return { data: null, message: last?.message };
 }
 
+// A rejected insert because a column the app now sends hasn't been added to
+// the database yet (a migration not run) — PostgREST's "not in the schema
+// cache" (PGRST204) or Postgres's "column does not exist" (42703).
+export function isMissingColumn(res: { code?: string; message?: string }) {
+  return res.code === "PGRST204" || res.code === "42703" || /column/i.test(res.message ?? "");
+}
+
 // Text-only messages that haven't been confirmed yet, kept in localStorage so
 // closing/reloading the app (iOS kills background web apps freely) doesn't
 // lose them — they are re-sent on the next start.
 export type OutboxEntry =
   | { kind: "meeting"; tempId: string; serverId: string; channelId: string; content: string; replyId: string | null }
-  | { kind: "dm"; tempId: string; serverId: string; recipientId: string; senderId: string; content: string };
+  | { kind: "dm"; tempId: string; serverId: string; recipientId: string; senderId: string; content: string; replyId?: string | null };
 
 const KEY = "funti-chat-outbox";
 

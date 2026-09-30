@@ -7,7 +7,7 @@ import { getUnreadMeetingCounts } from "@/lib/actions/meetings";
 import { playChatDing, unlockChatSound } from "@/lib/chatSound";
 import { firstSighting, inboxTopic, listenChatTopic, roomTopic, sendChatBroadcast, sendDmBroadcast } from "@/lib/chatBroadcast";
 import { startRealtimeWatchdog } from "@/lib/realtimeWatchdog";
-import { insertWithRetry, isQueuedThisSession, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
+import { insertWithRetry, isMissingColumn, isQueuedThisSession, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
 import { onConnectivityRestored } from "@/lib/connectivity";
 import { notifyNewMessage } from "@/lib/chatNotify";
 
@@ -145,12 +145,20 @@ export function ChatManagerProvider({
               break; // still no connection — try again on the next trigger
             }
           } else if (entry.senderId === currentUserId) {
-            const res = await insertWithRetry<DirectMessage>(supabase, "direct_messages", {
+            const row: Record<string, unknown> & { id: string } = {
               id: entry.serverId,
               sender_id: entry.senderId,
               recipient_id: entry.recipientId,
               content: entry.content,
-            });
+            };
+            if (entry.replyId) row.reply_to_message_id = entry.replyId;
+            let res = await insertWithRetry<DirectMessage>(supabase, "direct_messages", row);
+            // Before migrations/dm_reply.sql runs the column doesn't exist —
+            // send it as a plain message rather than not at all.
+            if (!res.data && entry.replyId && isMissingColumn(res)) {
+              delete row.reply_to_message_id;
+              res = await insertWithRetry<DirectMessage>(supabase, "direct_messages", row);
+            }
             if (res.data) {
               removeFromOutbox(entry.serverId);
               sendDmBroadcast(currentUserId, entry.recipientId, "dm", res.data);
