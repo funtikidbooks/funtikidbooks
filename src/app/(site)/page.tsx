@@ -1,25 +1,24 @@
-import { getPublishedProjects, getHeroSlides, getJsonSetting } from "@/lib/data/site-content";
+import { getJsonSetting, getPublishedProjects, getReviews } from "@/lib/data/site-content";
 import type { ImageTransform } from "@/components/site/EditableImage";
+import { COMPARE_KEY, DEFAULT_COMPARE, type ComparePair } from "@/lib/homeArt";
 import { HomeContent } from "./HomeContent";
 
-const HERO_KEY = "hero-trang-chu";
-
 export default async function HomePage() {
-  const [projects, heroSlides, heroTransforms, serviceImages, serviceTransforms] = await Promise.all([
+  const [projects, reviews, serviceImages, serviceTransforms, compare] = await Promise.all([
     getPublishedProjects(),
-    getHeroSlides(HERO_KEY, ["/brand/funti-team.jpg"]),
-    getJsonSetting<Record<string, ImageTransform>>(`${HERO_KEY}-transform`, {}),
+    getReviews(),
     getJsonSetting<Record<number, string>>("trang-chu-services-images", {}),
     getJsonSetting<Record<number, ImageTransform>>("trang-chu-services-transform", {}),
+    getJsonSetting<Partial<ComparePair>>(COMPARE_KEY, {}),
   ]);
 
   return (
     <HomeContent
       projects={projects}
-      heroSlides={heroSlides}
-      heroTransforms={heroTransforms}
+      reviews={reviews}
       serviceImages={serviceImages}
       serviceTransforms={serviceTransforms}
+      compare={{ sketch: compare.sketch || DEFAULT_COMPARE.sketch, color: compare.color || DEFAULT_COMPARE.color }}
     />
   );
 }

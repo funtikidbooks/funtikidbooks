@@ -75,7 +75,7 @@ export function SketchCompare({
       const url = await uploadContentImage(file);
       const next = { ...pair, [which]: url };
       setPair(next);
-      await saveJsonSetting(COMPARE_KEY, next, ["/", "/xem-thu-trang-chu"]);
+      await saveJsonSetting(COMPARE_KEY, next, ["/"]);
     } catch {
       // keeps the previous picture
     } finally {

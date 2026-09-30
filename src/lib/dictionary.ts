@@ -107,7 +107,6 @@ export const dictionary = {
       reviewsKicker: "KHÁCH NÓI GÌ",
       reviewsTitle: "Những lời khen làm cả studio vui cả tuần",
       partnersTitle: "Đã đồng hành cùng",
-      previewNote: "Bản xem thử trang chủ mới — khách chưa thấy trang này.",
     },
     services: {
       kicker: "DỊCH VỤ CỦA CHÚNG TÔI",
@@ -538,7 +537,6 @@ export const dictionary = {
       reviewsKicker: "WHAT CLIENTS SAY",
       reviewsTitle: "Kind words that made our week",
       partnersTitle: "We've worked with",
-      previewNote: "Preview of the new home page — visitors can't see it yet.",
     },
     services: {
       kicker: "OUR SERVICES",
