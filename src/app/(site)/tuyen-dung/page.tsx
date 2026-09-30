@@ -14,12 +14,19 @@ export const metadata: Metadata = {
   twitter: { title: "Tuyển dụng · Funti Kidbooks Studio", description: PAGE_DESCRIPTION },
 };
 
+// The team's group photos sếp Phúc put in the old home page's slideshow
+// (trips, the office) — the careers banner rotates through them, slowly
+// zooming, until an editor gives this page a slideshow of its own.
+const TEAM_PHOTOS_KEY = "hero-trang-chu";
+
 export default async function CareersPage() {
-  const [posts, heroSlides, heroTransforms] = await Promise.all([
+  const [posts, teamPhotos, teamTransforms, ownTransforms] = await Promise.all([
     getJobPostings(false),
-    getHeroSlides(HERO_KEY, ["/brand/funti-team.jpg"]),
+    getHeroSlides(TEAM_PHOTOS_KEY, ["/brand/funti-team.jpg"]),
+    getJsonSetting<Record<string, ImageTransform>>(`${TEAM_PHOTOS_KEY}-transform`, {}),
     getJsonSetting<Record<string, ImageTransform>>(`${HERO_KEY}-transform`, {}),
   ]);
+  const heroSlides = await getHeroSlides(HERO_KEY, teamPhotos);
 
-  return <CareersPageContent initialPosts={posts} heroSlides={heroSlides} heroTransforms={heroTransforms} />;
+  return <CareersPageContent initialPosts={posts} heroSlides={heroSlides} heroTransforms={{ ...teamTransforms, ...ownTransforms }} />;
 }
