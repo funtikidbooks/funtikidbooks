@@ -21,20 +21,29 @@ export function PushSetup() {
 // Shown on every workspace page while this device can't receive chat
 // notifications — a staff laptop with no push subscription at all got
 // nothing when a message arrived while the tab sat in the background
-// (sếp Phúc: sent 10:59, only noticed at 11:02 by clicking in). Dismissing
-// only hides it for this browser session, since missing messages is costly.
+// (sếp Phúc: sent 10:59, only noticed at 11:02 by clicking in). It can't be
+// dismissed (sếp Phúc, 30/9: notifications are required, no opting out) —
+// it goes away only once this device can receive them, re-checked whenever
+// the app comes back to the front (e.g. after allowing it in Settings).
 export function PushPermissionBanner() {
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (sessionStorage.getItem("funti-push-banner-dismissed")) return;
+    const check = () => setStatus(getPushStatus());
     // Browser-only APIs — has to run post-mount, same as IosInstallHint.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setStatus(getPushStatus());
+    check();
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      check();
+      // Allowed in Settings while away: sign this device up now.
+      if (getPushStatus() === "granted") void subscribeToPush({ prompt: false });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
-  if (status !== "default" && status !== "denied") return null;
+  if (status !== "default" && status !== "denied" && status !== "unsupported") return null;
 
   async function enable() {
     setBusy(true);
@@ -57,35 +66,27 @@ export function PushPermissionBanner() {
             {busy ? "Đang bật…" : "Bật thông báo"}
           </button>
         </>
+      ) : status === "denied" ? (
+        <span className="flex-1 min-w-[200px]">
+          Thông báo đang <b>bị chặn</b> trên máy này — bắt buộc phải bật. Máy tính: bấm 🔒 (hoặc ⚙) cạnh địa chỉ web → <b>Thông báo</b> → <b>Cho phép</b>, rồi tải lại trang. iPhone/iPad: <b>Cài đặt</b> → <b>Thông báo</b> → <b>Funti</b> → bật <b>Cho phép thông báo</b>.
+        </span>
       ) : (
         <span className="flex-1 min-w-[200px]">
-          Thông báo đang <b>bị chặn</b> trên trình duyệt này. Bấm biểu tượng 🔒 (hoặc ⚙) cạnh địa chỉ web → <b>Thông báo</b> → <b>Cho phép</b>, rồi tải lại trang.
+          Trình duyệt này <b>không nhận được thông báo</b>. Hãy dùng Chrome hoặc Edge trên máy tính, hoặc app Funti trên điện thoại.
         </span>
       )}
-      <button
-        type="button"
-        onClick={() => {
-          sessionStorage.setItem("funti-push-banner-dismissed", "1");
-          setStatus(null);
-        }}
-        className="btn-icon flex-none"
-        aria-label="Đóng"
-      >
-        ✕
-      </button>
     </div>
   );
 }
 
-// A small dismissible banner nudging iPad/iPhone Safari users to install
-// the workspace as an app — the one manual step iOS requires before push
-// notifications can work at all.
+// iPad/iPhone in Safari: install the workspace as an app — the one manual
+// step iOS requires before push notifications can work at all. Required,
+// so it can't be dismissed either.
 export function IosInstallHint() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     if (!isIos() || isStandalone()) return;
-    if (sessionStorage.getItem("funti-ios-hint-dismissed")) return;
     // Deliberate: navigator/sessionStorage only exist client-side, so this
     // has to run post-mount rather than as a lazy useState initializer —
     // the standard SSR-safe pattern for browser-only conditional UI.
@@ -102,19 +103,8 @@ export function IosInstallHint() {
     >
       <span aria-hidden>📲</span>
       <span className="flex-1">
-        Để nhận thông báo tin nhắn trên iPad/iPhone: bấm nút <b>Chia sẻ</b> ở Safari → <b>&quot;Thêm vào MH chính&quot;</b>, rồi mở workspace từ biểu tượng đó thay vì Safari.
+        <b>Bắt buộc bật thông báo:</b> trên iPad/iPhone bấm nút <b>Chia sẻ</b> ở Safari → <b>&quot;Thêm vào MH chính&quot;</b>, rồi mở workspace từ biểu tượng Funti đó (không mở bằng Safari) và bấm <b>Bật thông báo</b>.
       </span>
-      <button
-        type="button"
-        onClick={() => {
-          sessionStorage.setItem("funti-ios-hint-dismissed", "1");
-          setVisible(false);
-        }}
-        className="btn-icon flex-none"
-        aria-label="Đóng"
-      >
-        ✕
-      </button>
     </div>
   );
 }

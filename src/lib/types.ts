@@ -333,6 +333,12 @@ export type PushSubscriptionRow = {
   p256dh: string;
   auth: string;
   created_at: string;
+  // Health (supabase/migrations/push_health.sql) — missing before it ran.
+  device?: string | null; // "iPhone · app", "Windows · Chrome"…
+  last_seen_at?: string | null; // the app last re-confirmed this subscription
+  last_ok_at?: string | null; // a push to it was last accepted
+  last_error_at?: string | null;
+  last_error?: string | null;
 };
 
 export type Project = {

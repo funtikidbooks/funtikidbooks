@@ -36,6 +36,7 @@ const GROUPS: NavGroup[] = [
       { href: "/quan-tri/bang-luong", label: "Bảng lương", icon: "💰", who: "hr" },
       { href: "/quan-tri/hop-dong", label: "Hợp đồng", icon: "📄", who: "hr" },
       { href: "/quan-tri/tai-lieu", label: "Tài liệu", icon: "🗂️", who: "hr" },
+      { href: "/quan-tri/thong-bao", label: "Thông báo trên máy", icon: "🔔", who: "hr" },
     ],
   },
   {

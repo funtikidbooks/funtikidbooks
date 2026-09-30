@@ -9,6 +9,31 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// The browser expired or rotated this device's push subscription — often
+// with the app closed. Without saving the new one the device silently
+// stops receiving notifications until someone happens to reopen the app,
+// so re-subscribe (same server key) and tell the site right away.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      const old = event.oldSubscription || null;
+      let sub = event.newSubscription || null;
+      if (!sub) {
+        const key = old && old.options && old.options.applicationServerKey;
+        if (!key) return;
+        sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      }
+      const json = sub.toJSON();
+      await fetch("/api/push/resubscribe", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oldEndpoint: old ? old.endpoint : null, endpoint: json.endpoint, keys: json.keys }),
+      });
+    })().catch(() => {}),
+  );
+});
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
 

@@ -259,6 +259,14 @@ create table if not exists public.push_subscriptions (
 );
 create index if not exists push_subscriptions_user_idx on public.push_subscriptions (user_id);
 
+-- Per-device health (migrations/push_health.sql).
+alter table public.push_subscriptions
+  add column if not exists device text,
+  add column if not exists last_seen_at timestamptz,
+  add column if not exists last_ok_at timestamptz,
+  add column if not exists last_error_at timestamptz,
+  add column if not exists last_error text;
+
 alter table public.push_subscriptions enable row level security;
 
 drop policy if exists "staff can manage their own push subscriptions" on public.push_subscriptions;
