@@ -55,13 +55,28 @@ function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: st
   }
 
   async function copyDraft() {
-    try {
-      await navigator.clipboard.writeText(draft);
+    const done = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 4000);
+    };
+    try {
+      await navigator.clipboard.writeText(draft);
+      done();
     } catch {
-      // Clipboard blocked (older Safari, no HTTPS) — the textarea below still
-      // lets sếp select-all and copy by hand.
+      // Clipboard API blocked (older Safari, some in-app browsers): the old
+      // select-and-copy way, which those still allow inside a tap.
+      const box = document.createElement("textarea");
+      box.value = draft;
+      box.setAttribute("readonly", "");
+      box.style.cssText = "position:fixed;top:0;left:0;opacity:0;font-size:16px";
+      document.body.appendChild(box);
+      box.select();
+      box.setSelectionRange(0, draft.length);
+      try {
+        if (document.execCommand("copy")) done();
+      } finally {
+        box.remove();
+      }
     }
   }
 
@@ -165,11 +180,27 @@ function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: st
           <span className="text-xs font-semibold" style={{ color: "var(--color-neutral-500)" }}>
             Proposal nháp
           </span>
-          {!editing && (
-            <button type="button" className="text-xs font-semibold hover:underline" style={{ color: "var(--color-accent-700)" }} onClick={() => setEditing(true)}>
-              Sửa
+          <span className="flex items-center gap-1.5">
+            {/* Copy just the proposal, whatever the lead's status. */}
+            <button
+              type="button"
+              className="btn btn-sm"
+              style={{
+                padding: "5px 12px",
+                fontSize: 12,
+                background: copied ? "var(--status-green)" : "var(--color-accent-100)",
+                color: copied ? "#fff" : "var(--color-accent-800)",
+              }}
+              onClick={() => void copyDraft()}
+            >
+              {copied ? "Đã chép ✓" : "📋 Chép proposal"}
             </button>
-          )}
+            {!editing && (
+              <button type="button" className="btn btn-sm btn-ghost" style={{ padding: "5px 12px", fontSize: 12 }} onClick={() => setEditing(true)}>
+                Sửa
+              </button>
+            )}
+          </span>
         </div>
         {editing ? (
           <>
@@ -215,12 +246,6 @@ function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: st
           >
             {copied ? "Đã chép ✓ — dán vào Upwork" : "Mở job & chép proposal"}
           </a>
-        )}
-        {/* A skipped lead has no "open job" button — keep a plain copy. */}
-        {lead.status === "rejected" && (
-          <button type="button" className="btn btn-secondary btn-sm" onClick={copyDraft}>
-            {copied ? "Đã chép ✓" : "Sao chép proposal"}
-          </button>
         )}
         {lead.status === "pending" && (
           <>
