@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
-import { listLunchData, saveFoodShopDetails, updateDishMeta, uploadDishPhoto, type FoodShopDetailsInput } from "@/lib/actions/foodShops";
+import { saveFoodShopDetails, updateDishMeta, uploadDishPhoto, type FoodShopDetailsInput } from "@/lib/actions/foodShops";
+import { fetchLunchData, patchCachedItem, peekLunchData, type LunchData } from "@/lib/foodData";
 import {
   LUNCH_BUDGETS,
   LUNCH_NEEDS,
@@ -108,16 +109,19 @@ export function LunchPicker({
 }: {
   onClose: () => void;
   // Already-loaded library (skips the fetch) — e.g. a preview.
-  initial?: { shops: FoodShop[]; items: FoodShopMenuItem[]; lastOrdered: Record<string, string> };
+  initial?: LunchData;
   // Starts today's group order in the room with this quán.
   onOrderTogether: (shopId: string) => Promise<void>;
   onShopSaved: (shop: FoodShop) => void;
 }) {
-  const [loading, setLoading] = useState(true);
+  // What this session already loaded (the room prefetches it) shows at
+  // once; a fresh copy replaces it a moment later.
+  const [seed] = useState(() => initial ?? peekLunchData() ?? null);
+  const [loading, setLoading] = useState(!seed);
   const [error, setError] = useState<string | null>(null);
-  const [shops, setShops] = useState<FoodShop[]>([]);
-  const [items, setItems] = useState<FoodShopMenuItem[]>([]);
-  const [lastOrdered, setLastOrdered] = useState<Record<string, string>>({});
+  const [shops, setShops] = useState<FoodShop[]>(seed?.shops ?? []);
+  const [items, setItems] = useState<FoodShopMenuItem[]>(seed?.items ?? []);
+  const [lastOrdered, setLastOrdered] = useState<Record<string, string>>(seed?.lastOrdered ?? {});
   const [filters, setFilters] = useState<LunchFilters>(NO_FILTERS);
   const [picked, setPicked] = useState<string | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
@@ -129,15 +133,16 @@ export function LunchPicker({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFilters(readSavedFilters());
-    const load = initial ? Promise.resolve(initial) : listLunchData();
-    load
-      .then((d) => {
-        setShops(d.shops);
-        setItems(d.items);
-        setLastOrdered(d.lastOrdered);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : "Không tải được danh sách quán."))
-      .finally(() => setLoading(false));
+    if (!initial) {
+      fetchLunchData()
+        .then((d) => {
+          setShops(d.shops);
+          setItems(d.items);
+          setLastOrdered(d.lastOrdered);
+        })
+        .catch((e) => !seed && setError(e instanceof Error ? e.message : "Không tải được danh sách quán."))
+        .finally(() => setLoading(false));
+    }
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
     // Loads once when the picker opens; `initial` is read only then.
@@ -205,6 +210,7 @@ export function LunchPicker({
   }
 
   function patchItem(id: string, patch: Partial<FoodShopMenuItem>) {
+    patchCachedItem(id, patch);
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i)));
   }
 

@@ -1,23 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+// Writes for the Đặt đồ ăn room. Its reads go browser → Supabase in
+// lib/foodData.ts (in parallel; server actions run one at a time).
+
 import { requireUser } from "@/lib/supabase/server";
 import { vnToday } from "@/lib/constants/attendance";
 import type { FoodOrderItem, FoodOrderRound } from "@/lib/types";
-
-// Every round started today, oldest first — several can coexist (lunch,
-// then a separate afternoon trà sữa round), so the panel renders one card
-// per round instead of assuming there's only ever one.
-export async function listTodayFoodOrderRounds(channelId: string): Promise<FoodOrderRound[]> {
-  const { supabase } = await requireUser();
-  const { data } = await supabase
-    .from("food_order_rounds")
-    .select("*")
-    .eq("channel_id", channelId)
-    .eq("order_date", vnToday())
-    .order("created_at", { ascending: true });
-  return (data ?? []) as FoodOrderRound[];
-}
 
 export async function startFoodOrderRound(
   channelId: string,
@@ -41,17 +29,7 @@ export async function startFoodOrderRound(
     await supabase.from("food_order_round_shops").insert(input.shopIds.map((shopId) => ({ round_id: data.id, shop_id: shopId })));
   }
 
-  revalidatePath("/workspace/hop");
   return data as FoodOrderRound;
-}
-
-// Quán currently active in a round — zero, one, or several. Anyone can add
-// another quán to an already-open round (a colleague wanting bubble tea
-// from a different shop than whoever started the round picked).
-export async function listRoundShopIds(roundId: string): Promise<string[]> {
-  const { supabase } = await requireUser();
-  const { data } = await supabase.from("food_order_round_shops").select("shop_id").eq("round_id", roundId);
-  return (data ?? []).map((r) => r.shop_id as string);
 }
 
 export async function addShopToRound(roundId: string, shopId: string): Promise<void> {
@@ -99,16 +77,6 @@ export async function deleteFoodOrderRound(roundId: string): Promise<void> {
   const { supabase } = await requireUser();
   const { data } = await supabase.from("food_order_rounds").delete().eq("id", roundId).select("id");
   if (!data || data.length === 0) throw new Error("Chỉ người tạo đợt này hoặc Giám đốc mới xoá được.");
-}
-
-export async function listFoodOrderItems(roundId: string): Promise<FoodOrderItem[]> {
-  const { supabase } = await requireUser();
-  const { data } = await supabase
-    .from("food_order_items")
-    .select("*")
-    .eq("round_id", roundId)
-    .order("created_at", { ascending: true });
-  return (data ?? []) as FoodOrderItem[];
 }
 
 export async function upsertMyFoodOrderItem(

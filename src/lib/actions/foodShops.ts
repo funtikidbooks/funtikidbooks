@@ -8,24 +8,6 @@ import type { FoodShop, FoodShopMenuItem } from "@/lib/types";
 const ALLOWED_PHOTO_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
 const MAX_PHOTO_SIZE = 20 * 1024 * 1024;
 
-// The whole library — just enough to render a "Chọn quán" picker when
-// starting a new food order round.
-export async function listFoodShops(): Promise<FoodShop[]> {
-  const { supabase } = await requireUser();
-  const { data } = await supabase.from("food_shops").select("*").order("name", { ascending: true });
-  return (data ?? []) as FoodShop[];
-}
-
-export async function getFoodShopMenu(shopId: string): Promise<FoodShopMenuItem[]> {
-  const { supabase } = await requireUser();
-  const { data } = await supabase
-    .from("food_shop_menu_items")
-    .select("*")
-    .eq("shop_id", shopId)
-    .order("sort_order", { ascending: true });
-  return (data ?? []) as FoodShopMenuItem[];
-}
-
 // Adds a quán once — with its menu typed in directly, or with zero items
 // and just a screenshotted photo instead (see uploadFoodShopPhoto below),
 // left for someone to transcribe later via replaceFoodShopItems. Later
@@ -127,34 +109,9 @@ export async function deleteFoodShop(shopId: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// "Trưa nay ăn gì?" (lib/lunch.ts) — the library with every menu, plus when
-// each quán was last ordered from (for "Đổi gió"), and saving a quán's details.
+// "Trưa nay ăn gì?" (lib/lunch.ts) — saving a quán's details and a dish's
+// photo and topic. Its reads are in lib/foodData.ts.
 // ---------------------------------------------------------------------------
-
-export async function listLunchData(): Promise<{
-  shops: FoodShop[];
-  items: FoodShopMenuItem[];
-  lastOrdered: Record<string, string>;
-}> {
-  const { supabase } = await requireUser();
-  const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
-  const [{ data: shops }, { data: items }, { data: rounds }] = await Promise.all([
-    supabase.from("food_shops").select("*").order("name", { ascending: true }),
-    supabase.from("food_shop_menu_items").select("*").order("sort_order", { ascending: true }),
-    supabase.from("food_order_rounds").select("id, order_date").gte("order_date", since),
-  ]);
-  const dateByRound = new Map((rounds ?? []).map((r) => [r.id as string, r.order_date as string]));
-  const lastOrdered: Record<string, string> = {};
-  if (dateByRound.size > 0) {
-    const { data: links } = await supabase.from("food_order_round_shops").select("round_id, shop_id").in("round_id", [...dateByRound.keys()]);
-    for (const l of links ?? []) {
-      const d = dateByRound.get(l.round_id as string);
-      const id = l.shop_id as string;
-      if (d && (!lastOrdered[id] || d > lastOrdered[id])) lastOrdered[id] = d;
-    }
-  }
-  return { shops: (shops ?? []) as FoodShop[], items: (items ?? []) as FoodShopMenuItem[], lastOrdered };
-}
 
 export type FoodShopDetailsInput = {
   id?: string;

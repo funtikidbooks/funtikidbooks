@@ -1,20 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { preconnect } from "react-dom";
 import { createClient } from "@/lib/supabase/client";
 import {
   addShopToRound,
   deleteFoodOrderRound,
   deleteMyFoodOrderItem,
-  listFoodOrderItems,
-  listRoundShopIds,
-  listTodayFoodOrderRounds,
   setFoodOrderRoundStatus,
   startFoodOrderRound,
   updateFoodOrderRoundLink,
   upsertMyFoodOrderItem,
 } from "@/lib/actions/foodOrders";
-import { addFoodShop, getFoodShopMenu, listFoodShops, replaceFoodShopItems, uploadFoodShopPhoto } from "@/lib/actions/foodShops";
+import { addFoodShop, replaceFoodShopItems, uploadFoodShopPhoto } from "@/lib/actions/foodShops";
+import {
+  fetchLunchData,
+  fetchMenu,
+  fetchMenus,
+  fetchRoundDetail,
+  fetchShops,
+  fetchTodayRounds,
+  peekRounds,
+  peekShops,
+  setCachedMenu,
+  setCachedRounds,
+  setCachedShop,
+} from "@/lib/foodData";
 import { LunchPicker } from "@/components/workspace/LunchPicker";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import type { FoodOrderItem, FoodOrderRound, FoodShop, FoodShopMenuItem, Profile } from "@/lib/types";
@@ -208,7 +219,7 @@ function EditShopMenuForm({
 
   useEffect(() => {
     let cancelled = false;
-    getFoodShopMenu(shop.id)
+    fetchMenu(shop.id, true)
       .then((existing) => {
         if (cancelled) return;
         setItems(
@@ -243,6 +254,7 @@ function EditShopMenuForm({
         shop.id,
         items.map((it) => ({ name: it.name, note: it.note, price: it.price === "" ? null : Number(it.price) })),
       );
+      setCachedMenu(shop.id, saved);
       onSaved(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
@@ -377,12 +389,12 @@ function FoodOrderRoundCard({
     let cancelled = false;
     async function load() {
       try {
-        const [list, shopIds] = await Promise.all([listFoodOrderItems(round.id), listRoundShopIds(round.id)]);
+        // Orders, the round's quán and every menu side by side.
+        const [{ items: list, shopIds }, menus] = await Promise.all([fetchRoundDetail(round.id), fetchMenus()]);
         if (cancelled) return;
         setItems(list);
         setRoundShopIds(new Set(shopIds));
-        const entries = await Promise.all(shopIds.map(async (id) => [id, await getFoodShopMenu(id)] as const));
-        if (!cancelled) setShopMenus(new Map(entries));
+        setShopMenus(new Map(shopIds.map((id) => [id, menus.filter((m) => m.shop_id === id)])));
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Không thể tải đợt này.");
       }
@@ -412,7 +424,7 @@ function FoodOrderRoundCard({
         (payload) => {
           const row = payload.new as { shop_id: string };
           setRoundShopIds((prev) => new Set(prev).add(row.shop_id));
-          getFoodShopMenu(row.shop_id)
+          fetchMenu(row.shop_id, true)
             .then((menu) => setShopMenus((prev) => new Map(prev).set(row.shop_id, menu)))
             .catch(() => {});
         },
@@ -450,8 +462,7 @@ function FoodOrderRoundCard({
     setAddingExistingShop(true);
     setError(null);
     try {
-      await addShopToRound(round.id, addExistingShopId);
-      const menu = await getFoodShopMenu(addExistingShopId);
+      const [, menu] = await Promise.all([addShopToRound(round.id, addExistingShopId), fetchMenu(addExistingShopId)]);
       setRoundShopIds((prev) => new Set(prev).add(addExistingShopId));
       setShopMenus((prev) => new Map(prev).set(addExistingShopId, menu));
       setAddExistingShopId("");
@@ -466,8 +477,7 @@ function FoodOrderRoundCard({
     onShopCreated(shop);
     setShowAddShop(false);
     try {
-      await addShopToRound(round.id, shop.id);
-      const menu = await getFoodShopMenu(shop.id);
+      const [, menu] = await Promise.all([addShopToRound(round.id, shop.id), fetchMenu(shop.id, true)]);
       setRoundShopIds((prev) => new Set(prev).add(shop.id));
       setShopMenus((prev) => new Map(prev).set(shop.id, menu));
     } catch (err) {
@@ -846,13 +856,26 @@ function FoodOrderRoundCard({
   );
 }
 
-// The "Đặt đồ ăn" room's group-order tool, pinned above the regular chat.
-// Several rounds can exist the same day (lunch, then a separate afternoon
-// trà sữa round) — each renders as its own FoodOrderRoundCard below the
-// "start a new round" prompt, which stays available regardless of whether
-// today already has one. The message thread right below still works
-// exactly like any other room, for "quán này hết món rồi" back-and-forth a
-// structured order list can't capture.
+// The "Đặt đồ ăn" room's group-order tool, pinned above the regular chat as
+// one slim bar — today's rounds at a glance, "Trưa nay ăn gì?", and a
+// button to open the rest. Opened, it never takes more than 45% of the
+// room's height (it scrolls inside), so the conversation below always has
+// room. Several rounds can exist the same day (lunch, then a separate
+// afternoon trà sữa round) — each renders as its own FoodOrderRoundCard.
+// The message thread right below still works exactly like any other room,
+// for "quán này hết món rồi" back-and-forth a structured order list can't
+// capture. Open/closed is remembered per person.
+const PANEL_OPEN_KEY = "funti-food-panel-open";
+
+// "com tam" finds "Cơm Tấm".
+const plain = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+
 export function FoodOrderPanel({
   channelId,
   currentUserId,
@@ -862,44 +885,76 @@ export function FoodOrderPanel({
   currentUserId: string;
   profileById: Map<string, Profile>;
 }) {
-  const [loading, setLoading] = useState(true);
+  // The last copy seen this session shows at once; a fresh one replaces it.
+  const [shops, setShops] = useState<FoodShop[]>(() => peekShops() ?? []);
+  const [rounds, setRounds] = useState<FoodOrderRound[]>(() => peekRounds(channelId) ?? []);
+  const [loading, setLoading] = useState(() => !(peekShops() && peekRounds(channelId)));
   const [error, setError] = useState<string | null>(null);
-  const [shops, setShops] = useState<FoodShop[]>([]);
-  const [rounds, setRounds] = useState<FoodOrderRound[]>([]);
 
+  // Client-only (the panel is loaded with ssr: false), so reading the
+  // saved choice while rendering can't mismatch a server render.
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(PANEL_OPEN_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [showCreate, setShowCreate] = useState(false);
+  const [shopQuery, setShopQuery] = useState("");
   const [selectedShopIds, setSelectedShopIds] = useState<Set<string>>(new Set());
   const [starting, setStarting] = useState(false);
   const [showAddShop, setShowAddShop] = useState(false);
   const [editingShopId, setEditingShopId] = useState<string | null>(null);
   const [showLunch, setShowLunch] = useState(false);
 
+  function toggleOpen() {
+    setOpen((v) => {
+      try {
+        localStorage.setItem(PANEL_OPEN_KEY, v ? "0" : "1");
+      } catch {
+        // ignore
+      }
+      return !v;
+    });
+  }
+
   // "Đặt chung hôm nay" from Trưa nay ăn gì? — today's group order with that quán.
   async function orderTogether(shopId: string) {
     const r = await startFoodOrderRound(channelId, { title: "Đặt đồ ăn", shopIds: [shopId] });
     setRounds((prev) => (prev.some((x) => x.id === r.id) ? prev : [...prev, r]));
+    setOpen(true);
   }
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setError(null);
-      try {
-        const [shopList, roundList] = await Promise.all([listFoodShops(), listTodayFoodOrderRounds(channelId)]);
+    Promise.all([fetchShops(), fetchTodayRounds(channelId)])
+      .then(([shopList, roundList]) => {
         if (cancelled) return;
         setShops(shopList);
         setRounds(roundList);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Không thể tải đợt đặt đồ ăn.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
+        setError(null);
+      })
+      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : "Không thể tải đợt đặt đồ ăn."))
+      .finally(() => !cancelled && setLoading(false));
+
+    // Have "Trưa nay ăn gì?" ready before anyone taps it: its data once
+    // the room is idle, and a warm connection to the dish photos.
+    preconnect("https://images.unsplash.com");
+    const idle = (cb: () => void) =>
+      typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(cb, { timeout: 3000 }) : setTimeout(cb, 1200);
+    idle(() => {
+      if (!cancelled) fetchLunchData().catch(() => {});
+    });
     return () => {
       cancelled = true;
     };
   }, [channelId]);
+
+  // Keep the session copy current, so coming back to the room is instant.
+  useEffect(() => {
+    if (!loading) setCachedRounds(channelId, rounds);
+  }, [channelId, rounds, loading]);
 
   // Live for everyone looking at this room at once — a new round someone
   // else started (or chốt/xoá) shows up without reloading.
@@ -938,8 +993,10 @@ export function FoodOrderPanel({
     try {
       const shopIds = Array.from(selectedShopIds);
       const r = await startFoodOrderRound(channelId, { title: "Đặt đồ ăn", shopIds });
-      setRounds((prev) => [...prev, r]);
+      setRounds((prev) => (prev.some((x) => x.id === r.id) ? prev : [...prev, r]));
       setSelectedShopIds(new Set());
+      setShopQuery("");
+      setShowCreate(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
@@ -947,147 +1004,182 @@ export function FoodOrderPanel({
     }
   }
 
-  function handleShopCreated(shop: FoodShop) {
-    setShops((prev) => [...prev, shop].sort((a, b) => a.name.localeCompare(b.name, "vi")));
+  function handleShopSaved(shop: FoodShop) {
+    setCachedShop(shop);
+    setShops((prev) => {
+      const i = prev.findIndex((s) => s.id === shop.id);
+      return (i === -1 ? [...prev, shop] : prev.map((s) => (s.id === shop.id ? shop : s))).sort((a, b) => a.name.localeCompare(b.name, "vi"));
+    });
   }
 
   const editingShop = shops.find((s) => s.id === editingShopId) ?? null;
+  const openRounds = rounds.filter((r) => r.status === "open").length;
+  // Ticked quán stay on top of the search results.
+  const listedShops = useMemo(() => {
+    const q = plain(shopQuery.trim());
+    const hits = q ? shops.filter((s) => plain(s.name).includes(q) || selectedShopIds.has(s.id)) : shops;
+    return [...hits.filter((s) => selectedShopIds.has(s.id)), ...hits.filter((s) => !selectedShopIds.has(s.id))];
+  }, [shops, shopQuery, selectedShopIds]);
+  const creating = showCreate || (!loading && rounds.length === 0);
 
-  if (loading) {
-    return (
-      <div className="flex-none px-4 py-3 text-xs" style={{ color: "var(--color-neutral-500)" }}>
-        Đang tải đợt đặt đồ ăn…
-      </div>
-    );
-  }
+  const summary = loading
+    ? "Đang tải…"
+    : rounds.length === 0
+      ? "Chưa có đợt nào hôm nay"
+      : `${rounds.length} đợt hôm nay${openRounds > 0 && openRounds < rounds.length ? ` · ${openRounds} đang mở` : ""}`;
 
   return (
-    <div className="flex-none flex flex-col gap-3 mt-3">
-      <div
-        className="flex flex-col gap-3 mx-3 p-4 rounded-[14px]"
-        style={{ background: "var(--color-surface)", border: "1px solid var(--color-neutral-200)" }}
-      >
-        <div>
-          <div className="text-sm font-bold">🍱 Đặt đồ ăn</div>
-          <div className="text-xs mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
-            {rounds.length > 0
-              ? "Muốn đặt thêm một đợt riêng (VD: trà sữa buổi chiều)? Tạo đợt mới bên dưới."
-              : "Chọn một hoặc nhiều quán đã lưu sẵn menu (VD: cơm ở quán A, trà sữa ở quán B), hoặc bắt đầu không cần chọn quán."}
-          </div>
-        </div>
-
+    <div className="flex-none flex flex-col min-h-0" style={{ borderBottom: "1px solid var(--color-neutral-200)", background: "var(--color-surface)" }}>
+      {/* ------------------------------------------------------- THE BAR */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <button type="button" onClick={toggleOpen} aria-expanded={open} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+          <span aria-hidden className="text-base leading-none">
+            🍱
+          </span>
+          <span className="text-[13.5px] font-bold flex-none">Đặt đồ ăn</span>
+          {openRounds > 0 && (
+            <span className="tag flex-none" style={{ background: "var(--color-accent-100)", color: "var(--color-accent-700)" }}>
+              Đang mở
+            </span>
+          )}
+          <span className="text-xs truncate" style={{ color: "var(--color-neutral-500)" }}>
+            {summary}
+          </span>
+        </button>
+        <button type="button" onClick={() => setShowLunch(true)} className="btn btn-secondary btn-sm flex-none">
+          🍽 <span className="hidden sm:inline">Trưa nay ăn gì?</span>
+          <span className="sm:hidden">Ăn gì?</span>
+        </button>
         <button
           type="button"
-          onClick={() => setShowLunch(true)}
-          className="flex items-center gap-3 rounded-[12px] px-3.5 py-3 text-left w-full"
-          style={{ background: "var(--color-accent-100)", color: "var(--color-accent-800)" }}
+          onClick={toggleOpen}
+          className="btn btn-ghost btn-sm flex-none"
+          aria-expanded={open}
+          aria-label={open ? "Thu gọn khung đặt đồ ăn" : "Mở khung đặt đồ ăn"}
         >
-          <span className="text-2xl leading-none" aria-hidden>
-            🍽
-          </span>
-          <span className="flex-1 min-w-0">
-            <span className="block text-sm font-bold">Trưa nay ăn gì?</span>
-            <span className="block text-xs" style={{ color: "var(--color-accent-700)" }}>
-              Chọn quán theo món, giá, gần văn phòng, đang mở… kèm bản đồ và số điện thoại
-            </span>
-          </span>
-          <span className="flex-none text-sm font-bold">→</span>
+          {open ? "Thu gọn ▴" : openRounds > 0 ? "Đặt món ▾" : "Mở ▾"}
         </button>
-
-        {!showAddShop && (
-          <div className="flex flex-col gap-2">
-            {shops.length > 0 && (
-              <div className="flex flex-col gap-1">
-                {shops.map((s) => (
-                  <div key={s.id} className="flex items-center gap-2 text-sm">
-                    <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
-                      <input type="checkbox" checked={selectedShopIds.has(s.id)} onChange={() => toggleSelectedShop(s.id)} />
-                      <span className="truncate">{s.name}</span>
-                    </label>
-                    {s.photo_url && (
-                      <a href={s.photo_url} target="_blank" rel="noreferrer" className="text-xs flex-none" title="Xem ảnh menu">
-                        📷
-                      </a>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setEditingShopId(s.id)}
-                      className="text-xs flex-none"
-                      style={{ color: "var(--color-neutral-400)" }}
-                      title="Sửa menu"
-                    >
-                      ✏️
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {editingShop && (
-              <EditShopMenuForm
-                shop={editingShop}
-                onCancel={() => setEditingShopId(null)}
-                onSaved={() => setEditingShopId(null)}
-              />
-            )}
-            <div className="flex items-center gap-2 flex-wrap">
-              <button type="button" onClick={handleStart} className="btn btn-primary btn-sm flex-none" disabled={starting}>
-                {starting
-                  ? "Đang bắt đầu…"
-                  : selectedShopIds.size > 0
-                    ? `Tạo đợt mới (${selectedShopIds.size} quán)`
-                    : rounds.length > 0
-                      ? "Tạo đợt mới không cần chọn quán"
-                      : "Bắt đầu không cần chọn quán"}
-              </button>
-              <button type="button" onClick={() => setShowAddShop(true)} className="btn btn-ghost btn-sm flex-none">
-                + Thêm quán mới
-              </button>
-            </div>
-          </div>
-        )}
-
-        {showAddShop && (
-          <NewShopForm
-            onCancel={() => setShowAddShop(false)}
-            onCreated={(shop) => {
-              handleShopCreated(shop);
-              setSelectedShopIds((prev) => new Set(prev).add(shop.id));
-              setShowAddShop(false);
-            }}
-          />
-        )}
-
-        {error && (
-          <p className="text-xs font-semibold" style={{ color: "var(--status-red)" }}>
-            {error}
-          </p>
-        )}
       </div>
 
-      {showLunch && (
-        <LunchPicker
-          onClose={() => setShowLunch(false)}
-          onOrderTogether={orderTogether}
-          onShopSaved={(shop) =>
-            setShops((prev) => {
-              const i = prev.findIndex((s) => s.id === shop.id);
-              return (i === -1 ? [...prev, shop] : prev.map((s) => (s.id === shop.id ? shop : s))).sort((a, b) => a.name.localeCompare(b.name, "vi"));
-            })
-          }
-        />
+      {/* ---------------------------------------------- OPENED: SCROLLS */}
+      {open && (
+        <div className="overflow-y-auto overscroll-contain flex flex-col gap-3 pb-3" style={{ maxHeight: "min(45dvh, 560px)" }}>
+          {rounds.map((r) => (
+            <FoodOrderRoundCard
+              key={r.id}
+              round={r}
+              shops={shops}
+              currentUserId={currentUserId}
+              profileById={profileById}
+              onDeleted={(id) => setRounds((prev) => prev.filter((x) => x.id !== id))}
+              onShopCreated={handleShopSaved}
+            />
+          ))}
+
+          {!loading && !creating && (
+            <button type="button" onClick={() => setShowCreate(true)} className="btn btn-ghost btn-sm mx-3 w-fit">
+              + Tạo đợt mới (VD: trà sữa buổi chiều)
+            </button>
+          )}
+
+          {creating && (
+            <div
+              className="flex flex-col gap-2.5 mx-3 p-3.5 rounded-[14px]"
+              style={{ background: "var(--color-panel)", border: "1px solid var(--color-neutral-200)" }}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
+                  <b>Tạo đợt đặt mới</b> — tick một hoặc nhiều quán đã lưu menu, hoặc bắt đầu không cần chọn quán. Chưa biết ăn gì thì bấm <b>🍽 Trưa nay ăn gì?</b>
+                </div>
+                {rounds.length > 0 && (
+                  <button type="button" onClick={() => setShowCreate(false)} className="btn-icon flex-none" aria-label="Đóng">
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {!showAddShop && (
+                <div className="flex flex-col gap-2">
+                  {shops.length > 6 && (
+                    <input
+                      className="input"
+                      style={{ padding: "6px 10px", fontSize: 13 }}
+                      placeholder={`Tìm trong ${shops.length} quán…`}
+                      value={shopQuery}
+                      onChange={(e) => setShopQuery(e.target.value)}
+                    />
+                  )}
+                  {shops.length > 0 && (
+                    <div className="flex flex-col gap-1 max-h-[176px] overflow-y-auto overscroll-contain pr-1">
+                      {listedShops.map((s) => (
+                        <div key={s.id} className="flex items-center gap-2 text-sm">
+                          <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0 py-0.5">
+                            <input type="checkbox" checked={selectedShopIds.has(s.id)} onChange={() => toggleSelectedShop(s.id)} />
+                            <span className="truncate">{s.name}</span>
+                          </label>
+                          {s.photo_url && (
+                            <a href={s.photo_url} target="_blank" rel="noreferrer" className="text-xs flex-none" title="Xem ảnh menu">
+                              📷
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setEditingShopId(s.id)}
+                            className="text-xs flex-none"
+                            style={{ color: "var(--color-neutral-400)" }}
+                            title="Sửa menu"
+                          >
+                            ✏️
+                          </button>
+                        </div>
+                      ))}
+                      {listedShops.length === 0 && (
+                        <p className="text-xs py-1" style={{ color: "var(--color-neutral-500)" }}>
+                          Không có quán nào tên như vậy.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {editingShop && (
+                    <EditShopMenuForm shop={editingShop} onCancel={() => setEditingShopId(null)} onSaved={() => setEditingShopId(null)} />
+                  )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button type="button" onClick={handleStart} className="btn btn-primary btn-sm flex-none" disabled={starting}>
+                      {starting
+                        ? "Đang bắt đầu…"
+                        : selectedShopIds.size > 0
+                          ? `Tạo đợt mới (${selectedShopIds.size} quán)`
+                          : "Bắt đầu không cần chọn quán"}
+                    </button>
+                    <button type="button" onClick={() => setShowAddShop(true)} className="btn btn-ghost btn-sm flex-none">
+                      + Thêm quán mới
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {showAddShop && (
+                <NewShopForm
+                  onCancel={() => setShowAddShop(false)}
+                  onCreated={(shop) => {
+                    handleShopSaved(shop);
+                    setSelectedShopIds((prev) => new Set(prev).add(shop.id));
+                    setShowAddShop(false);
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {error && (
+            <p className="text-xs font-semibold mx-3" style={{ color: "var(--status-red)" }}>
+              {error}
+            </p>
+          )}
+        </div>
       )}
 
-      {rounds.map((r) => (
-        <FoodOrderRoundCard
-          key={r.id}
-          round={r}
-          shops={shops}
-          currentUserId={currentUserId}
-          profileById={profileById}
-          onDeleted={(id) => setRounds((prev) => prev.filter((x) => x.id !== id))}
-          onShopCreated={handleShopCreated}
-        />
-      ))}
+      {showLunch && <LunchPicker onClose={() => setShowLunch(false)} onOrderTogether={orderTogether} onShopSaved={handleShopSaved} />}
     </div>
   );
 }
