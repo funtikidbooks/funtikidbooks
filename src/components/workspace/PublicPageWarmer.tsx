@@ -16,8 +16,9 @@ const KEY = "funti-public-warm";
 const WARM_EVERY_MS = 30 * 60 * 1000;
 const CHECK_EVERY_MS = 5 * 60 * 1000;
 
+// Runs in a background tab too (most of the day the workspace sits behind
+// Photoshop): the fetches are tiny and a hidden tab's 5-minute timer still fires.
 async function warmIfDue(isStopped: () => boolean) {
-  if (document.visibilityState !== "visible") return;
   const build = ((await (await fetch("/api/build-id", { cache: "no-store" })).json()) as { id?: string }).id ?? "";
   let last: { build?: string; at?: number } | null = null;
   try {
@@ -34,10 +35,15 @@ async function warmIfDue(isStopped: () => boolean) {
   }
   const sitemap = await (await fetch("/sitemap.xml", { cache: "no-store" })).text();
   const paths = [...sitemap.matchAll(/<loc>https?:\/\/[^/<]+(\/[^<]*)?<\/loc>/g)].map((m) => m[1] || "/").slice(0, 80);
-  for (const path of paths) {
+  let freshHits = 0;
+  for (const [i, path] of paths.entries()) {
     if (isStopped()) return;
     // Like a first-time visitor: no cookies, past this browser's own cache.
-    await fetch(path, { cache: "no-store", credentials: "omit", priority: "low" } as RequestInit).catch(() => {});
+    const res = await fetch(path, { cache: "no-store", credentials: "omit", priority: "low" } as RequestInit).catch(() => null);
+    // The first pages already cached within the last 20 minutes: someone
+    // else's browser has just done this round — leave it to them.
+    if (res?.headers.get("x-vercel-cache") === "HIT" && Number(res.headers.get("age") ?? Infinity) < 20 * 60) freshHits++;
+    if (i === 1 && freshHits === 2) return;
     await new Promise((r) => setTimeout(r, 300));
   }
 }
