@@ -11,13 +11,12 @@ import type { SalaryAdvance } from "@/lib/types";
 // never carry the amount or the reason — a lock screen is often in plain
 // view of colleagues.
 
-// Who can ask: anyone paid through payroll who isn't a Giám đốc.
+// Who can ask: anyone paid through payroll — a Giám đốc included, whose
+// own request another Giám đốc decides (decide_salary_advance() refuses
+// deciding your own).
 async function canAskForAdvance(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], userId: string) {
-  const [{ data: profile }, { data: salary }] = await Promise.all([
-    supabase.from("profiles").select("access_role").eq("id", userId).maybeSingle(),
-    supabase.from("staff_salary").select("monthly_salary").eq("profile_id", userId).maybeSingle(),
-  ]);
-  return profile?.access_role !== "director" && Number(salary?.monthly_salary ?? 0) > 0;
+  const { data: salary } = await supabase.from("staff_salary").select("monthly_salary").eq("profile_id", userId).maybeSingle();
+  return Number(salary?.monthly_salary ?? 0) > 0;
 }
 
 export async function getMyAdvances(): Promise<{ eligible: boolean; requests: SalaryAdvance[] }> {
@@ -53,7 +52,7 @@ export async function requestAdvance(amountInput: number, reasonInput: string): 
       supabase.from("profiles").select("id").eq("access_role", "director"),
     ]);
     await sendPushToUsers(
-      (directors ?? []).map((d) => d.id as string),
+      (directors ?? []).map((d) => d.id as string).filter((id) => id !== user.id),
       {
         title: "💸 Yêu cầu ứng tiền mới",
         body: `${me?.display_name ?? "Một bạn"} vừa gửi yêu cầu ứng tiền. Bấm để xem.`,

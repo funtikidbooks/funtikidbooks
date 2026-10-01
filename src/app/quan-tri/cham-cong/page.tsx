@@ -37,12 +37,14 @@ export default async function AdminAttendancePage() {
     supabase
       .from("profiles")
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
-      .neq("id", OWNER_PROFILE_ID)
       .order("display_name", { ascending: true }),
     listAdvancesForManagers(),
   ]);
 
-  const staff = (profiles ?? []) as Profile[];
+  // Everyone — the owner can ask for an advance too, so the requests list
+  // needs their name; only the attendance board leaves them out.
+  const everyone = (profiles ?? []) as Profile[];
+  const staff = everyone.filter((p) => p.id !== OWNER_PROFILE_ID);
   return (
     <AttendanceBoard
       initialEntries={entries}
@@ -51,8 +53,9 @@ export default async function AdminAttendancePage() {
       advances={
         <SalaryAdvanceApprovals
           initial={advances}
-          profiles={staff}
+          profiles={everyone}
           currentMonth={firstOfMonth(vnToday())}
+          currentUserId={user.id}
           canDecide={profile?.access_role === "director"}
         />
       }

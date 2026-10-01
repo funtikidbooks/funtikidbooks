@@ -19,11 +19,13 @@ export function SalaryAdvanceApprovals({
   initial,
   profiles,
   currentMonth,
+  currentUserId,
   canDecide,
 }: {
   initial: AdvancesForManagers;
   profiles: Profile[];
   currentMonth: string;
+  currentUserId: string;
   canDecide: boolean;
 }) {
   const [data, setData] = useState(initial);
@@ -92,6 +94,7 @@ export function SalaryAdvanceApprovals({
                 takenThisMonth={takenBy(r.profile_id)}
                 monthOptions={[currentMonth, addMonths(currentMonth, 1)].filter((m) => !(paidMonths[r.profile_id] ?? []).includes(m))}
                 canDecide={canDecide}
+                isOwn={r.profile_id === currentUserId}
                 onDecided={applyDecision}
               />
             ))}
@@ -164,6 +167,7 @@ function PendingCard({
   takenThisMonth,
   monthOptions,
   canDecide,
+  isOwn,
   onDecided,
 }: {
   request: SalaryAdvance;
@@ -171,6 +175,8 @@ function PendingCard({
   takenThisMonth: number;
   monthOptions: string[];
   canDecide: boolean;
+  // The viewer's own request — another Giám đốc decides it.
+  isOwn: boolean;
   onDecided: (saved: SalaryAdvance) => void;
 }) {
   const [amount, setAmount] = useState(r.amount);
@@ -213,7 +219,11 @@ function PendingCard({
         {takenThisMonth > 0 ? `Đã ứng trừ lương tháng này: ${formatVnd(takenThisMonth)}` : "Tháng này chưa ứng lần nào"}
       </p>
 
-      {canDecide ? (
+      {isOwn ? (
+        <p className="text-[12px] font-semibold" style={{ color: "var(--color-neutral-500)" }}>
+          Yêu cầu của bạn — chờ Giám đốc khác duyệt.
+        </p>
+      ) : canDecide ? (
         monthOptions.length === 0 ? (
           <p className="text-[12.5px] font-semibold" style={{ color: "var(--status-red)" }}>
             Bảng lương tháng này và tháng sau của bạn ấy đều đã trả — chưa có tháng nào để trừ.
