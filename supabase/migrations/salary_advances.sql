@@ -114,9 +114,7 @@ begin
   if a.status <> 'pending' then
     raise exception 'Yêu cầu này đã được xử lý rồi.';
   end if;
-  if a.profile_id = auth.uid() then
-    raise exception 'Không tự duyệt yêu cầu của chính mình được.';
-  end if;
+  -- A Giám đốc may decide their own request too (sếp Phúc, 1/10/2026).
 
   if not p_approve then
     update public.salary_advances

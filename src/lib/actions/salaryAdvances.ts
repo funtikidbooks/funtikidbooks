@@ -11,9 +11,8 @@ import type { SalaryAdvance } from "@/lib/types";
 // never carry the amount or the reason — a lock screen is often in plain
 // view of colleagues.
 
-// Who can ask: anyone paid through payroll — a Giám đốc included, whose
-// own request another Giám đốc decides (decide_salary_advance() refuses
-// deciding your own).
+// Who can ask: anyone paid through payroll, a Giám đốc included (who may
+// approve their own).
 async function canAskForAdvance(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], userId: string) {
   const { data: salary } = await supabase.from("staff_salary").select("monthly_salary").eq("profile_id", userId).maybeSingle();
   return Number(salary?.monthly_salary ?? 0) > 0;
@@ -127,7 +126,7 @@ export async function decideAdvance(
   if (decision.approve && (!amount || amount <= 0 || amount > ADVANCE_MAX)) throw new Error("Số tiền duyệt không hợp lệ.");
 
   // The database function re-checks everything: Giám đốc only, still
-  // waiting, not their own, that month's payslip not paid yet.
+  // waiting, that month's payslip not paid yet.
   const { data, error } = await supabase.rpc("decide_salary_advance", {
     p_id: id,
     p_approve: decision.approve,

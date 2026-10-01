@@ -55,7 +55,6 @@ export default async function AdminAttendancePage() {
           initial={advances}
           profiles={everyone}
           currentMonth={firstOfMonth(vnToday())}
-          currentUserId={user.id}
           canDecide={profile?.access_role === "director"}
         />
       }
