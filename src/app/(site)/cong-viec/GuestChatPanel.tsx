@@ -15,6 +15,7 @@ import { useDict } from "@/components/site/LocaleProvider";
 import { visitorTypingChannelName, TYPING_IDLE_MS, TYPING_BROADCAST_THROTTLE_MS } from "@/lib/visitorTyping";
 import { AttachmentGallery } from "@/components/ui/AttachmentGallery";
 import type { FileAttachment, VisitorMessage } from "@/lib/types";
+import { isStaffEmail } from "@/lib/actions/clientLogin";
 
 // Same localStorage keys as the floating "Chat với chúng tôi" widget
 // (SupportChatWidget.tsx) — a visitor who chats here and later clicks the
@@ -231,6 +232,11 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
     setLoggingIn(true);
     onError(null);
     try {
+      // Staff accounts sign in with their password only — no emailed link.
+      if (await isStaffEmail(email)) {
+        onError(t.portal.staffUsePassword);
+        return;
+      }
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),

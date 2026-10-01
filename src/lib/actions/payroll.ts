@@ -133,9 +133,13 @@ export async function sendPayrollEmailsForMonth(monthStartInput?: string): Promi
     try {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("email, display_name")
+        .select("email, display_name, access_role")
         .eq("id", record.profile_id)
         .maybeSingle();
+      // "Gửi cho tất cả" is for the staff — never the directors' own
+      // payslips (sếp Phúc, 1/10). One director's slip can still be sent
+      // on purpose from its own modal.
+      if (profile?.access_role === "director") continue;
       if (!profile?.email) throw new Error("no email");
 
       await sendPayslipEmail({

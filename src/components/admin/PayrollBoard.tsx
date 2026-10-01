@@ -37,11 +37,14 @@ export function PayrollBoard({
 
   async function handleSendAllEmails() {
     if (sendingAllEmails) return;
-    if (records.length === 0) {
-      alert("Tháng này chưa có bảng lương nào để gửi.");
+    // Directors' own payslips are never part of "gửi cho tất cả".
+    const directorIds = new Set(staff.filter((p) => p.access_role === "director").map((p) => p.id));
+    const toStaff = records.filter((r) => !directorIds.has(r.profile_id)).length;
+    if (toStaff === 0) {
+      alert("Tháng này chưa có bảng lương nhân viên nào để gửi.");
       return;
     }
-    if (!confirm(`Gửi email phiếu lương ${monthLabel} cho ${records.length} nhân viên đã có bảng lương?`)) return;
+    if (!confirm(`Gửi email phiếu lương ${monthLabel} cho ${toStaff} nhân viên — mỗi người một email riêng, không gửi cho Giám đốc?`)) return;
     setSendingAllEmails(true);
     try {
       const { sent, failed } = await sendPayrollEmailsForMonth(monthStart);
