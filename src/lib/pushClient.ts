@@ -1,6 +1,7 @@
 "use client";
 
 import { savePushSubscription } from "@/lib/actions/push";
+import { reportClientError } from "@/components/workspace/ClientErrorReporter";
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -39,8 +40,10 @@ export function deviceLabel() {
   return `${os} · ${app}`;
 }
 
+// iPadOS Safari presents itself as a Mac — a touch screen gives it away.
 export function isIos() {
-  return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  const ua = window.navigator.userAgent;
+  return /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 }
 
 export function isStandalone() {
@@ -50,7 +53,10 @@ export function isStandalone() {
   );
 }
 
-export type PushStatus = "unsupported" | "needs-ios-install" | "denied" | "granted" | "default";
+// "failed": allowed, but the browser couldn't sign this device up with its
+// push service (a browser that blocks it, a network that does…) — the
+// device looks fine yet would never receive a thing, so it is shown.
+export type PushStatus = "unsupported" | "needs-ios-install" | "denied" | "granted" | "default" | "failed";
 
 // Reads current state without prompting or subscribing — used to render
 // the right message/button in the profile dialog.
@@ -72,7 +78,18 @@ export function getPushStatus(): PushStatus {
 // don't come from a click (and can auto-block the site after a few), which
 // is how some staff machines ended up never subscribed at all. The real
 // prompt only happens from a button (PushPermissionBanner / ProfileMenu).
-export async function subscribeToPush({ prompt = true }: { prompt?: boolean } = {}): Promise<PushStatus> {
+// The silent run happens from more than one place on a page load (PushSetup,
+// the banner) — they share one attempt instead of signing up twice at once.
+let silentRun: Promise<PushStatus> | null = null;
+export function subscribeToPush({ prompt = true }: { prompt?: boolean } = {}): Promise<PushStatus> {
+  if (prompt) return signUp(true);
+  silentRun ??= signUp(false).finally(() => {
+    silentRun = null;
+  });
+  return silentRun;
+}
+
+async function signUp(prompt: boolean): Promise<PushStatus> {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   if (!publicKey) return "unsupported";
 
@@ -104,7 +121,12 @@ export async function subscribeToPush({ prompt = true }: { prompt?: boolean } = 
       await savePushSubscription({ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } }, deviceLabel());
     }
     return "granted";
-  } catch {
-    return "denied";
+  } catch (err) {
+    // Recorded (Quản trị sees it in client_errors with the browser it came
+    // from) and shown on screen, instead of the device silently never
+    // being signed up.
+    const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    reportClientError(`Push subscribe failed (${deviceLabel()}): ${message}`);
+    return typeof Notification !== "undefined" && Notification.permission === "denied" ? "denied" : "failed";
   }
 }

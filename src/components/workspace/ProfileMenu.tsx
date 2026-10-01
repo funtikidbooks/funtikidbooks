@@ -213,6 +213,16 @@ function ProfileDialog({ profile, onClose }: { profile: Profile; onClose: () => 
               {notifBusy ? "Đang bật…" : "Bật thông báo"}
             </button>
           )}
+          {notifStatus === "failed" && (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-[12px]" style={{ color: "var(--status-red)" }}>
+                Đã cho phép nhưng máy này <b>chưa đăng ký được</b> với dịch vụ thông báo của trình duyệt. Bấm thử lại; vẫn lỗi thì dùng Chrome hoặc Edge (Brave, Cốc Cốc có thể chặn).
+              </p>
+              <button type="button" onClick={enableNotifications} className="btn btn-secondary btn-sm w-fit" disabled={notifBusy}>
+                {notifBusy ? "Đang thử…" : "Thử lại"}
+              </button>
+            </div>
+          )}
           {notifStatus === "granted" && (
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[12px] font-semibold" style={{ color: "var(--status-green)" }}>

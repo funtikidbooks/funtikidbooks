@@ -30,20 +30,25 @@ export function PushPermissionBanner() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const check = () => setStatus(getPushStatus());
     // Browser-only APIs — has to run post-mount, same as IosInstallHint.
-    check();
+    // Allowed isn't enough: the device must actually sign up with the
+    // browser's push service, or nothing ever arrives — a browser that
+    // blocks it used to look exactly like a working one.
+    const check = async () => {
+      const now = getPushStatus();
+      setStatus(now);
+      if (now === "granted") setStatus(await subscribeToPush({ prompt: false }));
+    };
+    void check();
     const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
-      check();
       // Allowed in Settings while away: sign this device up now.
-      if (getPushStatus() === "granted") void subscribeToPush({ prompt: false });
+      if (document.visibilityState === "visible") void check();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
-  if (status !== "default" && status !== "denied" && status !== "unsupported") return null;
+  if (status !== "default" && status !== "denied" && status !== "unsupported" && status !== "failed") return null;
 
   async function enable() {
     setBusy(true);
@@ -64,6 +69,15 @@ export function PushPermissionBanner() {
           </span>
           <button type="button" onClick={enable} disabled={busy} className="btn btn-primary btn-sm flex-none">
             {busy ? "Đang bật…" : "Bật thông báo"}
+          </button>
+        </>
+      ) : status === "failed" ? (
+        <>
+          <span className="flex-1 min-w-[200px]">
+            Máy này đã cho phép nhưng <b>chưa đăng ký nhận thông báo được</b> — tin nhắn sẽ không báo tới. Bấm Thử lại; vẫn lỗi thì dùng Chrome hoặc Edge (Brave, Cốc Cốc có thể chặn thông báo).
+          </span>
+          <button type="button" onClick={enable} disabled={busy} className="btn btn-primary btn-sm flex-none">
+            {busy ? "Đang thử…" : "Thử lại"}
           </button>
         </>
       ) : status === "denied" ? (

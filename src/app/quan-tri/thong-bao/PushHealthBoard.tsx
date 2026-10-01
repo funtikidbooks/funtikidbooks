@@ -33,7 +33,8 @@ const HEALTH: Record<Health, { label: string; color: string; bg: string; rank: n
     color: "var(--status-yellow)",
     bg: "rgba(214,160,40,.12)",
     rank: 3,
-    advice: "Có thể vẫn nhận được. Mở app một lần để máy xác nhận lại.",
+    advice:
+      "Máy đã đăng ký thông báo lâu rồi không mở app — có thể đã xoá app hoặc tắt thông báo, nên tin nhắn không tới. Nhắc bạn mở app Funti (hoặc workspace) trên máy đang dùng: thấy thanh 🔔 thì bấm Bật thông báo / Thử lại, rồi bấm Gửi thử ở đây để kiểm tra.",
   },
   unknown: {
     label: "Chờ mở app để kiểm tra",
