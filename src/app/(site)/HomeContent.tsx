@@ -138,6 +138,15 @@ function BookShelf({ books, note }: { books: HomeArt[]; note: string }) {
   );
 }
 
+// A project as the home page needs it.
+// The flip-book pages at the size they are shown (a page is at most 544px
+// wide, so 1100px stays sharp on a Retina screen) — the originals are ~1.5MB
+// each, and the cover alone used to be the heaviest thing on the home page.
+const FLIP_PAGES = BOOK_DEMO_PAGES.map((p) => resizedUrl(p, 1100) ?? p);
+const FLIP_BACK = resizedUrl(BOOK_DEMO_BACK_COVER, 1100) ?? BOOK_DEMO_BACK_COVER;
+
+export type HomeProject = Pick<Project, "id" | "title" | "title_en">;
+
 export function HomeContent({
   projects,
   reviews,
@@ -145,7 +154,7 @@ export function HomeContent({
   serviceTransforms,
   compare,
 }: {
-  projects: Project[];
+  projects: HomeProject[];
   reviews: Review[];
   serviceImages: Record<number, string>;
   serviceTransforms: Record<number, ImageTransform>;
@@ -157,7 +166,7 @@ export function HomeContent({
   const [showAll, setShowAll] = useState(false);
 
   const byId = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
-  const titleOf = (p: Project) => (locale === "en" && p.title_en ? p.title_en : p.title);
+  const titleOf = (p: HomeProject) => (locale === "en" && p.title_en ? p.title_en : p.title);
   const books = HERO_BOOKS.filter((b) => byId.has(b.projectId));
   const gallery = HOME_GALLERY.filter((g) => byId.has(g.projectId));
   const shown = showAll ? gallery : gallery.slice(0, GALLERY_FIRST);
@@ -259,7 +268,7 @@ export function HomeContent({
                 style={{ width: 64, right: -84, top: -6, transform: "rotate(12deg)" }}
               />
             </div>
-            <BookFlipDemo pages={BOOK_DEMO_PAGES} alt={t.services.previewAlt} backCover={BOOK_DEMO_BACK_COVER} />
+            <BookFlipDemo pages={FLIP_PAGES} alt={t.services.previewAlt} backCover={FLIP_BACK} />
           </div>
         </section>
         <div style={{ background: "var(--color-surface)" }}>
@@ -302,7 +311,7 @@ export function HomeContent({
               {spread(shown, n).map((col, ci) => (
                 <div key={ci} className="flex flex-col gap-3 md:gap-4 min-w-0">
                   {col.map((g) => {
-                    const p = byId.get(g.projectId) as Project;
+                    const p = byId.get(g.projectId) as HomeProject;
                     return (
                       <Link
                         key={g.src}

@@ -42,10 +42,13 @@ export function Column({
   onQuickEdit,
   onHoverTask,
   onToggleLabelNames,
+  loadingCards = false,
 }: {
   column: BoardColumn;
   tasks: TaskWithAssignee[];
   totalCount: number;
+  // Its cards are still being fetched (a finished-work list — Board.tsx).
+  loadingCards?: boolean;
   filtering: boolean;
   boardLabels: BoardLabel[];
   showLabelNames: boolean;
@@ -320,6 +323,11 @@ export function Column({
             />
           ))}
         </SortableContext>
+        {loadingCards && tasks.length === 0 && (
+          <span className="text-[12.5px] py-2 text-center" style={{ color: "var(--list-muted)" }}>
+            Đang tải {totalCount} thẻ…
+          </span>
+        )}
         {hidden > 0 && (
           <button
             type="button"

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { saveJsonSetting, uploadContentImage } from "@/lib/actions/admin";
 import { DEFAULT_IMAGE_TRANSFORM, type ImageTransform } from "@/components/site/EditableImage";
+import { resizedUrl } from "@/lib/imageTransform";
 
 const IMAGES_KEY = "trang-chu-services-images";
 const TRANSFORMS_KEY = "trang-chu-services-transform";
@@ -225,7 +226,9 @@ function ServiceImageArea({
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage: `url(${imageUrl})`,
+            // A sized copy, not the upload itself (often 2–3000px, ~300KB+): the
+            // card is 220px tall, and 1400px still covers zooming in on Retina.
+            backgroundImage: `url(${resizedUrl(imageUrl, 1400) ?? imageUrl})`,
             backgroundSize: `${localTransform.zoom}%`,
             backgroundPosition: `${localTransform.posX}% ${localTransform.posY}%`,
             backgroundRepeat: "no-repeat",

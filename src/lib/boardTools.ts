@@ -9,6 +9,18 @@ export const ARCHIVE_COLUMN_TITLE = "📦 Lưu trữ";
 
 export const isArchiveColumnTitle = (title: string) => title.trim() === ARCHIVE_COLUMN_TITLE;
 
+// The finished-work lists ("Final 2025 (150 dự án)"…) hold ~90% of all cards
+// (511 of 568 on 1/10/2026). The board opens without them and fetches them
+// right after it's on screen — lib/data/board.ts, components/workspace/Board.tsx.
+export const isDeferredColumnTitle = (title: string) => /^final\b/i.test(title.trim());
+
+// What a card needs on the board — the server's first load and the board's
+// own fetch of the deferred lists read cards the same way. "*" rather than
+// a column list: picks up due_complete once its migration has run, without
+// the board failing to load before that.
+export const BOARD_TASK_SELECT =
+  "*, assignee:profiles!tasks_assignee_id_fkey(id, display_name, avatar_url), assignees:task_assignees(profile:profiles(id, display_name, avatar_url)), checklist_items:task_checklist_items(id, done), comment_count:task_comments(count), attachment_count:task_attachments(count)";
+
 // "#1546" ↔ /workspace?the=1546 — a link that opens the board on that card.
 export const CARD_PARAM = "the";
 export const taskLink = (origin: string, code: string) => `${origin}/workspace?${CARD_PARAM}=${encodeURIComponent(code.replace(/^#/, ""))}`;

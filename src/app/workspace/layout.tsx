@@ -56,6 +56,9 @@ export default async function WorkspaceLayout({
     redirect("/dang-nhap?next=/workspace");
   }
 
+  // The unread client-message badge (director/PM only) starts with the rest
+  // instead of after them: for anyone else it is refused and simply unused.
+  const clientUnreadPromise = getUnreadClientMessageCount().catch(() => 0);
   const [{ data: profile }, { data: allProfiles }, unreadCounts, pendingDocumentCount] = await Promise.all([
     supabase
       .from("profiles")
@@ -96,7 +99,7 @@ export default async function WorkspaceLayout({
   // (this icon and MobileNav's were both director-only), so they had no
   // way to discover the URL themselves.
   const canOpenAdmin = myProfile.access_role === "director" || myProfile.role === "Project Manager";
-  const initialClientUnreadCount = canOpenAdmin ? await getUnreadClientMessageCount().catch(() => 0) : 0;
+  const initialClientUnreadCount = canOpenAdmin ? await clientUnreadPromise : 0;
 
   return (
     <ChatManagerProvider currentUserId={user.id} initialUnreadCounts={unreadCounts}>

@@ -11,7 +11,7 @@ export default async function WorkspacePage() {
   const { user } = await requireUser();
 
   const board = await getOrCreateDefaultBoard(user.id);
-  const { columns, tasks, profiles, boardLabels } = await getBoardData(board.id);
+  const { columns, tasks, profiles, boardLabels, deferredCounts } = await getBoardData(board.id);
 
   return (
     <WorkspaceBoard
@@ -20,6 +20,7 @@ export default async function WorkspacePage() {
       initialTasks={tasks}
       profiles={profiles}
       initialBoardLabels={boardLabels}
+      deferredCounts={deferredCounts}
       currentUserId={user.id}
     />
   );

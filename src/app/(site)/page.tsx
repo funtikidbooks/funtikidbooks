@@ -14,7 +14,11 @@ export default async function HomePage() {
 
   return (
     <HomeContent
-      projects={projects}
+      // Only what the page shows (a title per project, and how many): the full
+      // rows — descriptions, both languages, every gallery picture — made the
+      // home page ship ~290KB of data a phone then had to read before it
+      // could respond.
+      projects={projects.map((p) => ({ id: p.id, title: p.title, title_en: p.title_en }))}
       reviews={reviews}
       serviceImages={serviceImages}
       serviceTransforms={serviceTransforms}

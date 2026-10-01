@@ -51,8 +51,10 @@ import {
 } from "@/lib/actions/board";
 import { isDoneColumnTitle } from "@/lib/taskProgress";
 import { vnToday } from "@/lib/constants/attendance";
+import { mapTaskAssignees } from "@/lib/mapTaskAssignees";
 import {
   ARCHIVE_COLUMN_TITLE,
+  BOARD_TASK_SELECT,
   CARD_PARAM,
   EMPTY_FILTER,
   codeFromParam,
@@ -106,6 +108,7 @@ export function WorkspaceBoard({
   initialTasks,
   profiles,
   initialBoardLabels = [],
+  deferredCounts = {},
   currentUserId,
 }: {
   board: Board;
@@ -113,6 +116,9 @@ export function WorkspaceBoard({
   initialTasks: TaskWithAssignee[];
   profiles: Profile[];
   initialBoardLabels?: BoardLabel[];
+  // Finished-work lists that arrived without their cards (lib/data/board.ts)
+  // → how many each holds; their cards are fetched right after mount.
+  deferredCounts?: Record<string, number>;
   currentUserId: string;
 }) {
   const [columns, setColumns] = useState([...initialColumns].sort((a, b) => a.position - b.position));
@@ -124,6 +130,61 @@ export function WorkspaceBoard({
     return map;
   });
   const [boardLabels, setBoardLabels] = useState([...initialBoardLabels].sort((a, b) => a.position - b.position));
+
+  // The "Final …" lists' cards: fetched straight from the database once the
+  // board is on screen, so opening the workspace doesn't wait for (and the
+  // page doesn't carry) ~500 finished cards nobody is about to look at.
+  // Until then each shows its count and "Đang tải".
+  const [pendingLists, setPendingLists] = useState<string[]>(() => Object.keys(deferredCounts));
+  useEffect(() => {
+    const ids = Object.keys(deferredCounts);
+    if (ids.length === 0) return;
+    let cancelled = false;
+    async function load(attempt: number) {
+      // One request per list, side by side — and each stays well under the
+      // database's 1000-rows-per-request cap as the years add up.
+      const supabase = createClient();
+      const results = await Promise.all(
+        ids.map((id) => supabase.from("tasks").select(BOARD_TASK_SELECT).eq("column_id", id).order("position", { ascending: true })),
+      );
+      if (cancelled) return;
+      if (results.some((r) => r.error || !r.data)) {
+        if (attempt < 3) setTimeout(() => load(attempt + 1), 2000 * attempt);
+        return;
+      }
+      const fetched = results
+        .flatMap((r) => (r.data ?? []) as unknown as (TaskWithAssignee & { assignees: unknown })[])
+        .map((t) => ({ ...t, assignees: mapTaskAssignees(t.assignees) }));
+      setTasksByColumn((prev) => {
+        const next = { ...prev };
+        for (const id of ids) {
+          // Anything that landed here meanwhile (moved in, realtime) is newer.
+          const here = prev[id] ?? [];
+          const seen = new Set(here.map((t) => t.id));
+          next[id] = byPosition([...here, ...fetched.filter((t) => t.column_id === id && !seen.has(t.id))]);
+        }
+        return next;
+      });
+      setPendingLists([]);
+    }
+    void load(1);
+    return () => {
+      cancelled = true;
+    };
+    // Once, on open — the counts never change identity after that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // A list's card count: while its cards are still on their way, the count
+  // the server sent.
+  const countOf = (columnId: string) => {
+    const have = tasksByColumn[columnId]?.length ?? 0;
+    return pendingLists.includes(columnId) ? Math.max(have, deferredCounts[columnId] ?? 0) : have;
+  };
+  const stillLoading = (columnId: string) => {
+    if (!pendingLists.includes(columnId)) return false;
+    alert("Danh sách này đang tải thẻ — thử lại sau một giây.");
+    return true;
+  };
 
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
@@ -224,7 +285,7 @@ export function WorkspaceBoard({
     .map((c) => {
       const match = c.title.match(/final\s*(\d{4})/i);
       if (!match) return null;
-      return { year: match[1], count: tasksByColumn[c.id]?.length ?? 0 };
+      return { year: match[1], count: countOf(c.id) };
     })
     .filter((v): v is { year: string; count: number } => v !== null);
 
@@ -727,12 +788,20 @@ export function WorkspaceBoard({
     setEditingTask(null);
     setCardParam(null);
   }
+  // The card a shared link points at, once on load — and again when the
+  // finished lists arrive, in case it's one of theirs.
+  const linkedCardOpenedRef = useRef(false);
+  const listsLoaded = pendingLists.length === 0;
   useEffect(() => {
+    if (linkedCardOpenedRef.current) return;
     const code = codeFromParam(new URLSearchParams(window.location.search).get(CARD_PARAM));
     if (!code) return;
     const task = allTasksRef.current.find((t) => t.code === code);
-    if (task) setEditingTask(task); // the card a shared link points at, once on load
-  }, []);
+    if (task) {
+      linkedCardOpenedRef.current = true;
+      setEditingTask(task);
+    }
+  }, [listsLoaded]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -1117,7 +1186,7 @@ export function WorkspaceBoard({
               className={`fk-bar-btn flex-none rounded-full px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap ${on ? "is-on" : ""}`}
             >
               {collapsed.includes(c.id) && <span aria-hidden>⇔ </span>}
-              {c.title} <span className="tabular-nums opacity-70">{(filtering ? visibleTasksOf(c.id) : (tasksByColumn[c.id] ?? [])).length}</span>
+              {c.title} <span className="tabular-nums opacity-70">{filtering ? visibleTasksOf(c.id).length : countOf(c.id)}</span>
             </button>
           );
         })}
@@ -1158,7 +1227,8 @@ export function WorkspaceBoard({
                   key={col.id}
                   column={col}
                   tasks={visibleTasksOf(col.id)}
-                  totalCount={(tasksByColumn[col.id] ?? []).length}
+                  totalCount={countOf(col.id)}
+                  loadingCards={pendingLists.includes(col.id)}
                   filtering={filtering}
                   boardLabels={boardLabels}
                   showLabelNames={showLabelNames}
@@ -1170,8 +1240,8 @@ export function WorkspaceBoard({
                   onOpenTask={openTask}
                   onQuickAdd={(title) => handleQuickAdd(col.id, title)}
                   onSort={(mode) => handleSortColumn(col.id, mode)}
-                  onArchiveAll={() => handleArchive((tasksByColumn[col.id] ?? []).map((t) => t.id))}
-                  onMoveAll={(to) => handleMoveAll(col.id, to)}
+                  onArchiveAll={() => !stillLoading(col.id) && handleArchive((tasksByColumn[col.id] ?? []).map((t) => t.id))}
+                  onMoveAll={(to) => !stillLoading(col.id) && handleMoveAll(col.id, to)}
                   onDeleteColumn={() => handleColumnDeleted(col.id)}
                   onToggleCollapse={() => toggleCollapsed(col.id)}
                   onToggleDue={handleToggleDue}
@@ -1237,7 +1307,7 @@ export function WorkspaceBoard({
                 <span className="text-[13.5px] font-bold flex-1 truncate" style={{ color: activeColumn.color }}>
                   {activeColumn.title}
                 </span>
-                <span className="tag tag-neutral tabular-nums">{(tasksByColumn[activeColumn.id] ?? []).length}</span>
+                <span className="tag tag-neutral tabular-nums">{countOf(activeColumn.id)}</span>
               </div>
             ) : null}
           </DragOverlay>
