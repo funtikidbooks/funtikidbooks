@@ -9,50 +9,62 @@ import { useEffect } from "react";
 // A server-side warm-up can't help — it would come from Singapore or the US
 // and warm their edges instead — but the studio's own browsers are in
 // Vietnam: one of them, quietly in the background, opens every page in the
-// sitemap after each deploy and at most every 30 minutes.
+// sitemap after each deploy and at most every 30 minutes. The workspace
+// stays open all day, so it looks for a new deploy every 5 minutes.
 
 const KEY = "funti-public-warm";
-const EVERY_MS = 30 * 60 * 1000;
+const WARM_EVERY_MS = 30 * 60 * 1000;
+const CHECK_EVERY_MS = 5 * 60 * 1000;
+
+async function warmIfDue(isStopped: () => boolean) {
+  if (document.visibilityState !== "visible") return;
+  const build = ((await (await fetch("/api/build-id", { cache: "no-store" })).json()) as { id?: string }).id ?? "";
+  let last: { build?: string; at?: number } | null = null;
+  try {
+    last = JSON.parse(localStorage.getItem(KEY) ?? "null");
+  } catch {
+    last = null;
+  }
+  if (last?.build === build && Date.now() - (last.at ?? 0) < WARM_EVERY_MS) return;
+  // Claimed before starting, so another open tab skips this round.
+  try {
+    localStorage.setItem(KEY, JSON.stringify({ build, at: Date.now() }));
+  } catch {
+    // private mode — warms anyway, just can't tell other tabs
+  }
+  const sitemap = await (await fetch("/sitemap.xml", { cache: "no-store" })).text();
+  const paths = [...sitemap.matchAll(/<loc>https?:\/\/[^/<]+(\/[^<]*)?<\/loc>/g)].map((m) => m[1] || "/").slice(0, 80);
+  for (const path of paths) {
+    if (isStopped()) return;
+    // Like a first-time visitor: no cookies, past this browser's own cache.
+    await fetch(path, { cache: "no-store", credentials: "omit", priority: "low" } as RequestInit).catch(() => {});
+    await new Promise((r) => setTimeout(r, 300));
+  }
+}
 
 export function PublicPageWarmer() {
   useEffect(() => {
     let stopped = false;
-    // A while after the workspace opens, so it never competes with it.
-    const timer = setTimeout(
-      async () => {
-        if (document.visibilityState !== "visible") return;
-        try {
-          const build = ((await (await fetch("/api/build-id", { cache: "no-store" })).json()) as { id?: string }).id ?? "";
-          let last: { build?: string; at?: number } | null = null;
-          try {
-            last = JSON.parse(localStorage.getItem(KEY) ?? "null");
-          } catch {
-            last = null;
-          }
-          if (last?.build === build && Date.now() - (last.at ?? 0) < EVERY_MS) return;
-          // Claimed before starting, so another open tab skips this round.
-          try {
-            localStorage.setItem(KEY, JSON.stringify({ build, at: Date.now() }));
-          } catch {
-            // private mode — warms anyway, just can't tell other tabs
-          }
-          const sitemap = await (await fetch("/sitemap.xml", { cache: "no-store" })).text();
-          const paths = [...sitemap.matchAll(/<loc>https?:\/\/[^/<]+(\/[^<]*)?<\/loc>/g)].map((m) => m[1] || "/").slice(0, 80);
-          for (const path of paths) {
-            if (stopped) return;
-            // Like a first-time visitor: no cookies, past this browser's own cache.
-            await fetch(path, { cache: "no-store", credentials: "omit", priority: "low" } as RequestInit).catch(() => {});
-            await new Promise((r) => setTimeout(r, 300));
-          }
-        } catch {
+    let running = false;
+    const run = () => {
+      if (running || stopped) return;
+      running = true;
+      warmIfDue(() => stopped)
+        .catch(() => {
           // Best effort — a missed round just means the next visitor warms it.
-        }
-      },
-      15000 + Math.random() * 30000,
-    );
+        })
+        .finally(() => {
+          running = false;
+        });
+    };
+    // A while after the workspace opens, so it never competes with it; the
+    // random part spreads several people's checks apart.
+    const first = setTimeout(run, 15000 + Math.random() * 30000);
+    const every = setInterval(run, CHECK_EVERY_MS + Math.random() * 60000);
     return () => {
       stopped = true;
-      clearTimeout(timer);
+      clearTimeout(first);
+      clearInterval(every);
     };
   }, []);
   return null;
