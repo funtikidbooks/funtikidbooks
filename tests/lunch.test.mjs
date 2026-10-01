@@ -22,6 +22,7 @@ test("priceRange prefers the menu, then the typed range", () => {
   assert.deepEqual(priceRange(shop("a", { price_min: 25000, price_max: 165000 }), []), { min: 25000, max: 165000 });
   assert.deepEqual(priceRange(shop("a", { price_min: 25000 }), [{ price: 40000 }, { price: 50000 }, { price: null }]), { min: 40000, max: 50000 });
   assert.equal(priceRange(shop("a"), []), null);
+  assert.deepEqual(priceRange(shop("a", { price_max: 100000 }), []), { min: 0, max: 100000 }); // "dưới 100k"
 });
 
 test("filterLunch: topics, budget and requirements all must hold", () => {

@@ -65,7 +65,8 @@ export function priceRange(shop: FoodShop, items: FoodShopMenuItem[] = []): { mi
   const prices = items.map((i) => i.price).filter((p): p is number => typeof p === "number" && p > 0);
   if (prices.length > 0) return { min: Math.min(...prices), max: Math.max(...prices) };
   if (shop.price_min || shop.price_max) {
-    const min = shop.price_min ?? shop.price_max!;
+    // Only an upper bound (Google's "1–100.000 ₫") means "under that".
+    const min = shop.price_min ?? 0;
     const max = shop.price_max ?? shop.price_min!;
     return { min, max };
   }

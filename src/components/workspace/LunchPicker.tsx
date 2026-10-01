@@ -91,7 +91,7 @@ function PriceTag({ d, className }: { d: LunchDish; className: string }) {
   const r = priceRange(d.shop);
   return (
     <span className={`font-semibold ${className}`} style={{ color: "var(--color-neutral-600)" }}>
-      {r ? (r.min === r.max ? formatK(r.min) : `${formatK(r.min)} – ${formatK(r.max)}`) : "Giá tại quán"}
+      {r ? (r.min === 0 ? `Dưới ${formatK(r.max)}` : r.min === r.max ? formatK(r.min) : `${formatK(r.min)} – ${formatK(r.max)}`) : "Giá tại quán"}
       {r && <span className="ml-1 text-[11px] font-medium" style={{ color: "var(--color-neutral-500)" }}>giá quán</span>}
     </span>
   );
