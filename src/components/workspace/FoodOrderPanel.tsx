@@ -15,6 +15,7 @@ import {
   upsertMyFoodOrderItem,
 } from "@/lib/actions/foodOrders";
 import { addFoodShop, getFoodShopMenu, listFoodShops, replaceFoodShopItems, uploadFoodShopPhoto } from "@/lib/actions/foodShops";
+import { LunchPicker } from "@/components/workspace/LunchPicker";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import type { FoodOrderItem, FoodOrderRound, FoodShop, FoodShopMenuItem, Profile } from "@/lib/types";
 
@@ -870,6 +871,13 @@ export function FoodOrderPanel({
   const [starting, setStarting] = useState(false);
   const [showAddShop, setShowAddShop] = useState(false);
   const [editingShopId, setEditingShopId] = useState<string | null>(null);
+  const [showLunch, setShowLunch] = useState(false);
+
+  // "Đặt chung hôm nay" from Trưa nay ăn gì? — today's group order with that quán.
+  async function orderTogether(shopId: string) {
+    const r = await startFoodOrderRound(channelId, { title: "Đặt đồ ăn", shopIds: [shopId] });
+    setRounds((prev) => (prev.some((x) => x.id === r.id) ? prev : [...prev, r]));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -968,6 +976,24 @@ export function FoodOrderPanel({
           </div>
         </div>
 
+        <button
+          type="button"
+          onClick={() => setShowLunch(true)}
+          className="flex items-center gap-3 rounded-[12px] px-3.5 py-3 text-left w-full"
+          style={{ background: "var(--color-accent-100)", color: "var(--color-accent-800)" }}
+        >
+          <span className="text-2xl leading-none" aria-hidden>
+            🍽
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-bold">Trưa nay ăn gì?</span>
+            <span className="block text-xs" style={{ color: "var(--color-accent-700)" }}>
+              Chọn quán theo món, giá, gần văn phòng, đang mở… kèm bản đồ và số điện thoại
+            </span>
+          </span>
+          <span className="flex-none text-sm font-bold">→</span>
+        </button>
+
         {!showAddShop && (
           <div className="flex flex-col gap-2">
             {shops.length > 0 && (
@@ -1037,6 +1063,19 @@ export function FoodOrderPanel({
           </p>
         )}
       </div>
+
+      {showLunch && (
+        <LunchPicker
+          onClose={() => setShowLunch(false)}
+          onOrderTogether={orderTogether}
+          onShopSaved={(shop) =>
+            setShops((prev) => {
+              const i = prev.findIndex((s) => s.id === shop.id);
+              return (i === -1 ? [...prev, shop] : prev.map((s) => (s.id === shop.id ? shop : s))).sort((a, b) => a.name.localeCompare(b.name, "vi"));
+            })
+          }
+        />
+      )}
 
       {rounds.map((r) => (
         <FoodOrderRoundCard

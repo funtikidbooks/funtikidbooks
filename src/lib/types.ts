@@ -258,6 +258,20 @@ export type FoodShop = {
   photo_url: string | null;
   added_by: string | null;
   created_at: string;
+  // "Trưa nay ăn gì?" details (supabase/migrations/food_shop_details.sql) —
+  // missing on rows read before it ran.
+  address?: string | null;
+  phone?: string | null;
+  map_url?: string | null;
+  themes?: string[];
+  opening_hours?: string | null; // "10:00 - 22:00"
+  price_min?: number | null;
+  price_max?: number | null;
+  near_office?: boolean;
+  dine_in?: boolean;
+  vegetarian?: boolean;
+  note?: string | null;
+  updated_at?: string | null;
 };
 
 export type FoodShopMenuItem = {

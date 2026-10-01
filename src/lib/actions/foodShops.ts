@@ -116,3 +116,85 @@ export async function deleteFoodShop(shopId: string): Promise<void> {
     if (path) await supabase.storage.from("task-attachments").remove([path]).catch(() => {});
   }
 }
+
+// ---------------------------------------------------------------------------
+// "Trưa nay ăn gì?" (lib/lunch.ts) — the library with every menu, plus when
+// each quán was last ordered from (for "Đổi gió"), and saving a quán's details.
+// ---------------------------------------------------------------------------
+
+export async function listLunchData(): Promise<{
+  shops: FoodShop[];
+  items: FoodShopMenuItem[];
+  lastOrdered: Record<string, string>;
+}> {
+  const { supabase } = await requireUser();
+  const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const [{ data: shops }, { data: items }, { data: rounds }] = await Promise.all([
+    supabase.from("food_shops").select("*").order("name", { ascending: true }),
+    supabase.from("food_shop_menu_items").select("*").order("sort_order", { ascending: true }),
+    supabase.from("food_order_rounds").select("id, order_date").gte("order_date", since),
+  ]);
+  const dateByRound = new Map((rounds ?? []).map((r) => [r.id as string, r.order_date as string]));
+  const lastOrdered: Record<string, string> = {};
+  if (dateByRound.size > 0) {
+    const { data: links } = await supabase.from("food_order_round_shops").select("round_id, shop_id").in("round_id", [...dateByRound.keys()]);
+    for (const l of links ?? []) {
+      const d = dateByRound.get(l.round_id as string);
+      const id = l.shop_id as string;
+      if (d && (!lastOrdered[id] || d > lastOrdered[id])) lastOrdered[id] = d;
+    }
+  }
+  return { shops: (shops ?? []) as FoodShop[], items: (items ?? []) as FoodShopMenuItem[], lastOrdered };
+}
+
+export type FoodShopDetailsInput = {
+  id?: string;
+  name: string;
+  address: string;
+  phone: string;
+  mapUrl: string;
+  shopeeLink: string;
+  themes: string[];
+  openingHours: string;
+  priceMin: number | null;
+  priceMax: number | null;
+  nearOffice: boolean;
+  dineIn: boolean;
+  vegetarian: boolean;
+  note: string;
+};
+
+// Adds a quán (no id) or updates one — anyone in the studio may, so the
+// library stays current (a new phone number, a quán that moved).
+export async function saveFoodShopDetails(input: FoodShopDetailsInput): Promise<FoodShop> {
+  const { supabase, user } = await requireUser();
+  const name = input.name.trim();
+  if (!name) throw new Error("Cần nhập tên quán.");
+  const clean = (s: string) => s.trim() || null;
+  const row = {
+    name,
+    address: clean(input.address),
+    phone: clean(input.phone),
+    map_url: clean(input.mapUrl),
+    shopee_link: clean(input.shopeeLink),
+    themes: [...new Set(input.themes)],
+    opening_hours: clean(input.openingHours),
+    price_min: input.priceMin,
+    price_max: input.priceMax,
+    near_office: input.nearOffice,
+    dine_in: input.dineIn,
+    vegetarian: input.vegetarian,
+    note: clean(input.note),
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = input.id
+    ? await supabase.from("food_shops").update(row).eq("id", input.id).select("*").single()
+    : await supabase.from("food_shops").insert({ ...row, added_by: user.id }).select("*").single();
+  if (error || !data) {
+    if (error && (error.code === "PGRST204" || error.code === "42703" || /column/i.test(error.message))) {
+      throw new Error("Chưa chạy file SQL food_shop_details.sql trên Supabase — chưa lưu được địa chỉ/số điện thoại.");
+    }
+    throw new Error(input.id ? "Không lưu được thông tin quán." : "Không thêm được quán.");
+  }
+  return data as FoodShop;
+}
