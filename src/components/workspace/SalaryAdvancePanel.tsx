@@ -23,7 +23,7 @@ import type { SalaryAdvance, SalaryAdvanceStatus } from "@/lib/types";
 //
 // Money is private: amounts stay hidden ("••••") until the person taps the
 // eye — this page is often open in the office — and nobody but them and
-// the managers ever sees these requests.
+// a Giám đốc ever sees these requests (not a PM either).
 
 export function AdvanceStatusChip({ status }: { status: SalaryAdvanceStatus }) {
   const st = ADVANCE_STATUS[status];
@@ -157,7 +157,7 @@ export function SalaryAdvancePanel({
         </p>
         <p className="text-[12px] rounded-[10px] px-3 py-2 flex gap-2" style={{ background: "var(--color-surface)", color: "var(--color-neutral-600)" }}>
           <span aria-hidden>🔒</span>
-          <span>Riêng tư: chỉ bạn và ban quản lý (Giám đốc, PM) thấy các yêu cầu này, đồng nghiệp khác không thấy.</span>
+          <span>Riêng tư: chỉ bạn và Giám đốc thấy các yêu cầu này, đồng nghiệp khác không thấy.</span>
         </p>
 
         <div className="flex flex-col gap-2">

@@ -5,7 +5,7 @@ import { listAllAttendance, listOffDates } from "@/lib/actions/attendance";
 import { AttendanceBoard } from "@/components/admin/AttendanceBoard";
 import { ClockPanel } from "@/components/admin/ClockPanel";
 import { SalaryAdvanceApprovals } from "@/components/admin/SalaryAdvanceApprovals";
-import { listAdvancesForManagers } from "@/lib/actions/salaryAdvances";
+import { listAdvancesForDirectors } from "@/lib/actions/salaryAdvances";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import type { Profile } from "@/lib/types";
 
@@ -31,6 +31,9 @@ export default async function AdminAttendancePage() {
     redirect("/quan-tri");
   }
 
+  // Ứng tiền trước is the Giám đốc's alone — a PM opening this page gets
+  // the attendance board without it.
+  const isDirector = profile?.access_role === "director";
   const [entries, offDates, { data: profiles }, advances] = await Promise.all([
     listAllAttendance(),
     listOffDates(),
@@ -38,7 +41,7 @@ export default async function AdminAttendancePage() {
       .from("profiles")
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
       .order("display_name", { ascending: true }),
-    listAdvancesForManagers(),
+    isDirector ? listAdvancesForDirectors() : null,
   ]);
 
   // Everyone — the owner can ask for an advance too, so the requests list
@@ -50,14 +53,7 @@ export default async function AdminAttendancePage() {
       initialEntries={entries}
       initialOffDates={offDates}
       staff={staff}
-      advances={
-        <SalaryAdvanceApprovals
-          initial={advances}
-          profiles={everyone}
-          currentMonth={firstOfMonth(vnToday())}
-          canDecide={profile?.access_role === "director"}
-        />
-      }
+      advances={advances ? <SalaryAdvanceApprovals initial={advances} profiles={everyone} currentMonth={firstOfMonth(vnToday())} /> : undefined}
       clock={<ClockPanel staff={staff} />}
     />
   );

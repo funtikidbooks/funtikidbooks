@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { decideAdvance, listAdvancesForManagers, type AdvancesForManagers } from "@/lib/actions/salaryAdvances";
+import { decideAdvance, listAdvancesForDirectors, type AdvancesForDirectors } from "@/lib/actions/salaryAdvances";
 import { formatVnd } from "@/lib/financeSummary";
 import { addMonths } from "@/lib/constants/attendance";
 import { AttendanceAvatar } from "@/components/admin/AttendanceEditCellModal";
@@ -13,18 +13,16 @@ import type { Profile, SalaryAdvance } from "@/lib/types";
 // Quản trị → Chấm công: staff's Ứng tiền trước requests waiting on a
 // Giám đốc, then the ones already decided. Approving picks how much (what
 // they asked for, unless changed) and which month's payslip it comes off —
-// this month unless that payslip is already paid. A PM sees the same list
-// but can't decide (decide_salary_advance() refuses anyone else anyway).
+// this month unless that payslip is already paid. Giám đốc only — a PM
+// never gets this section (nor the rows: salary_advances.sql).
 export function SalaryAdvanceApprovals({
   initial,
   profiles,
   currentMonth,
-  canDecide,
 }: {
-  initial: AdvancesForManagers;
+  initial: AdvancesForDirectors;
   profiles: Profile[];
   currentMonth: string;
-  canDecide: boolean;
 }) {
   const [data, setData] = useState(initial);
   const [showHistory, setShowHistory] = useState(false);
@@ -37,11 +35,11 @@ export function SalaryAdvanceApprovals({
     const supabase = createClient();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const channel = supabase
-      .channel("salary-advances-managers")
+      .channel("salary-advances-directors")
       .on("postgres_changes", { event: "*", schema: "public", table: "salary_advances" }, () => {
         clearTimeout(timer);
         timer = setTimeout(() => {
-          listAdvancesForManagers().then(setData, () => {});
+          listAdvancesForDirectors().then(setData, () => {});
         }, 300);
       })
       .subscribe();
@@ -91,7 +89,6 @@ export function SalaryAdvanceApprovals({
                 profile={profileOf(r.profile_id)}
                 takenThisMonth={takenBy(r.profile_id)}
                 monthOptions={[currentMonth, addMonths(currentMonth, 1)].filter((m) => !(paidMonths[r.profile_id] ?? []).includes(m))}
-                canDecide={canDecide}
                 onDecided={applyDecision}
               />
             ))}
@@ -163,14 +160,12 @@ function PendingCard({
   profile,
   takenThisMonth,
   monthOptions,
-  canDecide,
   onDecided,
 }: {
   request: SalaryAdvance;
   profile: Profile;
   takenThisMonth: number;
   monthOptions: string[];
-  canDecide: boolean;
   onDecided: (saved: SalaryAdvance) => void;
 }) {
   const [amount, setAmount] = useState(r.amount);
@@ -213,8 +208,7 @@ function PendingCard({
         {takenThisMonth > 0 ? `Đã ứng trừ lương tháng này: ${formatVnd(takenThisMonth)}` : "Tháng này chưa ứng lần nào"}
       </p>
 
-      {canDecide ? (
-        monthOptions.length === 0 ? (
+      {monthOptions.length === 0 ? (
           <p className="text-[12.5px] font-semibold" style={{ color: "var(--status-red)" }}>
             Bảng lương tháng này và tháng sau của bạn ấy đều đã trả — chưa có tháng nào để trừ.
           </p>
@@ -256,12 +250,7 @@ function PendingCard({
               </button>
             </div>
           </>
-        )
-      ) : (
-        <p className="text-[12px] font-semibold" style={{ color: "var(--color-neutral-500)" }}>
-          Chờ Giám đốc duyệt.
-        </p>
-      )}
+        )}
     </div>
   );
 }

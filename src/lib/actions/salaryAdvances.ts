@@ -79,7 +79,7 @@ export async function cancelMyAdvance(id: string): Promise<SalaryAdvance> {
   return toSalaryAdvance(data);
 }
 
-export type AdvancesForManagers = {
+export type AdvancesForDirectors = {
   requests: SalaryAdvance[];
   // Per person, the payslip months (this month / next) already paid — an
   // advance can't come off those.
@@ -87,11 +87,11 @@ export type AdvancesForManagers = {
 };
 
 // Quản trị → Chấm công: everything still waiting, plus the last ~4 months'
-// decisions. Giám đốc and PM only (the table's own policy is the real gate).
-export async function listAdvancesForManagers(): Promise<AdvancesForManagers> {
+// decisions. Giám đốc only — not a PM (the table's own policy is the real gate).
+export async function listAdvancesForDirectors(): Promise<AdvancesForDirectors> {
   const { supabase, user } = await requireUser();
-  const { data: me } = await supabase.from("profiles").select("access_role, role").eq("id", user.id).maybeSingle();
-  if (me?.access_role !== "director" && me?.role !== "Project Manager") throw new Error("Bạn không có quyền này.");
+  const { data: me } = await supabase.from("profiles").select("access_role").eq("id", user.id).maybeSingle();
+  if (me?.access_role !== "director") throw new Error("Bạn không có quyền này.");
 
   const thisMonth = firstOfMonth(vnToday());
   const since = addMonths(thisMonth, -3);

@@ -1,10 +1,11 @@
 -- Ứng tiền trước: a staff member asks for part of their pay early from
--- their own Chấm công page; only a Giám đốc approves (a PM can see the list
--- but not decide); an approved advance goes on that month's payslip as an
+-- their own Chấm công page; only a Giám đốc sees and approves them (not a
+-- PM); an approved advance goes on that month's payslip as an
 -- "Ứng lương dd/mm" deduction. Run once in the Supabase Dashboard SQL Editor.
 --
 -- Private by design: each person sees only their own requests — never a
--- colleague's. Giám đốc and PM (can_manage_hr()) see all of them.
+-- colleague's. Only a Giám đốc sees all of them — a PM doesn't (sếp Phúc,
+-- 1/10/2026), unlike the rest of chấm công / bảng lương.
 
 -- 1. The requests.
 create table if not exists public.salary_advances (
@@ -34,10 +35,11 @@ create index if not exists salary_advances_waiting_idx on public.salary_advances
 alter table public.salary_advances enable row level security;
 
 drop policy if exists "own or hr can read advances" on public.salary_advances;
-create policy "own or hr can read advances"
+drop policy if exists "own or director can read advances" on public.salary_advances;
+create policy "own or director can read advances"
   on public.salary_advances for select
   to authenticated
-  using (profile_id = auth.uid() or public.can_manage_hr());
+  using (profile_id = auth.uid() or public.current_access_role() = 'director');
 
 -- Staff ask for themselves only, always as a fresh waiting request.
 drop policy if exists "staff can request own advance" on public.salary_advances;
