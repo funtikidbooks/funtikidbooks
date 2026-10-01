@@ -1467,9 +1467,14 @@ export function MeetingHub({
       roomCloseTimerRef.current = null;
     }
   }
+  // Hover is a real mouse (or an iPad trackpad) only: a tap on iPhone/iPad
+  // also fires a compatibility "mouse enter" — which opened the peek on every
+  // tap, and with no finger ever "leaving", it never closed. Pointer events
+  // say which it was; a finger gets the peek by holding (touch handlers).
   function roomPeekHandlers(room: MeetingChannelPublic) {
     return {
-      onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+      onPointerEnter: (e: React.PointerEvent<HTMLElement>) => {
+        if (e.pointerType !== "mouse") return;
         cancelRoomPeekClose();
         const rect = e.currentTarget.getBoundingClientRect();
         clearRoomHoverTimer();
@@ -1478,9 +1483,16 @@ export function MeetingHub({
           setRoomPeek({ room, rect, via: "hover" });
         }, 300);
       },
-      onMouseLeave: () => {
+      onPointerLeave: (e: React.PointerEvent<HTMLElement>) => {
+        if (e.pointerType !== "mouse") return;
         clearRoomHoverTimer();
         scheduleRoomPeekClose();
+      },
+      // Clicking the room opens it — the peek has done its job.
+      onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+        if (e.pointerType !== "mouse") return;
+        clearRoomHoverTimer();
+        setRoomPeek(null);
       },
       onTouchStart: (e: React.TouchEvent<HTMLElement>) => {
         const touch = e.touches[0];
@@ -5193,7 +5205,10 @@ export function MeetingHub({
         />
       )}
       {roomPeek && (
-        <div onMouseEnter={cancelRoomPeekClose} onMouseLeave={scheduleRoomPeekClose}>
+        <div
+          onPointerEnter={(e) => e.pointerType === "mouse" && cancelRoomPeekClose()}
+          onPointerLeave={(e) => e.pointerType === "mouse" && scheduleRoomPeekClose()}
+        >
           <RoomInfoPeekPopup
             key={roomPeek.room.id}
             rect={roomPeek.rect}

@@ -564,8 +564,10 @@ export function HourTimesheet({
                         return;
                       }
                     }}
-                    onMouseEnter={(e) => {
-                      if (!isToday) return;
+                    // A real mouse only — a tap's compatibility "mouse enter"
+                    // opened this on iPhone/iPad and it never closed.
+                    onPointerEnter={(e) => {
+                      if (e.pointerType !== "mouse" || !isToday) return;
                       cancelClose();
                       const rect = e.currentTarget.getBoundingClientRect();
                       clearHoverTimer();
@@ -574,7 +576,8 @@ export function HourTimesheet({
                         setPeek({ project: null, date, rect, via: "hover" });
                       }, 300);
                     }}
-                    onMouseLeave={() => {
+                    onPointerLeave={(e) => {
+                      if (e.pointerType !== "mouse") return;
                       clearHoverTimer();
                       scheduleClose();
                     }}
@@ -667,13 +670,15 @@ export function HourTimesheet({
                             setPeek(null);
                             setEditingEntry({ project, date });
                           }}
-                          onMouseEnter={(e) => {
+                          onPointerEnter={(e) => {
+                            if (e.pointerType !== "mouse") return;
                             cancelClose();
                             const rect = e.currentTarget.getBoundingClientRect();
                             clearHoverTimer();
                             hoverTimerRef.current = window.setTimeout(() => showPeek(rect, "hover"), 300);
                           }}
-                          onMouseLeave={() => {
+                          onPointerLeave={(e) => {
+                            if (e.pointerType !== "mouse") return;
                             clearHoverTimer();
                             scheduleClose();
                           }}
@@ -790,7 +795,7 @@ export function HourTimesheet({
       </div>
 
       {peek && (
-        <div onMouseEnter={cancelClose} onMouseLeave={scheduleClose}>
+        <div onPointerEnter={(e) => e.pointerType === "mouse" && cancelClose()} onPointerLeave={(e) => e.pointerType === "mouse" && scheduleClose()}>
           {peek.project ? (
             <CellPeekPopup
               rect={peek.rect}
