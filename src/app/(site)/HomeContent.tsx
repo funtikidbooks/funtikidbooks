@@ -15,7 +15,7 @@ import { useViewer } from "@/components/site/ViewerProvider";
 import type { ImageTransform } from "@/components/site/EditableImage";
 import { BOOK_DEMO_BACK_COVER, BOOK_DEMO_PAGES } from "@/lib/bookDemo";
 import { HERO_BOOKS, HOME_GALLERY, SERVICE_ART, type ComparePair, type HomeArt } from "@/lib/homeArt";
-import { resizedUrl } from "@/lib/imageTransform";
+import { resizedSrcSet, resizedUrl } from "@/lib/imageTransform";
 import type { Project, Review } from "@/lib/types";
 
 // The home page, drawn around the studio's own pictures: real covers on a
@@ -112,12 +112,14 @@ function BookShelf({ books, note }: { books: HomeArt[]; note: string }) {
                     aria-hidden
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/brand/funti-mascot.png" alt="" className="fk-bob block w-full" draggable={false} />
+                    <img src="/brand/funti-mascot-256.webp" alt="" className="fk-bob block w-full" draggable={false} />
                   </span>
                 )}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={resizedUrl(b.src, 560)}
+                  srcSet={resizedSrcSet(b.src, [280, 420, 560])}
+                  sizes="(max-width: 767px) 36vw, 300px"
                   alt={b.title}
                   className="absolute inset-0 w-full h-full object-cover"
                   style={{ borderRadius: "inherit" }}
@@ -139,11 +141,6 @@ function BookShelf({ books, note }: { books: HomeArt[]; note: string }) {
 }
 
 // A project as the home page needs it.
-// The flip-book pages at the size they are shown (a page is at most 544px
-// wide, so 1100px stays sharp on a Retina screen) — the originals are ~1.5MB
-// each, and the cover alone used to be the heaviest thing on the home page.
-const FLIP_PAGES = BOOK_DEMO_PAGES.map((p) => resizedUrl(p, 1100) ?? p);
-const FLIP_BACK = resizedUrl(BOOK_DEMO_BACK_COVER, 1100) ?? BOOK_DEMO_BACK_COVER;
 
 export type HomeProject = Pick<Project, "id" | "title" | "title_en">;
 
@@ -261,14 +258,14 @@ export function HomeContent({
               <SectionHead kicker={h.flipKicker} title={h.flipTitle} body={t.services.previewSubtitle} />
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/brand/funti-mascot.png"
+                src="/brand/funti-mascot-128.webp"
                 alt=""
                 aria-hidden
                 className="hidden md:block absolute pointer-events-none"
                 style={{ width: 64, right: -84, top: -6, transform: "rotate(12deg)" }}
               />
             </div>
-            <BookFlipDemo pages={FLIP_PAGES} alt={t.services.previewAlt} backCover={FLIP_BACK} />
+            <BookFlipDemo pages={BOOK_DEMO_PAGES} alt={t.services.previewAlt} backCover={BOOK_DEMO_BACK_COVER} />
           </div>
         </section>
         <div style={{ background: "var(--color-surface)" }}>

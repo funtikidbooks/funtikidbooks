@@ -95,7 +95,7 @@ export function Header() {
               that one's own cream background showed as a visible white
               disc wherever this sits on anything but a plain white bar. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/funti-mascot.png" alt="Funti Kidbooks Studio" width={40} height={40} className="flex-none" />
+          <img src="/brand/funti-mascot-128.webp" alt="Funti Kidbooks Studio" width={40} height={40} className="flex-none" />
           <span className="flex flex-col leading-tight">
             <span className="font-heading font-bold text-base">Funti Kidbooks</span>
             <span

@@ -5,7 +5,10 @@ import Image from "next/image";
 import { Modal } from "@/components/ui/Modal";
 import { addHeroSlide, removeHeroSlide, saveJsonSetting } from "@/lib/actions/admin";
 import { DEFAULT_IMAGE_TRANSFORM, type ImageTransform } from "@/components/site/EditableImage";
-import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
+import { isSupabaseStorageUrl, resizedUrl, supabaseImageLoader } from "@/lib/imageTransform";
+
+// Full-width slides: up to 1600px, a phone takes a smaller copy.
+const HERO_LOADER = supabaseImageLoader(1600);
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 
 const ROTATE_MS = 6000;
@@ -241,11 +244,12 @@ export function HeroSlideshow({
                   }
                 >
                   <Image
-                    src={isSupabaseStorageUrl(src) ? (resizedUrl(src, 1600) ?? src) : src}
+                    src={src}
+                    loader={isSupabaseStorageUrl(src) ? HERO_LOADER : undefined}
+                    sizes="100vw"
                     alt="Funti Kidbooks Studio"
                     fill
                     priority={i === 0}
-                    unoptimized={isSupabaseStorageUrl(src)}
                     className="object-cover"
                     style={{ transform: `scale(${t.zoom / 100})`, objectPosition: `${posX}% ${t.posY}%`, pointerEvents: "none" }}
                   />

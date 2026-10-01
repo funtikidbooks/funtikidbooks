@@ -7,6 +7,8 @@
 // thumbnail instead. Falls back to the original URL untouched for anything
 // that isn't a Supabase Storage public URL (a local blob: preview before
 // upload finishes, or an external host).
+import type { ImageLoader } from "next/image";
+
 const PUBLIC_OBJECT_MARKER = "/storage/v1/object/public/";
 
 export function thumbnailUrl(url: string | null | undefined, width: number, height: number = width): string | undefined {
@@ -31,6 +33,31 @@ export function thumbnailUrl(url: string | null | undefined, width: number, heig
 // distinct-enough image to bill for.
 export function isSupabaseStorageUrl(url: string | null | undefined): boolean {
   return !!url && url.includes(PUBLIC_OBJECT_MARKER);
+}
+
+// The smallest of a few fixed widths that covers `cssPx` on this screen —
+// a fixed set so the CDN keeps reusing the same few copies of a picture
+// instead of making one per window size. At most 2× the CSS size: a 3×
+// phone screen doesn't show the difference on a photo, but pays for it.
+const FIT_WIDTHS = [480, 720, 1000, 1400, 2000];
+export function fitWidth(cssPx: number, max = 1400): number {
+  const dpr = typeof window === "undefined" ? 2 : Math.min(window.devicePixelRatio || 1, 2);
+  const want = cssPx * dpr;
+  return Math.min(FIT_WIDTHS.find((w) => w >= want) ?? max, max);
+}
+
+// srcSet for a plain <img> of a Supabase upload — with `sizes`, a phone
+// picks a smaller copy than a wide screen instead of everyone getting the
+// largest. undefined for anything else (the plain src is used).
+export function resizedSrcSet(url: string | null | undefined, widths: number[]): string | undefined {
+  if (!isSupabaseStorageUrl(url)) return undefined;
+  return widths.map((w) => `${resizedUrl(url, w)} ${w}w`).join(", ");
+}
+
+// The same for next/image: its srcSet, served by Supabase's transform (not
+// Vercel's, see above), never wider than `max`.
+export function supabaseImageLoader(max: number): ImageLoader {
+  return ({ src, width, quality }) => resizedUrl(src, Math.min(width, max), quality ?? 75) ?? src;
 }
 
 // General-purpose sibling of thumbnailUrl() for non-square content — a

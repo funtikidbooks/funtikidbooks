@@ -5,7 +5,9 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { EditableImage, DEFAULT_IMAGE_TRANSFORM, type ImageTransform } from "./EditableImage";
 import { saveJsonSetting, setSiteImage } from "@/lib/actions/admin";
-import { isSupabaseStorageUrl, resizedUrl } from "@/lib/imageTransform";
+import { isSupabaseStorageUrl, supabaseImageLoader } from "@/lib/imageTransform";
+
+const PAGE_HERO_LOADER = supabaseImageLoader(1400);
 
 // The top of an inner page: kicker, title, a line of text, the buttons, and
 // on the right either real art (`art`), a photo, or — for pages without
@@ -109,10 +111,11 @@ export function PageHero({
         ) : imageSrc ? (
           <div className="w-full relative rounded-[var(--radius-lg)] overflow-hidden" style={{ minHeight: 300, aspectRatio: "4 / 3" }}>
             <Image
-              src={isSupabaseStorageUrl(imageSrc) ? (resizedUrl(imageSrc, 1400) ?? imageSrc) : imageSrc}
+              src={imageSrc}
+              loader={isSupabaseStorageUrl(imageSrc) ? PAGE_HERO_LOADER : undefined}
+              sizes="(max-width: 767px) 100vw, 50vw"
               alt=""
               fill
-              unoptimized={isSupabaseStorageUrl(imageSrc)}
               className="object-cover"
               priority
             />

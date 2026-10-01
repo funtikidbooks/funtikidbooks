@@ -10,7 +10,7 @@ import { useDict } from "@/components/site/LocaleProvider";
 import { categoryLabel } from "@/lib/dictionary";
 import { pickLocalized } from "@/lib/i18n";
 import { updateNewsPost } from "@/lib/actions/admin";
-import { resizedUrl } from "@/lib/imageTransform";
+import { resizedSrcSet, resizedUrl } from "@/lib/imageTransform";
 import type { NewsPost } from "@/lib/types";
 
 // Code-split: the rich-text editor (TipTap) it pulls in is heavy and only
@@ -101,6 +101,8 @@ export function NewsGrid({ initialPosts, canEdit }: { initialPosts: NewsPost[]; 
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={resizedUrl(lead.cover_image_url, 1000)}
+                srcSet={resizedSrcSet(lead.cover_image_url, [480, 720, 1000])}
+                sizes="(max-width: 767px) 92vw, 55vw"
                 alt={lead.title}
                 className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
               />

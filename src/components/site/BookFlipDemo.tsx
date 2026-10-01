@@ -1,6 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useNearViewport } from "@/lib/useNearViewport";
+import { resizedSrcSet, resizedUrl } from "@/lib/imageTransform";
+
+// The originals are ~1.5MB each: pages come resized, at the copy that fits
+// the page as shown (at most 544px wide, so 1100px stays sharp on Retina;
+// a phone's ~300px page takes the 720px copy).
+const PAGE_WIDTHS = [480, 720, 1100];
+function pageImage(src: string, sizes: string) {
+  return { src: resizedUrl(src, 1100) ?? src, srcSet: resizedSrcSet(src, PAGE_WIDTHS), sizes };
+}
 
 // A picture book you turn by hand. Drag a page (mouse), swipe it (finger),
 // tap it, or use the arrows. Paper pages curl from the corner you pull:
@@ -236,12 +246,15 @@ function bookLayout(avail: number, flipped: number, n: number, motion: Motion) {
 function PageSurface({
   src,
   alt,
+  width,
   spineSide,
   isCover,
   children,
 }: {
   src: string | null;
   alt: string;
+  // The page as shown, in CSS px — picks the image size.
+  width: number;
   spineSide: "left" | "right";
   isCover?: boolean;
   children?: ReactNode;
@@ -250,7 +263,7 @@ function PageSurface({
     <div className="absolute inset-0 rounded-[10px] overflow-hidden" style={{ background: "#fdfcf8" }}>
       {src && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={src} alt={alt} draggable={false} decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+        <img {...pageImage(src, `${Math.round(width)}px`)} alt={alt} draggable={false} decoding="async" className="absolute inset-0 w-full h-full object-cover" />
       )}
       {isCover && (
         // Hardcover books are scored a little way in from the spine so the
@@ -346,6 +359,12 @@ export function BookFlipDemo({ pages, alt, backCover = null }: { pages: string[]
   const bookRef = useRef<HTMLDivElement>(null);
   const [avail, setAvail] = useState(0);
   const [flipped, setFlipped] = useState(0); // leaves turned so far
+  // Pages download as the reader gets to them — the cover and first spread
+  // at the start, then always two leaves ahead of the open page. Every page
+  // (~1.8MB on a phone) used to load with the home page, before anyone had
+  // even turned the cover. Once loaded a page stays (no reload on turning back).
+  const [loadedThrough, setLoadedThrough] = useState(1);
+  if (flipped + 2 > loadedThrough && flipped > 0) setLoadedThrough(flipped + 2);
   const [motion, setMotion] = useState<Motion>(REST);
   const [dragging, setDragging] = useState(false);
 
@@ -370,12 +389,19 @@ export function BookFlipDemo({ pages, alt, backCover = null }: { pages: string[]
     return () => ro.disconnect();
   }, []);
 
+  // The flip sounds (~90KB) load as the book nears the screen, not with
+  // the page — on a phone it sits well below the first screen.
+  const bookNear = useNearViewport(wrapRef, "300px") !== null;
   useEffect(() => {
+    if (!bookNear || soundsRef.current.length > 0) return;
     soundsRef.current = Array.from({ length: FLIP_SOUND_VARIANTS }, (_, i) => {
       const audio = new Audio(`/sounds/page-flip-${i + 1}.mp3`);
       audio.volume = 0.5;
       return audio;
     });
+  }, [bookNear]);
+
+  useEffect(() => {
     reducedRef.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     return () => {
       if (tweenRef.current !== null) cancelAnimationFrame(tweenRef.current);
@@ -749,7 +775,7 @@ export function BookFlipDemo({ pages, alt, backCover = null }: { pages: string[]
         <div className="relative mx-auto rounded-[10px] overflow-hidden" style={{ width: `min(78vw, ${MAX_PAGE}px)`, aspectRatio: "668 / 854" }}>
           {leaves[0]?.front && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={leaves[0].front} alt={`${alt} — bìa`} draggable={false} className="absolute inset-0 w-full h-full object-cover" />
+            <img {...pageImage(leaves[0].front, `min(78vw, ${MAX_PAGE}px)`)} alt={`${alt} — bìa`} draggable={false} className="absolute inset-0 w-full h-full object-cover" />
           )}
         </div>
       ) : (
@@ -801,8 +827,9 @@ export function BookFlipDemo({ pages, alt, backCover = null }: { pages: string[]
                 return (
                   <div key={key} className="absolute pointer-events-none" style={style ?? { display: "none" }}>
                     <PageSurface
-                      src={side === "f" ? leaf.front : leaf.back}
+                      src={j > loadedThrough ? null : side === "f" ? leaf.front : leaf.back}
                       alt={`${alt} — ${label}`}
+                      width={W}
                       spineSide={side === "f" ? "left" : "right"}
                       isCover={isHard(j)}
                     >

@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { saveJsonSetting, uploadContentImage } from "@/lib/actions/admin";
 import { DEFAULT_IMAGE_TRANSFORM, type ImageTransform } from "@/components/site/EditableImage";
-import { resizedUrl } from "@/lib/imageTransform";
+import { fitWidth, resizedUrl } from "@/lib/imageTransform";
+import { useNearViewport } from "@/lib/useNearViewport";
 
 const IMAGES_KEY = "trang-chu-services-images";
 const TRANSFORMS_KEY = "trang-chu-services-transform";
@@ -150,6 +151,7 @@ function ServiceImageArea({
   const [dragging, setDragging] = useState(false);
   const [localTransform, setLocalTransform] = useState(transform);
   const boxRef = useRef<HTMLDivElement>(null);
+  const nearWidth = useNearViewport(boxRef);
   const transformRef = useRef(transform);
   const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(null);
 
@@ -226,9 +228,11 @@ function ServiceImageArea({
         <div
           className="absolute inset-0"
           style={{
-            // A sized copy, not the upload itself (often 2–3000px, ~300KB+): the
-            // card is 220px tall, and 1400px still covers zooming in on Retina.
-            backgroundImage: `url(${resizedUrl(imageUrl, 1400) ?? imageUrl})`,
+            // A sized copy, not the upload itself (often 2–3000px, ~300KB+),
+            // only once the card nears the screen, and only as wide as the
+            // card shows it (zoom included) — all six used to load at 1400px
+            // with the page, ~760KB before a phone even scrolled down to them.
+            backgroundImage: nearWidth === null ? undefined : `url(${resizedUrl(imageUrl, fitWidth((nearWidth * localTransform.zoom) / 100)) ?? imageUrl})`,
             backgroundSize: `${localTransform.zoom}%`,
             backgroundPosition: `${localTransform.posX}% ${localTransform.posY}%`,
             backgroundRepeat: "no-repeat",

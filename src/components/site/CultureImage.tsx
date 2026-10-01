@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { saveJsonSetting, setSiteImage } from "@/lib/actions/admin";
+import { fitWidth, resizedUrl } from "@/lib/imageTransform";
+import { useNearViewport } from "@/lib/useNearViewport";
 
 const CULTURE_IMAGE_KEY = "gioi-thieu-culture-image";
 const CULTURE_OPACITY_KEY = "gioi-thieu-culture-opacity";
@@ -40,6 +42,10 @@ export function CultureImage({
   const transformRef = useRef(transform);
   const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(null);
   const shown = preview ?? imageSrc;
+  // The original upload was sent as is (~360KB); now a copy sized to the
+  // section (zoom included), fetched as the section nears the screen.
+  const nearWidth = useNearViewport(containerRef);
+  const backgroundUrl = preview ?? (imageSrc && nearWidth !== null ? resizedUrl(imageSrc, fitWidth((nearWidth * transform.zoom) / 100, 2000)) : null);
 
   useEffect(() => {
     transformRef.current = transform;
@@ -128,7 +134,7 @@ export function CultureImage({
         <div
           className="absolute inset-0"
           style={{
-            backgroundImage: `url(${shown})`,
+            backgroundImage: backgroundUrl ? `url(${backgroundUrl})` : undefined,
             backgroundSize: `${transform.zoom}%`,
             backgroundPosition: `${transform.posX}% ${transform.posY}%`,
             backgroundRepeat: "no-repeat",
