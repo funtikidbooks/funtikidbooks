@@ -89,9 +89,12 @@ const OPEN_GROUPS_KEY = "funti-admin-nav-open";
 export function AdminSidebar({
   user,
   initialPendingPayrollFeedbackIds,
+  initialPendingAdvanceIds,
 }: {
   user: { displayName: string; email: string; accessRole: AccessRole; jobTitle: string | null };
   initialPendingPayrollFeedbackIds: string[];
+  // Ứng tiền trước requests waiting on a Giám đốc (empty for anyone else).
+  initialPendingAdvanceIds: string[];
 }) {
   const pathname = usePathname();
   const isDirector = user.accessRole === "director";
@@ -129,6 +132,36 @@ export function AdminSidebar({
   }, [isDirector, isProjectManager]);
 
   const hasPendingPayrollFeedback = pendingFeedbackIds.size > 0;
+
+  // Same idea for Ứng tiền trước — Giám đốc only, like the requests themselves.
+  const [pendingAdvanceIds, setPendingAdvanceIds] = useState<Set<string>>(() => new Set(initialPendingAdvanceIds));
+  useEffect(() => {
+    if (!isDirector) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel("sidebar-salary-advances-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "salary_advances" }, (payload) => {
+        const isDelete = payload.eventType === "DELETE";
+        const row = (isDelete ? payload.old : payload.new) as { id: string; status: string };
+        setPendingAdvanceIds((prev) => {
+          const next = new Set(prev);
+          if (isDelete || row.status !== "pending") next.delete(row.id);
+          else next.add(row.id);
+          return next;
+        });
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isDirector]);
+
+  // Which pages have something waiting — a red dot on the page and on its
+  // group, so it shows even while the group is folded.
+  const waiting: Record<string, string> = {};
+  if (hasPendingPayrollFeedback) waiting["/quan-tri/bang-luong"] = "Có thắc mắc lương chưa xử lý";
+  if (pendingAdvanceIds.size > 0) waiting["/quan-tri/cham-cong"] = `${pendingAdvanceIds.size} yêu cầu ứng tiền chờ duyệt`;
+  const anyWaiting = Object.keys(waiting).length > 0;
 
   const isAdmin = user.accessRole === "admin";
   function canSee(who: Audience) {
@@ -174,8 +207,9 @@ export function AdminSidebar({
   // element in the drawer just closes it directly on click. A no-op on
   // the desktop <aside> instance since mobileOpen is already false there.
   // A plain render helper, not a component, so React never remounts links.
-  function renderLink(item: NavItem, showDot = false, indent = false) {
+  function renderLink(item: NavItem, indent = false) {
     const active = isActive(item.href);
+    const dotTitle = waiting[item.href];
     return (
       <Link
         key={item.href}
@@ -184,14 +218,14 @@ export function AdminSidebar({
         className={`flex items-center gap-2 py-2 rounded-[8px] text-[13px] font-semibold transition-colors ${indent ? "pl-7 pr-2" : "px-2"}`}
         style={{
           background: active ? "var(--color-accent-100)" : "transparent",
-          color: active ? "var(--color-accent-700)" : "var(--color-text)",
+          color: active ? "var(--color-accent-700)" : dotTitle ? "var(--status-red)" : "var(--color-text)",
         }}
       >
         <span aria-hidden>{item.icon}</span>
         <span className="flex-1 min-w-0 truncate">{item.label}</span>
-        {showDot && (
+        {dotTitle && (
           <span
-            title="Có thắc mắc lương chưa xử lý"
+            title={dotTitle}
             className="rounded-full flex-none"
             style={{ width: 8, height: 8, background: "var(--status-red)" }}
           />
@@ -228,7 +262,7 @@ export function AdminSidebar({
       {visibleGroups.map((g) => {
         const holdsActive = g.items.some((i) => isActive(i.href));
         const open = holdsActive || openGroups.has(g.id);
-        const dot = g.items.some((i) => i.href === "/quan-tri/bang-luong") && hasPendingPayrollFeedback;
+        const dot = g.items.some((i) => waiting[i.href]);
         return (
           <div key={g.id} className="flex flex-col gap-0.5">
             <button
@@ -240,7 +274,7 @@ export function AdminSidebar({
             >
               <span aria-hidden>{g.icon}</span>
               <span className="flex-1">{g.label}</span>
-              {!open && dot && <span className="rounded-full flex-none" style={{ width: 8, height: 8, background: "var(--status-red)" }} />}
+              {dot && <span className="rounded-full flex-none" style={{ width: 8, height: 8, background: "var(--status-red)" }} />}
               <span
                 aria-hidden
                 className="text-[10px] transition-transform"
@@ -249,7 +283,7 @@ export function AdminSidebar({
                 ▶
               </span>
             </button>
-            {open && g.items.map((item) => renderLink(item, item.href === "/quan-tri/bang-luong" && hasPendingPayrollFeedback, true))}
+            {open && g.items.map((item) => renderLink(item, true))}
           </div>
         );
       })}
@@ -316,11 +350,14 @@ export function AdminSidebar({
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
-            className="btn-icon"
+            className="btn-icon relative"
             style={{ width: 34, height: 34 }}
-            aria-label="Mở menu quản trị"
+            aria-label={anyWaiting ? "Mở menu quản trị — có việc chờ xử lý" : "Mở menu quản trị"}
           >
             ☰
+            {anyWaiting && (
+              <span className="absolute rounded-full" style={{ width: 9, height: 9, top: 3, right: 3, background: "var(--status-red)", border: "1.5px solid var(--color-bg)" }} />
+            )}
           </button>
         </div>
       </div>

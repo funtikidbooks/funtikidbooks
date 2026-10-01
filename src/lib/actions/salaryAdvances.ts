@@ -79,6 +79,15 @@ export async function cancelMyAdvance(id: string): Promise<SalaryAdvance> {
   return toSalaryAdvance(data);
 }
 
+// The admin menu's red dot on Nhân sự › Chấm công. Only ever called for a
+// Giám đốc (quan-tri/layout.tsx); the table's policy would leave anyone
+// else just their own.
+export async function listPendingAdvanceIds(): Promise<string[]> {
+  const { supabase } = await requireUser();
+  const { data } = await supabase.from("salary_advances").select("id").eq("status", "pending");
+  return (data ?? []).map((r) => r.id as string);
+}
+
 export type AdvancesForDirectors = {
   requests: SalaryAdvance[];
   // Per person, the payslip months (this month / next) already paid — an
