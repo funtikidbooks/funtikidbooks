@@ -10,6 +10,7 @@ import { UpworkSopView } from "./UpworkSopView";
 import { UpworkStats } from "./UpworkStats";
 import type { UpworkSop } from "@/lib/upworkSop";
 import type { UpworkFilters } from "@/lib/upworkFilters";
+import { useOutsideLink } from "@/lib/externalLink";
 
 const STATUS_LABEL: Record<UpworkLeadStatus, string> = {
   pending: "Chờ duyệt",
@@ -38,6 +39,8 @@ function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: st
   const [editing, setEditing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
+  // iPhone/iPad home-screen app: send the job to Safari, where Upwork is signed in.
+  const outsideLink = useOutsideLink();
 
   function setStatus(status: UpworkLeadStatus) {
     startTransition(async () => {
@@ -98,7 +101,7 @@ function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: st
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <a
-            href={lead.job_url}
+            href={outsideLink(lead.job_url)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm font-bold hover:underline"
@@ -238,7 +241,7 @@ function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: st
             after an await) so iOS Safari never blocks it as a popup. */}
         {lead.status !== "rejected" && lead.status !== "pending" && (
           <a
-            href={lead.job_url}
+            href={outsideLink(lead.job_url)}
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => void copyDraft()}
@@ -250,7 +253,7 @@ function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: st
         {lead.status === "pending" && (
           <>
             <a
-              href={lead.job_url}
+              href={outsideLink(lead.job_url)}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => {
