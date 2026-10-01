@@ -5,7 +5,7 @@
 -- no password. The page now refuses staff emails, but the real lock has
 -- to be here, where tokens are issued: this hook refuses a staff account
 -- (anyone with a public.profiles row — clients have none) whenever the
--- sign-in came from an emailed link or code. Password sign-in, and keeping
+-- sign-in came from an emailed link or code, or from Google (oauth). Password sign-in, and keeping
 -- an existing password session alive, are untouched.
 --
 -- Run once in the Supabase Dashboard SQL Editor, THEN switch it on:
@@ -21,7 +21,7 @@ as $$
 declare
   method text := coalesce(event ->> 'authentication_method', '');
 begin
-  if method in ('magiclink', 'otp', 'recovery', 'invite', 'email/signup')
+  if method in ('magiclink', 'otp', 'recovery', 'invite', 'email/signup', 'oauth', 'sso/saml')
      and exists (select 1 from public.profiles where id = (event ->> 'user_id')::uuid) then
     return jsonb_build_object(
       'error', jsonb_build_object(
@@ -45,6 +45,6 @@ grant execute on function public.staff_password_only_hook(jsonb) to supabase_aut
 delete from auth.sessions s
 using auth.mfa_amr_claims a
 where a.session_id = s.id
-  and a.authentication_method in ('magiclink', 'otp', 'recovery', 'invite', 'email/signup')
+  and a.authentication_method in ('magiclink', 'otp', 'recovery', 'invite', 'email/signup', 'oauth', 'sso/saml')
   and s.user_id in (select id from public.profiles)
 returning s.user_id, s.created_at;
