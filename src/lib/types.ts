@@ -282,6 +282,11 @@ export type FoodShopMenuItem = {
   price: number | null;
   sort_order: number;
   created_at: string;
+  // Dish wall (supabase/migrations/food_dishes_photos.sql) — missing before it ran.
+  category?: string | null; // a LUNCH_THEMES id
+  vegetarian?: boolean;
+  photo_url?: string | null;
+  photo_is_sample?: boolean; // a free illustration, not this quán's real dish
 };
 
 export type MeetingReaction = {

@@ -96,13 +96,22 @@ export async function replaceFoodShopItems(
   const { supabase } = await requireUser();
   const cleaned = items.map((it) => ({ ...it, name: it.name.trim() })).filter((it) => it.name);
 
+  // A dish keeps its photo, category and "chay" through a menu edit — matched
+  // by name, since the menu is rewritten as a whole.
+  const { data: old } = await supabase.from("food_shop_menu_items").select("*").eq("shop_id", shopId);
+  const kept = new Map(((old ?? []) as FoodShopMenuItem[]).map((o) => [o.name.trim().toLowerCase(), o]));
+
   await supabase.from("food_shop_menu_items").delete().eq("shop_id", shopId);
   if (cleaned.length === 0) return [];
 
-  const { data, error } = await supabase
-    .from("food_shop_menu_items")
-    .insert(cleaned.map((it, i) => ({ shop_id: shopId, name: it.name, note: it.note.trim() || null, price: it.price, sort_order: i })))
-    .select("*");
+  const rows = cleaned.map((it, i) => {
+    const o = kept.get(it.name.toLowerCase());
+    const base = { shop_id: shopId, name: it.name, note: it.note.trim() || null, price: it.price, sort_order: i };
+    return o && (o.photo_url || o.category || o.vegetarian)
+      ? { ...base, category: o.category ?? null, vegetarian: !!o.vegetarian, photo_url: o.photo_url ?? null, photo_is_sample: !!o.photo_is_sample }
+      : base;
+  });
+  const { data, error } = await supabase.from("food_shop_menu_items").insert(rows).select("*");
   if (error) throw new Error("Không thể lưu menu.");
   return (data ?? []) as FoodShopMenuItem[];
 }
@@ -197,4 +206,42 @@ export async function saveFoodShopDetails(input: FoodShopDetailsInput): Promise<
     throw new Error(input.id ? "Không lưu được thông tin quán." : "Không thêm được quán.");
   }
   return data as FoodShop;
+}
+
+// A real photo of a dish, from whoever ordered it — replaces the free
+// illustration it started with.
+export async function uploadDishPhoto(itemId: string, formData: FormData): Promise<string> {
+  const { supabase } = await requireUser();
+  const file = formData.get("file");
+  if (!(file instanceof File)) throw new Error("Thiếu ảnh món.");
+  if (!ALLOWED_PHOTO_TYPES.has(file.type)) throw new Error("Chỉ hỗ trợ ảnh PNG, JPG, GIF hoặc WEBP.");
+  if (file.size > MAX_PHOTO_SIZE) throw new Error("Ảnh vượt quá 20MB.");
+
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+  const storagePath = `food-dishes/${itemId}/${randomUUID()}.${ext}`;
+  const { error: uploadError } = await supabase.storage.from("task-attachments").upload(storagePath, file, { contentType: file.type });
+  if (uploadError) throw new Error("Không thể tải ảnh lên");
+
+  const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
+  const { error } = await supabase
+    .from("food_shop_menu_items")
+    .update({ photo_url: publicUrlData.publicUrl, photo_is_sample: false })
+    .eq("id", itemId);
+  if (error) {
+    if (error.code === "PGRST204" || error.code === "42703" || /column/i.test(error.message)) {
+      throw new Error("Chưa chạy file SQL food_dishes_photos.sql trên Supabase — chưa lưu được ảnh món.");
+    }
+    throw new Error("Không lưu được ảnh món.");
+  }
+  return publicUrlData.publicUrl;
+}
+
+// Which category a dish is in, and whether it's vegetarian.
+export async function updateDishMeta(itemId: string, meta: { category: string | null; vegetarian: boolean }): Promise<void> {
+  const { supabase } = await requireUser();
+  const { error } = await supabase
+    .from("food_shop_menu_items")
+    .update({ category: meta.category, vegetarian: meta.vegetarian })
+    .eq("id", itemId);
+  if (error) throw new Error("Không lưu được loại món.");
 }

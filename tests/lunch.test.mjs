@@ -49,3 +49,31 @@ test("links: map search, phone", () => {
   assert.equal(mapLink({ name: "x", address: null, map_url: "https://maps.app.goo.gl/abc" }), "https://maps.app.goo.gl/abc");
   assert.equal(telLink("0909 123 456"), "tel:0909123456");
 });
+
+test("filterDishes: one card per dish, sides hidden, quán without menu as one card", async () => {
+  const { filterDishes, CATEGORY_PHOTO } = await import("../src/lib/lunch.ts");
+  const shops = [
+    shop("pho", { themes: ["nuoc"], near_office: true }),
+    shop("tam", { themes: ["com"], price_min: 25000, price_max: 165000 }),
+  ];
+  const menus = new Map([
+    [
+      "pho",
+      [
+        { id: "p1", shop_id: "pho", name: "Phở tái", price: 40000, category: "nuoc", photo_url: null },
+        { id: "p2", shop_id: "pho", name: "Chén trứng", price: 10000 },
+        { id: "p3", shop_id: "pho", name: "Phở chay", price: 45000, vegetarian: true, photo_url: "https://x/real.jpg", photo_is_sample: false },
+      ],
+    ],
+  ]);
+  const keys = (f) => filterDishes(shops, menus, f, noonVN, new Map()).map((d) => d.key);
+  assert.deepEqual(keys({ themes: [], budget: null, needs: [] }).sort(), ["p1", "p3", "shop-tam"].sort());
+  assert.deepEqual(keys({ themes: ["com"], budget: null, needs: [] }), ["shop-tam"]);
+  assert.deepEqual(keys({ themes: [], budget: "u40", needs: [] }), ["shop-tam"]); // tam's range starts at 25k; phở is 40k+
+  assert.deepEqual(keys({ themes: [], budget: null, needs: ["veg"] }), ["p3"]);
+  assert.deepEqual(keys({ themes: [], budget: null, needs: ["near"] }).sort(), ["p1", "p3"]);
+  const d = filterDishes(shops, menus, { themes: [], budget: null, needs: [] }, noonVN, new Map());
+  assert.equal(d.find((x) => x.key === "p1").photo, CATEGORY_PHOTO.nuoc);
+  assert.equal(d.find((x) => x.key === "p1").sample, true);
+  assert.equal(d.find((x) => x.key === "p3").sample, false);
+});

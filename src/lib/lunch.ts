@@ -93,6 +93,111 @@ export function telLink(phone: string) {
   return `tel:${phone.replace(/[^\d+]/g, "")}`;
 }
 
+// A free illustration per category, for a dish (or a quán with no dishes
+// yet) without a photo of its own. Unsplash, free to use.
+const U = (id: string) => `https://images.unsplash.com/photo-${id}?w=800&q=70&auto=format&fit=crop`;
+export const CATEGORY_PHOTO: Record<LunchThemeId, string> = {
+  com: U("1762305193367-91e072e47c3f"),
+  nuoc: U("1766050586763-723571af4dde"),
+  banhmi: U("1710532774170-9844f837ae54"),
+  ga: U("1426869981800-95ebf51ce900"),
+  chay: U("1511690656952-34342bb7c2f2"),
+  healthy: U("1512621776951-a57141f2eefd"),
+  hannhat: U("1741295017668-c8132acd6fc0"),
+  anvat: U("1695712641569-05eee7b37b6d"),
+  uong: U("1745883949374-baeba0ed57c3"),
+};
+
+// Smaller copy of an Unsplash photo for a card; other photos as they are.
+export function sizedPhoto(url: string, width: number) {
+  return url.includes("images.unsplash.com") ? url.replace(/([?&])w=\d+/, `$1w=${width}`) : url;
+}
+
+// Under this a menu line is a side (thêm trứng, thêm cơm) — not its own card.
+export const SIDE_PRICE = 15000;
+
+export type LunchDish = {
+  key: string;
+  shop: FoodShop;
+  item: FoodShopMenuItem | null; // null = the quán itself, no menu yet
+  name: string;
+  category: LunchThemeId | null;
+  price: number | null;
+  vegetarian: boolean;
+  photo: string | null;
+  sample: boolean; // illustration, not the real dish
+  open: boolean | null;
+};
+
+const THEME_IDS = new Set<string>(LUNCH_THEMES.map((t) => t.id));
+
+// The dish wall: every dish of every quán that passes the quán-level
+// requirements, then the topic/budget filters on the dish itself. A quán
+// without a menu yet shows as one card (its name, its range, its topic).
+export function filterDishes(
+  shops: FoodShop[],
+  menus: Map<string, FoodShopMenuItem[]>,
+  f: LunchFilters,
+  now: Date,
+  lastOrdered: Map<string, string>,
+): LunchDish[] {
+  const budget = f.budget ? LUNCH_BUDGETS.find((b) => b.id === f.budget) ?? null : null;
+  const out: LunchDish[] = [];
+  // Quán-level requirements first (reuse filterLunch without topic/budget);
+  // "có món chay" is judged per dish below, not per quán.
+  const shopNeeds = f.needs.filter((n) => n !== "veg");
+  const shopsOk = filterLunch(shops, menus, { themes: [], budget: null, needs: shopNeeds }, now, lastOrdered);
+  for (const { shop, open, price: range } of shopsOk) {
+    const items = (menus.get(shop.id) ?? []).filter((i) => !(typeof i.price === "number" && i.price > 0 && i.price < SIDE_PRICE));
+    const shopTheme = (shop.themes ?? []).find((t) => THEME_IDS.has(t)) as LunchThemeId | undefined;
+    const cards: LunchDish[] =
+      items.length > 0
+        ? items.map((i) => {
+            const category = (i.category && THEME_IDS.has(i.category) ? i.category : shopTheme ?? null) as LunchThemeId | null;
+            const vegetarian = !!i.vegetarian || category === "chay";
+            return {
+              key: i.id,
+              shop,
+              item: i,
+              name: i.name,
+              category,
+              price: typeof i.price === "number" && i.price > 0 ? i.price : null,
+              vegetarian,
+              photo: i.photo_url ?? (category ? CATEGORY_PHOTO[category] : null),
+              sample: i.photo_url ? !!i.photo_is_sample : true,
+              open,
+            };
+          })
+        : [
+            {
+              key: `shop-${shop.id}`,
+              shop,
+              item: null,
+              name: shop.name,
+              category: shopTheme ?? null,
+              price: null,
+              vegetarian: !!shop.vegetarian || shopTheme === "chay",
+              photo: shopTheme ? CATEGORY_PHOTO[shopTheme] : null,
+              sample: true,
+              open,
+            },
+          ];
+    for (const d of cards) {
+      const cats = d.item ? [d.category] : shop.themes ?? [];
+      if (f.themes.length > 0 && !f.themes.some((t) => cats.includes(t))) continue;
+      if (f.needs.includes("veg") && !d.vegetarian && !(d.item === null && shop.vegetarian)) continue;
+      if (budget) {
+        const p = d.price;
+        if (p !== null) {
+          if (p < budget.min || p >= budget.max) continue;
+        } else if (!range || range.min >= budget.max || range.max < budget.min) continue;
+      }
+      out.push(d);
+    }
+  }
+  return out;
+}
+
 export type LunchMatch = { shop: FoodShop; items: FoodShopMenuItem[]; price: { min: number; max: number } | null; open: boolean | null };
 
 // Every quán that meets every ticked box. A topic matches if the quán has
