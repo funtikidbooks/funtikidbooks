@@ -9,6 +9,7 @@ import { ChatHeadBubbles } from "@/components/workspace/ChatHeadBubbles";
 import { MessageToasts } from "@/components/workspace/MessageToasts";
 import { ChatSyncBanner } from "@/components/workspace/ChatSyncBanner";
 import { ClientErrorReporter } from "@/components/workspace/ClientErrorReporter";
+import { PublicPageWarmer } from "@/components/workspace/PublicPageWarmer";
 import { TabNotificationBadge } from "@/components/workspace/TabNotificationBadge";
 import { ThemeSync } from "@/components/workspace/ThemeSync";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
@@ -154,6 +155,7 @@ export default async function WorkspaceLayout({
       <ChatHeadBubbles profiles={(allProfiles ?? []) as Profile[]} />
       <MessageToasts profiles={(allProfiles ?? []) as Profile[]} />
       <ClientErrorReporter />
+      <PublicPageWarmer />
     </ChatManagerProvider>
   );
 }
