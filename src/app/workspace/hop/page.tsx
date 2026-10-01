@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/supabase/server";
 import { MeetingHub } from "@/components/workspace/MeetingHub";
+import { HydrationProbe } from "@/components/workspace/HydrationProbe";
 import { getDmTabLabel, getGeneralChannelId, getRoomSync, listChannels } from "@/lib/actions/meetings";
 import type { Profile } from "@/lib/types";
 
@@ -70,19 +71,22 @@ export default async function MeetingPage({ searchParams }: { searchParams: Prom
           : null;
 
   return (
-    <MeetingHub
-      currentUser={{ id: user?.id ?? "", display_name: me?.display_name ?? user?.email ?? "Bạn" }}
-      profiles={(profiles ?? []) as Profile[]}
-      initialChannels={channels}
-      initialDmTabLabel={dmTabLabel}
-      initialRoomId={initialRoomSync ? (openRoomId && askedSync ? firstRoomId : generalRoomId) : null}
-      initialMessages={initialRoomSync?.messages}
-      initialReactions={initialRoomSync?.reactions}
-      initialReads={initialRoomSync?.reads}
-      initialPinnedMessages={initialRoomSync?.pinnedMessages}
-      openRoomId={openRoomId}
-      openDmPeerId={openDmPeerId}
-      openAutoCall={one(sp.call) === "1"}
-    />
+    <>
+      <MeetingHub
+        currentUser={{ id: user?.id ?? "", display_name: me?.display_name ?? user?.email ?? "Bạn" }}
+        profiles={(profiles ?? []) as Profile[]}
+        initialChannels={channels}
+        initialDmTabLabel={dmTabLabel}
+        initialRoomId={initialRoomSync ? (openRoomId && askedSync ? firstRoomId : generalRoomId) : null}
+        initialMessages={initialRoomSync?.messages}
+        initialReactions={initialRoomSync?.reactions}
+        initialReads={initialRoomSync?.reads}
+        initialPinnedMessages={initialRoomSync?.pinnedMessages}
+        openRoomId={openRoomId}
+        openDmPeerId={openDmPeerId}
+        openAutoCall={one(sp.call) === "1"}
+      />
+      <HydrationProbe />
+    </>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import {
   addDirectReaction,
@@ -10,7 +9,7 @@ import {
   removeDirectReaction,
 } from "@/lib/actions/messages";
 import { notifyNewMessage } from "@/lib/chatNotify";
-import { dmTopic, inboxTopic, listenChatTopic, sendDmBroadcast } from "@/lib/chatBroadcast";
+import { dmTopic, inboxTopic, listenChatTopic, sendChatBroadcast, sendDmBroadcast } from "@/lib/chatBroadcast";
 import { fetchConversation, fetchDirectReactions, readDmSnapshot, writeDmSnapshot } from "@/lib/dmLoad";
 import { reportChatSyncFailure, reportChatSyncOk } from "@/lib/chatSyncHealth";
 import {
@@ -226,7 +225,6 @@ export function DirectConversation({
   // re-snapping when already within 150px, or the view is left sitting
   // above the true bottom.
   const stickyUntilRef = useRef(0);
-  const channelRef = useRef<RealtimeChannel | null>(null);
   // Latest messages/reactions arrays, read (not reacted to) from inside
   // resync() below — kept out of its dependency array so a new message or
   // reaction doesn't tear down and recreate the realtime channel
@@ -523,8 +521,14 @@ export function DirectConversation({
 
   useEffect(() => {
     const supabase = createClient();
+    // A name of its own per open copy: supabase-js hands back the existing
+    // channel for a repeated name — this conversation open twice (the
+    // popup and the Riêng tab), or reopened while the last copy is still
+    // closing — and adding listeners to an already-joined channel throws,
+    // which broke live updates for that conversation. Typing, which both
+    // sides must share a channel for, goes over the pair topic below.
     const channel = supabase
-      .channel(`dm-${[currentUser.id, peer.id].sort().join("-")}`)
+      .channel(`dm-${[currentUser.id, peer.id].sort().join("-")}-${Math.random().toString(36).slice(2, 8)}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "direct_messages" },
@@ -579,12 +583,6 @@ export function DirectConversation({
           );
         },
       )
-      .on("broadcast", { event: "typing" }, (msg) => {
-        if ((msg.payload as { userId?: string } | null)?.userId !== peer.id) return;
-        setPeerTyping(true);
-        if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
-        peerTypingTimeoutRef.current = setTimeout(() => setPeerTyping(false), TYPING_IDLE_MS);
-      })
       // Fires with "SUBSCRIBED" both on the initial connect and after any
       // reconnect — resyncing here is what catches up on messages that
       // arrived during a drop, since Realtime doesn't replay missed events.
@@ -600,10 +598,7 @@ export function DirectConversation({
         }
       });
 
-    channelRef.current = channel;
-
     return () => {
-      channelRef.current = null;
       if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
       setPeerTyping(false);
       supabase.removeChannel(channel);
@@ -615,10 +610,17 @@ export function DirectConversation({
   // above (which then merges as a no-op, same id).
   // Listens on the pair's own channel too (see dmTopic) — the fastest path
   // while both sides have the conversation open; the same message arriving
-  // on both merges once by id.
+  // on both merges once by id. The "đang soạn tin" indicator travels there too.
   useEffect(() => {
     const peerId = peer.id;
     const onEvent = (event: string, payload: unknown) => {
+      if (event === "typing") {
+        if ((payload as { userId?: string } | null)?.userId !== peerId) return;
+        setPeerTyping(true);
+        if (peerTypingTimeoutRef.current) clearTimeout(peerTypingTimeoutRef.current);
+        peerTypingTimeoutRef.current = setTimeout(() => setPeerTyping(false), TYPING_IDLE_MS);
+        return;
+      }
       if (event === "retract") {
         const id = (payload as { id?: string })?.id;
         if (id) setMessages((prev) => (prev.some((m) => m.id === id && m.provisional) ? prev.filter((m) => m.id !== id) : prev));
@@ -777,7 +779,8 @@ export function DirectConversation({
     const now = Date.now();
     if (now - lastTypingSentAtRef.current < TYPING_BROADCAST_THROTTLE_MS) return;
     lastTypingSentAtRef.current = now;
-    channelRef.current?.send({ type: "broadcast", event: "typing", payload: { userId: currentUser.id } });
+    // Only on the pair topic — the one the other person's open conversation listens on.
+    sendChatBroadcast(dmTopic(currentUser.id, peer.id), "typing", { userId: currentUser.id });
   }
 
   // Both wrapped in useCallback — the memoized message list further down
