@@ -594,6 +594,22 @@ export type PayrollItem = {
   amount: number; // positive = allowance/bonus, negative = deduction
 };
 
+// Ứng tiền trước — see supabase/migrations/salary_advances.sql.
+export type SalaryAdvanceStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type SalaryAdvance = {
+  id: string;
+  profile_id: string;
+  amount: number; // what was asked for
+  reason: string | null;
+  status: SalaryAdvanceStatus;
+  approved_amount: number | null;
+  deduct_month: string | null; // the payslip month it comes off, e.g. "2026-10-01"
+  decision_note: string | null;
+  decided_at: string | null;
+  payroll_record_id: string | null;
+  requested_at: string;
+};
+
 export type PayrollStatus = "draft" | "paid";
 
 export type PayrollRecord = {
@@ -1368,6 +1384,13 @@ export type Database = {
         Update: Partial<StaffSalary>;
         Relationships: [];
       };
+      salary_advances: {
+        Row: SalaryAdvance;
+        Insert: { profile_id: string; amount: number; reason?: string | null };
+        // Staff only ever withdraw their own; decisions go through decide_salary_advance().
+        Update: { status: "cancelled" };
+        Relationships: [];
+      };
       profile_changes: {
         Row: ProfileChange;
         Insert: never;
@@ -1541,6 +1564,11 @@ export type Database = {
       sign_staff_document: {
         Args: { p_document_id: string; p_signature_image_url: string; p_signed_name: string };
         Returns: StaffDocument;
+      };
+      // A Giám đốc's Duyệt / Không duyệt — supabase/migrations/salary_advances.sql.
+      decide_salary_advance: {
+        Args: { p_id: string; p_approve: boolean; p_amount?: number | null; p_month?: string | null; p_note?: string | null };
+        Returns: SalaryAdvance;
       };
     };
   };

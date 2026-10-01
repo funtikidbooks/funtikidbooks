@@ -4,6 +4,9 @@ import { requireUser } from "@/lib/supabase/server";
 import { listAllAttendance, listOffDates } from "@/lib/actions/attendance";
 import { AttendanceBoard } from "@/components/admin/AttendanceBoard";
 import { ClockPanel } from "@/components/admin/ClockPanel";
+import { SalaryAdvanceApprovals } from "@/components/admin/SalaryAdvanceApprovals";
+import { listAdvancesForManagers } from "@/lib/actions/salaryAdvances";
+import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import type { Profile } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Quản trị — Chấm công" };
@@ -28,7 +31,7 @@ export default async function AdminAttendancePage() {
     redirect("/quan-tri");
   }
 
-  const [entries, offDates, { data: profiles }] = await Promise.all([
+  const [entries, offDates, { data: profiles }, advances] = await Promise.all([
     listAllAttendance(),
     listOffDates(),
     supabase
@@ -36,8 +39,24 @@ export default async function AdminAttendancePage() {
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
       .neq("id", OWNER_PROFILE_ID)
       .order("display_name", { ascending: true }),
+    listAdvancesForManagers(),
   ]);
 
   const staff = (profiles ?? []) as Profile[];
-  return <AttendanceBoard initialEntries={entries} initialOffDates={offDates} staff={staff} clock={<ClockPanel staff={staff} />} />;
+  return (
+    <AttendanceBoard
+      initialEntries={entries}
+      initialOffDates={offDates}
+      staff={staff}
+      advances={
+        <SalaryAdvanceApprovals
+          initial={advances}
+          profiles={staff}
+          currentMonth={firstOfMonth(vnToday())}
+          canDecide={profile?.access_role === "director"}
+        />
+      }
+      clock={<ClockPanel staff={staff} />}
+    />
+  );
 }

@@ -27,10 +27,14 @@ export function MyAttendance({
   initialEntries,
   initialOffDates,
   currentUserId,
+  aside,
 }: {
   initialEntries: AttendanceEntry[];
   initialOffDates: string[];
   currentUserId: string;
+  // A column beside the calendar on wide screens (Ứng tiền trước); under
+  // the payslip on phones and iPad.
+  aside?: React.ReactNode;
 }) {
   const [monthStart, setMonthStart] = useState(() => firstOfMonth(vnToday()));
   const [offDates, setOffDates] = useState(initialOffDates);
@@ -188,7 +192,14 @@ export function MyAttendance({
         </p>
       </div>
 
-      <div className="grid grid-cols-4 gap-3" style={{ maxWidth: 520 }}>
+      <div
+        className={
+          aside
+            ? "grid gap-5 items-start [grid-template-areas:'stats'_'pay'_'aside'_'cal'] xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)] xl:grid-rows-[auto_auto_1fr] xl:[grid-template-areas:'stats_aside'_'pay_aside'_'cal_aside']"
+            : "flex flex-col gap-5"
+        }
+      >
+      <div className="grid grid-cols-4 gap-3 [grid-area:stats]" style={{ maxWidth: 520 }}>
         <div className="card p-3 flex flex-col items-center gap-0.5" style={{ background: "var(--color-surface)" }}>
           <span className="text-xl font-bold" style={{ color: "var(--status-green)" }}>{stats.present}</span>
           <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>Ngày công</span>
@@ -207,8 +218,13 @@ export function MyAttendance({
         </div>
       </div>
 
-      <MyPayrollPanel monthStart={monthStart} />
+      <div className="[grid-area:pay]">
+        <MyPayrollPanel monthStart={monthStart} />
+      </div>
 
+      {aside && <div className="[grid-area:aside] min-w-0">{aside}</div>}
+
+      <div className="flex flex-col gap-5 [grid-area:cal] min-w-0">
       <div className="flex items-center gap-3">
         <button type="button" onClick={() => goToMonth(addMonths(monthStart, -1))} className="btn-icon" aria-label="Tháng trước">
           ←
@@ -251,7 +267,7 @@ export function MyAttendance({
       </div>
 
       {view === "calendar" ? (
-        <div className="card elev-sm p-4" style={{ opacity: loading ? 0.6 : 1, maxWidth: 720 }}>
+        <div className="card elev-sm p-4" style={{ opacity: loading ? 0.6 : 1, maxWidth: aside ? undefined : 720 }}>
           <div className="grid grid-cols-7 gap-1 mb-1">
             {WEEKDAYS_SHORT.map((w) => (
               <div key={w} className="text-center text-[11px] font-bold py-1" style={{ color: "var(--color-neutral-500)" }}>
@@ -285,7 +301,7 @@ export function MyAttendance({
           </div>
         </div>
       ) : (
-        <div className="card elev-sm overflow-x-auto" style={{ opacity: loading ? 0.6 : 1, maxWidth: 720 }}>
+        <div className="card elev-sm overflow-x-auto" style={{ opacity: loading ? 0.6 : 1, maxWidth: aside ? undefined : 720 }}>
           <table className="w-full text-[13px]" style={{ borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
@@ -330,6 +346,8 @@ export function MyAttendance({
           </table>
         </div>
       )}
+      </div>
+      </div>
     </div>
   );
 }

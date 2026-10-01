@@ -21,11 +21,14 @@ export function AttendanceBoard({
   initialEntries,
   initialOffDates,
   staff,
+  advances,
   clock,
 }: {
   initialEntries: AttendanceEntry[];
   initialOffDates: string[];
   staff: Profile[];
+  // Ứng tiền trước requests — first, since they're waiting on someone.
+  advances?: React.ReactNode;
   // The fingerprint machine's panel, when the viewer runs it.
   clock?: React.ReactNode;
 }) {
@@ -122,6 +125,8 @@ export function AttendanceBoard({
           {WORK_HOURS_LABEL}. Bấm vào một thẻ để xem chi tiết theo tháng.
         </p>
       </div>
+
+      {advances}
 
       {clock}
 
