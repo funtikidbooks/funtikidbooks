@@ -88,13 +88,26 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
     // A tap on a field hides the bar straight away (EARLY_MS) so it doesn't
     // ride up on the keyboard while it slides in; if the viewport hasn't
     // shrunk by then, there's no keyboard and the bar comes back.
+    //
+    // Two ways a keyboard shows up: older iOS / most Android keep the page's
+    // height and only shrink the visual viewport (offset below), while newer
+    // iOS — the installed app included — shrinks the whole page with it, so
+    // the two heights stay equal and that check alone never fired (the bar
+    // hid for the first 800ms, then came back on top of the keyboard). So
+    // the visible height is also compared with the tallest it has been in
+    // this orientation: a typing field focused and 120px+ gone is a keyboard.
     const EARLY_MS = 800;
     let touchAt = 0;
     let tapFocusAt = 0;
+    let full = { width: 0, height: 0 };
     function sync() {
+      if (Math.abs(window.innerWidth - full.width) > 40) full = { width: window.innerWidth, height: 0 }; // first run, or rotated
+      full.height = Math.max(full.height, vv!.height);
       const offset = window.innerHeight - (vv!.height + vv!.offsetTop);
-      const early = isTypingOnTouch() && Date.now() - tapFocusAt < EARLY_MS;
-      setKeyboardOpen(offset > KEYBOARD_MIN_PX || early);
+      const shrunk = full.height - vv!.height;
+      const typing = isTypingOnTouch();
+      const early = typing && Date.now() - tapFocusAt < EARLY_MS;
+      setKeyboardOpen(offset > KEYBOARD_MIN_PX || (typing && shrunk > KEYBOARD_MIN_PX) || early);
     }
     let recheck: ReturnType<typeof setTimeout> | undefined;
     function onPointerDown() {
@@ -113,6 +126,7 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
     sync();
     vv.addEventListener("resize", sync);
     vv.addEventListener("scroll", sync);
+    window.addEventListener("resize", sync);
     document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", onFocusOut);
@@ -120,6 +134,7 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
       clearTimeout(recheck);
       vv.removeEventListener("resize", sync);
       vv.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", onFocusOut);
