@@ -131,6 +131,13 @@ export type LunchDish = {
 
 const THEME_IDS = new Set<string>(LUNCH_THEMES.map((t) => t.id));
 
+// The topics a card counts under: its own — a vegetarian phở is under
+// "Bún · Phở" and "Chay" — or, for a quán with no menu yet, the quán's.
+export function dishThemes(d: Pick<LunchDish, "item" | "category" | "vegetarian" | "shop">): string[] {
+  if (!d.item) return d.shop.themes ?? [];
+  return [d.category, d.vegetarian ? "chay" : null].filter((t): t is LunchThemeId => !!t);
+}
+
 // The dish wall: every dish of every quán that passes the quán-level
 // requirements, then the topic/budget filters on the dish itself. A quán
 // without a menu yet shows as one card (its name, its range, its topic).
@@ -183,7 +190,7 @@ export function filterDishes(
             },
           ];
     for (const d of cards) {
-      const cats = d.item ? [d.category] : shop.themes ?? [];
+      const cats = dishThemes(d);
       if (f.themes.length > 0 && !f.themes.some((t) => cats.includes(t))) continue;
       if (f.needs.includes("veg") && !d.vegetarian && !(d.item === null && shop.vegetarian)) continue;
       if (budget) {

@@ -1,0 +1,157 @@
+-- "Trưa nay ăn gì?": more quán across Tân Bình, Phú Nhuận and Quận 3 —
+-- ten vegetarian ones among them — each with its signature món and a free
+-- Unsplash illustration (photo_is_sample) until someone adds a real photo.
+-- Name, address, opening hours and price range from Foody (1/10/2026);
+-- places that only open for breakfast or dinner, or are marked closed,
+-- were left out. Prices on Foody can be old — fix them in the app when you
+-- order. Phone numbers aren't published there; add each one the first
+-- time someone calls.
+-- Run once in the Supabase Dashboard SQL Editor, after food_shop_details.sql
+-- and food_dishes_photos.sql. Running it again adds nothing twice.
+
+insert into public.food_shops (name, address, themes, opening_hours, price_min, price_max, near_office, dine_in, vegetarian, note)
+select v.name, v.address, v.themes, v.hours, v.pmin, v.pmax, v.near, v.dine, v.veg, v.note
+from (values
+  -- Chay
+  ('Dzị Vegetarian', '74 Út Tịch, P. 4, Q. Tân Bình, TP. HCM', array['chay'], '08:00 - 14:30, 16:00 - 21:00', 30000, 220000, true, true, true, null),
+  ('Zenhouse Café & Vegan Restaurant', '60/2 Vân Côi, P. 7, Q. Tân Bình, TP. HCM', array['chay', 'healthy'], '07:00 - 22:00', 150000, 250000, false, true, true, null),
+  ('Cơm Chay Việt - Bàu Bàng', '27 Bàu Bàng, P. 13, Q. Tân Bình, TP. HCM', array['chay', 'com'], '08:30 - 21:00', null, null, false, true, true, null),
+  ('Nhà Hàng Chay Thanh Hương', '161 Ba Vân, P. 4, Q. Tân Bình, TP. HCM', array['chay', 'com'], '08:00 - 21:00', 20000, 150000, false, true, true, null),
+  ('CHAY TABÀHA - Chay Nhanh', '55 Tân Canh, P. 1, Q. Tân Bình, TP. HCM', array['chay', 'anvat'], '06:30 - 21:30', 15000, 35000, false, true, true, null),
+  ('Quán Chay Phúc An - Nguyễn Đình Chính', '117D Nguyễn Đình Chính, P. 15, Q. Phú Nhuận, TP. HCM', array['chay'], '07:00 - 14:00, 17:00 - 20:00', 15000, 69000, false, true, true, null),
+  ('An Food Station - Cơm Chay', '33/1 Đặng Văn Ngữ, P. 10, Q. Phú Nhuận, TP. HCM', array['chay', 'com'], '06:00 - 22:00', 20000, 35000, false, true, true, null),
+  ('Sen Hồng - Bếp Thực Dưỡng Thuần Chay', '58 Hồ Biểu Chánh, P. 11, Q. Phú Nhuận, TP. HCM', array['chay', 'healthy'], '08:00 - 17:00', 15000, 40000, false, true, true, null),
+  ('Chay Garden Restaurant & Coffee', '52 Võ Văn Tần, P. 6, Q. 3, TP. HCM', array['chay'], '10:00 - 22:00', 100000, 200000, false, true, true, null),
+  ('Chay Hoan Hỷ - Bà Huyện Thanh Quan', '73 Bà Huyện Thanh Quan, Q. 3, TP. HCM', array['chay'], '10:00 - 14:00, 16:00 - 21:00', 50000, 150000, false, true, true, null),
+  -- Ngay quanh văn phòng
+  ('Bánh Mì PewPew - Út Tịch', '66 Út Tịch, P. 4, Q. Tân Bình, TP. HCM', array['banhmi'], '06:00 - 23:00', 20000, 30000, true, true, false, null),
+  ('Trùm Cơm Chiên Út Tịch', '53 Út Tịch, P. 4, Q. Tân Bình, TP. HCM', array['com'], '08:00 - 21:00', null, null, true, true, false, null),
+  ('Hủ Tiếu Mì Sườn - Hoàng Tứ', '30 Hoàng Việt, P. 4, Q. Tân Bình, TP. HCM', array['nuoc'], '07:00 - 14:00', null, null, true, true, false, null),
+  ('Bánh Tráng Nướng Đà Lạt - Út Tịch', '68/17 Út Tịch, P. 4, Q. Tân Bình, TP. HCM', array['anvat'], '15:00 - 19:00', 7000, 15000, true, true, false, 'Bán buổi chiều — ăn xế.'),
+  ('KAI Coffee - Út Tịch', '50 Út Tịch, P. 4, Q. Tân Bình, TP. HCM', array['uong'], '07:00 - 23:59', 25000, 60000, true, true, false, null),
+  ('BTOWN - Healthy Drinks & Cakes', '437/2/33/18 Hoàng Văn Thụ, P. 4, Q. Tân Bình, TP. HCM', array['uong', 'healthy'], '08:30 - 19:00', 20000, 40000, true, false, false, 'Chỉ giao hàng, không ngồi tại quán.'),
+  -- Tân Bình
+  ('KFC - Vincom Maximark Cộng Hòa', '15-17 Cộng Hòa, P. 4, Q. Tân Bình, TP. HCM', array['ga'], '09:00 - 22:00', 30000, 88000, false, true, false, null),
+  ('Kohaku Ramen & Udon - Lotte Cộng Hòa', 'Tầng 1 Lotte Mart, 20 Cộng Hòa, P. 4, Q. Tân Bình, TP. HCM', array['hannhat', 'nuoc'], '10:00 - 21:30', null, null, false, true, false, null),
+  ('Tokyo Deli Express - Hậu Giang', '7-9 Hậu Giang, P. 4, Q. Tân Bình, TP. HCM', array['hannhat'], '11:00 - 20:00', 100000, 165000, false, true, false, null),
+  ('Chi Ri San - Ẩm Thực Hàn Quốc', '4 Nguyễn Văn Mại, P. 4, Q. Tân Bình, TP. HCM', array['hannhat'], '10:00 - 22:00', 100000, 200000, false, true, false, null),
+  ('Haru Sushi - Lê Văn Sỹ', '289A Lê Văn Sỹ, P. 1, Q. Tân Bình, TP. HCM', array['hannhat'], '10:00 - 14:00, 16:00 - 22:00', 30000, 500000, false, true, false, null),
+  ('Hẻm Fast Food - Món Hàn - Bàu Cát', '187 Bàu Cát, P. 14, Q. Tân Bình, TP. HCM', array['hannhat', 'anvat'], '11:00 - 21:30', 15000, 45000, false, true, false, null),
+  ('Phố Chè Xôi - Lê Văn Sỹ', '228 Lê Văn Sỹ, P. 1, Q. Tân Bình, TP. HCM', array['banhmi', 'anvat'], null, 10000, 45000, false, true, false, null),
+  ('Bún Đậu Hẻm - Lê Văn Sỹ', '281/13/13 Lê Văn Sỹ, P. 1, Q. Tân Bình, TP. HCM', array['nuoc'], '09:00 - 22:00', 25000, 65000, false, true, false, null),
+  ('Bún Thịt Nướng Hùng 7', '127 Bạch Đằng, P. 2, Q. Tân Bình, TP. HCM', array['nuoc'], '09:00 - 22:00', null, null, false, true, false, null),
+  ('Quán Mì Quảng Sâm', '16 Ca Văn Thỉnh, P. 11, Q. Tân Bình, TP. HCM', array['nuoc'], '06:00 - 13:00, 15:00 - 21:00', 15000, 55000, false, true, false, null),
+  ('Clover Kitchen - Salad & Healthy Food', '2/71 Thiên Phước, P. 9, Q. Tân Bình, TP. HCM', array['healthy'], '07:00 - 22:00', null, null, false, true, false, null),
+  -- Phú Nhuận
+  ('Cơm Tấm Ba Ghiền - Đặng Văn Ngữ', '84 Đặng Văn Ngữ, P. 10, Q. Phú Nhuận, TP. HCM', array['com'], '07:00 - 22:00', 40000, 66000, false, true, false, null),
+  ('Cơm Tấm Cali - Nguyễn Văn Trỗi', '82 Nguyễn Văn Trỗi, P. 8, Q. Phú Nhuận, TP. HCM', array['com'], '07:30 - 20:15', 25000, 66000, false, true, false, null),
+  ('Phở Huỳnh Anh', '105 Phan Đăng Lưu, Q. Phú Nhuận, TP. HCM', array['nuoc'], '07:00 - 22:00', 20000, 45000, false, true, false, null),
+  ('Bánh Xèo Bà Hai - Nguyễn Trọng Tuyển', '49 Nguyễn Trọng Tuyển, P. 15, Q. Phú Nhuận, TP. HCM', array['anvat'], '10:00 - 22:00', 35000, 66000, false, true, false, null),
+  ('Bún Chả Phố Cổ - Phan Xích Long', '225 Phan Xích Long, P. 2, Q. Phú Nhuận, TP. HCM', array['nuoc'], '07:00 - 21:15', 35000, 40000, false, true, false, null),
+  ('Kawaee Poké & Salad', '117B Nguyễn Đình Chính, P. 15, Q. Phú Nhuận, TP. HCM', array['healthy'], '10:00 - 22:00', 50000, 100000, false, true, false, null),
+  ('Saladi.vn - Salad Online', '104/13C Hồ Biểu Chánh, P. 11, Q. Phú Nhuận, TP. HCM', array['healthy'], '09:00 - 21:00', 25000, 75000, false, false, false, 'Bán online — đặt giao.'),
+  -- Quận 3
+  ('Phở Hòa - Pasteur', '260C Pasteur, P. 8, Q. 3, TP. HCM', array['nuoc'], '05:00 - 23:30', 40000, 55000, false, true, false, null),
+  ('Ba Hoàng - Hủ Tiếu Nam Vang', '46/2 Võ Văn Tần, P. 6, Q. 3, TP. HCM', array['nuoc'], '06:30 - 23:59', 30000, 55000, false, true, false, null),
+  ('Hainanese - Cơm Gà Thả Vườn', '443/122 Lê Văn Sỹ, P. 12, Q. 3, TP. HCM', array['com', 'ga'], '07:00 - 23:00', null, null, false, true, false, null)
+) as v(name, address, themes, hours, pmin, pmax, near, dine, veg, note)
+where not exists (select 1 from public.food_shops s where s.name = v.name);
+
+-- Their món. A món already on the quán's menu (same name) is skipped.
+insert into public.food_shop_menu_items (shop_id, name, price, category, vegetarian, photo_url, photo_is_sample, sort_order)
+select s.id, v.dish, null, v.category, v.veg, 'https://images.unsplash.com/photo-' || v.photo || '?w=800&q=70&auto=format&fit=crop', true, v.ord
+from public.food_shops s
+join (values
+  ('Dzị Vegetarian', 'Cơm chiên lục vị chay', 'chay', true, '1751618646882-4221d5e3b1c2', 1),
+  ('Dzị Vegetarian', 'Pad Thái chay', 'chay', true, '1645500498403-970672caf43e', 2),
+  ('Dzị Vegetarian', 'Hủ tiếu xào chay', 'chay', true, '1788240146169-02acc1e6a0a0', 3),
+  ('Dzị Vegetarian', 'Chả giò rong biển', 'chay', true, '1695712641388-87c0f9c2d36e', 4),
+  ('Dzị Vegetarian', 'Lẩu nấm', 'chay', true, '1682496178113-6275890f1fd7', 5),
+  ('Zenhouse Café & Vegan Restaurant', 'Cơm Sài Gòn chay', 'chay', true, '1582576163090-09d3b6f8a969', 1),
+  ('Zenhouse Café & Vegan Restaurant', 'Bún bò chay', 'nuoc', true, '1775213371176-41291be474ba', 2),
+  ('Zenhouse Café & Vegan Restaurant', 'Salad chay', 'healthy', true, '1547496502-affa22d38842', 3),
+  ('Cơm Chay Việt - Bàu Bàng', 'Cơm chay thập cẩm', 'chay', true, '1582576163090-09d3b6f8a969', 1),
+  ('Cơm Chay Việt - Bàu Bàng', 'Đậu hũ kho nấm', 'chay', true, '1789999018388-68773a66b33f', 2),
+  ('Nhà Hàng Chay Thanh Hương', 'Cơm niêu chà bông chay', 'chay', true, '1664717698774-84f62382613b', 1),
+  ('Nhà Hàng Chay Thanh Hương', 'Bún xào nghệ chay', 'chay', true, '1788240146169-02acc1e6a0a0', 2),
+  ('Nhà Hàng Chay Thanh Hương', 'Chả giò chay', 'chay', true, '1669340781012-ae89fbac9fc3', 3),
+  ('Nhà Hàng Chay Thanh Hương', 'Lẩu Thái chay', 'chay', true, '1682496178113-6275890f1fd7', 4),
+  ('CHAY TABÀHA - Chay Nhanh', 'Bún Huế nấm chay', 'nuoc', true, '1775213371176-41291be474ba', 1),
+  ('CHAY TABÀHA - Chay Nhanh', 'Bánh cuốn chay', 'chay', true, '1786114774610-8696925848c6', 2),
+  ('CHAY TABÀHA - Chay Nhanh', 'Đậu hủ chiên xù', 'chay', true, '1745582763219-1a5259056ba3', 3),
+  ('CHAY TABÀHA - Chay Nhanh', 'Gỏi cuốn chay', 'chay', true, '1761315413785-0bf98364ceab', 4),
+  ('Quán Chay Phúc An - Nguyễn Đình Chính', 'Bún trộn chay', 'chay', true, '1585032226651-759b368d7246', 1),
+  ('Quán Chay Phúc An - Nguyễn Đình Chính', 'Pad Thái chay', 'chay', true, '1707546944460-dda9069b9c1e', 2),
+  ('An Food Station - Cơm Chay', 'Cơm chay thập cẩm', 'chay', true, '1788535284819-87436fcaef2f', 1),
+  ('An Food Station - Cơm Chay', 'Cơm tấm chay', 'chay', true, '1582576163090-09d3b6f8a969', 2),
+  ('An Food Station - Cơm Chay', 'Trà đào', 'uong', false, '1597481499666-130f8eb2c9cd', 3),
+  ('Sen Hồng - Bếp Thực Dưỡng Thuần Chay', 'Phở chay', 'nuoc', true, '1555126634-323283e090fa', 1),
+  ('Chay Garden Restaurant & Coffee', 'Cà ri chay', 'chay', true, '1587040690786-b091531837a2', 1),
+  ('Chay Garden Restaurant & Coffee', 'Cơm chiên thơm chay', 'chay', true, '1612755637313-9517f17d84b5', 2),
+  ('Chay Garden Restaurant & Coffee', 'Chả giò rong biển', 'chay', true, '1695712641569-05eee7b37b6d', 3),
+  ('Chay Hoan Hỷ - Bà Huyện Thanh Quan', 'Cơm chiên xù xì chay', 'chay', true, '1603133872878-684f208fb84b', 1),
+  ('Chay Hoan Hỷ - Bà Huyện Thanh Quan', 'Lẩu Hoan Hỷ (nấm, đậu hũ)', 'chay', true, '1682496178113-6275890f1fd7', 2),
+  ('Chay Hoan Hỷ - Bà Huyện Thanh Quan', 'Đậu hũ um', 'chay', true, '1765295218809-784d6c2fe39c', 3),
+  ('Bánh Mì PewPew - Út Tịch', 'Bánh mì bò tiêu đen', 'banhmi', false, '1715925717150-2a6d181d8846', 1),
+  ('Bánh Mì PewPew - Út Tịch', 'Bánh mì gà nướng mật ong', 'banhmi', false, '1710532774170-9844f837ae54', 2),
+  ('Bánh Mì PewPew - Út Tịch', 'Xôi thập cẩm', 'banhmi', false, '1551266080-616f5d8174f1', 3),
+  ('Trùm Cơm Chiên Út Tịch', 'Cơm chiên bò xào sa tế', 'com', false, '1603133872878-684f208fb84b', 1),
+  ('Trùm Cơm Chiên Út Tịch', 'Cơm chiên hải sản phô mai trứng muối', 'com', false, '1612755637313-9517f17d84b5', 2),
+  ('Hủ Tiếu Mì Sườn - Hoàng Tứ', 'Hủ tiếu mì sườn', 'nuoc', false, '1746183055178-e4d5889140f0', 1),
+  ('Bánh Tráng Nướng Đà Lạt - Út Tịch', 'Bánh tráng nướng trứng phô mai', 'anvat', false, '1614435842039-e842b002c342', 1),
+  ('Bánh Tráng Nướng Đà Lạt - Út Tịch', 'Bánh tráng nướng khô bò tôm', 'anvat', false, '1614435842039-e842b002c342', 2),
+  ('KAI Coffee - Út Tịch', 'Latte', 'uong', false, '1541167760496-1628856ab772', 1),
+  ('KAI Coffee - Út Tịch', 'Trà sữa', 'uong', false, '1558857563-b371033873b8', 2),
+  ('BTOWN - Healthy Drinks & Cakes', 'Matcha đá xay', 'uong', false, '1749280447307-31a68eb38673', 1),
+  ('BTOWN - Healthy Drinks & Cakes', 'Cheesecake việt quất', 'anvat', false, '1695088957420-c3b97d1f1138', 2),
+  ('KFC - Vincom Maximark Cộng Hòa', 'Gà rán 3 miếng', 'ga', false, '1624153064067-566cae78993d', 1),
+  ('KFC - Vincom Maximark Cộng Hòa', 'Cơm gà giòn cay', 'ga', false, '1766050587783-1c90751275dd', 2),
+  ('KFC - Vincom Maximark Cộng Hòa', 'Tart trứng', 'anvat', false, '1637273483570-10e72651892e', 3),
+  ('Kohaku Ramen & Udon - Lotte Cộng Hòa', 'Mì ramen', 'hannhat', false, '1569718212165-3a8278d5f624', 1),
+  ('Kohaku Ramen & Udon - Lotte Cộng Hòa', 'Mì udon', 'hannhat', false, '1618841557871-b4664fbf0cb3', 2),
+  ('Tokyo Deli Express - Hậu Giang', 'Sushi tổng hợp', 'hannhat', false, '1563612116625-3012372fccce', 1),
+  ('Tokyo Deli Express - Hậu Giang', 'Sashimi cá hồi', 'hannhat', false, '1676037150294-837ff0c29599', 2),
+  ('Tokyo Deli Express - Hậu Giang', 'Udon hải sản', 'hannhat', false, '1618841557871-b4664fbf0cb3', 3),
+  ('Chi Ri San - Ẩm Thực Hàn Quốc', 'Tokbokki', 'hannhat', false, '1747228469541-f0e7f56e7ec7', 1),
+  ('Chi Ri San - Ẩm Thực Hàn Quốc', 'Canh kim chi', 'hannhat', false, '1760228865341-675704c22a5b', 2),
+  ('Chi Ri San - Ẩm Thực Hàn Quốc', 'Sườn bò nướng Hàn Quốc', 'hannhat', false, '1709433420601-6e473136571b', 3),
+  ('Haru Sushi - Lê Văn Sỹ', 'Cơm cuộn California', 'hannhat', false, '1579871494447-9811cf80d66c', 1),
+  ('Haru Sushi - Lê Văn Sỹ', 'Cơm cuộn tôm tempura', 'hannhat', false, '1579584425555-c3ce17fd4351', 2),
+  ('Haru Sushi - Lê Văn Sỹ', 'Sashimi tổng hợp', 'hannhat', false, '1534256958597-7fe685cbd745', 3),
+  ('Hẻm Fast Food - Món Hàn - Bàu Cát', 'Gà cay phô mai', 'hannhat', false, '1645371958635-88dd6c8e1be7', 1),
+  ('Hẻm Fast Food - Món Hàn - Bàu Cát', 'Tokbokki đút lò', 'hannhat', false, '1747228469541-f0e7f56e7ec7', 2),
+  ('Hẻm Fast Food - Món Hàn - Bàu Cát', 'Kimbap', 'hannhat', false, '1608731002466-057222dc4989', 3),
+  ('Hẻm Fast Food - Món Hàn - Bàu Cát', 'Cơm trộn phô mai', 'hannhat', false, '1741295017668-c8132acd6fc0', 4),
+  ('Phố Chè Xôi - Lê Văn Sỹ', 'Xôi gà', 'banhmi', false, '1551266080-616f5d8174f1', 1),
+  ('Phố Chè Xôi - Lê Văn Sỹ', 'Chè mít sữa dừa', 'anvat', false, '1787898314268-afd422d85b86', 2),
+  ('Phố Chè Xôi - Lê Văn Sỹ', 'Bánh bèo', 'anvat', false, '1672858502422-ab27ac933910', 3),
+  ('Bún Đậu Hẻm - Lê Văn Sỹ', 'Bún đậu mắm tôm thập cẩm', 'nuoc', false, '1699670425934-b30d13e63fea', 1),
+  ('Bún Thịt Nướng Hùng 7', 'Bún thịt nướng', 'nuoc', false, '1677354469663-dc918927fd93', 1),
+  ('Bún Thịt Nướng Hùng 7', 'Bánh cuốn thịt nướng', 'nuoc', false, '1786114774610-8696925848c6', 2),
+  ('Bún Thịt Nướng Hùng 7', 'Nem lụi', 'anvat', false, '1779939855630-ee3c7744d9c5', 3),
+  ('Quán Mì Quảng Sâm', 'Mì quảng sườn tôm', 'nuoc', false, '1731460202531-bf8389d565f7', 1),
+  ('Quán Mì Quảng Sâm', 'Mì quảng gà', 'nuoc', false, '1784007686775-35f91f0b8654', 2),
+  ('Quán Mì Quảng Sâm', 'Mì quảng cá lóc', 'nuoc', false, '1583316175701-0bc5f25a0a44', 3),
+  ('Clover Kitchen - Salad & Healthy Food', 'Salad ức gà nướng', 'healthy', false, '1761315600943-d8a5bb0c499f', 1),
+  ('Clover Kitchen - Salad & Healthy Food', 'Cơm gạo lứt đùi gà mật ong', 'healthy', false, '1766050587783-1c90751275dd', 2),
+  ('Cơm Tấm Ba Ghiền - Đặng Văn Ngữ', 'Cơm tấm sườn nướng', 'com', false, '1762305193367-91e072e47c3f', 1),
+  ('Cơm Tấm Ba Ghiền - Đặng Văn Ngữ', 'Cơm tấm sườn trứng ốp la', 'com', false, '1766050587783-1c90751275dd', 2),
+  ('Cơm Tấm Cali - Nguyễn Văn Trỗi', 'Cơm tấm đặc biệt', 'com', false, '1762305193367-91e072e47c3f', 1),
+  ('Cơm Tấm Cali - Nguyễn Văn Trỗi', 'Bún thịt nướng đặc biệt', 'nuoc', false, '1677354469663-dc918927fd93', 2),
+  ('Phở Huỳnh Anh', 'Phở tái nạm viên', 'nuoc', false, '1582878826629-29b7ad1cdc43', 1),
+  ('Phở Huỳnh Anh', 'Phở đặc biệt', 'nuoc', false, '1766050586763-723571af4dde', 2),
+  ('Bánh Xèo Bà Hai - Nguyễn Trọng Tuyển', 'Bánh xèo tôm thịt', 'anvat', false, '1788927783922-8b1299701b45', 1),
+  ('Bánh Xèo Bà Hai - Nguyễn Trọng Tuyển', 'Bánh khọt', 'anvat', false, '1672858502422-ab27ac933910', 2),
+  ('Bánh Xèo Bà Hai - Nguyễn Trọng Tuyển', 'Gỏi cuốn', 'anvat', false, '1560162071-da4c4a91077a', 3),
+  ('Bún Chả Phố Cổ - Phan Xích Long', 'Bún chả Hà Nội', 'nuoc', false, '1742893368398-128bded9c656', 1),
+  ('Bún Chả Phố Cổ - Phan Xích Long', 'Nem rán', 'anvat', false, '1669340781012-ae89fbac9fc3', 2),
+  ('Kawaee Poké & Salad', 'Poké cá hồi', 'healthy', false, '1602881917445-0b1ba001addf', 1),
+  ('Kawaee Poké & Salad', 'Poké bowl rau củ', 'healthy', false, '1597958792579-bd3517df6399', 2),
+  ('Saladi.vn - Salad Online', 'Salad trộn', 'healthy', false, '1547496502-affa22d38842', 1),
+  ('Phở Hòa - Pasteur', 'Phở đặc biệt', 'nuoc', false, '1766050586763-723571af4dde', 1),
+  ('Phở Hòa - Pasteur', 'Phở bò tái', 'nuoc', false, '1582878826629-29b7ad1cdc43', 2),
+  ('Ba Hoàng - Hủ Tiếu Nam Vang', 'Hủ tiếu Nam Vang nước', 'nuoc', false, '1631709497146-a239ef373cf1', 1),
+  ('Ba Hoàng - Hủ Tiếu Nam Vang', 'Hủ tiếu Nam Vang khô', 'nuoc', false, '1761125066136-f657176f7525', 2),
+  ('Hainanese - Cơm Gà Thả Vườn', 'Cơm gà Hải Nam', 'com', false, '1787329682500-04fa551dde92', 1)
+) as v(shop, dish, category, veg, photo, ord) on v.shop = s.name
+where not exists (select 1 from public.food_shop_menu_items i where i.shop_id = s.id and i.name = v.dish);

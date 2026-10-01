@@ -71,6 +71,7 @@ test("filterDishes: one card per dish, sides hidden, quán without menu as one c
   assert.deepEqual(keys({ themes: ["com"], budget: null, needs: [] }), ["shop-tam"]);
   assert.deepEqual(keys({ themes: [], budget: "u40", needs: [] }), ["shop-tam"]); // tam's range starts at 25k; phở is 40k+
   assert.deepEqual(keys({ themes: [], budget: null, needs: ["veg"] }), ["p3"]);
+  assert.deepEqual(keys({ themes: ["chay"], budget: null, needs: [] }), ["p3"]); // a vegetarian phở counts as "Chay" too
   assert.deepEqual(keys({ themes: [], budget: null, needs: ["near"] }).sort(), ["p1", "p3"]);
   const d = filterDishes(shops, menus, { themes: [], budget: null, needs: [] }, noonVN, new Map());
   assert.equal(d.find((x) => x.key === "p1").photo, CATEGORY_PHOTO.nuoc);

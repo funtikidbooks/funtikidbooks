@@ -9,6 +9,7 @@ import {
   LUNCH_NEEDS,
   LUNCH_THEMES,
   directionsLink,
+  dishThemes,
   filterDishes,
   formatK,
   priceRange,
@@ -171,8 +172,7 @@ export function LunchPicker({
   const themeCount = useMemo(() => {
     const c = new Map<string, number>();
     for (const d of allDishes) {
-      const cats = d.item ? [d.category] : d.shop.themes ?? [];
-      for (const t of cats) if (t) c.set(t, (c.get(t) ?? 0) + 1);
+      for (const t of dishThemes(d)) c.set(t, (c.get(t) ?? 0) + 1);
     }
     return c;
   }, [allDishes]);
