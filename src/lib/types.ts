@@ -358,6 +358,10 @@ export type PushSubscriptionRow = {
   last_ok_at?: string | null; // a push to it was last accepted
   last_error_at?: string | null;
   last_error?: string | null;
+  // The device itself reporting a notification it showed (push_delivery.sql):
+  // when, and how long after the server sent it.
+  last_delivered_at?: string | null;
+  last_delivery_ms?: number | null;
 };
 
 export type Project = {

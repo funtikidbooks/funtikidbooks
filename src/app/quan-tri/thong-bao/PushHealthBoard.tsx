@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { listPushHealth, sendTestPushTo, type PushHealthPerson } from "@/lib/actions/push";
 
-type Health = "none" | "error" | "unknown" | "stale" | "ok";
+type Health = "none" | "error" | "slow" | "unknown" | "stale" | "ok";
 
 const HEALTH: Record<Health, { label: string; color: string; bg: string; rank: number; advice: string }> = {
   none: {
@@ -20,24 +20,34 @@ const HEALTH: Record<Health, { label: string; color: string; bg: string; rank: n
     rank: 1,
     advice: "Nhắc bạn mở app Funti một lần — app sẽ tự đăng ký lại. Vẫn lỗi thì tắt/bật lại thông báo trong Cài đặt.",
   },
+  slow: {
+    label: "Nhận chậm",
+    color: "var(--status-red)",
+    bg: "rgba(192,82,79,.1)",
+    rank: 2,
+    advice:
+      "Máy báo lại là thông báo tới trễ. iPhone/iPad: Cài đặt › Thông báo › Tóm tắt theo lịch — tắt cho Funti; tắt Nguồn điện thấp và cho Funti vượt qua Chế độ tập trung. Android: Cài đặt › Ứng dụng › Chrome › Pin › Không hạn chế. Máy tính: để Chrome/Edge chạy nền (Cài đặt › Hệ thống › Tiếp tục chạy ứng dụng nền khi đóng).",
+  },
   stale: {
     label: "Lâu chưa mở app",
     color: "var(--status-yellow)",
     bg: "rgba(214,160,40,.12)",
-    rank: 2,
+    rank: 3,
     advice: "Có thể vẫn nhận được. Mở app một lần để máy xác nhận lại.",
   },
   unknown: {
     label: "Chờ mở app để kiểm tra",
     color: "var(--color-neutral-500)",
     bg: "var(--color-neutral-100)",
-    rank: 3,
+    rank: 4,
     advice: "Đã đăng ký từ trước — lần tới bạn mở app hoặc có tin nhắn gửi tới, trạng thái sẽ hiện ở đây.",
   },
-  ok: { label: "Đang nhận", color: "var(--status-green)", bg: "rgba(72,160,110,.12)", rank: 4, advice: "" },
+  ok: { label: "Đang nhận", color: "var(--status-green)", bg: "rgba(72,160,110,.12)", rank: 5, advice: "" },
 };
 
 const DAY = 24 * 60 * 60 * 1000;
+// A device showing a notification later than this after it was sent is "slow".
+const SLOW_MS = 15_000;
 
 function latest(values: (string | null | undefined)[]) {
   const t = values.filter(Boolean).map((v) => new Date(v!).getTime());
@@ -50,6 +60,8 @@ function healthOf(p: PushHealthPerson, now: number): Health {
   const err = latest(p.devices.map((d) => d.last_error_at));
   const seen = latest(p.devices.map((d) => d.last_seen_at));
   if (err && (!ok || err > ok)) return "error";
+  const last = lastDelivery(p);
+  if (last && now - last.at < DAY && last.ms > SLOW_MS) return "slow";
   if (!ok && !seen) return "unknown";
   if (!seen || now - seen > 7 * DAY) return "stale";
   return "ok";
@@ -62,6 +74,18 @@ function ago(ms: number | null, now: number) {
   if (d < 3_600_000) return `${Math.round(d / 60_000)} phút trước`;
   if (d < DAY) return `${Math.round(d / 3_600_000)} giờ trước`;
   return `${Math.round(d / DAY)} ngày trước`;
+}
+
+// The latest notification any of this person's devices reported showing.
+function lastDelivery(p: PushHealthPerson) {
+  const d = p.devices
+    .filter((x) => x.last_delivered_at && x.last_delivery_ms != null)
+    .sort((a, b) => (b.last_delivered_at ?? "").localeCompare(a.last_delivered_at ?? ""))[0];
+  return d ? { at: new Date(d.last_delivered_at!).getTime(), ms: d.last_delivery_ms!, device: d.device ?? "Máy chưa rõ" } : null;
+}
+
+function seconds(ms: number) {
+  return ms < 1000 ? "dưới 1 giây" : ms < 60_000 ? `${(ms / 1000).toFixed(1).replace(".", ",")} giây` : `${Math.round(ms / 60_000)} phút`;
 }
 
 function deviceSummary(p: PushHealthPerson) {
@@ -84,7 +108,7 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
         .sort((a, b) => HEALTH[a.h].rank - HEALTH[b.h].rank || a.p.name.localeCompare(b.p.name, "vi")),
     [people, now],
   );
-  const counts = rows.reduce<Record<Health, number>>((acc, r) => ({ ...acc, [r.h]: acc[r.h] + 1 }), { none: 0, error: 0, stale: 0, unknown: 0, ok: 0 });
+  const counts = rows.reduce<Record<Health, number>>((acc, r) => ({ ...acc, [r.h]: acc[r.h] + 1 }), { none: 0, error: 0, slow: 0, stale: 0, unknown: 0, ok: 0 });
 
   async function refresh() {
     setRefreshing(true);
@@ -129,7 +153,7 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
       >
         <h1 className="text-lg sm:text-xl whitespace-nowrap">Thông báo trên máy</h1>
         <div className="flex flex-wrap items-center gap-2">
-          {(["none", "error", "stale", "unknown", "ok"] as Health[])
+          {(["none", "error", "slow", "stale", "unknown", "ok"] as Health[])
             .filter((h) => counts[h] > 0)
             .map((h) => (
               <span key={h} className="rounded-full px-2.5 py-1 text-[12px] font-bold whitespace-nowrap" style={{ background: HEALTH[h].bg, color: HEALTH[h].color }}>
@@ -144,7 +168,8 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-4">
         <p className="text-sm max-w-[110ch]" style={{ color: "var(--color-neutral-600)" }}>
-          Mỗi nhân viên, từng máy: máy đó mở app lần cuối lúc nào, Apple/Google nhận thông báo lần cuối lúc nào, và lỗi nếu có. Thông báo là
+          Mỗi nhân viên, từng máy: máy đó mở app lần cuối lúc nào, Apple/Google nhận thông báo lần cuối lúc nào, máy hiện thông báo sau bao
+          lâu (máy tự báo lại), và lỗi nếu có. Thông báo là
           bắt buộc — ai chưa bật sẽ thấy thanh nhắc không tắt được trong workspace. Bấm <b>Gửi thử</b> để gửi một thông báo kiểm tra tới
           các máy của người đó.
         </p>
@@ -154,6 +179,7 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
             const hs = HEALTH[h];
             const seen = latest(p.devices.map((d) => d.last_seen_at));
             const ok = latest(p.devices.map((d) => d.last_ok_at));
+            const shown = lastDelivery(p);
             const lastErr = p.devices
               .filter((d) => d.last_error_at)
               .sort((a, b) => (b.last_error_at ?? "").localeCompare(a.last_error_at ?? ""))[0];
@@ -199,7 +225,27 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
                   <dd className="font-semibold">{ago(seen, now)}</dd>
                   <dt style={{ color: "var(--color-neutral-500)" }}>Nhận lần cuối</dt>
                   <dd className="font-semibold">{ago(ok, now)}</dd>
+                  <dt style={{ color: "var(--color-neutral-500)" }}>Hiện trên máy sau</dt>
+                  <dd className="font-semibold" style={{ color: shown && shown.ms > SLOW_MS ? "var(--status-red)" : undefined }}>
+                    {shown ? `${seconds(shown.ms)} · ${ago(shown.at, now)}` : "—"}
+                  </dd>
                 </dl>
+                {p.devices.some((d) => d.last_delivered_at) && (
+                  <ul className="flex flex-col gap-0.5 text-[12px]" style={{ color: "var(--color-neutral-600)" }}>
+                    {p.devices
+                      .filter((d) => d.last_delivered_at && d.last_delivery_ms != null)
+                      .sort((a, b) => (b.last_delivered_at ?? "").localeCompare(a.last_delivered_at ?? ""))
+                      .slice(0, 4)
+                      .map((d) => (
+                        <li key={d.id} className="flex justify-between gap-2 min-w-0">
+                          <span className="truncate">{d.device ?? "Máy chưa rõ"}</span>
+                          <span className="flex-none font-semibold" style={{ color: d.last_delivery_ms! > SLOW_MS ? "var(--status-red)" : "var(--status-green)" }}>
+                            {seconds(d.last_delivery_ms!)}
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                )}
 
                 {h === "error" && lastErr?.last_error && (
                   <p className="text-[12px] break-words" style={{ color: "var(--status-red)" }}>

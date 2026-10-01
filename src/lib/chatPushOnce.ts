@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { pushDirectMessage, pushMeetingMessage } from "@/lib/chatPush";
+import { prepareDirectPush, prepareMeetingPush, sendPrepared } from "@/lib/chatPush";
 
 // Each chat message is pushed exactly once, by whichever trigger reaches
 // the server first: the database itself on insert (chat_push_hook.sql →
@@ -21,6 +21,9 @@ async function claim(messageId: string) {
 // ring everyone's phone again.
 const MAX_AGE_MS = 10 * 60 * 1000;
 
+// The claim and everything the push needs are fetched side by side: the
+// push leaves as soon as both are back, instead of claiming first and only
+// then starting to look up the room, the sender and the devices.
 export async function pushChatMessageOnce(type: "meeting" | "dm", messageId: string) {
   const admin = createAdminClient();
   if (type === "meeting") {
@@ -30,8 +33,8 @@ export async function pushChatMessageOnce(type: "meeting" | "dm", messageId: str
       .eq("id", messageId)
       .maybeSingle();
     if (!data || Date.now() - new Date(data.created_at).getTime() > MAX_AGE_MS) return;
-    if (!(await claim(data.id))) return;
-    await pushMeetingMessage(data);
+    const [claimed, prepared] = await Promise.all([claim(data.id), prepareMeetingPush(data)]);
+    if (claimed) await sendPrepared(prepared);
   } else {
     const { data } = await admin
       .from("direct_messages")
@@ -39,7 +42,13 @@ export async function pushChatMessageOnce(type: "meeting" | "dm", messageId: str
       .eq("id", messageId)
       .maybeSingle();
     if (!data || Date.now() - new Date(data.created_at).getTime() > MAX_AGE_MS) return;
-    if (!(await claim(data.id))) return;
-    await pushDirectMessage(data);
+    const [claimed, prepared] = await Promise.all([claim(data.id), prepareDirectPush(data)]);
+    if (claimed) await sendPrepared(prepared);
   }
+}
+
+// The database pings the hook every minute (push_delivery.sql) so a
+// function and its connections are already up when a real message comes.
+export async function warmChatPush() {
+  await createAdminClient().from("chat_push_log").select("message_id").limit(1);
 }

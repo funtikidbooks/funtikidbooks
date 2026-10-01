@@ -1,5 +1,7 @@
+import https from "node:https";
 import webpush from "web-push";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { PushSubscriptionRow } from "@/lib/types";
 
 let configured = false;
 function ensureConfigured() {
@@ -26,13 +28,18 @@ export type PushPayload = {
   requireInteraction?: boolean;
 };
 
+// Kept-open connections to Apple/Google/Mozilla/Microsoft's push servers:
+// a warm function reuses them instead of a fresh TLS handshake (a few
+// hundred ms to Apple) for every device of every message.
+const agent = new https.Agent({ keepAlive: true, maxSockets: 64 });
+
 // "high" urgency is what lets a chat push through immediately — web-push's
 // default ("normal") lets Android batch it until the phone's next Doze
 // maintenance window, which can be minutes. TTL: a phone that's been off
 // for over a day doesn't need yesterday's chat pings all arriving at once.
 // timeout: one push service that never answers mustn't hold the others'
 // bookkeeping (or the function) hostage.
-const PUSH_OPTIONS = { urgency: "high" as const, TTL: 60 * 60 * 24, timeout: 10_000 };
+const PUSH_OPTIONS = { urgency: "high" as const, TTL: 60 * 60 * 24, timeout: 10_000, agent };
 
 export type PushDeviceResult = { id: string; device: string | null; ok: boolean; status: number | null; error: string | null; removed: boolean };
 
@@ -45,17 +52,24 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
 
 // Same, for a whole room at once: one query for every recipient's devices
 // instead of one query per recipient before a single push could go out.
-// Every outcome is written back on the device (last_ok_at / last_error —
-// push_health.sql), so Quản trị → Thông báo trên máy shows who really
-// receives; a device the push service says is gone (404/410) is removed.
 export async function sendPushToUsers(userIds: string[], payload: PushPayload): Promise<PushDeviceResult[]> {
   if (!ensureConfigured() || userIds.length === 0) return [];
+  const { data: subs } = await createAdminClient().from("push_subscriptions").select("*").in("user_id", userIds);
+  return sendPushToSubscriptions((subs ?? []) as PushSubscriptionRow[], payload);
+}
 
+// The devices already in hand (chatPush loads them alongside everything
+// else a message needs). Every push carries the moment it left (sentAt):
+// the device reports back when it showed it (sw.js → /api/push/ack), which
+// is how Quản trị → Thông báo trên máy knows each device's real delay.
+// Every outcome is written back on the device (last_ok_at / last_error —
+// push_health.sql); a device the push service says is gone (404/410) is
+// removed.
+export async function sendPushToSubscriptions(subs: PushSubscriptionRow[], payload: PushPayload): Promise<PushDeviceResult[]> {
+  if (!ensureConfigured() || subs.length === 0) return [];
   const adminClient = createAdminClient();
-  const { data: subs } = await adminClient.from("push_subscriptions").select("*").in("user_id", userIds);
-  if (!subs || subs.length === 0) return [];
 
-  const json = JSON.stringify(payload);
+  const json = JSON.stringify({ ...payload, sentAt: Date.now() });
   const results = await Promise.all(
     subs.map(async (sub): Promise<PushDeviceResult> => {
       try {

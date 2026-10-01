@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { pushChatMessageOnce } from "@/lib/chatPushOnce";
+import { pushChatMessageOnce, warmChatPush } from "@/lib/chatPushOnce";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +10,14 @@ export const dynamic = "force-dynamic";
 // must be under 10 minutes old, and is pushed at most once (chat_push_log),
 // so calling this for a message that was already announced does nothing.
 // Answers at once and does the work after, so the database never waits.
+// {"type":"ping"} every minute (push_delivery.sql) keeps it warm: no cold
+// start in front of the next real message.
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as { type?: string; id?: string } | null;
+  if (body?.type === "ping") {
+    after(() => warmChatPush().catch(() => {}));
+    return new Response(null, { status: 204 });
+  }
   const type = body?.type === "dm" ? "dm" : body?.type === "meeting" ? "meeting" : null;
   if (!type || !body?.id || !/^[0-9a-f-]{36}$/i.test(body.id)) return new Response(null, { status: 400 });
   after(() => pushChatMessageOnce(type, body.id!).catch(() => {}));

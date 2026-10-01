@@ -46,8 +46,29 @@ self.addEventListener("push", (event) => {
 
   const title = payload.title || "Tin nhắn mới";
   const url = payload.url || "/workspace";
-  event.waitUntil(Promise.all([bumpAppBadge().catch(() => {}), showMessageNotification(title, url, payload)]));
+  const receivedAt = Date.now();
+  event.waitUntil(
+    Promise.all([
+      bumpAppBadge().catch(() => {}),
+      showMessageNotification(title, url, payload),
+      ackDelivery(payload, receivedAt).catch(() => {}),
+    ]),
+  );
 });
+
+// Tells the server this device got the push and how long after it was sent
+// (payload.sentAt) — Quản trị → Thông báo trên máy shows each device's real
+// delay from these. Runs beside showing the notification, never before it.
+async function ackDelivery(payload, receivedAt) {
+  if (!payload.sentAt) return;
+  const sub = await self.registration.pushManager.getSubscription();
+  if (!sub) return;
+  await fetch("/api/push/ack", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint: sub.endpoint, sentAt: payload.sentAt, receivedAt }),
+  });
+}
 
 // The unread number on the installed app's icon (Windows taskbar, Dock,
 // home screen). A Funti window that's open and in view keeps the exact count

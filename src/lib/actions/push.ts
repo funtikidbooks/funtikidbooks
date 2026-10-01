@@ -76,7 +76,10 @@ export type PushHealthPerson = {
   name: string;
   avatarUrl: string | null;
   role: string | null;
-  devices: Pick<PushSubscriptionRow, "id" | "device" | "created_at" | "last_seen_at" | "last_ok_at" | "last_error_at" | "last_error">[];
+  devices: Pick<
+    PushSubscriptionRow,
+    "id" | "device" | "created_at" | "last_seen_at" | "last_ok_at" | "last_error_at" | "last_error" | "last_delivered_at" | "last_delivery_ms"
+  >[];
 };
 
 export async function listPushHealth(): Promise<PushHealthPerson[]> {
@@ -97,6 +100,8 @@ export async function listPushHealth(): Promise<PushHealthPerson[]> {
       last_ok_at: s.last_ok_at ?? null,
       last_error_at: s.last_error_at ?? null,
       last_error: s.last_error ?? null,
+      last_delivered_at: s.last_delivered_at ?? null,
+      last_delivery_ms: s.last_delivery_ms ?? null,
     });
     byUser.set(s.user_id, list);
   }
