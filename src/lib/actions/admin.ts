@@ -256,7 +256,7 @@ export async function createNewsPost(input: {
 
   if (error || !data) throw new Error("Không thể tạo bài viết");
 
-  revalidatePath("/tin-tuc");
+  revalidatePath("/tin-tuc", "layout"); // the list and every article page
   return data as NewsPost;
 }
 
@@ -289,14 +289,14 @@ export async function updateNewsPost(
   const { data, error } = await supabase.from("news_posts").update(patch).eq("id", id).select("*").single();
   if (error || !data) throw new Error("Không thể cập nhật bài viết");
 
-  revalidatePath("/tin-tuc");
+  revalidatePath("/tin-tuc", "layout"); // the list and every article page
   return data as NewsPost;
 }
 
 export async function deleteNewsPost(id: string) {
   const { supabase } = await requireContentEditor();
   await supabase.from("news_posts").delete().eq("id", id);
-  revalidatePath("/tin-tuc");
+  revalidatePath("/tin-tuc", "layout"); // the list and every article page
 }
 
 // Fetches one full post (every field, including content) for NewsEditDialog
@@ -374,7 +374,7 @@ export async function createJobPosting(input: {
 
   if (error || !data) throw new Error("Không thể tạo tin tuyển dụng");
 
-  revalidatePath("/tuyen-dung");
+  revalidatePath("/tuyen-dung", "layout"); // the list and every job page
   return data as JobPosting;
 }
 
@@ -415,14 +415,14 @@ export async function updateJobPosting(
   const { data, error } = await supabase.from("job_postings").update(patch).eq("id", id).select("*").single();
   if (error || !data) throw new Error("Không thể cập nhật tin tuyển dụng");
 
-  revalidatePath("/tuyen-dung");
+  revalidatePath("/tuyen-dung", "layout"); // the list and every job page
   return data as JobPosting;
 }
 
 export async function deleteJobPosting(id: string) {
   const { supabase } = await requireContentEditor();
   await supabase.from("job_postings").delete().eq("id", id);
-  revalidatePath("/tuyen-dung");
+  revalidatePath("/tuyen-dung", "layout"); // the list and every job page
 }
 
 export async function uploadJobPostingContentImage(file: File) {

@@ -1,6 +1,14 @@
 "use server";
 
-import { getContentEditorRole, getJobPostings, getNewsPosts, getProjects, getReviews } from "@/lib/data/site-content";
+import {
+  getContentEditorRole,
+  getJobPostingBySlug,
+  getJobPostings,
+  getNewsPostBySlug,
+  getNewsPosts,
+  getProjects,
+  getReviews,
+} from "@/lib/data/site-content";
 import { getViewer } from "@/lib/supabase/server";
 import type { AccessRole } from "@/lib/types";
 
@@ -32,6 +40,18 @@ export async function fetchViewerInfo(): Promise<{
   } catch {
     return { isAuthenticated: false, memberHref: "/dang-nhap", canEdit: false, accessRole: null };
   }
+}
+
+// A draft's own page: the static page only has published articles, so an
+// editor's browser asks for the draft here.
+export async function fetchDraftNewsPost(slug: string) {
+  const role = await getContentEditorRole();
+  return role ? getNewsPostBySlug(slug, true) : null;
+}
+
+export async function fetchDraftJobPosting(slug: string) {
+  const role = await getContentEditorRole();
+  return role ? getJobPostingBySlug(slug, true) : null;
 }
 
 export async function fetchAllProjectsForEditor() {

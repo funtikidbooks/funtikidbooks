@@ -29,6 +29,11 @@ export function ViewerProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<ViewerState>(DEFAULT_STATE);
 
   useEffect(() => {
+    // Only a browser that has signed in can be anything but a plain visitor,
+    // and its Supabase session cookie (readable here — @supabase/ssr sets it
+    // for the browser client) says so. Customers skip the server round trip
+    // every page view used to make.
+    if (!/(^|;\s*)sb-[^=]*-auth-token/.test(document.cookie)) return;
     let cancelled = false;
     fetchViewerInfo().then((info) => {
       if (!cancelled) setState(info);

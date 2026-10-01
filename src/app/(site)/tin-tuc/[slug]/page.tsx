@@ -1,41 +1,35 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { NewsArticleView } from "@/components/site/NewsArticleView";
-import { getContentEditorRole, getNewsPostBySlug } from "@/lib/data/site-content";
-import { getLocale } from "@/lib/getLocale";
-import { pickLocalized } from "@/lib/i18n";
+import { DraftPost } from "@/components/site/DraftPost";
+import { getNewsPostBySlug, getPublishedNewsSlugs } from "@/lib/data/site-content";
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
+// Static like the rest of the public site — no cookies in the render path
+// (they made every view a fresh render in Singapore). Published articles are
+// prerendered and refreshed when one is saved (revalidatePath in
+// lib/actions/admin.ts); the language and edit rights are picked up in the
+// browser, and a draft's link shows the draft to an editor (DraftPost).
+export async function generateStaticParams() {
+  return (await getPublishedNewsSlugs()).map((slug) => ({ slug }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const [post, locale] = await Promise.all([getNewsPostBySlug(slug), getLocale()]);
-  if (!post) return { title: "Tin tức" };
-
-  const title = pickLocalized(locale, post.title, post.title_en);
-  const excerpt = pickLocalized(locale, post.excerpt, post.excerpt_en);
-
+  const post = await getNewsPostBySlug(slug);
+  if (!post) return { title: "Tin tức", robots: { index: false } };
   return {
-    title,
-    description: excerpt ?? undefined,
+    title: post.title,
+    description: post.excerpt ?? undefined,
     openGraph: {
-      title,
-      description: excerpt ?? undefined,
+      title: post.title,
+      description: post.excerpt ?? undefined,
       images: post.cover_image_url ? [post.cover_image_url] : undefined,
     },
   };
 }
 
-export default async function NewsArticlePage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function NewsArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [post, editorRole] = await Promise.all([getNewsPostBySlug(slug), getContentEditorRole()]);
-  if (!post) notFound();
-
-  return <NewsArticleView initialPost={post} canEdit={editorRole !== null} />;
+  const post = await getNewsPostBySlug(slug);
+  if (!post) return <DraftPost kind="news" slug={slug} />;
+  return <NewsArticleView initialPost={post} />;
 }

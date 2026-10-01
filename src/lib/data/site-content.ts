@@ -49,14 +49,31 @@ export async function getPublishedNewsPosts(): Promise<NewsPost[]> {
 
 // RLS already restricts unpublished rows to director/admin sessions, so no
 // extra filter is needed here — a non-editor gets null for a draft slug.
-export async function getNewsPostBySlug(slug: string): Promise<NewsPost | null> {
+// Published only, through the cookie-free client: the article pages stay
+// static (prerendered, served straight from the CDN). A director/admin
+// opening a draft's link gets it from the browser instead — see
+// fetchDraftNewsPost in lib/actions/editorContent.ts.
+export async function getNewsPostBySlug(slug: string, asEditor = false): Promise<NewsPost | null> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return null;
   try {
-    const supabase = await createClient();
-    const { data } = await supabase.from("news_posts").select("*").eq("slug", slug).maybeSingle();
+    const supabase = asEditor ? await createClient() : createPublicClient();
+    let query = supabase.from("news_posts").select("*").eq("slug", slug);
+    if (!asEditor) query = query.eq("published", true);
+    const { data } = await query.maybeSingle();
     return (data as NewsPost) ?? null;
   } catch {
     return null;
+  }
+}
+
+// Every published article, for prerendering at build.
+export async function getPublishedNewsSlugs(): Promise<string[]> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return [];
+  try {
+    const { data } = await createPublicClient().from("news_posts").select("slug").eq("published", true);
+    return (data ?? []).map((r) => r.slug as string);
+  } catch {
+    return [];
   }
 }
 
@@ -73,16 +90,28 @@ export async function getJobPostings(includeUnpublished = false): Promise<JobPos
   }
 }
 
-// RLS already restricts unpublished rows to director/admin sessions, so no
-// extra filter is needed here — a non-editor gets null for a draft slug.
-export async function getJobPostingBySlug(slug: string): Promise<JobPosting | null> {
+// Same as getNewsPostBySlug: published only unless asked for by an editor
+// (RLS restricts unpublished rows to director/admin sessions anyway).
+export async function getJobPostingBySlug(slug: string, asEditor = false): Promise<JobPosting | null> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return null;
   try {
-    const supabase = await createClient();
-    const { data } = await supabase.from("job_postings").select("*").eq("slug", slug).maybeSingle();
+    const supabase = asEditor ? await createClient() : createPublicClient();
+    let query = supabase.from("job_postings").select("*").eq("slug", slug);
+    if (!asEditor) query = query.eq("published", true);
+    const { data } = await query.maybeSingle();
     return (data as JobPosting) ?? null;
   } catch {
     return null;
+  }
+}
+
+export async function getPublishedJobSlugs(): Promise<string[]> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return [];
+  try {
+    const { data } = await createPublicClient().from("job_postings").select("slug").eq("published", true);
+    return (data ?? []).map((r) => r.slug as string);
+  } catch {
+    return [];
   }
 }
 

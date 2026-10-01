@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { EditableImage } from "./EditableImage";
 import { useDict } from "@/components/site/LocaleProvider";
+import { useViewer } from "@/components/site/ViewerProvider";
 import { categoryLabel } from "@/lib/dictionary";
 import { pickLocalized } from "@/lib/i18n";
 import { updateNewsPost } from "@/lib/actions/admin";
@@ -16,7 +17,8 @@ const NewsEditDialog = dynamic(() => import("@/components/admin/NewsEditDialog")
   ssr: false,
 });
 
-export function NewsArticleView({ initialPost, canEdit }: { initialPost: NewsPost; canEdit: boolean }) {
+export function NewsArticleView({ initialPost }: { initialPost: NewsPost }) {
+  const { canEdit } = useViewer();
   const { locale, t } = useDict();
   const [post, setPost] = useState(initialPost);
   const [editing, setEditing] = useState(false);

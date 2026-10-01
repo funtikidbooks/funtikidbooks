@@ -1,41 +1,31 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { JobPostingView } from "@/components/site/JobPostingView";
-import { getContentEditorRole, getJobPostingBySlug } from "@/lib/data/site-content";
-import { getLocale } from "@/lib/getLocale";
-import { pickLocalized } from "@/lib/i18n";
+import { DraftPost } from "@/components/site/DraftPost";
+import { getJobPostingBySlug, getPublishedJobSlugs } from "@/lib/data/site-content";
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
+// Static, same as tin-tuc/[slug] — see its comment.
+export async function generateStaticParams() {
+  return (await getPublishedJobSlugs()).map((slug) => ({ slug }));
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
-  const [post, locale] = await Promise.all([getJobPostingBySlug(slug), getLocale()]);
-  if (!post) return { title: "Tuyển dụng" };
-
-  const title = pickLocalized(locale, post.title, post.title_en);
-  const excerpt = pickLocalized(locale, post.excerpt, post.excerpt_en);
-
+  const post = await getJobPostingBySlug(slug);
+  if (!post) return { title: "Tuyển dụng", robots: { index: false } };
   return {
-    title,
-    description: excerpt ?? undefined,
+    title: post.title,
+    description: post.excerpt ?? undefined,
     openGraph: {
-      title,
-      description: excerpt ?? undefined,
+      title: post.title,
+      description: post.excerpt ?? undefined,
       images: post.cover_image_url ? [post.cover_image_url] : undefined,
     },
   };
 }
 
-export default async function JobPostingPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function JobPostingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const [post, editorRole] = await Promise.all([getJobPostingBySlug(slug), getContentEditorRole()]);
-  if (!post) notFound();
-
-  return <JobPostingView initialPost={post} canEdit={editorRole !== null} />;
+  const post = await getJobPostingBySlug(slug);
+  if (!post) return <DraftPost kind="job" slug={slug} />;
+  return <JobPostingView initialPost={post} />;
 }

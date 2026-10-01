@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { EditableImage } from "./EditableImage";
 import { useDict } from "@/components/site/LocaleProvider";
+import { useViewer } from "@/components/site/ViewerProvider";
 import { pickLocalized } from "@/lib/i18n";
 import { employmentTypeLabel, EMPLOYMENT_TYPES } from "@/lib/jobPostings";
 import { updateJobPosting } from "@/lib/actions/admin";
@@ -19,7 +20,8 @@ const JobPostingEditDialog = dynamic(
 
 const APPLY_EMAIL = "funtikidbooks.studio@gmail.com";
 
-export function JobPostingView({ initialPost, canEdit }: { initialPost: JobPosting; canEdit: boolean }) {
+export function JobPostingView({ initialPost }: { initialPost: JobPosting }) {
+  const { canEdit } = useViewer();
   const { locale, t } = useDict();
   const [post, setPost] = useState(initialPost);
   const [editing, setEditing] = useState(false);
