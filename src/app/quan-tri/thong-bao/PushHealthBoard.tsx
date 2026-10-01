@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { listPushHealth, sendTestPushTo, type PushHealthPerson } from "@/lib/actions/push";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getPushProbe, listPushHealth, sendTestPushTo, type PushHealthPerson } from "@/lib/actions/push";
 
 type Health = "none" | "error" | "slow" | "unknown" | "stale" | "ok";
 
@@ -34,7 +34,7 @@ const HEALTH: Record<Health, { label: string; color: string; bg: string; rank: n
     bg: "rgba(214,160,40,.12)",
     rank: 3,
     advice:
-      "Máy đã đăng ký thông báo lâu rồi không mở app — có thể đã xoá app hoặc tắt thông báo, nên tin nhắn không tới. Nhắc bạn mở app Funti (hoặc workspace) trên máy đang dùng: thấy thanh 🔔 thì bấm Bật thông báo / Thử lại, rồi bấm Gửi thử ở đây để kiểm tra.",
+      "Máy đã đăng ký thông báo lâu rồi không mở app — có thể đã xoá app hoặc tắt thông báo, nên tin nhắn không tới. Nhắc bạn mở app Funti (hoặc workspace) trên máy đang dùng: thấy thanh 🔔 thì bấm Bật thông báo / Thử lại, rồi bấm Đo tín hiệu ở đây để kiểm tra.",
   },
   unknown: {
     label: "Chờ mở app để kiểm tra",
@@ -89,33 +89,162 @@ function seconds(ms: number) {
   return ms < 1000 ? "dưới 1 giây" : ms < 60_000 ? `${(ms / 1000).toFixed(1).replace(".", ",")} giây` : `${Math.round(ms / 60_000)} phút`;
 }
 
+function sortedIds(people: PushHealthPerson[], now: number) {
+  return people
+    .map((p) => ({ p, h: healthOf(p, now) }))
+    .sort((a, b) => HEALTH[a.h].rank - HEALTH[b.h].rank || a.p.name.localeCompare(b.p.name, "vi"))
+    .map((r) => r.p.id);
+}
+
 function deviceSummary(p: PushHealthPerson) {
   const counts = new Map<string, number>();
   for (const d of p.devices) counts.set(d.device ?? "Máy chưa rõ", (counts.get(d.device ?? "Máy chưa rõ") ?? 0) + 1);
   return [...counts.entries()].map(([name, n]) => (n > 1 ? `${name} ×${n}` : name));
 }
 
+// ---------------------------------------------------------------------------
+// Đo tín hiệu: a test notification to one person's devices, then each
+// device's own "I showed it" report (sw.js → /api/push/ack) is watched for
+// live — the delay is measured on the server's clock from the moment it
+// was sent, so nobody has to be asked "did it show up?".
+// ---------------------------------------------------------------------------
+
+// No report after this long = that device didn't show it (asleep with
+// delivery held back, notifications off, or an app that hasn't updated).
+const PROBE_TIMEOUT_MS = 60_000;
+
+type ProbeDevice = {
+  id: string;
+  name: string;
+  state: "waiting" | "ok" | "silent" | "failed" | "removed";
+  ms?: number;
+  error?: string | null;
+};
+type Probe = { sentAt: string; startedAt: number; devices: ProbeDevice[] };
+
+const probeDone = (p: Probe) => p.devices.every((d) => d.state !== "waiting");
+
+// 4 bars under 2 s, 3 under 5 s, 2 under 15 s, 1 slower, 0 never.
+function barsFor(d: ProbeDevice) {
+  if (d.state !== "ok" || d.ms == null) return 0;
+  return d.ms < 2000 ? 4 : d.ms < 5000 ? 3 : d.ms < SLOW_MS ? 2 : 1;
+}
+const BAR_COLOR = ["var(--color-neutral-300)", "var(--status-red)", "var(--status-yellow)", "var(--status-green)", "var(--status-green)"];
+
+function SignalBars({ level }: { level: number }) {
+  return (
+    <span aria-hidden className="inline-flex flex-none items-end gap-[2px]" style={{ height: 14 }}>
+      {[1, 2, 3, 4].map((i) => (
+        <span key={i} style={{ width: 3.5, height: 2 + i * 3, borderRadius: 1, background: i <= level ? BAR_COLOR[level] : "var(--color-neutral-200)" }} />
+      ))}
+    </span>
+  );
+}
+
+const exactSeconds = (ms: number) => `${(ms / 1000).toFixed(1).replace(".", ",")} giây`;
+const vnTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Ho_Chi_Minh" });
+
+function ProbeResult({ probe, now }: { probe: Probe; now: number }) {
+  const done = probeDone(probe);
+  const sent = probe.devices.filter((d) => d.state !== "failed" && d.state !== "removed");
+  const got = probe.devices.filter((d) => d.state === "ok");
+  const slowest = Math.max(0, ...got.map((d) => d.ms ?? 0));
+  let verdict: { text: string; color: string } | null = null;
+  if (done) {
+    if (got.length === 0) verdict = { text: "Không máy nào báo đã nhận — xem hướng dẫn trên thẻ, rồi đo lại.", color: "var(--status-red)" };
+    else if (got.length < probe.devices.length)
+      verdict = {
+        text: "Có máy chưa nhận: máy đó có thể đang tắt nguồn/mất mạng, chưa cho phép thông báo, hoặc app trên máy chưa cập nhật (nhắc bạn mở app Funti một lần rồi đo lại).",
+        color: "var(--status-red)",
+      };
+    else if (slowest >= SLOW_MS) verdict = { text: "Nhận được nhưng chậm — làm theo hướng dẫn chỉnh máy, rồi đo lại.", color: "var(--status-red)" };
+    else if (slowest >= 5000) verdict = { text: "Nhận được, hơi chậm một chút.", color: "var(--status-yellow)" };
+    else verdict = { text: "✓ Tín hiệu tốt — máy nhận thông báo ngay.", color: "var(--status-green)" };
+  }
+  return (
+    <div className="rounded-[10px] p-2.5 flex flex-col gap-1.5" style={{ background: "var(--color-surface)" }}>
+      <span className="text-[12px] font-bold">
+        Đo lúc {vnTime(probe.sentAt)} · {done ? `${got.length}/${probe.devices.length} máy nhận được` : `đang chờ máy báo lại… ${Math.round((now - probe.startedAt) / 1000)} giây`}
+      </span>
+      <ul className="flex flex-col gap-1">
+        {probe.devices.map((d) => (
+          <li key={d.id} className="flex items-center gap-2 min-w-0 text-[12.5px]">
+            <SignalBars level={barsFor(d)} />
+            <span className="truncate">{d.name}</span>
+            <span
+              className="ml-auto flex-none font-semibold tabular-nums"
+              style={{
+                color:
+                  d.state === "ok"
+                    ? BAR_COLOR[barsFor(d)]
+                    : d.state === "waiting"
+                      ? "var(--color-neutral-500)"
+                      : "var(--status-red)",
+              }}
+            >
+              {d.state === "ok"
+                ? `nhận sau ${exactSeconds(d.ms ?? 0)}`
+                : d.state === "waiting"
+                  ? "đang chờ…"
+                  : d.state === "silent"
+                    ? "không báo lại"
+                    : d.state === "removed"
+                      ? "đã huỷ đăng ký"
+                      : "gửi lỗi"}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {probe.devices
+        .filter((d) => d.state === "failed" && d.error)
+        .slice(0, 1)
+        .map((d) => (
+          <span key={d.id} className="text-[11.5px] break-words" style={{ color: "var(--status-red)" }}>
+            Lỗi: {d.error}
+          </span>
+        ))}
+      {sent.length === 0 && probe.devices.length > 0 && (
+        <span className="text-[12px]" style={{ color: "var(--status-red)" }}>
+          Không gửi được tới máy nào.
+        </span>
+      )}
+      {verdict && (
+        <span className="text-[12px] font-semibold leading-snug" style={{ color: verdict.color }}>
+          {verdict.text}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPerson[] }) {
   const [people, setPeople] = useState(initialPeople);
   const [now, setNow] = useState(() => Date.now());
   const [testing, setTesting] = useState<string | null>(null);
-  const [results, setResults] = useState<Record<string, string>>({});
+  const [sendErrors, setSendErrors] = useState<Record<string, string>>({});
+  const [probes, setProbes] = useState<Record<string, Probe>>({});
   const [refreshing, setRefreshing] = useState(false);
 
-  const rows = useMemo(
-    () =>
-      people
-        .map((p) => ({ p, h: healthOf(p, now) }))
-        .sort((a, b) => HEALTH[a.h].rank - HEALTH[b.h].rank || a.p.name.localeCompare(b.p.name, "vi")),
-    [people, now],
-  );
+  // Worst first — but only re-sorted on open and on ↻ Tải lại, so a card
+  // doesn't jump away (into "Đang nhận") the moment its measurement ends.
+  const [order, setOrder] = useState(() => sortedIds(initialPeople, Date.now()));
+  const rows = useMemo(() => {
+    const pos = new Map(order.map((id, i) => [id, i]));
+    return people
+      .map((p) => ({ p, h: healthOf(p, now) }))
+      .sort((a, b) => (pos.get(a.p.id) ?? 1e9) - (pos.get(b.p.id) ?? 1e9) || a.p.name.localeCompare(b.p.name, "vi"));
+  }, [people, now, order]);
   const counts = rows.reduce<Record<Health, number>>((acc, r) => ({ ...acc, [r.h]: acc[r.h] + 1 }), { none: 0, error: 0, slow: 0, stale: 0, unknown: 0, ok: 0 });
 
-  async function refresh() {
+  async function refresh(resort: boolean) {
     setRefreshing(true);
     try {
-      setPeople(await listPushHealth());
-      setNow(Date.now());
+      const fresh = await listPushHealth();
+      const t = Date.now();
+      setPeople(fresh);
+      setNow(t);
+      if (resort) setOrder(sortedIds(fresh, t));
     } finally {
       setRefreshing(false);
     }
@@ -123,28 +252,91 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
 
   async function test(p: PushHealthPerson) {
     setTesting(p.id);
+    setSendErrors((prev) => {
+      const next = { ...prev };
+      delete next[p.id];
+      return next;
+    });
     try {
-      const res = await sendTestPushTo(p.id);
-      const ok = res.filter((r) => r.ok).length;
-      const removed = res.filter((r) => r.removed).length;
-      const failed = res.filter((r) => !r.ok && !r.removed);
-      setResults((prev) => ({
-        ...prev,
-        [p.id]:
-          res.length === 0
-            ? "Không có máy nào để gửi."
-            : `Đã gửi tới ${ok}/${res.length} máy` +
-              (removed ? ` · gỡ ${removed} máy đã huỷ` : "") +
-              (failed.length ? ` · lỗi: ${failed[0].error}` : "") +
-              (ok ? " — hỏi bạn xem có hiện không." : ""),
-      }));
-      await refresh();
+      const { sentAt, results } = await sendTestPushTo(p.id);
+      // Same-named devices ("Máy chưa rõ" ×3) get a number each.
+      const seen = new Map<string, number>();
+      const devices: ProbeDevice[] = results.map((r) => {
+        const base = r.device ?? "Máy chưa rõ";
+        const n = (seen.get(base) ?? 0) + 1;
+        seen.set(base, n);
+        const name = results.filter((x) => (x.device ?? "Máy chưa rõ") === base).length > 1 ? `${base} (${n})` : base;
+        return { id: r.id, name, state: r.ok ? "waiting" : r.removed ? "removed" : "failed", error: r.error };
+      });
+      if (devices.length === 0) setSendErrors((prev) => ({ ...prev, [p.id]: "Không có máy nào để gửi." }));
+      else setProbes((prev) => ({ ...prev, [p.id]: { sentAt, startedAt: Date.now(), devices } }));
     } catch (err) {
-      setResults((prev) => ({ ...prev, [p.id]: err instanceof Error ? err.message : "Không gửi được" }));
+      setSendErrors((prev) => ({ ...prev, [p.id]: err instanceof Error ? err.message : "Không gửi được" }));
     } finally {
       setTesting(null);
     }
   }
+
+  // Watches every measurement still waiting, all in one request per tick
+  // (server actions run one at a time per page anyway).
+  const probesRef = useRef(probes);
+  useEffect(() => {
+    probesRef.current = probes;
+  }, [probes]);
+  const waitingKey = Object.entries(probes)
+    .filter(([, pr]) => !probeDone(pr))
+    .map(([id, pr]) => `${id}@${pr.sentAt}`)
+    .join(",");
+  useEffect(() => {
+    if (!waitingKey) return;
+    let stopped = false;
+    let busy = false;
+    const timer = setInterval(async () => {
+      setNow(Date.now());
+      if (busy) return;
+      busy = true;
+      try {
+        const active = Object.entries(probesRef.current).filter(([, pr]) => !probeDone(pr));
+        if (active.length === 0) return;
+        const since = active.map(([, pr]) => pr.sentAt).sort()[0];
+        const reports = await getPushProbe(
+          active.map(([id]) => id),
+          since,
+        );
+        if (stopped) return;
+        const deliveredAt = new Map(reports.map((r) => [r.id, r.deliveredAt]));
+        let finished = false;
+        setProbes((prev) => {
+          const next = { ...prev };
+          for (const [id, pr] of Object.entries(prev)) {
+            if (probeDone(pr)) continue;
+            const sentMs = Date.parse(pr.sentAt);
+            const timedOut = Date.now() - pr.startedAt > PROBE_TIMEOUT_MS;
+            const devices = pr.devices.map((d): ProbeDevice => {
+              if (d.state !== "waiting") return d;
+              const at = deliveredAt.get(d.id);
+              if (at && Date.parse(at) >= sentMs) return { ...d, state: "ok", ms: Math.max(0, Date.parse(at) - sentMs) };
+              return timedOut ? { ...d, state: "silent" } : d;
+            });
+            next[id] = { ...pr, devices };
+            if (probeDone(next[id])) finished = true;
+          }
+          return next;
+        });
+        // The card's own numbers ("Hiện trên máy sau") catch up once a measurement ends.
+        if (finished) void refresh(false);
+      } catch {
+        // a missed tick — the next one tries again
+      } finally {
+        busy = false;
+      }
+    }, 1000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+    // Restarts only when the set of waiting measurements changes.
+  }, [waitingKey]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -161,7 +353,7 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
                 {counts[h]} {HEALTH[h].label.toLowerCase()}
               </span>
             ))}
-          <button type="button" className="btn btn-secondary btn-sm" onClick={refresh} disabled={refreshing}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => refresh(true)} disabled={refreshing}>
             {refreshing ? "Đang tải…" : "↻ Tải lại"}
           </button>
         </div>
@@ -171,8 +363,9 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
         <p className="text-sm max-w-[110ch]" style={{ color: "var(--color-neutral-600)" }}>
           Mỗi nhân viên, từng máy: máy đó mở app lần cuối lúc nào, Apple/Google nhận thông báo lần cuối lúc nào, máy hiện thông báo sau bao
           lâu (máy tự báo lại), và lỗi nếu có. Thông báo là
-          bắt buộc — ai chưa bật sẽ thấy thanh nhắc không tắt được trong workspace. Bấm <b>Gửi thử</b> để gửi một thông báo kiểm tra tới
-          các máy của người đó.
+          bắt buộc — ai chưa bật sẽ thấy thanh nhắc không tắt được trong workspace. Bấm <b>📶 Đo tín hiệu</b> để gửi một thông báo kiểm tra
+          tới các máy của người đó: từng máy tự báo lại khi đã hiện, và thẻ cho thấy ngay máy nào nhận được, sau bao nhiêu giây, máy nào
+          chưa nhận — không cần hỏi lại bạn.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3">
@@ -259,13 +452,26 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
                   </p>
                 )}
 
+                {probes[p.id] && <ProbeResult probe={probes[p.id]} now={now} />}
+
                 <div className="flex flex-wrap items-center gap-2 mt-auto pt-1">
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => test(p)} disabled={testing === p.id || p.devices.length === 0}>
-                    {testing === p.id ? "Đang gửi…" : "🔔 Gửi thử"}
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => test(p)}
+                    disabled={testing === p.id || p.devices.length === 0 || (probes[p.id] && !probeDone(probes[p.id]))}
+                  >
+                    {testing === p.id
+                      ? "Đang gửi…"
+                      : probes[p.id] && !probeDone(probes[p.id])
+                        ? "Đang đo…"
+                        : probes[p.id]
+                          ? "📶 Đo lại"
+                          : "📶 Đo tín hiệu"}
                   </button>
-                  {results[p.id] && (
-                    <span className="text-[12px] leading-snug" style={{ color: "var(--color-neutral-700)" }}>
-                      {results[p.id]}
+                  {sendErrors[p.id] && (
+                    <span className="text-[12px] leading-snug" style={{ color: "var(--status-red)" }}>
+                      {sendErrors[p.id]}
                     </span>
                   )}
                 </div>

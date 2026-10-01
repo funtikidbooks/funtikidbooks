@@ -114,15 +114,32 @@ export async function listPushHealth(): Promise<PushHealthPerson[]> {
     }));
 }
 
-// "Gửi thử" beside one person: a test notification to each of their
-// devices, with what each push service answered.
-export async function sendTestPushTo(profileId: string): Promise<PushDeviceResult[]> {
+// "Đo tín hiệu" beside one person: a test notification to each of their
+// devices, with what each push service answered and when it left — the
+// board then watches for each device to report it shown (getPushProbe).
+export async function sendTestPushTo(profileId: string): Promise<{ sentAt: string; results: PushDeviceResult[] }> {
   const { user } = await requireHrManager();
-  return sendPushToUser(profileId, {
+  const sentAt = new Date().toISOString();
+  const results = await sendPushToUser(profileId, {
     title: "Funti Kidbooks Studio · kiểm tra",
     body: "Thông báo thử từ quản lý — thấy tin này là máy bạn đang nhận thông báo tốt.",
     senderId: user.id,
     url: "/workspace",
     tag: "funti-test",
   });
+  return { sentAt, results };
+}
+
+// The devices of these people that reported showing a notification since
+// `since` (sw.js → /api/push/ack), and when the server heard it — the same
+// clock as sendTestPushTo's sentAt, so a phone's own wrong clock can't skew it.
+export async function getPushProbe(profileIds: string[], since: string): Promise<{ id: string; deliveredAt: string }[]> {
+  await requireHrManager();
+  if (profileIds.length === 0 || Number.isNaN(Date.parse(since))) return [];
+  const { data } = await createAdminClient()
+    .from("push_subscriptions")
+    .select("id, last_delivered_at")
+    .in("user_id", profileIds.slice(0, 100))
+    .gte("last_delivered_at", since);
+  return (data ?? []).map((d) => ({ id: d.id as string, deliveredAt: d.last_delivered_at as string }));
 }
