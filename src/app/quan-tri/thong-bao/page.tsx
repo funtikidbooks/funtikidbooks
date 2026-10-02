@@ -15,5 +15,5 @@ export default async function PushHealthPage() {
   if (me?.access_role !== "director" && me?.role !== "Project Manager") redirect("/quan-tri");
 
   const people = await listPushHealth();
-  return <PushHealthBoard initialPeople={people} />;
+  return <PushHealthBoard initialPeople={people} currentUserId={user.id} />;
 }

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPushProbe, listPushHealth, sendTestPushTo, type PushHealthPerson } from "@/lib/actions/push";
+import { inboxTopic, listenChatTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
+import type { NotifyTestAck } from "@/lib/pageNotify";
 
 type Health = "none" | "error" | "slow" | "unknown" | "stale" | "ok";
 
@@ -120,7 +122,19 @@ type ProbeDevice = {
   ms?: number;
   error?: string | null;
 };
-type Probe = { sentAt: string; startedAt: number; devices: ProbeDevice[] };
+type Probe = { probeId: string; sentAt: string; startedAt: number; devices: ProbeDevice[] };
+// An open workspace's answer to the same test (lib/pageNotify.ts): it can
+// raise notifications itself, whatever the push service does.
+type PageAck = NotifyTestAck & { ms: number };
+// How long to wait for an open workspace to answer.
+const PAGE_TIMEOUT_MS = 15_000;
+
+function pageAckText(a: PageAck) {
+  if (a.shown) return `hiện thông báo sau ${exactSeconds(a.ms)}`;
+  if (a.reason === "denied") return "đã chặn thông báo trên trình duyệt";
+  if (a.reason === "default") return "chưa cho phép thông báo";
+  return "không bật được thông báo";
+}
 
 const probeDone = (p: Probe) => p.devices.every((d) => d.state !== "waiting");
 
@@ -145,14 +159,21 @@ const exactSeconds = (ms: number) => `${(ms / 1000).toFixed(1).replace(".", ",")
 const vnTime = (iso: string) =>
   new Date(iso).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Asia/Ho_Chi_Minh" });
 
-function ProbeResult({ probe, now }: { probe: Probe; now: number }) {
+function ProbeResult({ probe, now, pageAcks }: { probe: Probe; now: number; pageAcks: PageAck[] }) {
   const done = probeDone(probe);
   const sent = probe.devices.filter((d) => d.state !== "failed" && d.state !== "removed");
   const got = probe.devices.filter((d) => d.state === "ok");
   const slowest = Math.max(0, ...got.map((d) => d.ms ?? 0));
+  const pageWaiting = pageAcks.length === 0 && now - probe.startedAt < PAGE_TIMEOUT_MS;
+  const pageShown = pageAcks.some((a) => a.shown);
   let verdict: { text: string; color: string } | null = null;
   if (done) {
-    if (got.length === 0) verdict = { text: "Không máy nào báo đã nhận — xem hướng dẫn trên thẻ, rồi đo lại.", color: "var(--status-red)" };
+    if (got.length < probe.devices.length && pageShown)
+      verdict = {
+        text: "Đường thông báo của trình duyệt chưa tới, nhưng Workspace đang mở trên máy vẫn tự hiện thông báo — bạn ấy vẫn nhận được trong lúc mở Workspace.",
+        color: "var(--status-yellow)",
+      };
+    else if (got.length === 0) verdict = { text: "Không máy nào báo đã nhận — xem hướng dẫn trên thẻ, rồi đo lại.", color: "var(--status-red)" };
     else if (got.length < probe.devices.length)
       verdict = {
         text: "Có máy chưa nhận: máy đó có thể đang tắt nguồn/mất mạng, chưa cho phép thông báo, hoặc app trên máy chưa cập nhật (nhắc bạn mở app Funti một lần rồi đo lại).",
@@ -204,6 +225,31 @@ function ProbeResult({ probe, now }: { probe: Probe; now: number }) {
             Lỗi: {d.error}
           </span>
         ))}
+      <div className="flex flex-col gap-1 pt-1.5" style={{ borderTop: "1px dashed var(--color-neutral-200)" }}>
+        <span className="text-[11.5px] font-bold" style={{ color: "var(--color-neutral-600)" }}>
+          Qua Workspace đang mở trên máy
+        </span>
+        {pageAcks.length === 0 ? (
+          <span className="text-[12.5px]" style={{ color: pageWaiting ? "var(--color-neutral-500)" : "var(--status-red)" }}>
+            {pageWaiting ? "đang chờ…" : "Không có Workspace nào đang mở (Chrome đã tắt, hoặc tab bị trình duyệt cho ngủ)."}
+          </span>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {pageAcks.map((a, i) => (
+              <li key={`${a.device}-${i}`} className="flex items-center gap-2 min-w-0 text-[12.5px]">
+                <span aria-hidden>🖥</span>
+                <span className="truncate">
+                  {a.device}
+                  {a.looking ? " · đang xem trang" : ""}
+                </span>
+                <span className="ml-auto flex-none font-semibold tabular-nums" style={{ color: a.shown ? "var(--status-green)" : "var(--status-red)" }}>
+                  {pageAckText(a)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {sent.length === 0 && probe.devices.length > 0 && (
         <span className="text-[12px]" style={{ color: "var(--status-red)" }}>
           Không gửi được tới máy nào.
@@ -218,12 +264,27 @@ function ProbeResult({ probe, now }: { probe: Probe; now: number }) {
   );
 }
 
-export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPerson[] }) {
+export function PushHealthBoard({ initialPeople, currentUserId }: { initialPeople: PushHealthPerson[]; currentUserId: string }) {
   const [people, setPeople] = useState(initialPeople);
   const [now, setNow] = useState(() => Date.now());
   const [testing, setTesting] = useState<string | null>(null);
   const [sendErrors, setSendErrors] = useState<Record<string, string>>({});
   const [probes, setProbes] = useState<Record<string, Probe>>({});
+  // Open workspaces answering a test, by probe id — kept apart from probes
+  // because an answer (~0.1s) can arrive before the push send has returned.
+  const [pageAcks, setPageAcks] = useState<Record<string, PageAck[]>>({});
+  const probeStartRef = useRef(new Map<string, number>());
+  useEffect(
+    () =>
+      listenChatTopic(inboxTopic(currentUserId), (event, payload) => {
+        if (event !== "notify-test-ack") return;
+        const ack = payload as NotifyTestAck;
+        const start = probeStartRef.current.get(ack?.probeId);
+        if (start === undefined) return;
+        setPageAcks((prev) => ({ ...prev, [ack.probeId]: [...(prev[ack.probeId] ?? []), { ...ack, ms: Date.now() - start }] }));
+      }),
+    [currentUserId],
+  );
   const [refreshing, setRefreshing] = useState(false);
 
   // Worst first — but only re-sorted on open and on ↻ Tải lại, so a card
@@ -258,7 +319,12 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
       return next;
     });
     try {
-      const { sentAt, results } = await sendTestPushTo(p.id);
+      // Both ways at once: the push service, and their open workspaces.
+      const probeId = crypto.randomUUID();
+      probeStartRef.current.set(probeId, Date.now());
+      sendChatBroadcast(inboxTopic(p.id), "notify-test", { probeId, from: currentUserId });
+      setTimeout(() => setNow(Date.now()), PAGE_TIMEOUT_MS + 300);
+      const { sentAt, results } = await sendTestPushTo(p.id, probeId);
       // Same-named devices ("Máy chưa rõ" ×3) get a number each.
       const seen = new Map<string, number>();
       const devices: ProbeDevice[] = results.map((r) => {
@@ -269,7 +335,7 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
         return { id: r.id, name, state: r.ok ? "waiting" : r.removed ? "removed" : "failed", error: r.error };
       });
       if (devices.length === 0) setSendErrors((prev) => ({ ...prev, [p.id]: "Không có máy nào để gửi." }));
-      else setProbes((prev) => ({ ...prev, [p.id]: { sentAt, startedAt: Date.now(), devices } }));
+      else setProbes((prev) => ({ ...prev, [p.id]: { probeId, sentAt, startedAt: Date.now(), devices } }));
     } catch (err) {
       setSendErrors((prev) => ({ ...prev, [p.id]: err instanceof Error ? err.message : "Không gửi được" }));
     } finally {
@@ -452,7 +518,7 @@ export function PushHealthBoard({ initialPeople }: { initialPeople: PushHealthPe
                   </p>
                 )}
 
-                {probes[p.id] && <ProbeResult probe={probes[p.id]} now={now} />}
+                {probes[p.id] && <ProbeResult probe={probes[p.id]} now={now} pageAcks={pageAcks[probes[p.id].probeId] ?? []} />}
 
                 <div className="flex flex-wrap items-center gap-2 mt-auto pt-1">
                   <button

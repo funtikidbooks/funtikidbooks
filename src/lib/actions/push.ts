@@ -117,7 +117,9 @@ export async function listPushHealth(): Promise<PushHealthPerson[]> {
 // "Đo tín hiệu" beside one person: a test notification to each of their
 // devices, with what each push service answered and when it left — the
 // board then watches for each device to report it shown (getPushProbe).
-export async function sendTestPushTo(profileId: string): Promise<{ sentAt: string; results: PushDeviceResult[] }> {
+// `probeId`: the same test also goes to their open workspaces (lib/pageNotify.ts);
+// sharing the tag, a device that gets both shows one notification.
+export async function sendTestPushTo(profileId: string, probeId?: string): Promise<{ sentAt: string; results: PushDeviceResult[] }> {
   const { user } = await requireHrManager();
   const sentAt = new Date().toISOString();
   const results = await sendPushToUser(profileId, {
@@ -126,6 +128,7 @@ export async function sendTestPushTo(profileId: string): Promise<{ sentAt: strin
     senderId: user.id,
     url: "/workspace",
     tag: "funti-test",
+    messageId: probeId,
   });
   return { sentAt, results };
 }

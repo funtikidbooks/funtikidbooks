@@ -15,6 +15,9 @@
 // Same tag as the push for that message (sw.js), so when the push does
 // arrive it quietly replaces this one instead of alerting twice.
 
+import { inboxTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
+import { deviceLabel } from "@/lib/pushClient";
+
 export const messageNotificationTag = (messageId: string) => `funti-msg-${messageId}`;
 
 function lookingAtTab() {
@@ -37,6 +40,43 @@ export async function notifyFromPage(opts: { messageId: string; title: string; b
   } catch {
     // The push (if it gets through) still shows it.
   }
+}
+
+// "Đo tín hiệu" (Quản trị → Thông báo trên máy) also checks this path: the
+// board sends "notify-test" to the person's inbox topic; each of their open
+// workspaces raises the test notification right away (same tag as the test
+// push, so a device that gets both shows one) and answers on the board's
+// inbox topic — whether it could, and whether anyone was looking.
+export type NotifyTest = { probeId: string; from: string };
+export type NotifyTestAck = { probeId: string; userId: string; device: string; shown: boolean; reason: string | null; looking: boolean };
+
+export async function answerNotifyTest(test: NotifyTest, meId: string) {
+  if (!test?.probeId || !test.from) return;
+  const looking = lookingAtTab();
+  let shown = false;
+  let reason: string | null = null;
+  if (!("Notification" in window) || !("serviceWorker" in navigator)) reason = "unsupported";
+  else if (Notification.permission !== "granted") reason = Notification.permission; // "default" | "denied"
+  else {
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) reason = "no-sw";
+      else {
+        await reg.showNotification("Funti Kidbooks Studio · kiểm tra", {
+          body: "Thông báo thử từ quản lý — thấy tin này là máy bạn đang nhận thông báo tốt.",
+          icon: "/brand/funti-logo.jpg",
+          badge: "/brand/funti-logo.jpg",
+          tag: messageNotificationTag(test.probeId),
+          data: { url: "/workspace" },
+        });
+        shown = true;
+      }
+    } catch {
+      reason = "error";
+    }
+  }
+  const ack: NotifyTestAck = { probeId: test.probeId, userId: meId, device: deviceLabel(), shown, reason, looking };
+  sendChatBroadcast(inboxTopic(test.from), "notify-test-ack", ack);
 }
 
 // A message taken back before it was saved (lib/chatSyncCursor.ts).

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getUnreadCounts, markConversationRead } from "@/lib/actions/messages";
 import { getUnreadMeetingCounts } from "@/lib/actions/meetings";
 import { playChatDing, unlockChatSound } from "@/lib/chatSound";
-import { closeMessageNotification } from "@/lib/pageNotify";
+import { answerNotifyTest, closeMessageNotification, type NotifyTest } from "@/lib/pageNotify";
 import { firstSighting, inboxTopic, listenChatTopic, roomTopic, sendChatBroadcast, sendDmBroadcast } from "@/lib/chatBroadcast";
 import { startRealtimeWatchdog } from "@/lib/realtimeWatchdog";
 import { insertWithRetry, isMissingColumn, isQueuedThisSession, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
@@ -397,6 +397,8 @@ export function ChatManagerProvider({
     return listenChatTopic(inboxTopic(currentUserId), (event, payload) => {
       if (event === "dm" && (payload as DirectMessage)?.id) handleIncomingDm(payload as DirectMessage);
       if (event === "retract" && (payload as { id?: string })?.id) handleRetract((payload as { id: string }).id);
+      // Quản trị's "Đo tín hiệu" checking this tab can raise notifications.
+      if (event === "notify-test") void answerNotifyTest(payload as NotifyTest, currentUserId);
     });
   }, [currentUserId, handleIncomingDm, handleRetract]);
 
