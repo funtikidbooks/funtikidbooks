@@ -22,6 +22,10 @@ export type PushPayload = {
   senderId: string;
   url?: string;
   tag?: string;
+  // A chat message's id: the notification is tagged with it (sw.js), the
+  // same tag an open workspace uses when it raises the notification itself
+  // (lib/pageNotify.ts) — so the two never alert twice for one message.
+  messageId?: string;
   // Android/desktop keep the notification on screen until it's tapped or
   // dismissed instead of letting it disappear on its own — see sw.js. iOS
   // ignores this and falls back to its own default behavior regardless.

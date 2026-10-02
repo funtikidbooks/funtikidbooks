@@ -53,6 +53,7 @@ export async function prepareMeetingPush(message: MeetingRow): Promise<PreparedP
       senderId: message.sender_id,
       url: `/workspace/hop?room=${message.channel_id}`,
       tag: `funti-channel-${message.channel_id}`,
+      messageId: message.id,
     },
   };
 }
@@ -70,6 +71,7 @@ export async function prepareDirectPush(message: DirectRow): Promise<PreparedPus
       body: bodyFor(message.content ?? "", !!message.attachment_url),
       senderId: message.sender_id,
       url: `/workspace/hop?dm=${message.sender_id}`,
+      messageId: message.id,
     },
   };
 }

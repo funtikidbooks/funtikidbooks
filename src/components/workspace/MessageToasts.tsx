@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { thumbnailUrl } from "@/lib/imageTransform";
+import { notifyFromPage } from "@/lib/pageNotify";
 import { useChatManager, useLiveProfiles, type ChatToast } from "@/components/workspace/ChatManager";
 import type { Profile } from "@/lib/types";
 
@@ -59,6 +60,34 @@ function ToastItem({ toast, sender, onDismiss }: { toast: ChatToast; sender: Pro
       cancelled = true;
     };
   }, [toast.kind, toast.channelId]);
+
+  // Nobody looking at the tab: the system notification too, worded like the
+  // push for the same message (lib/chatPush.ts) — see lib/pageNotify.ts.
+  // Once the room's name is known, or after a moment without it.
+  const notifiedRef = useRef(false);
+  useEffect(() => {
+    if (notifiedRef.current) return;
+    const fire = () => {
+      if (notifiedRef.current) return;
+      notifiedRef.current = true;
+      const name = sender?.display_name ?? "Ai đó";
+      const text = toast.content.trim() || (toast.hasAttachment ? "📎 Đã gửi một tệp đính kèm" : "");
+      const title =
+        toast.kind === "room"
+          ? /(^|\s)@all\b/.test(toast.content)
+            ? `📢 #${room?.name ?? "Phòng họp"} · ${name} đã nhắc tất cả mọi người`
+            : `#${room?.name ?? "Phòng họp"} · ${name}`
+          : name;
+      const url = toast.kind === "room" ? `/workspace/hop?room=${toast.channelId}` : `/workspace/hop?dm=${toast.senderId}`;
+      void notifyFromPage({ messageId: toast.key, title, body: text, url, senderId: toast.senderId });
+    };
+    if (toast.kind === "dm" || room) {
+      fire();
+      return;
+    }
+    const wait = setTimeout(fire, 1500);
+    return () => clearTimeout(wait);
+  }, [room, sender, toast]);
 
   // Auto-dismiss, paused while the pointer is over it so it doesn't vanish
   // mid-read.

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getUnreadCounts, markConversationRead } from "@/lib/actions/messages";
 import { getUnreadMeetingCounts } from "@/lib/actions/meetings";
 import { playChatDing, unlockChatSound } from "@/lib/chatSound";
+import { closeMessageNotification } from "@/lib/pageNotify";
 import { firstSighting, inboxTopic, listenChatTopic, roomTopic, sendChatBroadcast, sendDmBroadcast } from "@/lib/chatBroadcast";
 import { startRealtimeWatchdog } from "@/lib/realtimeWatchdog";
 import { insertWithRetry, isMissingColumn, isQueuedThisSession, loadOutbox, removeFromOutbox } from "@/lib/chatOutbox";
@@ -340,6 +341,7 @@ export function ChatManagerProvider({
       if (!counted) return;
       countedRef.current.delete(id);
       dismissToast(id);
+      void closeMessageNotification(id);
       if (counted.dmSender) {
         const sender = counted.dmSender;
         setUnreadCounts((prev) => ({ ...prev, [sender]: Math.max(0, (prev[sender] ?? 0) - 1) }));

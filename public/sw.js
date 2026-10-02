@@ -91,11 +91,16 @@ function showMessageNotification(title, url, payload) {
       body: payload.body || "",
       icon: "/brand/funti-logo.jpg",
       badge: "/brand/funti-logo.jpg",
-      // Unique per push: a shared tag (one per room/sender) made each new
+      // Unique per message: a shared tag (one per room/sender) made each new
       // message silently *replace* the previous one still sitting on the
       // lock screen — no banner, no sound — so a second message in the same
-      // room could go completely unnoticed. Every message alerts on its own.
-      tag: `${payload.tag || (payload.senderId ? `funti-dm-${payload.senderId}` : "funti-dm")}-${Date.now()}`,
+      // room could go completely unnoticed. A chat message is tagged with
+      // its own id — the tag an open workspace uses when it has already
+      // shown this message itself (lib/pageNotify.ts), so the push then
+      // replaces that one quietly instead of alerting a second time.
+      tag: payload.messageId
+        ? `funti-msg-${payload.messageId}`
+        : `${payload.tag || (payload.senderId ? `funti-dm-${payload.senderId}` : "funti-dm")}-${Date.now()}`,
       // Stays on screen until tapped/dismissed instead of disappearing on
       // its own — used for the "khách hàng nhắn tin" alert so it can't slip
       // by unnoticed the way a routine DM ping might. Android/desktop only;
