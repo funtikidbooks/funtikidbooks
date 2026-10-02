@@ -14,15 +14,20 @@ const shortDateTime = (iso: string) => {
   return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} · ${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 };
 
+// A request's person, or a stand-in if they've since left.
+export function profileLookup(profiles: Profile[]): (id: string) => Profile {
+  const byId = new Map(profiles.map((p) => [p.id, p]));
+  return (id) =>
+    byId.get(id) ?? { id, email: "", display_name: "Nhân viên", avatar_url: null, role: null, joined_at: null, phone: null, address: null, access_role: "staff", theme: null, created_at: "" };
+}
+
 // Quản trị → Chấm công: đơn xin nghỉ waiting on a Giám đốc or PM, then the
 // recent decisions. Approving with or without pay writes those work days
 // onto the attendance board (lib/actions/leave.ts).
 export function LeaveApprovals({ initial, profiles }: { initial: LeaveRequest[]; profiles: Profile[] }) {
   const [requests, setRequests] = useState(initial);
   const [showHistory, setShowHistory] = useState(false);
-  const byId = new Map(profiles.map((p) => [p.id, p]));
-  const profileOf = (id: string): Profile =>
-    byId.get(id) ?? { id, email: "", display_name: "Nhân viên", avatar_url: null, role: null, joined_at: null, phone: null, address: null, access_role: "staff", theme: null, created_at: "" };
+  const profileOf = profileLookup(profiles);
 
   // A new request (or one withdrawn, or decided by the other manager) shows up live.
   useEffect(() => {
@@ -135,7 +140,8 @@ export function LeaveApprovals({ initial, profiles }: { initial: LeaveRequest[];
   );
 }
 
-function PendingLeave({ request: r, profile, onDecided }: { request: LeaveRequest; profile: Profile; onDecided: (saved: LeaveRequest) => void }) {
+// Also in the workspace top bar's "Chờ duyệt" inbox (LeaveTopBar).
+export function PendingLeave({ request: r, profile, onDecided }: { request: LeaveRequest; profile: Profile; onDecided: (saved: LeaveRequest) => void }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -9,7 +9,8 @@ import type { LeaveRequest, LeaveRequestStatus } from "@/lib/types";
 
 // Đơn xin nghỉ on a staff member's own Chấm công page: a card beside the
 // calendar listing their requests, and the form a tap on a future day (or
-// "+ Xin nghỉ") opens. A Giám đốc or PM decides in Quản trị → Chấm công.
+// "+ Xin nghỉ") opens. A Giám đốc or PM decides from the "Chờ duyệt"
+// inbox on the workspace top bar (LeaveTopBar) or Quản trị → Chấm công.
 
 export function LeaveStatusChip({ status }: { status: LeaveRequestStatus }) {
   const st = LEAVE_STATUS[status];
@@ -53,49 +54,56 @@ export function LeaveCard({
             Chưa có đơn xin nghỉ nào.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2">
-            {shown.map((r) => (
-              <li key={r.id} className="rounded-[10px] px-3 py-2.5 flex flex-col gap-1" style={{ background: "var(--color-surface)" }}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[14px] font-bold">{leaveRangeLabel(r)}</span>
-                  <LeaveStatusChip status={r.status} />
-                </div>
-                {r.start_date !== r.end_date && (
-                  <span className="text-[12px]" style={{ color: "var(--color-neutral-600)" }}>
-                    {leaveWorkDays(r.start_date, r.end_date).length} ngày làm việc
-                  </span>
-                )}
-                {r.reason && (
-                  <span className="text-[12.5px]" style={{ color: "var(--color-neutral-600)" }}>
-                    {r.reason}
-                  </span>
-                )}
-                {r.status === "approved" && (
-                  <span className="text-[12.5px] font-semibold" style={{ color: "var(--status-green)" }}>
-                    {leaveOutcome(r)}
-                  </span>
-                )}
-                {r.decision_note && (
-                  <span className="text-[12.5px]" style={{ color: "var(--color-neutral-600)" }}>
-                    Quản lý nhắn: {r.decision_note}
-                  </span>
-                )}
-                {r.status === "pending" && (
-                  <button
-                    type="button"
-                    className="text-[12.5px] font-semibold w-fit hover:underline"
-                    style={{ color: "var(--color-neutral-500)" }}
-                    onClick={() => onCancel(r.id)}
-                  >
-                    Huỷ đơn
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
+          <LeaveList requests={shown} onCancel={onCancel} />
         )}
       </div>
     </section>
+  );
+}
+
+// One row per request — here and in the top bar's "Đơn xin nghỉ của bạn" (LeaveTopBar).
+export function LeaveList({ requests, onCancel }: { requests: LeaveRequest[]; onCancel: (id: string) => void }) {
+  return (
+    <ul className="flex flex-col gap-2">
+      {requests.map((r) => (
+        <li key={r.id} className="rounded-[10px] px-3 py-2.5 flex flex-col gap-1" style={{ background: "var(--color-surface)" }}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[14px] font-bold">{leaveRangeLabel(r)}</span>
+            <LeaveStatusChip status={r.status} />
+          </div>
+          {r.start_date !== r.end_date && (
+            <span className="text-[12px]" style={{ color: "var(--color-neutral-600)" }}>
+              {leaveWorkDays(r.start_date, r.end_date).length} ngày làm việc
+            </span>
+          )}
+          {r.reason && (
+            <span className="text-[12.5px]" style={{ color: "var(--color-neutral-600)" }}>
+              {r.reason}
+            </span>
+          )}
+          {r.status === "approved" && (
+            <span className="text-[12.5px] font-semibold" style={{ color: "var(--status-green)" }}>
+              {leaveOutcome(r)}
+            </span>
+          )}
+          {r.decision_note && (
+            <span className="text-[12.5px]" style={{ color: "var(--color-neutral-600)" }}>
+              Quản lý nhắn: {r.decision_note}
+            </span>
+          )}
+          {r.status === "pending" && (
+            <button
+              type="button"
+              className="text-[12.5px] font-semibold w-fit hover:underline"
+              style={{ color: "var(--color-neutral-500)" }}
+              onClick={() => onCancel(r.id)}
+            >
+              Huỷ đơn
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -14,6 +14,7 @@ import { TabNotificationBadge } from "@/components/workspace/TabNotificationBadg
 import { ThemeSync } from "@/components/workspace/ThemeSync";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
 import { MessengerButton } from "@/components/workspace/MessengerButton";
+import { LeaveTopBar } from "@/components/workspace/LeaveTopBar";
 import { MobileNav } from "@/components/workspace/MobileNav";
 import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
 import { IosInstallHint, PushPermissionBanner, PushSetup } from "@/components/workspace/PushSetup";
@@ -22,6 +23,8 @@ import { getUnreadCounts } from "@/lib/actions/messages";
 import { checkInIfNeeded } from "@/lib/actions/attendance";
 import { countMyPendingDocuments } from "@/lib/actions/documents";
 import { getUnreadClientMessageCount } from "@/lib/actions/clientPortal";
+import { fetchActiveLeave } from "@/lib/leaveActive";
+import { vnToday } from "@/lib/constants/attendance";
 import type { Profile } from "@/lib/types";
 
 // The workspace is an internal tool used mostly through the installed
@@ -60,7 +63,7 @@ export default async function WorkspaceLayout({
   // The unread client-message badge (director/PM only) starts with the rest
   // instead of after them: for anyone else it is refused and simply unused.
   const clientUnreadPromise = getUnreadClientMessageCount().catch(() => 0);
-  const [{ data: profile }, { data: allProfiles }, unreadCounts, pendingDocumentCount] = await Promise.all([
+  const [{ data: profile }, { data: allProfiles }, unreadCounts, pendingDocumentCount, activeLeave] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, theme, created_at")
@@ -72,6 +75,8 @@ export default async function WorkspaceLayout({
       .order("display_name", { ascending: true }),
     getUnreadCounts().catch(() => ({})),
     countMyPendingDocuments().catch(() => 0),
+    // The top bar's đơn xin nghỉ (LeaveTopBar): one's own, or everyone's for a Giám đốc / PM.
+    fetchActiveLeave(supabase, vnToday()).catch(() => []),
   ]);
 
   // Auto-check-in bookkeeping has zero bearing on what this layout renders
@@ -100,7 +105,18 @@ export default async function WorkspaceLayout({
   // (this icon and MobileNav's were both director-only), so they had no
   // way to discover the URL themselves.
   const canOpenAdmin = myProfile.access_role === "director" || myProfile.role === "Project Manager";
-  const initialClientUnreadCount = canOpenAdmin ? await clientUnreadPromise : 0;
+  const isDirector = myProfile.access_role === "director";
+  // Đề nghị ứng lương waiting count joins a Giám đốc's "Chờ duyệt" inbox.
+  const [initialClientUnreadCount, pendingAdvanceCount] = await Promise.all([
+    canOpenAdmin ? clientUnreadPromise : 0,
+    isDirector
+      ? supabase
+          .from("salary_advances")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending")
+          .then(({ count }) => count ?? 0)
+      : 0,
+  ]);
 
   return (
     <ChatManagerProvider currentUserId={user.id} initialUnreadCounts={unreadCounts}>
@@ -141,6 +157,14 @@ export default async function WorkspaceLayout({
                 profiles={(allProfiles ?? []) as Profile[]}
               />
               <div className="flex items-center gap-2">
+                <LeaveTopBar
+                  currentUserId={user.id}
+                  canManage={canOpenAdmin}
+                  isDirector={isDirector}
+                  profiles={(allProfiles ?? []) as Profile[]}
+                  initial={activeLeave}
+                  initialAdvanceCount={pendingAdvanceCount}
+                />
                 <MessengerButton currentUserId={user.id} profiles={(allProfiles ?? []) as Profile[]} />
                 <ProfileMenu profile={myProfile} />
               </div>

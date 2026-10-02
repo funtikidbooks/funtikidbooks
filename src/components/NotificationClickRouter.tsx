@@ -20,6 +20,9 @@ export function NotificationClickRouter() {
       const target = new URL(event.data.url, window.location.origin);
       if (target.origin !== window.location.origin) return;
       event.ports?.[0]?.postMessage("ok");
+      // A đơn xin nghỉ link: the workspace top bar opens its panel in place
+      // (LeaveTopBar listens to this same message) — no need to leave the page.
+      if (target.searchParams.has("don-nghi") && window.location.pathname.startsWith("/workspace")) return;
       const path = `${target.pathname}${target.search}${target.hash}`;
       // Already there: the chat page switches rooms itself off this same
       // message (MeetingHub), no navigation needed.
