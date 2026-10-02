@@ -6,6 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 import { listMyMonthAttendance, listOffDates } from "@/lib/actions/attendance";
 import { MyPayrollPanel } from "@/components/workspace/MyPayrollPanel";
 import { OvertimeBadge } from "@/components/admin/AttendanceEditCellModal";
+import { LeaveCard, LeaveRequestModal } from "@/components/workspace/LeaveRequests";
+import { cancelMyLeave } from "@/lib/actions/leave";
+import { LEAVE_SELECT, datesBetween } from "@/lib/leave";
 import {
   isCalendarOffFor,
   MONTH_LABELS,
@@ -21,21 +24,64 @@ import {
   summarizeAttendance,
   vnToday,
 } from "@/lib/constants/attendance";
-import type { AttendanceEntry } from "@/lib/types";
+import type { AttendanceEntry, LeaveRequest } from "@/lib/types";
 
 export function MyAttendance({
   initialEntries,
   initialOffDates,
   currentUserId,
+  initialLeaveRequests,
   aside,
 }: {
   initialEntries: AttendanceEntry[];
   initialOffDates: string[];
   currentUserId: string;
-  // A column beside the calendar on wide screens (Ứng tiền trước); under
-  // the payslip on phones and iPad.
+  // Đơn xin nghỉ (lib/actions/leave.ts) — their requests; the calendar's
+  // days from today on become tappable to ask for one.
+  initialLeaveRequests?: LeaveRequest[];
+  // A column beside the calendar on wide screens (Xin nghỉ, Ứng tiền
+  // trước); under the payslip on phones and iPad.
   aside?: React.ReactNode;
 }) {
+  const leaveOn = initialLeaveRequests !== undefined;
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(initialLeaveRequests ?? []);
+  const [leaveDraft, setLeaveDraft] = useState<string | null>(null);
+  // A Giám đốc/PM decision (or a request from another device) shows up here.
+  useEffect(() => {
+    if (!leaveOn) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`leave-requests-${currentUserId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests", filter: `profile_id=eq.${currentUserId}` }, async () => {
+        const { data } = await supabase
+          .from("leave_requests")
+          .select(LEAVE_SELECT)
+          .eq("profile_id", currentUserId)
+          .order("start_date", { ascending: false })
+          .limit(50);
+        if (data) setLeaveRequests(data as LeaveRequest[]);
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [leaveOn, currentUserId]);
+  // Days with a request still waiting — marked on the calendar.
+  const pendingLeaveDays = useMemo(() => {
+    const days = new Set<string>();
+    for (const r of leaveRequests) if (r.status === "pending") datesBetween(r.start_date, r.end_date).forEach((d) => days.add(d));
+    return days;
+  }, [leaveRequests]);
+  async function cancelLeave(id: string) {
+    if (!window.confirm("Huỷ đơn xin nghỉ này?")) return;
+    try {
+      const saved = await cancelMyLeave(id);
+      setLeaveRequests((prev) => prev.map((r) => (r.id === id ? saved : r)));
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Chưa huỷ được, thử lại nhé.");
+    }
+  }
+  const hasSide = leaveOn || !!aside;
   const [monthStart, setMonthStart] = useState(() => firstOfMonth(vnToday()));
   const [offDates, setOffDates] = useState(initialOffDates);
   const offDateSet = useMemo(() => new Set(offDates), [offDates]);
@@ -194,7 +240,7 @@ export function MyAttendance({
 
       <div
         className={
-          aside
+          hasSide
             ? "grid gap-5 items-start [grid-template-areas:'stats'_'pay'_'aside'_'cal'] xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)] xl:grid-rows-[auto_auto_1fr] xl:[grid-template-areas:'stats_aside'_'pay_aside'_'cal_aside']"
             : "flex flex-col gap-5"
         }
@@ -222,7 +268,23 @@ export function MyAttendance({
         <MyPayrollPanel monthStart={monthStart} />
       </div>
 
-      {aside && <div className="[grid-area:aside] min-w-0">{aside}</div>}
+      {hasSide && (
+        <div className="[grid-area:aside] min-w-0 flex flex-col gap-5">
+          {leaveOn && <LeaveCard requests={leaveRequests} onNew={() => setLeaveDraft(vnToday())} onCancel={cancelLeave} />}
+          {aside}
+        </div>
+      )}
+      {leaveDraft && (
+        <LeaveRequestModal
+          initialStart={leaveDraft}
+          offDates={offDates}
+          onClose={() => setLeaveDraft(null)}
+          onSaved={(saved) => {
+            setLeaveRequests((prev) => [saved, ...prev.filter((r) => r.id !== saved.id)]);
+            setLeaveDraft(null);
+          }}
+        />
+      )}
 
       <div className="flex flex-col gap-5 [grid-area:cal] min-w-0">
       <div className="flex items-center gap-3">
@@ -267,7 +329,7 @@ export function MyAttendance({
       </div>
 
       {view === "calendar" ? (
-        <div className="card elev-sm p-4" style={{ opacity: loading ? 0.6 : 1, maxWidth: aside ? undefined : 720 }}>
+        <div className="card elev-sm p-4" style={{ opacity: loading ? 0.6 : 1, maxWidth: hasSide ? undefined : 720 }}>
           <div className="grid grid-cols-7 gap-1 mb-1">
             {WEEKDAYS_SHORT.map((w) => (
               <div key={w} className="text-center text-[11px] font-bold py-1" style={{ color: "var(--color-neutral-500)" }}>
@@ -280,20 +342,27 @@ export function MyAttendance({
               const inMonth = isSameMonth(date, monthStart);
               const entry = byDate.get(date);
               const isToday = date === today;
+              const waitingLeave = pendingLeaveDays.has(date) && !entry;
+              const canAskLeave =
+                leaveOn && inMonth && date >= today && isDefaultWorkDay(date) && !offDateSet.has(date) && !entry && !waitingLeave;
               return (
                 <div
                   key={date}
-                  title={entry?.note ?? undefined}
-                  className="flex flex-col items-center justify-center rounded-[8px] py-2 gap-0.5"
+                  title={canAskLeave ? "Bấm để xin nghỉ ngày này" : (entry?.note ?? undefined)}
+                  role={canAskLeave ? "button" : undefined}
+                  tabIndex={canAskLeave ? 0 : undefined}
+                  onClick={canAskLeave ? () => setLeaveDraft(date) : undefined}
+                  onKeyDown={canAskLeave ? (e) => e.key === "Enter" && setLeaveDraft(date) : undefined}
+                  className={`flex flex-col items-center justify-center rounded-[8px] py-2 gap-0.5 ${canAskLeave ? "cursor-pointer hover:bg-[var(--color-surface)]" : ""}`}
                   style={{
-                    background: isToday ? "var(--color-accent-100)" : "transparent",
+                    background: isToday ? "var(--color-accent-100)" : waitingLeave ? "rgba(214,160,40,.12)" : undefined,
                     opacity: inMonth ? 1 : 0.3,
                     minHeight: 54,
                   }}
                 >
                   <span className="text-[11px] font-semibold">{Number(date.slice(8, 10))}</span>
                   <span className="text-[10px] font-bold text-center" style={{ lineHeight: 1.3 }}>
-                    {dayBadge(date, entry, inMonth)}
+                    {waitingLeave ? <span style={{ color: "var(--status-yellow)" }}>Chờ duyệt</span> : dayBadge(date, entry, inMonth)}
                   </span>
                 </div>
               );
@@ -301,7 +370,7 @@ export function MyAttendance({
           </div>
         </div>
       ) : (
-        <div className="card elev-sm overflow-x-auto" style={{ opacity: loading ? 0.6 : 1, maxWidth: aside ? undefined : 720 }}>
+        <div className="card elev-sm overflow-x-auto" style={{ opacity: loading ? 0.6 : 1, maxWidth: hasSide ? undefined : 720 }}>
           <table className="w-full text-[13px]" style={{ borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>

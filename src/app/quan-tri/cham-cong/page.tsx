@@ -6,6 +6,8 @@ import { AttendanceBoard } from "@/components/admin/AttendanceBoard";
 import { ClockPanel } from "@/components/admin/ClockPanel";
 import { SalaryAdvanceApprovals } from "@/components/admin/SalaryAdvanceApprovals";
 import { listAdvancesForDirectors } from "@/lib/actions/salaryAdvances";
+import { listLeaveForManagers } from "@/lib/actions/leave";
+import { LeaveApprovals } from "@/components/admin/LeaveApprovals";
 import { firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import type { Profile } from "@/lib/types";
 
@@ -34,7 +36,7 @@ export default async function AdminAttendancePage() {
   // Ứng tiền trước is the Giám đốc's alone — a PM opening this page gets
   // the attendance board without it.
   const isDirector = profile?.access_role === "director";
-  const [entries, offDates, { data: profiles }, advances] = await Promise.all([
+  const [entries, offDates, { data: profiles }, advances, leaveRequests] = await Promise.all([
     listAllAttendance(),
     listOffDates(),
     supabase
@@ -42,6 +44,8 @@ export default async function AdminAttendancePage() {
       .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
       .order("display_name", { ascending: true }),
     isDirector ? listAdvancesForDirectors() : null,
+    // Giám đốc and PM both decide đơn xin nghỉ.
+    listLeaveForManagers(),
   ]);
 
   // Everyone — the owner can ask for an advance too, so the requests list
@@ -53,6 +57,7 @@ export default async function AdminAttendancePage() {
       initialEntries={entries}
       initialOffDates={offDates}
       staff={staff}
+      leave={<LeaveApprovals initial={leaveRequests} profiles={everyone} />}
       advances={advances ? <SalaryAdvanceApprovals initial={advances} profiles={everyone} currentMonth={firstOfMonth(vnToday())} /> : undefined}
       clock={<ClockPanel staff={staff} />}
     />

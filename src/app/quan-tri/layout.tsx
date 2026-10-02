@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/supabase/server";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { listPendingPayrollFeedbackIds } from "@/lib/actions/payroll";
 import { listPendingAdvanceIds } from "@/lib/actions/salaryAdvances";
+import { listPendingLeaveIds } from "@/lib/actions/leave";
 
 export default async function AdminLayout({
   children,
@@ -38,9 +39,10 @@ export default async function AdminLayout({
   }
 
   const isDirector = profile.access_role === "director";
-  const [initialPendingPayrollFeedbackIds, initialPendingAdvanceIds] = await Promise.all([
+  const [initialPendingPayrollFeedbackIds, initialPendingAdvanceIds, initialPendingLeaveIds] = await Promise.all([
     isDirector || isProjectManager ? listPendingPayrollFeedbackIds() : [],
     isDirector ? listPendingAdvanceIds() : [],
+    isDirector || isProjectManager ? listPendingLeaveIds() : [],
   ]);
 
   return (
@@ -54,6 +56,7 @@ export default async function AdminLayout({
         }}
         initialPendingPayrollFeedbackIds={initialPendingPayrollFeedbackIds}
         initialPendingAdvanceIds={initialPendingAdvanceIds}
+        initialPendingLeaveIds={initialPendingLeaveIds}
       />
       <div className="flex-1 flex flex-col min-w-0">{children}</div>
     </div>

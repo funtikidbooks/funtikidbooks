@@ -594,6 +594,22 @@ export type PayrollItem = {
   amount: number; // positive = allowance/bonus, negative = deduction
 };
 
+// Đơn xin nghỉ — see supabase/migrations/leave_requests.sql.
+export type LeaveRequestStatus = "pending" | "approved" | "rejected" | "cancelled";
+export type LeaveRequest = {
+  id: string;
+  profile_id: string;
+  start_date: string; // "YYYY-MM-DD"
+  end_date: string;
+  half_day: boolean;
+  reason: string | null;
+  status: LeaveRequestStatus;
+  paid: boolean | null; // decided on approval
+  decision_note: string | null;
+  decided_at: string | null;
+  requested_at: string;
+};
+
 // Ứng tiền trước — see supabase/migrations/salary_advances.sql.
 export type SalaryAdvanceStatus = "pending" | "approved" | "rejected" | "cancelled";
 export type SalaryAdvance = {
@@ -1382,6 +1398,12 @@ export type Database = {
         Row: StaffSalary;
         Insert: Partial<StaffSalary> & { profile_id: string };
         Update: Partial<StaffSalary>;
+        Relationships: [];
+      };
+      leave_requests: {
+        Row: LeaveRequest;
+        Insert: { profile_id: string; start_date: string; end_date: string; half_day?: boolean; reason?: string | null };
+        Update: Partial<Pick<LeaveRequest, "status" | "paid" | "decision_note" | "decided_at">> & { decided_by?: string };
         Relationships: [];
       };
       salary_advances: {

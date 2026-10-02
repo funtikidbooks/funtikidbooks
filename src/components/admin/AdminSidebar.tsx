@@ -90,11 +90,14 @@ export function AdminSidebar({
   user,
   initialPendingPayrollFeedbackIds,
   initialPendingAdvanceIds,
+  initialPendingLeaveIds,
 }: {
   user: { displayName: string; email: string; accessRole: AccessRole; jobTitle: string | null };
   initialPendingPayrollFeedbackIds: string[];
   // Ứng tiền trước requests waiting on a Giám đốc (empty for anyone else).
   initialPendingAdvanceIds: string[];
+  // Đơn xin nghỉ waiting on a Giám đốc or PM.
+  initialPendingLeaveIds: string[];
 }) {
   const pathname = usePathname();
   const isDirector = user.accessRole === "director";
@@ -156,11 +159,38 @@ export function AdminSidebar({
     };
   }, [isDirector]);
 
+  // And for đơn xin nghỉ — Giám đốc and PM both decide those.
+  const [pendingLeaveIds, setPendingLeaveIds] = useState<Set<string>>(() => new Set(initialPendingLeaveIds));
+  useEffect(() => {
+    if (!isDirector && !isProjectManager) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel("sidebar-leave-requests-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "leave_requests" }, (payload) => {
+        const isDelete = payload.eventType === "DELETE";
+        const row = (isDelete ? payload.old : payload.new) as { id: string; status: string };
+        setPendingLeaveIds((prev) => {
+          const next = new Set(prev);
+          if (isDelete || row.status !== "pending") next.delete(row.id);
+          else next.add(row.id);
+          return next;
+        });
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isDirector, isProjectManager]);
+
   // Which pages have something waiting — a red dot on the page and on its
   // group, so it shows even while the group is folded.
   const waiting: Record<string, string> = {};
   if (hasPendingPayrollFeedback) waiting["/quan-tri/bang-luong"] = "Có thắc mắc lương chưa xử lý";
-  if (pendingAdvanceIds.size > 0) waiting["/quan-tri/cham-cong"] = `${pendingAdvanceIds.size} yêu cầu ứng tiền chờ duyệt`;
+  const chamCongWaiting = [
+    pendingLeaveIds.size > 0 ? `${pendingLeaveIds.size} đơn xin nghỉ` : null,
+    pendingAdvanceIds.size > 0 ? `${pendingAdvanceIds.size} yêu cầu ứng tiền` : null,
+  ].filter(Boolean);
+  if (chamCongWaiting.length > 0) waiting["/quan-tri/cham-cong"] = `${chamCongWaiting.join(", ")} chờ duyệt`;
   const anyWaiting = Object.keys(waiting).length > 0;
 
   const isAdmin = user.accessRole === "admin";
