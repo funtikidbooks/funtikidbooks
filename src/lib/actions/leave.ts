@@ -3,13 +3,15 @@
 import { after } from "next/server";
 import { requireUser } from "@/lib/supabase/server";
 import { addDays, firstOfMonth, toVnDateString, vnToday } from "@/lib/constants/attendance";
-import { sendPushToUser, sendPushToUsers } from "@/lib/push";
+import { sendPushToUsers } from "@/lib/push";
+import { pushChatMessageOnce } from "@/lib/chatPushOnce";
 import { syncPayrollForAttendanceChange } from "@/lib/payrollSync";
-import { LEAVE_MAX_DAYS, LEAVE_SELECT, leaveRangeLabel, leaveWorkDays } from "@/lib/leave";
+import { LEAVE_MAX_DAYS, LEAVE_SELECT, leaveOutcome, leaveRangeLabel, leaveWorkDays } from "@/lib/leave";
 import type { AttendanceEntry, LeaveRequest } from "@/lib/types";
 
-// Đơn xin nghỉ (supabase/migrations/leave_requests.sql). Notifications say
-// who and when, never the reason — a lock screen is often in plain view.
+// Đơn xin nghỉ (supabase/migrations/leave_requests.sql). A request, its
+// withdrawal and the decision each go out as a chat message (Riêng) between
+// the staff member and the Giám đốc / PM — notified like any message.
 
 type Supabase = Awaited<ReturnType<typeof requireUser>>["supabase"];
 
@@ -63,24 +65,47 @@ export async function requestLeave(input: { start: string; end: string; halfDay:
   if (error || !data) throw new Error("Chưa gửi được đơn, bạn thử lại nhé.");
   const saved = data as LeaveRequest;
 
+  // A message from them to every Giám đốc and PM, in the chat (Riêng) —
+  // with its own notification like any message (sếp Phúc: "phải thông báo
+  // lên tin nhắn cho giám đốc và pm thấy").
+  const days = leaveWorkDays(saved.start_date, saved.end_date).length;
+  const text = [
+    `🗓 Em xin nghỉ ${leaveRangeLabel(saved)}${saved.half_day ? "" : ` (${days} ngày làm việc)`}.`,
+    saved.reason ? `Lý do: ${saved.reason}` : null,
+    `Duyệt đơn tại Quản trị › Chấm công: ${SITE}/quan-tri/cham-cong`,
+  ]
+    .filter(Boolean)
+    .join("\n");
   after(async () => {
-    const [{ data: me }, { data: managers }] = await Promise.all([
-      supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
-      supabase.from("profiles").select("id").or("access_role.eq.director,role.eq.Project Manager"),
-    ]);
-    await sendPushToUsers(
-      (managers ?? []).map((m) => m.id as string).filter((id) => id !== user.id),
-      {
-        title: "🗓 Đơn xin nghỉ mới",
-        body: `${me?.display_name ?? "Một bạn"} xin nghỉ ${leaveRangeLabel(saved)}. Bấm để duyệt.`,
-        senderId: user.id,
-        url: "/quan-tri/cham-cong",
-        tag: `funti-leave-${saved.id}`,
-      },
-    ).catch(() => {});
+    const managers = await managerIds(supabase);
+    await messageFrom(supabase, user.id, managers, text);
   });
 
   return saved;
+}
+
+const SITE = "https://funtikidbooks.com";
+
+// Every Giám đốc and PM.
+async function managerIds(supabase: Supabase): Promise<string[]> {
+  const { data } = await supabase.from("profiles").select("id").or("access_role.eq.director,role.eq.Project Manager");
+  return (data ?? []).map((m) => m.id as string);
+}
+
+// A chat message (Riêng) from `senderId` to each recipient, notified like
+// any other message. Falls back to a plain push if it can't be saved.
+async function messageFrom(supabase: Supabase, senderId: string, recipientIds: string[], content: string) {
+  const to = [...new Set(recipientIds)].filter((id) => id !== senderId);
+  if (to.length === 0) return;
+  const { data, error } = await supabase
+    .from("direct_messages")
+    .insert(to.map((recipient_id) => ({ sender_id: senderId, recipient_id, content })))
+    .select("id");
+  if (error || !data) {
+    await sendPushToUsers(to, { title: "🗓 Đơn xin nghỉ", body: content.split("\n")[0], senderId, url: "/workspace/hop" }).catch(() => {});
+    return;
+  }
+  await Promise.all(data.map((m) => pushChatMessageOnce("dm", m.id as string).catch(() => {})));
 }
 
 export async function cancelMyLeave(id: string): Promise<LeaveRequest> {
@@ -94,7 +119,10 @@ export async function cancelMyLeave(id: string): Promise<LeaveRequest> {
     .select(LEAVE_SELECT)
     .maybeSingle();
   if (error || !data) throw new Error("Đơn này đã được xử lý nên không huỷ được nữa.");
-  return data as LeaveRequest;
+  const saved = data as LeaveRequest;
+  // The managers saw the request in their chat — tell them it's withdrawn there too.
+  after(async () => messageFrom(supabase, user.id, await managerIds(supabase), `↩️ Em đã huỷ đơn xin nghỉ ${leaveRangeLabel(saved)}.`));
+  return saved;
 }
 
 // Quản trị → Chấm công: everything waiting, plus the last two months' decisions.
@@ -166,18 +194,16 @@ export async function decideLeave(id: string, decision: { approve: boolean; paid
     }
   }
 
-  after(() =>
-    sendPushToUser(saved.profile_id, {
-      title: saved.status === "approved" ? "✓ Đơn xin nghỉ đã được duyệt" : "Đơn xin nghỉ chưa được duyệt",
-      body: `${leaveRangeLabel(saved)} — mở Chấm công để xem chi tiết.`,
-      senderId: user.id,
-      url: "/workspace/cham-cong",
-      tag: `funti-leave-${saved.id}`,
-    }).then(
-      () => {},
-      () => {},
-    ),
-  );
+  // The answer goes back in the same chat the request came in on.
+  const reply = [
+    saved.status === "approved"
+      ? `✓ Đã duyệt đơn xin nghỉ ${leaveRangeLabel(saved)} — ${leaveOutcome(saved)}.`
+      : `Đơn xin nghỉ ${leaveRangeLabel(saved)} chưa được duyệt.`,
+    note,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  after(() => messageFrom(supabase, user.id, [saved.profile_id], reply));
 
   return saved;
 }

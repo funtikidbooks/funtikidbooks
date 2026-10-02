@@ -378,6 +378,28 @@ test("báo giá: các đợt thanh toán tính theo tổng từng mức, cộng 
   assert.ok(text.includes("Các đợt thanh toán:\n1. Đặt cọc khi bắt đầu (50%): Cơ bản 500.000 ₫ · Chi tiết 1.000.000 ₫"));
 });
 
+test("ngày nghỉ đã duyệt: quẹt vân tay vẫn là nghỉ; đếm ngày nghỉ bỏ qua Chủ nhật và ngày nghỉ chung", async () => {
+  const { planScan } = await import("../src/lib/clockMath.ts");
+  const { leaveWorkDays, leaveRangeLabel } = await import("../src/lib/leave.ts");
+  const at = (hhmm, d = "2026-10-05") => new Date(`${d}T${hhmm}:00+07:00`);
+  // An approved leave day (written by decideLeave, no check-in) — the person comes in and touches the machine anyway.
+  for (const status of ["leave", "paid_leave", "half_day"]) {
+    const row = { id: "x", status, check_in_at: null, check_in_source: null, check_out_at: null };
+    const plan = planScan(row, at("09:01"));
+    assert.equal(plan.patch.status, status, `${status} stays ${status} after a scan`);
+    // …and the day still counts as leave, not as a ngày công worked.
+    const scanned = { work_date: "2026-10-05", status, check_in_at: plan.patch.check_in_at };
+    const s = summarizeAttendance([scanned]);
+    assert.equal(s.present, status === "paid_leave" ? 1 : status === "half_day" ? 0.5 : 0);
+  }
+  // 2026-10-03 (Sat) → 2026-10-07 (Wed): Sunday the 4th dropped, and a company day off on the 6th.
+  assert.deepEqual(leaveWorkDays("2026-10-03", "2026-10-07"), ["2026-10-03", "2026-10-05", "2026-10-06", "2026-10-07"]);
+  assert.deepEqual(leaveWorkDays("2026-10-03", "2026-10-07", ["2026-10-06"]), ["2026-10-03", "2026-10-05", "2026-10-07"]);
+  assert.deepEqual(leaveWorkDays("2026-10-04", "2026-10-04"), []); // a Sunday alone takes nothing off
+  assert.equal(leaveRangeLabel({ start_date: "2026-10-05", end_date: "2026-10-05", half_day: true }), "Thứ Hai 05/10 · nửa ngày");
+  assert.equal(leaveRangeLabel({ start_date: "2026-10-05", end_date: "2026-10-09", half_day: false }), "05/10 – 09/10");
+});
+
 test("máy chấm công vân tay: vào, về, chạm lại, giờ web bị thay, quét bù khi mất mạng", async () => {
   const { planScan, scanTime, lateMinutes, screenFor, asciiFold, vnDate } = await import("../src/lib/clockMath.ts");
   const at = (hhmm, day = "2026-09-29") => new Date(`${day}T${hhmm}:00+07:00`);

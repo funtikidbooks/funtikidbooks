@@ -1,5 +1,15 @@
-import { addDays, isDefaultWorkDay, weekdayIndex } from "@/lib/constants/attendance";
 import type { LeaveRequest, LeaveRequestStatus } from "@/lib/types";
+
+// No runtime imports, so tests/calculations.test.mjs can load this in plain
+// Node. Same calendar as lib/constants/attendance.ts: Monday = 0, and
+// every day but Sunday is a work day (isDefaultWorkDay).
+const nextDay = (date: string) => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+const weekdayIndex = (date: string) => (new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7;
+const isDefaultWorkDay = (date: string) => weekdayIndex(date) !== 6;
 
 // Đơn xin nghỉ — shared by the staff calendar, the Quản trị list and the
 // server actions (supabase/migrations/leave_requests.sql).
@@ -18,7 +28,7 @@ export const LEAVE_STATUS: Record<LeaveRequestStatus, { label: string; color: st
 // Every calendar day from start to end, inclusive.
 export function datesBetween(start: string, end: string): string[] {
   const out: string[] = [];
-  for (let d = start; d <= end && out.length <= LEAVE_MAX_DAYS; d = addDays(d, 1)) out.push(d);
+  for (let d = start; d <= end && out.length <= LEAVE_MAX_DAYS; d = nextDay(d)) out.push(d);
   return out;
 }
 
