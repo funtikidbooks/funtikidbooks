@@ -43,18 +43,24 @@ export function TeamOnlineBadge({
   );
 
   return (
-    <div ref={rootRef} className="relative flex-none">
+    // The one thing on the top bar allowed to give up width: when the right
+    // side gets crowded (an iPad in portrait, beside the sidebar, with a đơn
+    // xin nghỉ chip and the 📥 inbox) "thành viên online" trails off instead
+    // of pushing Hồ sơ off the screen.
+    <div ref={rootRef} className="relative min-w-[4.75rem]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold flex-none"
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold max-w-full min-w-0 whitespace-nowrap"
         style={{ background: "var(--color-neutral-100)", color: "var(--color-neutral-700)" }}
         aria-label="Xem ai đang online"
         title="Xem ai đang online"
       >
         <span aria-hidden>👥</span>
-        {onlineIds.size}/{totalMembers}
-        <span className="hidden sm:inline"> thành viên online</span>
+        <span className="flex-none">
+          {onlineIds.size}/{totalMembers}
+        </span>
+        <span className="hidden sm:inline truncate">thành viên online</span>
       </button>
 
       {open && (

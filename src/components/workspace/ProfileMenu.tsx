@@ -31,7 +31,7 @@ export function ProfileMenu({ profile }: { profile: Profile }) {
             profile.display_name.charAt(0).toUpperCase()
           )}
         </span>
-        <span className="text-[13px] font-bold hidden sm:inline">Hồ sơ</span>
+        <span className="text-[13px] font-bold hidden sm:inline whitespace-nowrap">Hồ sơ</span>
       </button>
       {open && <ProfileDialog profile={profile} onClose={() => setOpen(false)} />}
     </>

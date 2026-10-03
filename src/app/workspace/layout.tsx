@@ -156,7 +156,8 @@ export default async function WorkspaceLayout({
                 totalMembers={(allProfiles ?? []).length}
                 profiles={(allProfiles ?? []) as Profile[]}
               />
-              <div className="flex items-center gap-2">
+              {/* Never shrinks: when the bar is crowded, TeamOnlineBadge gives way. */}
+              <div className="flex-none flex items-center gap-2">
                 <LeaveTopBar
                   currentUserId={user.id}
                   canManage={canOpenAdmin}

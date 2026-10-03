@@ -194,8 +194,16 @@ export function Sidebar({
   }
 
   return (
+    // Never taller than the screen: on an iPad in landscape (Safari's bars
+    // and the notification banners take another 100px or so) the opened
+    // groups made the menu longer than the screen, and the shell's
+    // overflow-hidden cut the bottom off — Vào Quản trị, Đăng xuất — with no
+    // way to scroll to it. The list scrolls now; Quản trị and the account
+    // block stay pinned at the bottom — except on a very short screen (a
+    // phone on its side), where the pinned block would leave the list a
+    // sliver, so the whole column scrolls instead.
     <aside
-      className="w-[220px] flex-none hidden md:flex flex-col gap-6 px-3.5 py-5"
+      className="w-[220px] flex-none min-h-0 hidden md:flex flex-col gap-5 px-3.5 py-5 [@media(max-height:480px)]:overflow-y-auto"
       style={{ background: "var(--color-bg)", borderRight: "1px solid var(--color-neutral-200)" }}
     >
       <Link href="/" className="flex items-center gap-2 px-1">
@@ -209,7 +217,7 @@ export function Sidebar({
         <span className="font-heading font-bold text-sm">Funti Kidbooks</span>
       </Link>
 
-      <div className="flex flex-col gap-1">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col gap-1 -mx-1 px-1 [@media(max-height:480px)]:flex-none [@media(max-height:480px)]:overflow-visible">
         <div
           className="text-[11px] font-bold tracking-[0.08em] px-2 mb-1"
           style={{ color: "var(--color-neutral-500)" }}
@@ -256,19 +264,18 @@ export function Sidebar({
             </div>
           );
         })}
+      </div>
 
+      <div className="flex-none flex flex-col gap-3">
         {canOpenAdmin && (
           <Link
             href="/quan-tri"
-            className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-[10px] text-[13px] font-bold mt-3"
+            className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-[10px] text-[13px] font-bold"
             style={{ background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
           >
             🛠 Vào Quản trị →
           </Link>
         )}
-      </div>
-
-      <div className="mt-auto flex flex-col gap-3">
         <InstallAppButton />
         <ThemeToggle />
         <div className="flex items-center gap-2 px-2">

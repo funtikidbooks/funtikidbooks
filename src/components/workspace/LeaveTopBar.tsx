@@ -200,7 +200,10 @@ export function LeaveTopBar({
           title="Đơn xin nghỉ của bạn"
         >
           <span aria-hidden>🗓</span>
-          {chip.status && <span className="hidden md:inline font-semibold">{leaveRangeLabel(chip.request)} ·</span>}
+          {/* The day sets it apart from the 📥 "Chờ duyệt" inbox beside it; the
+              full range only from xl, where the 220px sidebar leaves room. */}
+          {chip.status && <span className="hidden sm:inline xl:hidden font-semibold">{dayMonth(chip.request.start_date)} ·</span>}
+          {chip.status && <span className="hidden xl:inline font-semibold">{leaveRangeLabel(chip.request)} ·</span>}
           <span>{chip.text}</span>
           {chip.isNew && <RedDot />}
         </button>
@@ -222,7 +225,8 @@ export function LeaveTopBar({
           <span aria-hidden>📥</span>
           {waitingCount > 0 && (
             <>
-              <span className="hidden sm:inline text-[12.5px] font-bold whitespace-nowrap">Chờ duyệt</span>
+              {/* Not beside the sidebar on an iPad in portrait (md–lg): no room. */}
+              <span className="hidden sm:inline md:hidden lg:inline text-[12.5px] font-bold whitespace-nowrap">Chờ duyệt</span>
               <CountBadge n={waitingCount} />
             </>
           )}
