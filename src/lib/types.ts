@@ -1400,6 +1400,13 @@ export type Database = {
         Update: Partial<StaffSalary>;
         Relationships: [];
       };
+      // supabase/migrations/push_device_state.sql — server (service role) only.
+      push_device_state: {
+        Row: { profile_id: string; device: string; status: string; user_agent: string | null; updated_at: string };
+        Insert: { profile_id: string; device: string; status: string; user_agent?: string | null; updated_at?: string };
+        Update: Partial<{ status: string; user_agent: string | null; updated_at: string }>;
+        Relationships: [];
+      };
       leave_requests: {
         Row: LeaveRequest;
         Insert: { profile_id: string; start_date: string; end_date: string; half_day?: boolean; reason?: string | null };

@@ -77,7 +77,7 @@ export function getPushStatus(): PushStatus {
 // path uses it, because Chrome quietly suppresses permission prompts that
 // don't come from a click (and can auto-block the site after a few), which
 // is how some staff machines ended up never subscribed at all. The real
-// prompt only happens from a button (PushPermissionBanner / ProfileMenu).
+// prompt only happens from a button (PushGate / ProfileMenu).
 // The silent run happens from more than one place on a page load (PushSetup,
 // the banner) — they share one attempt instead of signing up twice at once.
 let silentRun: Promise<PushStatus> | null = null;
@@ -118,7 +118,17 @@ async function signUp(prompt: boolean): Promise<PushStatus> {
 
     const json = subscription.toJSON();
     if (json.endpoint && json.keys?.p256dh && json.keys?.auth) {
-      await savePushSubscription({ endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } }, deviceLabel());
+      const sub = { endpoint: json.endpoint, keys: { p256dh: json.keys.p256dh, auth: json.keys.auth } };
+      // The device is signed up; only telling the server can hit a dead
+      // moment of network ("Load failed" on a just-woken iPhone). Try again
+      // shortly, and if that fails too keep "granted" — it was saved on an
+      // earlier open, and the next open saves it again.
+      await savePushSubscription(sub, deviceLabel()).catch(async () => {
+        await new Promise((r) => setTimeout(r, 2000));
+        await savePushSubscription(sub, deviceLabel()).catch((err) =>
+          reportClientError(`Push save failed (${deviceLabel()}): ${err instanceof Error ? `${err.name}: ${err.message}` : String(err)}`),
+        );
+      });
     }
     return "granted";
   } catch (err) {

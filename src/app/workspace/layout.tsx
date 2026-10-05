@@ -17,7 +17,7 @@ import { MessengerButton } from "@/components/workspace/MessengerButton";
 import { LeaveTopBar } from "@/components/workspace/LeaveTopBar";
 import { MobileNav } from "@/components/workspace/MobileNav";
 import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
-import { IosInstallHint, PushPermissionBanner, PushSetup } from "@/components/workspace/PushSetup";
+import { PushGate, PushSetup } from "@/components/workspace/PushSetup";
 import { AutoReloadWatchdog } from "@/components/workspace/AutoReloadWatchdog";
 import { getUnreadCounts } from "@/lib/actions/messages";
 import { checkInIfNeeded } from "@/lib/actions/attendance";
@@ -134,8 +134,7 @@ export default async function WorkspaceLayout({
           an inner `flex-1 min-h-0` + `overflow-y-auto` region, so nothing
           needs body-level scroll — the bottom nav now truly can't move. */}
       <div className="flex flex-col h-[100dvh] overflow-hidden" style={{ background: "var(--color-bg)" }}>
-        <IosInstallHint />
-        <PushPermissionBanner />
+        <PushGate />
         <div className="flex flex-1 min-h-0">
           <Sidebar
             user={{

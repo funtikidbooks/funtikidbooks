@@ -36,6 +36,22 @@ export async function replacePushSubscription(oldEndpoint: string | null, sub: S
   await savePushSubscription(sub, device);
 }
 
+// The device this person just opened the workspace on, and whether it can
+// get notifications (push_device_state.sql) — so Quản trị sees a device that
+// never signed up, not only the ones that did. Before that SQL runs the
+// table is missing and this does nothing.
+const PUSH_STATES = new Set(["granted", "needs-ios-install", "denied", "default", "failed", "unsupported"]);
+export async function reportPushState(device: string, status: string, userAgent: string) {
+  const { user } = await requireUser();
+  if (!PUSH_STATES.has(status)) return;
+  await createAdminClient()
+    .from("push_device_state")
+    .upsert(
+      { profile_id: user.id, device: device.slice(0, 60), status, user_agent: userAgent.slice(0, 300), updated_at: new Date().toISOString() },
+      { onConflict: "profile_id,device" },
+    );
+}
+
 export async function deletePushSubscription(endpoint: string) {
   const { supabase } = await requireUser();
   await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
@@ -80,15 +96,29 @@ export type PushHealthPerson = {
     PushSubscriptionRow,
     "id" | "device" | "created_at" | "last_seen_at" | "last_ok_at" | "last_error_at" | "last_error" | "last_delivered_at" | "last_delivery_ms"
   >[];
+  // Every device they've opened the workspace on lately, signed up or not.
+  states: { device: string; status: string; updatedAt: string }[];
 };
 
 export async function listPushHealth(): Promise<PushHealthPerson[]> {
   await requireHrManager();
   const admin = createAdminClient();
-  const [{ data: people }, { data: subs }] = await Promise.all([
+  const [{ data: people }, { data: subs }, { data: stateRows }] = await Promise.all([
     admin.from("profiles").select("id, display_name, avatar_url, role").order("display_name"),
     admin.from("push_subscriptions").select("*"),
+    // Missing before push_device_state.sql runs → no rows, nothing breaks.
+    admin
+      .from("push_device_state")
+      .select("profile_id, device, status, updated_at")
+      .gte("updated_at", new Date(Date.now() - 14 * 86400e3).toISOString())
+      .order("updated_at", { ascending: false }),
   ]);
+  const statesByUser = new Map<string, PushHealthPerson["states"]>();
+  for (const r of (stateRows ?? []) as { profile_id: string; device: string; status: string; updated_at: string }[]) {
+    const list = statesByUser.get(r.profile_id) ?? [];
+    list.push({ device: r.device, status: r.status, updatedAt: r.updated_at });
+    statesByUser.set(r.profile_id, list);
+  }
   const byUser = new Map<string, PushHealthPerson["devices"]>();
   for (const s of (subs ?? []) as PushSubscriptionRow[]) {
     const list = byUser.get(s.user_id) ?? [];
@@ -111,6 +141,7 @@ export async function listPushHealth(): Promise<PushHealthPerson[]> {
       avatarUrl: (p.avatar_url as string | null) ?? null,
       role: (p.role as string | null) ?? null,
       devices: byUser.get(p.id as string) ?? [],
+      states: statesByUser.get(p.id as string) ?? [],
     }));
 }
 

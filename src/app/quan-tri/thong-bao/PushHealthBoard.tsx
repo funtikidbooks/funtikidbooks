@@ -5,7 +5,7 @@ import { getPushProbe, listPushHealth, sendTestPushTo, type PushHealthPerson } f
 import { inboxTopic, listenChatTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
 import type { NotifyTestAck } from "@/lib/pageNotify";
 
-type Health = "none" | "error" | "slow" | "unknown" | "stale" | "ok";
+type Health = "none" | "blocked" | "error" | "silent" | "slow" | "unknown" | "stale" | "ok";
 
 const HEALTH: Record<Health, { label: string; color: string; bg: string; rank: number; advice: string }> = {
   none: {
@@ -14,6 +14,22 @@ const HEALTH: Record<Health, { label: string; color: string; bg: string; rank: n
     bg: "rgba(192,82,79,.1)",
     rank: 0,
     advice: "Nhắc bạn mở workspace trên máy mình và bấm Bật thông báo (iPhone/iPad: thêm app ra màn hình chính trước).",
+  },
+  blocked: {
+    label: "Máy đang dùng không nhận được",
+    color: "var(--status-red)",
+    bg: "rgba(192,82,79,.1)",
+    rank: 0,
+    advice:
+      "Bạn đang mở workspace trên một máy chưa nhận được thông báo (xem dòng đỏ bên trên). Từ nay máy đó hiện màn hình hướng dẫn bật và không vào workspace được tới khi bật xong.",
+  },
+  silent: {
+    label: "Gửi tới nhưng máy không hiện",
+    color: "var(--status-red)",
+    bg: "rgba(192,82,79,.1)",
+    rank: 1,
+    advice:
+      "Apple/Google đã nhận thông báo nhưng không máy nào của bạn báo lại là đã hiện. Máy tính: Chrome/Edge phải đang chạy (Cài đặt › Hệ thống › Tiếp tục chạy ứng dụng nền khi đóng). iPhone/iPad: mở app Funti một lần, kiểm tra Cài đặt › Thông báo › Funti đang bật. Rồi bấm Đo tín hiệu.",
   },
   error: {
     label: "Gửi bị lỗi",
@@ -49,6 +65,15 @@ const HEALTH: Record<Health, { label: string; color: string; bg: string; rank: n
 };
 
 const DAY = 24 * 60 * 60 * 1000;
+
+// Why a device the person used can't get notifications (lib/pushClient.ts PushStatus).
+const STATE_LABEL: Record<string, string> = {
+  "needs-ios-install": "mở bằng Safari, chưa thêm app ra màn hình chính",
+  denied: "đã chặn thông báo",
+  default: "chưa bấm Bật thông báo",
+  failed: "đã cho phép nhưng đăng ký không được",
+  unsupported: "trình duyệt không hỗ trợ thông báo",
+};
 // A device showing a notification later than this after it was sent is "slow".
 const SLOW_MS = 15_000;
 
@@ -57,13 +82,25 @@ function latest(values: (string | null | undefined)[]) {
   return t.length ? Math.max(...t) : null;
 }
 
+// "Not delivered" once a push is this old and no device has said it showed it.
+const SILENT_AFTER_MS = 10 * 60_000;
+
+// Devices they opened the workspace on in the last 3 days that can't get
+// notifications (push_device_state.sql).
+function blockedStates(p: PushHealthPerson, now: number) {
+  return p.states.filter((s) => s.status !== "granted" && now - new Date(s.updatedAt).getTime() < 3 * DAY);
+}
+
 function healthOf(p: PushHealthPerson, now: number): Health {
+  if (blockedStates(p, now).length > 0) return "blocked";
   if (p.devices.length === 0) return "none";
   const ok = latest(p.devices.map((d) => d.last_ok_at));
   const err = latest(p.devices.map((d) => d.last_error_at));
   const seen = latest(p.devices.map((d) => d.last_seen_at));
   if (err && (!ok || err > ok)) return "error";
   const last = lastDelivery(p);
+  // The latest push was accepted but nothing showed it.
+  if (ok && now - ok < 3 * DAY && now - ok > SILENT_AFTER_MS && (!last || ok - last.at > SILENT_AFTER_MS)) return "silent";
   if (last && now - last.at < DAY && last.ms > SLOW_MS) return "slow";
   if (!ok && !seen) return "unknown";
   if (!seen || now - seen > 7 * DAY) return "stale";
@@ -296,7 +333,7 @@ export function PushHealthBoard({ initialPeople, currentUserId }: { initialPeopl
       .map((p) => ({ p, h: healthOf(p, now) }))
       .sort((a, b) => (pos.get(a.p.id) ?? 1e9) - (pos.get(b.p.id) ?? 1e9) || a.p.name.localeCompare(b.p.name, "vi"));
   }, [people, now, order]);
-  const counts = rows.reduce<Record<Health, number>>((acc, r) => ({ ...acc, [r.h]: acc[r.h] + 1 }), { none: 0, error: 0, slow: 0, stale: 0, unknown: 0, ok: 0 });
+  const counts = rows.reduce<Record<Health, number>>((acc, r) => ({ ...acc, [r.h]: acc[r.h] + 1 }), { none: 0, blocked: 0, error: 0, silent: 0, slow: 0, stale: 0, unknown: 0, ok: 0 });
 
   async function refresh(resort: boolean) {
     setRefreshing(true);
@@ -412,7 +449,7 @@ export function PushHealthBoard({ initialPeople, currentUserId }: { initialPeopl
       >
         <h1 className="text-lg sm:text-xl whitespace-nowrap">Thông báo trên máy</h1>
         <div className="flex flex-wrap items-center gap-2">
-          {(["none", "error", "slow", "stale", "unknown", "ok"] as Health[])
+          {(["blocked", "none", "silent", "error", "slow", "stale", "unknown", "ok"] as Health[])
             .filter((h) => counts[h] > 0)
             .map((h) => (
               <span key={h} className="rounded-full px-2.5 py-1 text-[12px] font-bold whitespace-nowrap" style={{ background: HEALTH[h].bg, color: HEALTH[h].color }}>
@@ -429,7 +466,7 @@ export function PushHealthBoard({ initialPeople, currentUserId }: { initialPeopl
         <p className="text-sm max-w-[110ch]" style={{ color: "var(--color-neutral-600)" }}>
           Mỗi nhân viên, từng máy: máy đó mở app lần cuối lúc nào, Apple/Google nhận thông báo lần cuối lúc nào, máy hiện thông báo sau bao
           lâu (máy tự báo lại), và lỗi nếu có. Thông báo là
-          bắt buộc — ai chưa bật sẽ thấy thanh nhắc không tắt được trong workspace. Bấm <b>📶 Đo tín hiệu</b> để gửi một thông báo kiểm tra
+          bắt buộc — ai chưa bật sẽ thấy màn hình hướng dẫn bật và không vào workspace được tới khi bật xong. Bấm <b>📶 Đo tín hiệu</b> để gửi một thông báo kiểm tra
           tới các máy của người đó: từng máy tự báo lại khi đã hiện, và thẻ cho thấy ngay máy nào nhận được, sau bao nhiêu giây, máy nào
           chưa nhận — không cần hỏi lại bạn.
         </p>
@@ -469,6 +506,12 @@ export function PushHealthBoard({ initialPeople, currentUserId }: { initialPeopl
                     {hs.label}
                   </span>
                 </div>
+
+                {blockedStates(p, now).map((st) => (
+                  <p key={st.device} className="text-[12.5px] font-semibold leading-snug" style={{ color: "var(--status-red)" }}>
+                    ⛔ {st.device}: {STATE_LABEL[st.status] ?? st.status} · {ago(new Date(st.updatedAt).getTime(), now)}
+                  </p>
+                ))}
 
                 {p.devices.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
