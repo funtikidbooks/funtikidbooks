@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { signOut } from "@/lib/actions/auth";
 import { reportPushState } from "@/lib/actions/push";
 import { resetThemeOnSignOut } from "@/lib/useTheme";
@@ -45,15 +45,11 @@ const BLOCKING: PushStatus[] = ["default", "denied", "failed", "needs-ios-instal
 export function PushGate() {
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [busy, setBusy] = useState(false);
-  const reported = useRef<string | null>(null);
-
+  // Every check is reported, not just changes — a device stuck on this
+  // screen keeps showing up in Quản trị with when it last tried.
   const settle = useCallback((next: PushStatus) => {
     setStatus(next);
-    const device = deviceLabel();
-    if (reported.current !== `${device}|${next}`) {
-      reported.current = `${device}|${next}`;
-      reportPushState(device, next, navigator.userAgent).catch(() => {});
-    }
+    reportPushState(deviceLabel(), next, navigator.userAgent).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -145,9 +141,13 @@ export function PushGate() {
         )}
         {steps.action === "reload" && (
           <button type="button" onClick={() => window.location.reload()} className="btn btn-primary w-full" style={{ minHeight: 48, fontSize: 16 }}>
-            Tôi đã bật — tải lại trang
+            Tôi đã bật — kiểm tra lại
           </button>
         )}
+
+        <p className="text-[11px] text-center" style={{ color: "var(--color-neutral-400)" }}>
+          {deviceLabel()} · {status}
+        </p>
 
         <form action={signOut} onSubmit={resetThemeOnSignOut} className="flex justify-center">
           <button type="submit" className="text-[12.5px] font-semibold hover:underline" style={{ color: "var(--color-neutral-500)" }}>
@@ -203,9 +203,9 @@ function stepsFor(status: PushStatus, os: Os): Steps {
     const list =
       os === "iphone" || os === "ipad"
         ? [
-            <>Mở {b("Cài đặt")} của máy → {b("Thông báo")}.</>,
-            <>Tìm {b("Funti")} trong danh sách → bật {b("Cho phép thông báo")}.</>,
-            <>Quay lại app Funti — màn hình này tự biến mất.</>,
+            <>Mở {b("Cài đặt")} của máy → {b("Thông báo")} → {b("Funti")} → bật {b("Cho phép thông báo")}. (Máy mới: {b("Cài đặt")} → {b("Ứng dụng")} → {b("Funti")} → {b("Thông báo")}.)</>,
+            <>Vuốt tắt hẳn app Funti (vuốt lên từ đáy màn hình, đẩy Funti lên), rồi mở lại từ biểu tượng.</>,
+            <>Vẫn thấy màn hình này thì bấm nút bên dưới.</>,
           ]
         : os === "android"
           ? [
@@ -224,7 +224,20 @@ function stepsFor(status: PushStatus, os: Os): Steps {
                 <>Ở dòng {b("Thông báo")}, chọn {b("Cho phép")}.</>,
                 <>Bấm nút bên dưới để tải lại trang.</>,
               ];
-    return { title: "Thông báo đang bị chặn trên máy này", list, action: os === "iphone" || os === "ipad" ? "none" : "reload" };
+    return {
+      title: "Thông báo đang bị chặn trên máy này",
+      list,
+      // iPhone/iPad keep reading "blocked" until the app restarts — and when
+      // Funti isn't listed in Settings at all, only a fresh install resets it
+      // (Như Ý's iPad, 6/10).
+      note:
+        os === "iphone" || os === "ipad" ? (
+          <>
+            Không thấy Funti trong Cài đặt, hoặc đã bật mà vẫn bị chặn: chạm giữ biểu tượng {b("Funti")} → {b("Xoá ứng dụng")}. Mở funtikidbooks.com bằng {b("Safari")} → {b("Chia sẻ")} → {b("Thêm vào MH chính")}, mở app mới, đăng nhập rồi bấm {b("Bật thông báo")} → {b("Cho phép")}.
+          </>
+        ) : undefined,
+      action: "reload",
+    };
   }
 
   if (status === "failed") {
