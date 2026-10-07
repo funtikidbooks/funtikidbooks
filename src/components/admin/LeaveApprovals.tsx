@@ -147,7 +147,7 @@ export function PendingLeave({ request: r, profile, onDecided }: { request: Leav
   const [error, setError] = useState<string | null>(null);
   const days = leaveWorkDays(r.start_date, r.end_date).length;
 
-  async function decide(key: string, decision: { approve: boolean; paid?: boolean }, question: string) {
+  async function decide(key: string, decision: { approve: boolean }, question: string) {
     if (!window.confirm(question)) return;
     setBusy(key);
     setError(null);
@@ -200,25 +200,15 @@ export function PendingLeave({ request: r, profile, onDecided }: { request: Leav
             {busy === "half" ? "Đang duyệt…" : "✓ Duyệt (nửa công)"}
           </button>
         ) : (
-          <>
-            <button
-              type="button"
-              className="btn btn-primary flex-1 whitespace-nowrap"
-              disabled={busy !== null}
-              onClick={() => decide("paid", { approve: true, paid: true }, `Duyệt cho ${who} nghỉ ${when} — CÓ lương?`)}
-            >
-              {busy === "paid" ? "Đang duyệt…" : "✓ Duyệt · có lương"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary flex-1 whitespace-nowrap"
-              style={{ background: "var(--color-accent-2-600)" }}
-              disabled={busy !== null}
-              onClick={() => decide("unpaid", { approve: true, paid: false }, `Duyệt cho ${who} nghỉ ${when} — KHÔNG lương?`)}
-            >
-              {busy === "unpaid" ? "Đang duyệt…" : "✓ Duyệt · không lương"}
-            </button>
-          </>
+          // Leave is unpaid — there's no "có lương" choice (sếp Phúc, 7/10).
+          <button
+            type="button"
+            className="btn btn-primary flex-1 whitespace-nowrap"
+            disabled={busy !== null}
+            onClick={() => decide("unpaid", { approve: true }, `Duyệt cho ${who} nghỉ ${when} — KHÔNG lương?`)}
+          >
+            {busy === "unpaid" ? "Đang duyệt…" : "✓ Duyệt · không lương"}
+          </button>
         )}
         <button
           type="button"

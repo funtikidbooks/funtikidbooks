@@ -134,16 +134,17 @@ export async function listPendingLeaveIds(): Promise<string[]> {
   return (data ?? []).map((r) => r.id as string);
 }
 
-// Duyệt (paid or not) / Không duyệt. Approving marks each work day of the
-// request on the attendance board and recomputes that month's payroll.
-export async function decideLeave(id: string, decision: { approve: boolean; paid?: boolean; note?: string }): Promise<LeaveRequest> {
+// Duyệt (always unpaid — sếp Phúc, 7/10: no "có lương" option) / Không
+// duyệt. Approving marks each work day of the request on the attendance
+// board and recomputes that month's payroll.
+export async function decideLeave(id: string, decision: { approve: boolean; note?: string }): Promise<LeaveRequest> {
   const { supabase, user } = await requireHrManager();
   const note = decision.note?.trim().slice(0, 300) || null;
   const { data, error } = await supabase
     .from("leave_requests")
     .update({
       status: decision.approve ? "approved" : "rejected",
-      paid: decision.approve ? !!decision.paid : null,
+      paid: decision.approve ? false : null,
       decision_note: note,
       decided_by: user.id,
       decided_at: new Date().toISOString(),
