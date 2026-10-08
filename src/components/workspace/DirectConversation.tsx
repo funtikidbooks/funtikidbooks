@@ -5,12 +5,12 @@ import { createClient } from "@/lib/supabase/client";
 import {
   addDirectReaction,
   getOlderDirectMessages,
-  markDirectMessagesRead,
   removeDirectReaction,
 } from "@/lib/actions/messages";
 import { notifyNewMessage } from "@/lib/chatNotify";
 import { dmTopic, inboxTopic, listenChatTopic, sendChatBroadcast, sendDmBroadcast } from "@/lib/chatBroadcast";
 import { fetchConversation, fetchDirectReactions, readDmSnapshot, writeDmSnapshot } from "@/lib/dmLoad";
+import { saveDirectMessagesRead } from "@/lib/chatReadsClient";
 import { reportChatSyncFailure, reportChatSyncOk } from "@/lib/chatSyncHealth";
 import {
   catchUpFrom,
@@ -508,8 +508,8 @@ export function DirectConversation({
   const pageVisible = usePageVisible();
   useEffect(() => {
     if (!pageVisible || messages.length === 0) return;
-    markDirectMessagesRead(peer.id).catch(() => {});
-  }, [peer.id, messages, pageVisible]);
+    saveDirectMessagesRead(currentUser.id, peer.id).catch(() => {});
+  }, [currentUser.id, peer.id, messages, pageVisible]);
 
   useEffect(() => {
     messagesRef.current = messages;

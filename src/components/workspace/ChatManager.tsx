@@ -2,8 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getUnreadCounts, markConversationRead } from "@/lib/actions/messages";
-import { getUnreadMeetingCounts } from "@/lib/actions/meetings";
+import { loadDmUnreadCounts, loadMeetingUnreadCounts, saveConversationRead } from "@/lib/chatReadsClient";
 import { playChatDing, unlockChatSound } from "@/lib/chatSound";
 import { answerNotifyTest, closeMessageNotification, type NotifyTest } from "@/lib/pageNotify";
 import { firstSighting, inboxTopic, listenChatTopic, roomTopic, sendChatBroadcast, sendDmBroadcast } from "@/lib/chatBroadcast";
@@ -215,8 +214,8 @@ export function ChatManagerProvider({
       delete next[profileId];
       return next;
     });
-    markConversationRead(profileId).catch(() => {});
-  }, []);
+    saveConversationRead(currentUserId, profileId).catch(() => {});
+  }, [currentUserId]);
 
   const openChat = useCallback(
     (profile: Profile) => {
@@ -259,10 +258,12 @@ export function ChatManagerProvider({
   // network blip...) — staff reported only ever seeing a new-message badge
   // after reloading the page, which is exactly that gap. Called on tab
   // focus/visibility and whenever the realtime channel (re)subscribes.
+  // Straight from the browser (lib/chatReadsClient.ts) — this runs on every
+  // window focus, which used to make two Vercel function calls each time.
   const resync = useCallback(async () => {
     const [dm, meeting] = await Promise.all([
-      getUnreadCounts().catch(() => null),
-      getUnreadMeetingCounts().catch(() => null),
+      loadDmUnreadCounts(currentUserId).catch(() => null),
+      loadMeetingUnreadCounts(currentUserId).catch(() => null),
     ]);
     // An open conversation only counts as read while the tab is on screen —
     // a resync from a background tab (e.g. after a socket drop) must keep
@@ -279,7 +280,7 @@ export function ChatManagerProvider({
       if (watching && activeMeetingChannelIdRef.current) delete meeting[activeMeetingChannelIdRef.current];
       setMeetingUnreadCounts(meeting);
     }
-  }, []);
+  }, [currentUserId]);
 
   useEffect(() => {
     function handleVisibility() {

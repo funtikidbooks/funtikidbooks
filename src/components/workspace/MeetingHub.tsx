@@ -57,7 +57,6 @@ import {
   leaveChannel,
   listChannelMembers,
   listChannels,
-  markRoomSeen,
   recallMeetingMessage,
   removeChannelMember,
   removeReaction,
@@ -68,6 +67,7 @@ import {
   updateChannel,
 } from "@/lib/actions/meetings";
 import { translateMessage } from "@/lib/actions/translate";
+import { saveRoomSeen } from "@/lib/chatReadsClient";
 import type {
   MeetingChannelPublic,
   MeetingChannelRead,
@@ -2427,11 +2427,10 @@ export function MeetingHub({
   // costs one cheap delta fetch per tick when the socket is actually fine,
   // and is what actually recovers it when the socket has gone stale.
   //
-  // Only while the room is actually on screen, and once a minute: each
-  // tick is a Server Action (a Vercel function call), and a room left
-  // open all day in a background tab was costing thousands of calls a day
-  // per person — Vercel's monthly allowance ran out (10/2026). Coming back
-  // to the tab still resyncs at once (the visibility/focus handler above).
+  // Only while the room is actually on screen, and once a minute — a room
+  // left open all day in a background tab no longer re-reads every 20 s.
+  // Coming back to the tab still resyncs at once (the visibility/focus
+  // handler above).
   useEffect(() => {
     if (!activeId || activeId === DM_TAB_ID) return;
     const interval = setInterval(() => {
@@ -2792,7 +2791,7 @@ export function MeetingHub({
       const channel = channels.find((c) => c.id === id);
       if (channel?.is_new) {
         setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, is_new: false } : c)));
-        markRoomSeen(id).catch(() => {});
+        saveRoomSeen(currentUser.id, id).catch(() => {});
       }
     }
   }

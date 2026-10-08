@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useChatManager, useLiveProfiles } from "@/components/workspace/ChatManager";
 import { DirectConversation } from "@/components/workspace/DirectConversation";
 import { VideoCallModal } from "@/components/workspace/VideoCallModal";
-import { getRecentDmPreviews, searchDirectMessages, type DmPreview } from "@/lib/actions/messages";
+import { searchDirectMessages, type DmPreview } from "@/lib/actions/messages";
+import { loadRecentDmPreviews } from "@/lib/chatReadsClient";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import { useCallPresence } from "@/lib/useCallPresence";
 import { usePresence } from "@/lib/usePresence";
@@ -208,10 +209,10 @@ export function DirectMessagesPanel({
   // at this rail anyway.
   const [previews, setPreviews] = useState<Record<string, DmPreview>>({});
   useEffect(() => {
-    getRecentDmPreviews()
+    loadRecentDmPreviews(currentUser.id)
       .then(setPreviews)
       .catch(() => {});
-  }, [recentSenderOrder, selectedPeerId]);
+  }, [currentUser.id, recentSenderOrder, selectedPeerId]);
 
   const teammates = useMemo(() => {
     return profiles

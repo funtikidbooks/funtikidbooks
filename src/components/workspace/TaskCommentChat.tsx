@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { addComment, getTaskActivity, getTaskComments, updateComment } from "@/lib/actions/task-detail";
+import { addComment, updateComment } from "@/lib/actions/task-detail";
+import { loadTaskActivity, loadTaskComments } from "@/lib/taskCommentsClient";
 import { uploadTaskFile } from "@/lib/taskUpload";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import type { Profile, TaskActivity, TaskAttachment, TaskComment } from "@/lib/types";
@@ -69,14 +70,14 @@ export function TaskCommentChat({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Two Server Actions per tick — only while the card is on screen, every
-  // 10 s (it was every 4 s even in a background tab, part of what used up
-  // Vercel's monthly allowance in 10/2026).
+  // Read straight from Supabase (lib/taskCommentsClient.ts), only while the
+  // card is on screen, every 10 s — it used to be two Vercel function calls
+  // every 4 s even in a background tab (Vercel's allowance ran out, 10/2026).
   useEffect(() => {
     const interval = setInterval(async () => {
       if (document.visibilityState !== "visible") return;
       try {
-        const [freshComments, freshActivity] = await Promise.all([getTaskComments(taskId), getTaskActivity(taskId)]);
+        const [freshComments, freshActivity] = await Promise.all([loadTaskComments(taskId), loadTaskActivity(taskId)]);
         setComments(freshComments);
         setActivity(freshActivity);
       } catch {

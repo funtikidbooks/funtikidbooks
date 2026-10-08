@@ -1,6 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+// No revalidatePath("/workspace") after a change (10/2026): the board keeps
+// its own state and follows changes over realtime, so re-rendering the whole
+// board on the server after every drag, tick or comment only burned Vercel
+// CPU (the free plan’s allowance ran out).
 import { requireUser } from "@/lib/supabase/server";
 import { storagePathFromPublicUrl } from "@/lib/storagePath";
 import type { Task } from "@/lib/types";
@@ -23,7 +26,6 @@ export async function createColumn(boardId: string, title: string) {
     .select("id, board_id, title, color, position, created_at")
     .single();
 
-  revalidatePath("/workspace");
   return data ?? null;
 }
 
@@ -32,7 +34,6 @@ export async function renameColumn(columnId: string, title: string) {
   const trimmed = title.trim();
   if (!trimmed) return;
   await supabase.from("board_columns").update({ title: trimmed }).eq("id", columnId);
-  revalidatePath("/workspace");
 }
 
 export async function deleteColumn(columnId: string) {
@@ -58,7 +59,6 @@ export async function deleteColumn(columnId: string) {
   if (paths.length > 0) await supabase.storage.from("task-attachments").remove(paths).catch(() => {});
 
   await supabase.from("board_columns").delete().eq("id", columnId);
-  revalidatePath("/workspace");
 }
 
 function randomTaskCode() {
@@ -109,7 +109,6 @@ export async function createTask(input: {
     }
   }
 
-  revalidatePath("/workspace");
   return data ?? null;
 }
 
@@ -121,13 +120,11 @@ export async function addTaskAssignee(taskId: string, profileId: string) {
   const { data: profile } = await supabase.from("profiles").select("display_name").eq("id", profileId).maybeSingle();
   if (profile) await logTaskActivity(supabase, taskId, user.id, "assigned", { name: profile.display_name });
 
-  revalidatePath("/workspace");
 }
 
 export async function removeTaskAssignee(taskId: string, profileId: string) {
   const { supabase } = await requireUser();
   await supabase.from("task_assignees").delete().eq("task_id", taskId).eq("profile_id", profileId);
-  revalidatePath("/workspace");
 }
 
 // The file itself is uploaded client-side, straight to Supabase Storage
@@ -147,7 +144,6 @@ export async function setTaskCoverUrl(taskId: string, url: string) {
     await removeCoverFile(supabase, taskId, currentTask.cover_image_url);
   }
 
-  revalidatePath("/workspace");
   return url;
 }
 
@@ -166,7 +162,6 @@ export async function removeTaskCover(taskId: string) {
   const { data: currentTask } = await supabase.from("tasks").select("cover_image_url").eq("id", taskId).maybeSingle();
   await supabase.from("tasks").update({ cover_image_url: null }).eq("id", taskId);
   if (currentTask?.cover_image_url) await removeCoverFile(supabase, taskId, currentTask.cover_image_url);
-  revalidatePath("/workspace");
 }
 
 export async function updateTask(
@@ -188,7 +183,6 @@ export async function updateTask(
   if (input.dueDate !== undefined) patch.due_date = input.dueDate || null;
 
   await supabase.from("tasks").update(patch).eq("id", taskId);
-  revalidatePath("/workspace");
 }
 
 // Changing a card's list from the card or its quick menu — distinct from
@@ -214,13 +208,11 @@ export async function moveTaskColumn(taskId: string, toColumnId: string) {
     to: toColumn?.title ?? "",
   });
 
-  revalidatePath("/workspace");
 }
 
 export async function updateTaskLabels(taskId: string, labels: string[]) {
   const { supabase } = await requireUser();
   await supabase.from("tasks").update({ labels }).eq("id", taskId);
-  revalidatePath("/workspace");
 }
 
 export async function createBoardLabel(boardId: string, name: string, color: string) {
@@ -236,7 +228,6 @@ export async function createBoardLabel(boardId: string, name: string, color: str
     .select("id, board_id, name, color, position, created_at")
     .single();
 
-  revalidatePath("/workspace");
   return data ?? null;
 }
 
@@ -247,7 +238,6 @@ export async function updateBoardLabel(labelId: string, patch: { name?: string; 
   if (patch.color !== undefined) update.color = patch.color;
   if (Object.keys(update).length === 0) return;
   await supabase.from("board_labels").update(update).eq("id", labelId);
-  revalidatePath("/workspace");
 }
 
 export async function deleteBoardLabel(labelId: string) {
@@ -262,7 +252,6 @@ export async function deleteBoardLabel(labelId: string) {
   }
 
   await supabase.from("board_labels").delete().eq("id", labelId);
-  revalidatePath("/workspace");
 }
 
 export async function deleteTask(taskId: string) {
@@ -283,7 +272,6 @@ export async function deleteTask(taskId: string) {
   if (paths.length > 0) await supabase.storage.from("task-attachments").remove(paths).catch(() => {});
 
   await supabase.from("tasks").delete().eq("id", taskId);
-  revalidatePath("/workspace");
 }
 
 /**
@@ -309,7 +297,6 @@ export async function reorderTasks(
   // A card dragged to another list shows up in its activity, like Trello.
   if (moved && moved.from !== moved.to) await logTaskActivity(supabase, moved.taskId, user.id, "moved", { from: moved.from, to: moved.to });
 
-  revalidatePath("/workspace");
 }
 
 export async function setDueComplete(taskId: string, done: boolean) {
@@ -323,7 +310,6 @@ export async function setDueComplete(taskId: string, done: boolean) {
     );
   }
   await logTaskActivity(supabase, taskId, user.id, done ? "due_complete" : "due_incomplete");
-  revalidatePath("/workspace");
 }
 
 // ---------------------------------------------------------------------------
@@ -335,7 +321,6 @@ export async function setDueComplete(taskId: string, done: boolean) {
 export async function reorderColumns(orderedIds: string[]) {
   const { supabase } = await requireUser();
   await Promise.all(orderedIds.map((id, i) => supabase.from("board_columns").update({ position: i }).eq("id", id)));
-  revalidatePath("/workspace");
 }
 
 // The hidden list archived cards live in (see lib/boardTools.ts), created
@@ -369,7 +354,6 @@ export async function archiveTasks(taskIds: string[]) {
     taskIds.map((id, i) => supabase.from("tasks").update({ column_id: archiveId, position: (count ?? 0) + i }).eq("id", id)),
   );
   await Promise.all(taskIds.map((id) => logTaskActivity(supabase, id, user.id, "moved", { from: "", to: ARCHIVE_COLUMN_TITLE })));
-  revalidatePath("/workspace");
   return archiveId;
 }
 
@@ -419,7 +403,6 @@ export async function copyTask(taskId: string, toColumnId?: string) {
       .insert(checklist.map((c) => ({ task_id: copy.id as string, text: c.text, done: c.done, position: c.position })));
   }
   await logTaskActivity(supabase, copy.id as string, user.id, "created", { column: "(bản sao)" });
-  revalidatePath("/workspace");
   return copy;
 }
 
@@ -428,7 +411,6 @@ export async function setBoardBackground(boardId: string, key: string) {
   const { supabase } = await requireUser();
   if (!/^bg:[a-z]{2,20}$/.test(key)) throw new Error("Hình nền không hợp lệ");
   await supabase.from("boards").update({ color: key }).eq("id", boardId);
-  revalidatePath("/workspace");
 }
 
 export type BoardActivityItem = {

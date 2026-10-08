@@ -1,6 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+// No revalidatePath("/workspace") after a change (10/2026): the board keeps
+// its own state and follows changes over realtime, so re-rendering the whole
+// board on the server after every drag, tick or comment only burned Vercel
+// CPU (the free plan’s allowance ran out).
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { mapTaskAssignees } from "@/lib/mapTaskAssignees";
 import type {
@@ -97,14 +100,12 @@ export async function addTaskLink(taskId: string, label: string, url: string) {
   if (error || !data) return null;
   await logTaskActivity(supabase, taskId, user.id, "link_added", { label: trimmedLabel });
 
-  revalidatePath("/workspace");
   return data as TaskLink;
 }
 
 export async function deleteTaskLink(linkId: string) {
   const { supabase } = await requireUser();
   await supabase.from("task_links").delete().eq("id", linkId);
-  revalidatePath("/workspace");
 }
 
 export async function getTaskComments(taskId: string): Promise<TaskComment[]> {
@@ -138,20 +139,17 @@ export async function addChecklistItem(taskId: string, text: string) {
     .select("id, task_id, text, done, position, created_at")
     .single();
 
-  revalidatePath("/workspace");
   return (data as ChecklistItem) ?? null;
 }
 
 export async function toggleChecklistItem(itemId: string, done: boolean) {
   const { supabase } = await requireUser();
   await supabase.from("task_checklist_items").update({ done }).eq("id", itemId);
-  revalidatePath("/workspace");
 }
 
 export async function deleteChecklistItem(itemId: string) {
   const { supabase } = await requireUser();
   await supabase.from("task_checklist_items").delete().eq("id", itemId);
-  revalidatePath("/workspace");
 }
 
 export async function addComment(taskId: string, content: string, attachmentIds: string[] = []) {
@@ -183,7 +181,6 @@ export async function addComment(taskId: string, content: string, attachmentIds:
     .select(ATTACHMENT_SELECT)
     .eq("comment_id", comment.id);
 
-  revalidatePath("/workspace");
   return {
     ...comment,
     attachments: (attachments ?? []) as TaskAttachment[],
@@ -208,7 +205,6 @@ export async function updateComment(commentId: string, content: string) {
     .single();
 
   if (error || !data) return null;
-  revalidatePath("/workspace");
   return data as unknown as Omit<TaskComment, "attachments">;
 }
 
@@ -222,7 +218,6 @@ export async function deleteComment(commentId: string) {
   if (paths.length > 0) await supabase.storage.from("task-attachments").remove(paths).catch(() => {});
 
   await supabase.from("task_comments").delete().eq("id", commentId).eq("user_id", user.id);
-  revalidatePath("/workspace");
 }
 
 // The file itself goes browser → Storage (lib/taskUpload.ts): a Server
@@ -257,7 +252,6 @@ export async function recordTaskAttachment(
   if (error || !data) throw new Error("Không thể lưu tệp đính kèm");
   await logTaskActivity(supabase, taskId, user.id, "attached", { filename });
 
-  revalidatePath("/workspace");
   return data as TaskAttachment;
 }
 
@@ -272,5 +266,4 @@ export async function deleteAttachment(attachmentId: string) {
 
   await supabase.storage.from("task-attachments").remove([attachment.storage_path]);
   await supabase.from("task_attachments").delete().eq("id", attachmentId);
-  revalidatePath("/workspace");
 }
