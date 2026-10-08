@@ -55,7 +55,6 @@ import {
   getOlderMeetingMessages,
   joinChannel,
   leaveChannel,
-  listChannelMembers,
   listChannels,
   recallMeetingMessage,
   removeChannelMember,
@@ -67,7 +66,7 @@ import {
   updateChannel,
 } from "@/lib/actions/meetings";
 import { translateMessage } from "@/lib/actions/translate";
-import { saveRoomSeen } from "@/lib/chatReadsClient";
+import { loadChannelMembers, saveRoomSeen } from "@/lib/chatReadsClient";
 import type {
   MeetingChannelPublic,
   MeetingChannelRead,
@@ -428,7 +427,7 @@ function RoomInfoPeekPopup({
   // room — no need to reset state here on room.id changing.
   useEffect(() => {
     let cancelled = false;
-    listChannelMembers(room.id)
+    loadChannelMembers(room.id)
       .then((members) => {
         if (!cancelled) setMemberCount(members.length);
       })
@@ -903,7 +902,7 @@ function RoomInfoDropdown({
 
   useEffect(() => {
     let cancelled = false;
-    listChannelMembers(channelId)
+    loadChannelMembers(channelId)
       .then((members) => !cancelled && setMemberIds(new Set(members.map((m) => m.id))))
       .catch(() => !cancelled && setMemberIds(new Set()));
     return () => {
@@ -1867,7 +1866,7 @@ export function MeetingHub({
   useEffect(() => {
     if (!activeRoomIdForMembers) return;
     let cancelled = false;
-    listChannelMembers(activeRoomIdForMembers)
+    loadChannelMembers(activeRoomIdForMembers)
       .then((members) => !cancelled && setRoomMembers(members))
       .catch(() => !cancelled && setRoomMembers([]));
     return () => {
@@ -1888,7 +1887,7 @@ export function MeetingHub({
         "postgres_changes",
         { event: "*", schema: "public", table: "meeting_channel_members", filter: `channel_id=eq.${activeRoomIdForMembers}` },
         () => {
-          listChannelMembers(activeRoomIdForMembers)
+          loadChannelMembers(activeRoomIdForMembers)
             .then((members) => setRoomMembers(members))
             .catch(() => {});
         },
@@ -1897,7 +1896,7 @@ export function MeetingHub({
       // change during a brief drop otherwise sits stale until reload.
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
-          listChannelMembers(activeRoomIdForMembers)
+          loadChannelMembers(activeRoomIdForMembers)
             .then((members) => setRoomMembers(members))
             .catch(() => {});
         }

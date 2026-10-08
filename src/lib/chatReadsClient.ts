@@ -2,6 +2,7 @@
 
 import { createClient, ensureBrowserSession } from "@/lib/supabase/client";
 import type { DmPreview } from "@/lib/actions/messages";
+import type { Profile } from "@/lib/types";
 
 // Chat bookkeeping straight from the browser — the same queries the Server
 // Actions ran (getUnreadCounts, getUnreadMeetingCounts, getRecentDmPreviews,
@@ -120,6 +121,24 @@ export async function saveDirectMessagesRead(meId: string, peerId: string) {
     .eq("sender_id", peerId)
     .eq("recipient_id", meId)
     .is("read_at", null);
+}
+
+// Who is in a room, for its member list — re-read on every room switch and
+// every time the realtime socket reconnects, so it was a steady stream of
+// Vercel calls (listChannelMembers in lib/actions/meetings.ts).
+export async function loadChannelMembers(channelId: string): Promise<Profile[]> {
+  const supabase = await client();
+  const { data: memberRows, error } = await supabase.from("meeting_channel_members").select("profile_id").eq("channel_id", channelId);
+  if (error) throw error;
+  const ids = (memberRows ?? []).map((m) => m.profile_id as string);
+  if (ids.length === 0) return [];
+  const { data: profiles, error: e2 } = await supabase
+    .from("profiles")
+    .select("id, email, display_name, avatar_url, role, phone, address, access_role, joined_at, created_at")
+    .in("id", ids)
+    .order("display_name", { ascending: true });
+  if (e2) throw e2;
+  return (profiles ?? []) as Profile[];
 }
 
 // A room you were just added to stops showing as new.
