@@ -41,11 +41,20 @@ export function AutoReloadWatchdog() {
         // offline / transient — try again on the next tick
       }
     }
+    // Every 30 minutes, and on coming back to the tab at most every 5 —
+    // each check is a function call on Vercel, and every open tab of every
+    // staff member makes them (the monthly allowance ran out in 10/2026).
+    let lastCheck = Date.now();
     function handleVisible() {
-      if (document.visibilityState === "visible") checkForNewDeploy();
+      if (document.visibilityState !== "visible" || Date.now() - lastCheck < 5 * 60 * 1000) return;
+      lastCheck = Date.now();
+      checkForNewDeploy();
     }
     document.addEventListener("visibilitychange", handleVisible);
-    const interval = setInterval(checkForNewDeploy, 5 * 60 * 1000);
+    const interval = setInterval(() => {
+      lastCheck = Date.now();
+      checkForNewDeploy();
+    }, 30 * 60 * 1000);
     checkForNewDeploy();
     window.addEventListener("unhandledrejection", handleRejection);
     window.addEventListener("error", handleError);

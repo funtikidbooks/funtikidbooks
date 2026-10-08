@@ -6,7 +6,10 @@ import type { VisitorMessage } from "@/lib/types";
 
 const STORAGE_ID_KEY = "funti-visitor-conversation-id";
 const STORAGE_TOKEN_KEY = "funti-visitor-token";
-const POLL_MS = 4000;
+// Each poll is a Server Action (a Vercel function call) — only while the
+// page is on screen, plus once the moment it comes back (Vercel's monthly
+// allowance ran out in 10/2026 with tabs polling all day in the background).
+const POLL_MS = 6000;
 
 function formatTime(iso: string) {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
@@ -45,10 +48,17 @@ export function SupportChatWidget() {
       }
     }
     poll();
-    const interval = setInterval(poll, POLL_MS);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") poll();
+    }, POLL_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") poll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [open, conversationId, token]);
 

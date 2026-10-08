@@ -69,8 +69,12 @@ export function TaskCommentChat({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
+  // Two Server Actions per tick — only while the card is on screen, every
+  // 10 s (it was every 4 s even in a background tab, part of what used up
+  // Vercel's monthly allowance in 10/2026).
   useEffect(() => {
     const interval = setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
       try {
         const [freshComments, freshActivity] = await Promise.all([getTaskComments(taskId), getTaskActivity(taskId)]);
         setComments(freshComments);
@@ -78,7 +82,7 @@ export function TaskCommentChat({
       } catch {
         // no live backend yet — keep whatever is already shown
       }
-    }, 4000);
+    }, 10000);
     return () => clearInterval(interval);
   }, [taskId]);
 

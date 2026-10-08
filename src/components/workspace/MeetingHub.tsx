@@ -2426,9 +2426,17 @@ export function MeetingHub({
   // fired either. Polling resync() on a plain timer while a room stays open
   // costs one cheap delta fetch per tick when the socket is actually fine,
   // and is what actually recovers it when the socket has gone stale.
+  //
+  // Only while the room is actually on screen, and once a minute: each
+  // tick is a Server Action (a Vercel function call), and a room left
+  // open all day in a background tab was costing thousands of calls a day
+  // per person — Vercel's monthly allowance ran out (10/2026). Coming back
+  // to the tab still resyncs at once (the visibility/focus handler above).
   useEffect(() => {
     if (!activeId || activeId === DM_TAB_ID) return;
-    const interval = setInterval(resync, 20000);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") resync();
+    }, 60000);
     return () => clearInterval(interval);
   }, [activeId, resync]);
 

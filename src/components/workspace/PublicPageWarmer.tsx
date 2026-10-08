@@ -9,17 +9,21 @@ import { useEffect } from "react";
 // A server-side warm-up can't help — it would come from Singapore or the US
 // and warm their edges instead — but the studio's own browsers are in
 // Vietnam: one of them, quietly in the background, opens every page in the
-// sitemap after each deploy and at most every 30 minutes. The workspace
-// stays open all day, so it looks for a new deploy every 5 minutes.
+// sitemap after each deploy and at most every 2 hours.
+//
+// Kept light (10/2026, Vercel's monthly allowance ran out): the check
+// itself costs nothing — it compares this page's own build id (a new
+// deploy reloads the workspace, AutoReloadWatchdog) and the last round's
+// time on this device, with no request at all, and a round opens at most
+// 40 pages.
 
 const KEY = "funti-public-warm";
-const WARM_EVERY_MS = 30 * 60 * 1000;
-const CHECK_EVERY_MS = 5 * 60 * 1000;
+const WARM_EVERY_MS = 2 * 60 * 60 * 1000;
+const CHECK_EVERY_MS = 15 * 60 * 1000;
+const MAX_PAGES = 40;
 
-// Runs in a background tab too (most of the day the workspace sits behind
-// Photoshop): the fetches are tiny and a hidden tab's 5-minute timer still fires.
 async function warmIfDue(isStopped: () => boolean) {
-  const build = ((await (await fetch("/api/build-id", { cache: "no-store" })).json()) as { id?: string }).id ?? "";
+  const build = process.env.NEXT_PUBLIC_BUILD_ID ?? "";
   let last: { build?: string; at?: number } | null = null;
   try {
     last = JSON.parse(localStorage.getItem(KEY) ?? "null");
@@ -34,7 +38,7 @@ async function warmIfDue(isStopped: () => boolean) {
     // private mode — warms anyway, just can't tell other tabs
   }
   const sitemap = await (await fetch("/sitemap.xml", { cache: "no-store" })).text();
-  const paths = [...sitemap.matchAll(/<loc>https?:\/\/[^/<]+(\/[^<]*)?<\/loc>/g)].map((m) => m[1] || "/").slice(0, 80);
+  const paths = [...sitemap.matchAll(/<loc>https?:\/\/[^/<]+(\/[^<]*)?<\/loc>/g)].map((m) => m[1] || "/").slice(0, MAX_PAGES);
   let freshHits = 0;
   for (const [i, path] of paths.entries()) {
     if (isStopped()) return;
