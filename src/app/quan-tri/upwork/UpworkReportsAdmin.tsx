@@ -159,11 +159,15 @@ function LeadCard({ lead, foundAt, onChanged }: { lead: UpworkLead; foundAt?: st
         </div>
       )}
 
+      {/* A full summary of the client's project, one point per line
+          (sếp Phúc, 8/10: "tóm tắt hết để anh biết anh nhắn khách liền") —
+          the line breaks are kept. */}
       {lead.match_reason && (
-        <p className="text-xs" style={{ color: "var(--color-neutral-600)" }}>
-          <span className="font-semibold">Vì sao hợp: </span>
+        <div className="text-[13px] leading-relaxed whitespace-pre-line rounded-[8px] px-3 py-2.5" style={{ background: "var(--color-surface)", color: "var(--color-text)" }}>
+          <span className="font-semibold">Vì sao hợp · tóm tắt dự án: </span>
+          {"\n"}
           {lead.match_reason}
-        </p>
+        </div>
       )}
 
       {/* The email a lead comes from has no client history — these four

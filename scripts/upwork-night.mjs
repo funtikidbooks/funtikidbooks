@@ -144,7 +144,7 @@ async function report(file = REPORT_FILE) {
       job_url,
       budget_text: str(l.budget_text, 200) || null,
       client_info: str(l.client_info, 600) || null,
-      match_reason: str(l.match_reason, 1500) || null,
+      match_reason: str(l.match_reason, 4000) || null,
       proposal_draft,
       fit_score: Number.isInteger(fit) && fit >= 1 && fit <= 5 ? fit : null,
       recommendation: l.recommendation === "strong" || l.recommendation === "maybe" ? l.recommendation : null,
