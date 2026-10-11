@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { IntentLink } from "@/components/ui/IntentLink";
 import { useEffect, useState } from "react";
 import { signOut } from "@/lib/actions/auth";
 import { createClient } from "@/lib/supabase/client";
@@ -241,7 +242,7 @@ export function AdminSidebar({
     const active = isActive(item.href);
     const dotTitle = waiting[item.href];
     return (
-      <Link
+      <IntentLink
         key={item.href}
         href={item.href}
         onClick={() => setMobileOpen(false)}
@@ -260,7 +261,7 @@ export function AdminSidebar({
             style={{ width: 8, height: 8, background: "var(--status-red)" }}
           />
         )}
-      </Link>
+      </IntentLink>
     );
   }
 
@@ -270,14 +271,14 @@ export function AdminSidebar({
   // admin has no workspace (its layout sends them straight back here).
   const canOpenWorkspace = isDirector || isProjectManager;
   const workspaceButton = canOpenWorkspace && (
-    <Link
+    <IntentLink
       href="/workspace"
       onClick={() => setMobileOpen(false)}
       className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-[10px] text-[13px] font-bold mb-3"
       style={{ background: "var(--color-accent-500)", color: "#fff" }}
     >
       ← Về trang nhân viên
-    </Link>
+    </IntentLink>
   );
 
   const navSections = (
@@ -369,13 +370,13 @@ export function AdminSidebar({
         </Link>
         <div className="flex items-center gap-2">
           {canOpenWorkspace && (
-            <Link
+            <IntentLink
               href="/workspace"
               className="flex items-center rounded-full px-3 text-[12px] font-bold"
               style={{ height: 34, background: "var(--color-accent-100)", color: "var(--color-accent-700)" }}
             >
               ← Nhân viên
-            </Link>
+            </IntentLink>
           )}
           <button
             type="button"

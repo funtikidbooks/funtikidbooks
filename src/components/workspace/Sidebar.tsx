@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { IntentLink } from "@/components/ui/IntentLink";
 import { signOut } from "@/lib/actions/auth";
 import { useChatManager } from "@/components/workspace/ChatManager";
 import { ThemeToggle } from "@/components/workspace/ThemeToggle";
@@ -145,7 +146,7 @@ export function Sidebar({
   function NavLink(item: (typeof NAV)[number], indent = false) {
     const active = item.enabled && pathname === item.href;
     return (
-      <Link
+      <IntentLink
         key={item.label}
         href={item.href}
         aria-disabled={!item.enabled}
@@ -189,7 +190,7 @@ export function Sidebar({
           </span>
         )}
         {!item.enabled && <span className="ml-auto text-[9px] tag tag-neutral">SẮP RA MẮT</span>}
-      </Link>
+      </IntentLink>
     );
   }
 
@@ -268,13 +269,13 @@ export function Sidebar({
 
       <div className="flex-none flex flex-col gap-3">
         {canOpenAdmin && (
-          <Link
+          <IntentLink
             href="/quan-tri"
             className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-[10px] text-[13px] font-bold"
             style={{ background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
           >
             🛠 Vào Quản trị →
-          </Link>
+          </IntentLink>
         )}
         <InstallAppButton />
         <ThemeToggle />

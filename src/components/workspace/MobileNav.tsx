@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { IntentLink } from "@/components/ui/IntentLink";
 import { useEffect, useState } from "react";
 import { signOut } from "@/lib/actions/auth";
 import { useChatManager } from "@/components/workspace/ChatManager";
@@ -161,7 +161,7 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
         {primaryNav.map((item) => {
           const active = pathname === item.href;
           return (
-            <Link
+            <IntentLink
               key={item.href}
               href={item.href}
               className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2"
@@ -177,7 +177,7 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
                 )}
               </span>
               <span className="text-[10px] font-bold">{item.label}</span>
-            </Link>
+            </IntentLink>
           );
         })}
         <button
@@ -216,7 +216,7 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
               {[...moreNav, ...(canOpenAdmin ? [{ href: "/quan-tri", label: "Quản trị", icon: "🛠" }] : [])].map((item) => {
                 const active = pathname === item.href;
                 return (
-                  <Link
+                  <IntentLink
                     key={item.href}
                     href={item.href}
                     onClick={() => setShowMore(false)}
@@ -230,7 +230,7 @@ export function MobileNav({ canOpenAdmin }: { canOpenAdmin: boolean }) {
                       {item.icon}
                     </span>
                     <span className="text-[11px] font-semibold leading-tight">{item.label}</span>
-                  </Link>
+                  </IntentLink>
                 );
               })}
             </div>
