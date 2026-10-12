@@ -23,10 +23,22 @@ export async function POST(request: Request) {
   // and a week means "arrived when the phone came back", not a number.
   const delay = Math.round(Math.min(Math.max(receivedAt - sentAt, 0), 7 * 24 * 3600 * 1000));
   after(async () => {
-    await createAdminClient()
+    const admin = createAdminClient();
+    const { data: sub } = await admin
       .from("push_subscriptions")
       .update({ last_delivered_at: new Date().toISOString(), last_delivery_ms: delay })
-      .eq("endpoint", endpoint);
+      .eq("endpoint", endpoint)
+      .select("id")
+      .maybeSingle();
+    // And on that notification's own row (push_log.sql), matched by device
+    // and the send time the payload carried.
+    if (sub?.id) {
+      await admin
+        .from("push_log")
+        .update({ delivered_at: new Date().toISOString(), delivery_ms: delay })
+        .eq("subscription_id", sub.id)
+        .eq("sent_at", new Date(sentAt).toISOString());
+    }
   });
   return new Response(null, { status: 204 });
 }

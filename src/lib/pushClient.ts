@@ -61,10 +61,14 @@ export type PushStatus = "unsupported" | "needs-ios-install" | "denied" | "grant
 // Reads current state without prompting or subscribing — used to render
 // the right message/button in the profile dialog.
 export function getPushStatus(): PushStatus {
+  // Checked first: iPhone/iPad Safari has no Notification object outside
+  // the installed app, so the check below called it "unsupported" and the
+  // screen said "trình duyệt không hỗ trợ" instead of how to install the
+  // app (Như Ý, Thuỳ Dung, Maily… 10/2026).
+  if (isIos() && !isStandalone()) return "needs-ios-install";
   if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
     return "unsupported";
   }
-  if (isIos() && !isStandalone()) return "needs-ios-install";
   return Notification.permission as PushStatus; // "default" | "denied" | "granted"
 }
 

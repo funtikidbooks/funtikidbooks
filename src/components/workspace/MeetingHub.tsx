@@ -2426,15 +2426,16 @@ export function MeetingHub({
   // costs one cheap delta fetch per tick when the socket is actually fine,
   // and is what actually recovers it when the socket has gone stale.
   //
-  // Only while the room is actually on screen, and once a minute — a room
-  // left open all day in a background tab no longer re-reads every 20 s.
-  // Coming back to the tab still resyncs at once (the visibility/focus
-  // handler above).
+  // Every 20 s while the room is on screen (a background tab resyncs the
+  // moment it comes back, via the visibility/focus handler above). This
+  // reads Supabase straight from the browser (lib/roomLoad.ts) — no Vercel
+  // cost — so it was wrong to slow it to once a minute on 8/10: messages a
+  // dead socket missed then took up to a minute to show ("miss tin nhắn").
   useEffect(() => {
     if (!activeId || activeId === DM_TAB_ID) return;
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") resync();
-    }, 60000);
+    }, 20000);
     return () => clearInterval(interval);
   }, [activeId, resync]);
 

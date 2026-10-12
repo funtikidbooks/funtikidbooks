@@ -73,7 +73,8 @@ export async function sendPushToSubscriptions(subs: PushSubscriptionRow[], paylo
   if (!ensureConfigured() || subs.length === 0) return [];
   const adminClient = createAdminClient();
 
-  const json = JSON.stringify({ ...payload, sentAt: Date.now() });
+  const sentAt = Date.now();
+  const json = JSON.stringify({ ...payload, sentAt });
   const results = await Promise.all(
     subs.map(async (sub): Promise<PushDeviceResult> => {
       try {
@@ -101,9 +102,25 @@ export async function sendPushToSubscriptions(subs: PushSubscriptionRow[], paylo
   const now = new Date().toISOString();
   const okIds = results.filter((r) => r.ok).map((r) => r.id);
   const failed = results.filter((r) => !r.ok && !r.removed);
+  // One push_log row per device (push_log.sql) — the device's own ack
+  // fills in delivered_at, so each message's fate on each device can be
+  // traced. Missing table before that SQL runs → silently skipped.
+  const userOf = new Map(subs.map((s) => [s.id, s.user_id]));
   await Promise.all([
     okIds.length > 0 ? adminClient.from("push_subscriptions").update({ last_ok_at: now }).in("id", okIds) : null,
     ...failed.map((r) => adminClient.from("push_subscriptions").update({ last_error_at: now, last_error: r.error }).eq("id", r.id)),
+    adminClient.from("push_log").insert(
+      results.map((r) => ({
+        subscription_id: r.removed ? null : r.id,
+        profile_id: userOf.get(r.id) ?? null,
+        device: r.device,
+        message_id: payload.messageId ?? null,
+        title: payload.title.slice(0, 120),
+        sent_at: new Date(sentAt).toISOString(),
+        ok: r.ok,
+        status: r.status,
+      })),
+    ),
   ]).catch(() => {});
 
   return results;
