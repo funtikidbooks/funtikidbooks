@@ -47,9 +47,13 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Tin nhắn mới";
   const url = payload.url || "/workspace";
   const receivedAt = Date.now();
+  // Only a chat message counts on the app icon — a test from Quản trị
+  // ("Đo tín hiệu") or a đơn xin nghỉ notice left a "1" on Lalune's icon
+  // with nothing unread inside the app (12/10).
+  const isChatMessage = Boolean(payload.messageId) && payload.tag !== "funti-test";
   event.waitUntil(
     Promise.all([
-      bumpAppBadge().catch(() => {}),
+      isChatMessage ? bumpAppBadge().catch(() => {}) : Promise.resolve(),
       showMessageNotification(title, url, payload),
       ackDelivery(payload, receivedAt).catch(() => {}),
     ]),
