@@ -274,6 +274,8 @@ test("bảng công việc: mô tả kiểu Trello (Markdown) hiện đúng, th�
   assert.ok(html.includes("<ul><li>one</li><li>two &lt;b&gt;x&lt;/b&gt;</li></ul>")); // raw HTML in Markdown is shown, never run
   assert.ok(html.includes('<ol start="3"><li>three</li></ol>'));
   assert.ok(html.includes(">🖼 image.webp</a>")); // Trello images need a login — linked, not embedded
+  // …but an image already copied into our storage shows as a picture.
+  assert.ok(descriptionToHtml("![a](https://abc.supabase.co/storage/v1/object/public/task-attachments/t/x.png)").includes('<img src="https://abc.supabase.co/storage/'));
   assert.ok(html.includes("<em>The Bear</em> and file_name_x"));
   assert.ok(!descriptionToHtml("[x](javascript:alert(1))").includes("href")); // only http(s)/mailto links
   assert.equal(descriptionToHtml("<p>đã là HTML</p>"), "<p>đã là HTML</p>");

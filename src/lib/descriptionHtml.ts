@@ -37,9 +37,13 @@ function inline(src: string): string {
   s = s.replace(/\\([\\`*_{}[\]()#+\-.!>~|])/g, (_, ch: string) => put(esc(ch)));
   s = s.replace(/`([^`]+)`/g, (_, code: string) => put(`<code>${esc(code)}</code>`));
   // Images on Trello need a Trello login to load — linked, not embedded.
+  // Ones already copied into our own storage (a Trello import that brought
+  // the files over) show as pictures.
   s = s.replace(/!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g, (m, alt: string, url: string) => {
     const u = safeUrl(url);
-    return u ? put(anchor(u, `🖼 ${alt.trim() || "Ảnh"}`)) : m;
+    if (!u) return m;
+    if (/^https:\/\/[a-z0-9]+\.supabase\.co\/storage\//i.test(u)) return put(`<img src="${esc(u)}" alt="${esc(alt.trim())}" loading="lazy">`);
+    return put(anchor(u, `🖼 ${alt.trim() || "Ảnh"}`));
   });
   s = s.replace(/\[([^\]]+)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g, (m, text: string, url: string) => {
     const u = safeUrl(url);
