@@ -250,7 +250,8 @@ export async function recordTaskAttachment(
     .single();
 
   if (error || !data) throw new Error("Không thể lưu tệp đính kèm");
-  await logTaskActivity(supabase, taskId, user.id, "attached", { filename });
+  // url/mime let the card's conversation show the file itself, like Trello.
+  await logTaskActivity(supabase, taskId, user.id, "attached", { filename, url: publicUrlData.publicUrl, mime_type: String(file.mimeType ?? "") });
 
   return data as TaskAttachment;
 }

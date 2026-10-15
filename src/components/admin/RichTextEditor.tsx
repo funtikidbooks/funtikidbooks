@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -53,6 +53,10 @@ export function RichTextEditor({
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  // The editor's paste/drop handlers are set up once; they call the latest
+  // upload function through this.
+  const pasteImagesRef = useRef<(files: File[]) => void>(() => {});
+  const imagesIn = (list: FileList | null | undefined) => Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -68,7 +72,31 @@ export function RichTextEditor({
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
     editorProps: {
       attributes: { class: "rich-content rte-editable" },
+      // Like Trello: a copied picture or screenshot pasted (Ctrl/⌘+V), or an
+      // image file dragged in, is uploaded and shows in place.
+      handlePaste: (_view, event) => {
+        const files = imagesIn(event.clipboardData?.files);
+        if (files.length === 0) return false;
+        event.preventDefault();
+        pasteImagesRef.current(files);
+        return true;
+      },
+      handleDrop: (_view, event) => {
+        const files = imagesIn((event as DragEvent).dataTransfer?.files);
+        if (files.length === 0) return false;
+        event.preventDefault();
+        pasteImagesRef.current(files);
+        return true;
+      },
     },
+  });
+
+  useEffect(() => {
+    pasteImagesRef.current = (files: File[]) => {
+      void (async () => {
+        for (const file of files) await handleImageFile(file);
+      })();
+    };
   });
 
   async function handleImageFile(file: File | undefined) {
@@ -77,6 +105,8 @@ export function RichTextEditor({
     try {
       const url = await onUploadImage(file);
       editor.chain().focus().setImage({ src: url }).run();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Không tải ảnh lên được");
     } finally {
       setUploading(false);
       if (imageInputRef.current) imageInputRef.current.value = "";

@@ -42,6 +42,37 @@ function activityText(a: TaskActivity): string {
   }
 }
 
+// A file in the conversation, the way Trello shows it: a picture as a
+// thumbnail, anything else (PDF, PSD…) as a named chip. Both open the file.
+function FileInFeed({ url, filename, mimeType, size = 64 }: { url: string; filename: string; mimeType?: string; size?: number }) {
+  const isImage = (mimeType ?? "").startsWith("image/") || /.(png|jpe?g|webp|gif|avif)$/i.test(filename);
+  if (isImage) {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" title={filename}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={thumbnailUrl(url, size * 2)}
+          alt={filename}
+          className="rounded-[6px] object-cover"
+          style={{ width: size, height: size, border: "1px solid var(--color-neutral-200)" }}
+        />
+      </a>
+    );
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12.5px] font-semibold max-w-full"
+      style={{ background: "var(--color-surface)", border: "1px solid var(--color-neutral-200)", color: "var(--color-text)" }}
+    >
+      <span aria-hidden>📄</span>
+      <span className="truncate">{filename}</span>
+    </a>
+  );
+}
+
 type FeedItem =
   | { kind: "comment"; created_at: string; data: TaskComment }
   | { kind: "activity"; created_at: string; data: TaskActivity };
@@ -52,12 +83,16 @@ export function TaskCommentChat({
   initialComments,
   initialActivity,
   showDetails,
+  attachments = [],
 }: {
   taskId: string;
   currentUser: Pick<Profile, "id" | "display_name">;
   initialComments: TaskComment[];
   initialActivity: TaskActivity[];
   showDetails: boolean;
+  // The card's own files — older "đã đính kèm" entries only kept the file
+  // name, so this is how they find the file to show.
+  attachments?: TaskAttachment[];
 }) {
   const [comments, setComments] = useState(initialComments);
   const [activity, setActivity] = useState(initialActivity);
@@ -188,10 +223,28 @@ export function TaskCommentChat({
     ...activity.map((a): FeedItem => ({ kind: "activity", created_at: a.created_at, data: a })),
   ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-  // Collapsed view mirrors Trello's default: every comment, but only the
-  // single most recent activity entry rather than the full audit trail.
+  // The file an "đã đính kèm" entry is about. A photo sent with a comment
+  // already shows in that comment, so its entry is left out.
+  const commentFileUrls = new Set(comments.flatMap((c) => c.attachments.map((a) => a.url)));
+  const fileOf = (a: TaskActivity) => {
+    if (a.type !== "attached") return null;
+    if (a.metadata.url) return { url: a.metadata.url, filename: a.metadata.filename ?? "Tệp", mimeType: a.metadata.mime_type };
+    const match = attachments.find((x) => x.filename === a.metadata.filename);
+    return match ? { url: match.url, filename: match.filename, mimeType: match.mime_type ?? undefined } : null;
+  };
+  const shown = merged.filter((item) => {
+    if (item.kind !== "activity" || item.data.type !== "attached") return true;
+    const file = fileOf(item.data);
+    return !file || !commentFileUrls.has(file.url);
+  });
+
+  // Collapsed view mirrors Trello's default: every comment and every file
+  // added (sếp Phúc, 15/10: "đính kèm file nó hiện cùng hội thoại"), but
+  // only the single most recent other activity entry.
   const lastActivity = activity[activity.length - 1];
-  const visible = showDetails ? merged : merged.filter((item) => item.kind === "comment" || item.data.id === lastActivity?.id);
+  const visible = showDetails
+    ? shown
+    : shown.filter((item) => item.kind === "comment" || item.data.type === "attached" || item.data.id === lastActivity?.id);
 
   return (
     <div className="rounded-[var(--radius-md)]" style={{ border: "1px solid var(--color-neutral-200)" }}>
@@ -214,6 +267,14 @@ export function TaskCommentChat({
                 <p className="text-[12.5px]" style={{ color: "var(--color-neutral-600)" }}>
                   {activityText(item.data)}
                 </p>
+                {(() => {
+                  const file = fileOf(item.data);
+                  return file ? (
+                    <div className="mt-1">
+                      <FileInFeed url={file.url} filename={file.filename} mimeType={file.mimeType} size={96} />
+                    </div>
+                  ) : null;
+                })()}
                 <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
                   {formatTime(item.created_at)}
                 </span>
@@ -287,15 +348,7 @@ export function TaskCommentChat({
                 {item.data.attachments.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-1">
                     {item.data.attachments.map((att) => (
-                      <a key={att.id} href={att.url} target="_blank" rel="noreferrer">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={thumbnailUrl(att.url, 128)}
-                          alt={att.filename}
-                          className="rounded-[6px] object-cover"
-                          style={{ width: 64, height: 64, border: "1px solid var(--color-neutral-200)" }}
-                        />
-                      </a>
+                      <FileInFeed key={att.id} url={att.url} filename={att.filename} mimeType={att.mime_type ?? undefined} />
                     ))}
                   </div>
                 )}
@@ -310,13 +363,7 @@ export function TaskCommentChat({
           <div className="flex flex-wrap gap-1.5 mb-2">
             {pending.map((p) => (
               <div key={p.id} className="relative">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={thumbnailUrl(p.url, 88)}
-                  alt={p.filename}
-                  className="rounded-[6px] object-cover"
-                  style={{ width: 44, height: 44, border: "1px solid var(--color-neutral-200)" }}
-                />
+                <FileInFeed url={p.url} filename={p.filename} mimeType={p.mime_type ?? undefined} size={44} />
                 <button
                   type="button"
                   onClick={() => setPending((prev) => prev.filter((x) => x.id !== p.id))}
@@ -356,14 +403,13 @@ export function TaskCommentChat({
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             className="btn-icon flex-none"
-            title="Đính kèm ảnh"
+            title="Đính kèm ảnh hoặc tệp"
           >
             📎
           </button>
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
             multiple
             className="hidden"
             onChange={(e) => handleFiles(e.target.files)}

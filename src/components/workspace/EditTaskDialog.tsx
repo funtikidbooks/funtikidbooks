@@ -900,6 +900,7 @@ export function EditTaskDialog({
                 initialComments={comments}
                 initialActivity={activity}
                 showDetails={showDetails}
+                attachments={attachments}
               />
             )}
           </div>
