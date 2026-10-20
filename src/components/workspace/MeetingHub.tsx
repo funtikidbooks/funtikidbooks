@@ -67,6 +67,7 @@ import {
 } from "@/lib/actions/meetings";
 import { translateMessage } from "@/lib/actions/translate";
 import { loadChannelMembers, saveRoomSeen } from "@/lib/chatReadsClient";
+import { uploadResumable } from "@/lib/resumableUpload";
 import type {
   MeetingChannelPublic,
   MeetingChannelRead,
@@ -304,6 +305,19 @@ function formatDateDivider(date: string) {
 
 function isImage(mime: string | null) {
   return !!mime && mime.startsWith("image/");
+}
+
+// Up to 2GB per file (sếp, 20/10/2026: a whole project's PSDs or a video in
+// one go). Anything over 6MB goes up in resumable pieces — see
+// lib/resumableUpload.ts.
+const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
+const RESUMABLE_FROM_BYTES = 6 * 1024 * 1024;
+
+// Supabase only resizes pictures up to 25MB — a bigger one (a print-size
+// PNG) would show as a broken thumbnail, so it's offered as a file instead.
+const MAX_PREVIEW_IMAGE_BYTES = 25 * 1024 * 1024;
+function showsAsPicture(m: Pick<MeetingMessage, "attachment_mime" | "attachment_size">) {
+  return isImage(m.attachment_mime) && (m.attachment_size ?? 0) <= MAX_PREVIEW_IMAGE_BYTES;
 }
 
 // Each pending file becomes its own message row on send (see handleSend) —
@@ -1422,6 +1436,12 @@ export function MeetingHub({
   // Sends that failed only because of the network (not a real rejection) —
   // re-sent automatically once the connection is back, see the effect below.
   const networkFailedRef = useRef(new Set<string>());
+  // Where each message's file goes, fixed on its first try — a retry after a
+  // dropped connection then resumes the same upload (or, once it finished,
+  // skips it) instead of sending up to 2GB again.
+  const storagePathsRef = useRef(new Map<string, { path: string; uploaded: boolean }>());
+  // Percent uploaded for big files still on their way, by temp id.
+  const [uploadProgress, setUploadProgress] = useState<Map<string, number>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [createParentId, setCreateParentId] = useState<string | null>(null);
@@ -1737,7 +1757,7 @@ export function MeetingHub({
   // loop below).
   const photoBurstInfo = useMemo(() => {
     const map = new Map<string, { ids: string[]; leaderIndex: number }>();
-    const isBurstable = (msg: MeetingMessage) => !msg.is_recalled && !!msg.attachment_url && isImage(msg.attachment_mime);
+    const isBurstable = (msg: MeetingMessage) => !msg.is_recalled && !!msg.attachment_url && showsAsPicture(msg);
     const BURST_WINDOW_MS = 30 * 1000;
     let i = 0;
     while (i < messages.length) {
@@ -1947,7 +1967,7 @@ export function MeetingHub({
     for (const m of messages) {
       if (m.is_recalled) continue;
       if (m.attachment_url) {
-        if (isImage(m.attachment_mime)) images.push(m);
+        if (showsAsPicture(m)) images.push(m);
         else files.push(m);
       }
       if (m.content) {
@@ -3028,8 +3048,8 @@ export function MeetingHub({
     if (files.length === 0) return;
 
     e.preventDefault();
-    const valid = files.filter((f) => f.size <= 50 * 1024 * 1024);
-    setError(valid.length < files.length ? "Có ảnh vượt quá 50MB, đã bỏ qua" : null);
+    const valid = files.filter((f) => f.size <= MAX_FILE_BYTES);
+    setError(valid.length < files.length ? "Có ảnh vượt quá 2GB, đã bỏ qua" : null);
     if (valid.length === 0) return;
     setPendingFiles((prev) => [...prev, ...valid].slice(0, MAX_PENDING_FILES));
   }
@@ -3067,18 +3087,38 @@ export function MeetingHub({
         let storagePath: string | null = null;
         if (file) {
           const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
-          storagePath = `meetings/${channelId}/${crypto.randomUUID()}.${ext}`;
-          const { error: uploadError } = await supabase.storage
-            .from("task-attachments")
-            .upload(storagePath, file, { contentType: file.type });
+          const target = storagePathsRef.current.get(tempId) ?? {
+            path: `meetings/${channelId}/${crypto.randomUUID()}.${ext}`,
+            uploaded: false,
+          };
+          storagePathsRef.current.set(tempId, target);
+          storagePath = target.path;
+          let uploadError: { message?: string } | null = null;
+          if (target.uploaded) {
+            // Already up from an earlier try — only the message row failed.
+          } else if (file.size > RESUMABLE_FROM_BYTES) {
+            let shown = -1;
+            await uploadResumable("task-attachments", storagePath, file, (percent) => {
+              if (percent === shown) return;
+              shown = percent;
+              setUploadProgress((prev) => new Map(prev).set(tempId, percent));
+            }).catch((err: unknown) => {
+              uploadError = { message: err instanceof Error ? err.message : String(err) };
+            });
+          } else {
+            ({ error: uploadError } = await supabase.storage
+              .from("task-attachments")
+              .upload(storagePath, file, { contentType: file.type }));
+          }
           if (uploadError) {
             // A dropped connection mid-upload is retried automatically once
             // it's back (see the flush below), same as a text message.
-            if (!navigator.onLine || /fetch|network|timeout|abort/i.test(uploadError.message ?? "")) {
+            if (!navigator.onLine || /fetch|network|timeout|abort/i.test((uploadError as { message?: string }).message ?? "")) {
               networkFailedRef.current.add(tempId);
             }
             throw new Error("Không thể tải tệp lên");
           }
+          target.uploaded = true;
           const { data: publicUrlData } = supabase.storage.from("task-attachments").getPublicUrl(storagePath);
           attachment = { url: publicUrlData.publicUrl, filename: file.name, mime: file.type, size: file.size };
         }
@@ -3127,8 +3167,10 @@ export function MeetingHub({
         const res = await insertWithRetry<MeetingMessage>(supabase, "meeting_messages", insertRow);
         const sent = res.data;
         if (!sent) {
-          if (storagePath) await supabase.storage.from("task-attachments").remove([storagePath]).catch(() => {});
           if (res.code) {
+            // Kept on a network failure: the automatic retry reuses the file.
+            if (storagePath) await supabase.storage.from("task-attachments").remove([storagePath]).catch(() => {});
+            storagePathsRef.current.delete(tempId);
             // A real rejection (not a member, closed room...) — retrying
             // won't help, so it leaves the outbox too.
             removeFromOutbox(serverId);
@@ -3149,6 +3191,7 @@ export function MeetingHub({
         }
         pendingPayloadsRef.current.delete(tempId);
         serverIdsRef.current.delete(tempId);
+        storagePathsRef.current.delete(tempId);
         // Fast path to everyone else in the room (~0.06s) — see chatBroadcast.ts.
         sendChatBroadcast(roomTopic(channelId), "message", sent);
         notifyNewMessage("meeting", sent.id);
@@ -3158,6 +3201,12 @@ export function MeetingHub({
       } finally {
         setPendingIds((prev) => {
           const next = new Set(prev);
+          next.delete(tempId);
+          return next;
+        });
+        setUploadProgress((prev) => {
+          if (!prev.has(tempId)) return prev;
+          const next = new Map(prev);
           next.delete(tempId);
           return next;
         });
@@ -3707,7 +3756,7 @@ export function MeetingHub({
                         </div>
                       )}
                       {m.attachment_url &&
-                        (isImage(m.attachment_mime) ? (
+                        (showsAsPicture(m) ? (
                           burst ? (
                             <div
                               className={`relative mt-1 flex flex-wrap gap-1 ${reactionsBadge ? "mb-2" : ""}`}
@@ -3792,8 +3841,8 @@ export function MeetingHub({
                           ⚠️ Gửi lỗi — Bấm để gửi lại
                         </button>
                       ) : isPending ? (
-                        <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
-                          Đang gửi…
+                        <span className="text-[10px] mt-0.5 tabular-nums" style={{ color: "var(--color-neutral-500)" }}>
+                          {uploadProgress.has(m.id) ? `Đang tải lên ${uploadProgress.get(m.id)}%…` : "Đang gửi…"}
                         </span>
                       ) : (
                         (isGroupEnd || (!m.content && !m.is_recalled)) && (
@@ -3833,6 +3882,7 @@ export function MeetingHub({
                   currentUser.id,
                   pendingIds,
                   failedIds,
+                  uploadProgress,
                   reactionPickerFor,
                   moreMenuFor,
                   translatingIds,
@@ -5120,8 +5170,8 @@ export function MeetingHub({
                     const picked = Array.from(e.target.files ?? []);
                     e.target.value = "";
                     if (picked.length === 0) return;
-                    const valid = picked.filter((f) => f.size <= 50 * 1024 * 1024);
-                    setError(valid.length < picked.length ? "Có tệp vượt quá 50MB, đã bỏ qua" : null);
+                    const valid = picked.filter((f) => f.size <= MAX_FILE_BYTES);
+                    setError(valid.length < picked.length ? "Có tệp vượt quá 2GB, đã bỏ qua" : null);
                     if (valid.length === 0) return;
                     setPendingFiles((prev) => [...prev, ...valid].slice(0, MAX_PENDING_FILES));
                   }}
