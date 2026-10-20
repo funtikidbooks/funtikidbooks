@@ -29,7 +29,7 @@ import { useCallPresence } from "@/lib/useCallPresence";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
 import { usePageVisible } from "@/lib/usePageVisible";
 import { vnToday } from "@/lib/constants/attendance";
-import { resizedUrl, thumbnailUrl } from "@/lib/imageTransform";
+import { fileLinkUrl, resizedUrl, thumbnailUrl } from "@/lib/imageTransform";
 import { notifyNewMessage } from "@/lib/chatNotify";
 import { playChatDing } from "@/lib/chatSound";
 import { firstSighting, listenChatTopic, roomTopic, sendChatBroadcast } from "@/lib/chatBroadcast";
@@ -3809,7 +3809,7 @@ export function MeetingHub({
                         ) : (
                           <div className={`relative inline-block mt-1 ${reactionsBadge ? "mb-2" : ""}`}>
                             <a
-                              href={m.attachment_url}
+                              href={fileLinkUrl(m.attachment_url, m.attachment_filename, m.attachment_mime)}
                               target="_blank"
                               rel="noreferrer"
                               className="flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold"

@@ -20,7 +20,7 @@ import {
   replaceIfProvisional,
   type SyncCursor,
 } from "@/lib/chatSyncCursor";
-import { resizedUrl, thumbnailUrl } from "@/lib/imageTransform";
+import { fileLinkUrl, resizedUrl, thumbnailUrl } from "@/lib/imageTransform";
 import { addToOutbox, insertWithRetry, isMissingColumn, removeFromOutbox } from "@/lib/chatOutbox";
 import { onConnectivityRestored } from "@/lib/connectivity";
 import { useIsMobileViewport } from "@/lib/useIsMobileViewport";
@@ -1490,7 +1490,7 @@ export function DirectConversation({
                 ) : (
                   <div className={`relative inline-block mt-1 ${reactionsBadge ? "mb-2" : ""}`}>
                     <a
-                      href={m.attachment_url}
+                      href={fileLinkUrl(m.attachment_url, m.attachment_filename, m.attachment_mime)}
                       target="_blank"
                       rel="noreferrer"
                       className="flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12px] font-semibold"

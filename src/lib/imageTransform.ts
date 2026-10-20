@@ -73,3 +73,14 @@ export function resizedUrl(url: string | null | undefined, width: number, qualit
   const path = url.slice(idx + PUBLIC_OBJECT_MARKER.length);
   return `${base}/storage/v1/render/image/public/${path}?width=${width}&resize=contain&quality=${quality}`;
 }
+
+// Link for a chat file chip. A PSD, ZIP, AI… has no viewer in the browser:
+// on an iPad tapping it opened a blank tab instead of saving it. Asking
+// Supabase for `?download=<name>` makes it a real download (iPad: "Tải về",
+// then Files) under its original name. PDFs and videos still open to view.
+export function fileLinkUrl(url: string, filename: string | null, mime: string | null): string {
+  if (!url.includes(PUBLIC_OBJECT_MARKER) || url.includes("?")) return url;
+  const viewable = !!mime && (mime === "application/pdf" || mime.startsWith("video/") || mime.startsWith("audio/"));
+  if (viewable) return url;
+  return `${url}?download=${encodeURIComponent(filename ?? "")}`;
+}
