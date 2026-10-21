@@ -24,6 +24,7 @@ const MORE_NAV = [
   { href: "/workspace/kho-font", label: "Kho font & brush", icon: "🔤" },
   { href: "/workspace/tinh-kho-sach", label: "Tính khổ sách", icon: "📐" },
   { href: "/workspace/vien-sticker", label: "Tạo viền sticker", icon: "✂️" },
+  { href: "/workspace/di-line", label: "Đi line tự động", icon: "✒️" },
   { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️" },
   { href: "/workspace/hop-dong", label: "Hợp đồng", icon: "📄" },
   { href: "/workspace/cham-cong", label: "Chấm công", icon: "🕐" },
