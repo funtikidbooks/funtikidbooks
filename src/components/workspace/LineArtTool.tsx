@@ -18,6 +18,7 @@ type Settings = {
   gapMm: number;
   minMm: number;
   sketchOpacity: number;
+  frameBoost: number;
 };
 
 const DEFAULTS: Settings = {
@@ -31,6 +32,7 @@ const DEFAULTS: Settings = {
   gapMm: 1.5,
   minMm: 0.8,
   sketchOpacity: 0.25,
+  frameBoost: 1.6,
 };
 const SETTINGS_KEY = "funti-line-art-settings";
 
@@ -204,8 +206,9 @@ export function LineArtTool() {
     byWeight: settings.byWeight,
     brush: settings.brush,
     color: settings.color,
+    frameBoost: settings.frameBoost,
   };
-  const styleKey = `${style.widthPx}|${style.byWeight}|${style.brush}|${style.color}`;
+  const styleKey = `${style.widthPx}|${style.byWeight}|${style.brush}|${style.color}|${style.frameBoost}`;
 
   // Preview: the sketch faintly underneath, the line art on top.
   useEffect(() => {
@@ -222,8 +225,14 @@ export function LineArtTool() {
       ctx.drawImage(sk.canvas, 0, 0);
       ctx.globalAlpha = 1;
     }
-    const [widthPx, byWeight, brush, color] = styleKey.split("|");
-    drawLineArt(ctx, strokes, sketchHalf, { widthPx: Number(widthPx), byWeight: byWeight === "true", brush: brush as BrushStyle, color }, hidden);
+    const [widthPx, byWeight, brush, color, frameBoost] = styleKey.split("|");
+    drawLineArt(
+      ctx,
+      strokes,
+      sketchHalf,
+      { widthPx: Number(widthPx), byWeight: byWeight === "true", brush: brush as BrushStyle, color, frameBoost: Number(frameBoost) },
+      hidden,
+    );
   }, [strokes, sketchHalf, hidden, styleKey, settings.sketchOpacity, size]);
 
   async function pickFile(file: File | undefined) {
@@ -427,6 +436,16 @@ export function LineArtTool() {
         <div className="card elev-sm p-4 flex flex-col gap-3.5 lg:col-start-1 lg:row-start-2">
           <span className="text-sm font-bold">Nét line</span>
           <Slider label="Độ dày nét" value={settings.widthMm} min={0.1} max={2} step={0.05} unit="mm" onChange={(v) => set("widthMm", v)} />
+          <Slider
+            label="Viền khung ngoài đậm hơn"
+            hint={`Khung ngoài dày ${(settings.widthMm * settings.frameBoost).toFixed(2)} mm`}
+            value={settings.frameBoost}
+            min={1}
+            max={3}
+            step={0.1}
+            unit="×"
+            onChange={(v) => set("frameBoost", v)}
+          />
           <label className="flex items-start gap-2 text-xs">
             <input type="checkbox" className="mt-0.5" checked={settings.byWeight} onChange={(e) => set("byWeight", e.target.checked)} />
             <span>

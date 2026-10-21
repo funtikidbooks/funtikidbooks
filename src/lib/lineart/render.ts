@@ -10,6 +10,7 @@ export type RenderStyle = {
   byWeight: boolean; // heavier sketch lines → bolder (frame), lighter → finer (details)
   brush: BrushStyle;
   color: string;
+  frameBoost: number; // the outer frame drawn this many times as bold
 };
 
 export const BRUSHES: { id: BrushStyle; label: string }[] = [
@@ -22,6 +23,7 @@ export const BRUSHES: { id: BrushStyle; label: string }[] = [
 // Three weights, like a hand-inked colouring page: bold frame and outer
 // lines, normal lines, fine details.
 export function widthFor(s: Stroke, sketchHalf: number, style: RenderStyle): number {
+  if (s.role === "frame") return style.widthPx * style.frameBoost;
   if (!style.byWeight || sketchHalf <= 0) return style.widthPx;
   const r = s.weight / sketchHalf;
   return style.widthPx * (r < 0.8 ? 0.72 : r > 1.2 ? 1.5 : 1);
