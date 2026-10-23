@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { updateDraftDocument, sendDraftDocument, deleteStaffDocument } from "@/lib/actions/documents";
 import { DocumentPrintCard } from "@/components/workspace/DocumentPrintCard";
-import type { Profile, StaffDocument, StaffDocumentType } from "@/lib/types";
+import { fillTemplate } from "@/lib/documentTemplate";
+import type { Profile, StaffDocument, StaffDocumentTemplate, StaffDocumentType, StaffIdDocument } from "@/lib/types";
 
 const TYPE_LABELS: Record<StaffDocumentType, string> = {
   labor_contract: "Hợp đồng lao động",
@@ -19,7 +20,17 @@ const TYPE_OPTIONS: StaffDocumentType[] = ["labor_contract", "probation_contract
 // The compose-and-review screen for a still-draft document — "soạn thử
 // xem như nào, rồi mới gửi". Nothing here is visible to the recipient
 // until Gửi actually flips the row to 'pending' (see sendDraftDocument).
-export function DocumentDraftEditor({ document, profiles }: { document: StaffDocument; profiles: Profile[] }) {
+export function DocumentDraftEditor({
+  document,
+  profiles,
+  templates,
+  idDocuments,
+}: {
+  document: StaffDocument;
+  profiles: Profile[];
+  templates: StaffDocumentTemplate[];
+  idDocuments: StaffIdDocument[];
+}) {
   const router = useRouter();
   const [profileId, setProfileId] = useState(document.profile_id);
   const [type, setType] = useState<StaffDocumentType>(document.type);
@@ -33,6 +44,18 @@ export function DocumentDraftEditor({ document, profiles }: { document: StaffDoc
   const [previewing, setPreviewing] = useState(false);
 
   const recipient = profiles.find((p) => p.id === profileId);
+  const [templateId, setTemplateId] = useState("");
+
+  // Replaces the text with a Hợp đồng mẫu filled for the current recipient.
+  function applyTemplate() {
+    const tpl = templates.find((t) => t.id === templateId);
+    if (!tpl) return;
+    if (content.trim() && !confirm(`Thay toàn bộ nội dung hiện tại bằng mẫu "${tpl.name}"?`)) return;
+    setType(tpl.type);
+    setTitle(tpl.title);
+    setContent(fillTemplate(tpl.content, recipient, idDocuments.find((d) => d.profile_id === profileId)));
+    setTemplateId("");
+  }
 
   async function handleSaveDraft() {
     setSaving(true);
@@ -142,6 +165,24 @@ export function DocumentDraftEditor({ document, profiles }: { document: StaffDoc
             </select>
           </label>
         </div>
+        {templates.length > 0 && (
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-sm flex-1 min-w-[12rem]">
+              Lấy nội dung từ hợp đồng mẫu
+              <select className="input" value={templateId} onChange={(e) => setTemplateId(e.target.value)} disabled={busy}>
+                <option value="">— Chọn mẫu —</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={applyTemplate} disabled={busy || !templateId}>
+              Lấy từ mẫu
+            </button>
+          </div>
+        )}
         <label className="flex flex-col gap-1 text-sm">
           Tiêu đề
           <input type="text" className="input" value={title} onChange={(e) => setTitle(e.target.value)} disabled={busy} />

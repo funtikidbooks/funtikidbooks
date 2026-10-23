@@ -725,6 +725,19 @@ export type StaffDocument = {
   updated_at: string;
 };
 
+// Hợp đồng mẫu — a reusable starting text for a staff document; {{…}}
+// blanks are filled per person (see lib/documentTemplate.ts).
+export type StaffDocumentTemplate = {
+  id: string;
+  type: StaffDocumentType;
+  name: string;
+  title: string;
+  content: string;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 // CCCD (national ID) + residence info per employee — director/PM-only
 // reference data, kept off profiles itself (see its own comment in
 // schema.sql for why). One row per profile, upserted in place rather than
@@ -1482,6 +1495,12 @@ export type Database = {
         Row: StaffDocument;
         Insert: Partial<StaffDocument> & { profile_id: string; type: StaffDocumentType; title: string; content: string };
         Update: Partial<StaffDocument>;
+        Relationships: [];
+      };
+      staff_document_templates: {
+        Row: StaffDocumentTemplate;
+        Insert: Partial<StaffDocumentTemplate> & { type: StaffDocumentType; name: string; title: string; content: string };
+        Update: Partial<StaffDocumentTemplate>;
         Relationships: [];
       };
       staff_id_documents: {

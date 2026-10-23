@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/supabase/server";
-import type { StaffDocument, StaffDocumentType } from "@/lib/types";
+import type { StaffDocument, StaffDocumentTemplate, StaffDocumentType } from "@/lib/types";
 
 // Director, or any staff whose chức danh is exactly "Project Manager" —
 // mirrors the can_manage_hr() RLS helper in supabase/schema.sql.
@@ -188,4 +188,38 @@ export async function countMyPendingDocuments(): Promise<number> {
     .eq("profile_id", user.id)
     .eq("status", "pending");
   return count ?? 0;
+}
+
+// ---- Hợp đồng mẫu (staff_document_templates, director/PM only by RLS) ----
+
+export async function listDocumentTemplates(): Promise<StaffDocumentTemplate[]> {
+  const { supabase } = await requireHrManager();
+  const { data } = await supabase.from("staff_document_templates").select("*").order("type").order("name");
+  return (data ?? []) as StaffDocumentTemplate[];
+}
+
+export async function saveDocumentTemplate(input: {
+  id?: string;
+  type: StaffDocumentType;
+  name: string;
+  title: string;
+  content: string;
+}): Promise<StaffDocumentTemplate> {
+  const { supabase, user } = await requireHrManager();
+  const name = input.name.trim();
+  const title = input.title.trim();
+  if (!name) throw new Error("Cần đặt tên cho mẫu.");
+  if (!title) throw new Error("Cần nhập tiêu đề.");
+  const row = { type: input.type, name, title, content: input.content, updated_by: user.id, updated_at: new Date().toISOString() };
+  const { data, error } = input.id
+    ? await supabase.from("staff_document_templates").update(row).eq("id", input.id).select("*").single()
+    : await supabase.from("staff_document_templates").insert(row).select("*").single();
+  if (error || !data) throw new Error("Không thể lưu mẫu.");
+  return data as StaffDocumentTemplate;
+}
+
+export async function deleteDocumentTemplate(id: string): Promise<void> {
+  const { supabase } = await requireHrManager();
+  const { error } = await supabase.from("staff_document_templates").delete().eq("id", id);
+  if (error) throw new Error("Không thể xoá mẫu.");
 }

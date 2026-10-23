@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
-import { getStaffDocument } from "@/lib/actions/documents";
+import { getStaffDocument, listDocumentTemplates } from "@/lib/actions/documents";
+import { listStaffIdDocuments } from "@/lib/actions/staffId";
 import { DocumentDraftEditor } from "@/components/admin/DocumentDraftEditor";
 import { DocumentDetailView } from "@/components/workspace/DocumentDetailView";
 import type { Profile } from "@/lib/types";
@@ -29,8 +30,12 @@ export default async function AdminDocumentDetailPage({
   if (!document) notFound();
 
   if (document.status === "draft") {
-    const { data: profiles } = await supabase.from("profiles").select("*").order("display_name", { ascending: true });
-    return <DocumentDraftEditor document={document} profiles={(profiles ?? []) as Profile[]} />;
+    const [{ data: profiles }, templates, idDocuments] = await Promise.all([
+      supabase.from("profiles").select("*").order("display_name", { ascending: true }),
+      listDocumentTemplates(),
+      listStaffIdDocuments(),
+    ]);
+    return <DocumentDraftEditor document={document} profiles={(profiles ?? []) as Profile[]} templates={templates} idDocuments={idDocuments} />;
   }
 
   const { data: staffProfile } = await supabase

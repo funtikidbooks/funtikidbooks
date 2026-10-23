@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createDraftDocument } from "@/lib/actions/documents";
-import type { Profile, StaffDocument, StaffDocumentType } from "@/lib/types";
+import { fillTemplate } from "@/lib/documentTemplate";
+import { DocumentTemplatesSection } from "@/components/admin/DocumentTemplatesSection";
+import type { Profile, StaffDocument, StaffDocumentTemplate, StaffDocumentType, StaffIdDocument } from "@/lib/types";
 
 const TYPE_LABELS: Record<StaffDocumentType, string> = {
   labor_contract: "Hợp đồng lao động",
@@ -36,9 +38,24 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
 }
 
-function NewDraftStarter({ profiles, onCreated, onCancel }: { profiles: Profile[]; onCreated: (id: string) => void; onCancel: () => void }) {
+function NewDraftStarter({
+  profiles,
+  templates,
+  idDocuments,
+  onCreated,
+  onCancel,
+}: {
+  profiles: Profile[];
+  templates: StaffDocumentTemplate[];
+  idDocuments: StaffIdDocument[];
+  onCreated: (id: string) => void;
+  onCancel: () => void;
+}) {
   const [profileId, setProfileId] = useState(profiles[0]?.id ?? "");
   const [type, setType] = useState<StaffDocumentType>("labor_contract");
+  // "" = start empty; otherwise a template id. Follows the type picked.
+  const [templateId, setTemplateId] = useState<string>(() => templates.find((t) => t.type === "labor_contract")?.id ?? "");
+  const ofType = templates.filter((t) => t.type === type);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,7 +67,19 @@ function NewDraftStarter({ profiles, onCreated, onCancel }: { profiles: Profile[
     setCreating(true);
     setError(null);
     try {
-      const doc = await createDraftDocument({ profileId, type, title: TYPE_TITLE_DEFAULTS[type], content: "" });
+      const tpl = templates.find((t) => t.id === templateId);
+      const doc = await createDraftDocument({
+        profileId,
+        type,
+        title: tpl?.title || TYPE_TITLE_DEFAULTS[type],
+        content: tpl
+          ? fillTemplate(
+              tpl.content,
+              profiles.find((p) => p.id === profileId),
+              idDocuments.find((d) => d.profile_id === profileId),
+            )
+          : "",
+      });
       onCreated(doc.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể tạo nháp.");
@@ -74,12 +103,31 @@ function NewDraftStarter({ profiles, onCreated, onCancel }: { profiles: Profile[
         </label>
         <label className="flex flex-col gap-1 text-sm">
           Loại văn bản
-          <select className="input" value={type} onChange={(e) => setType(e.target.value as StaffDocumentType)}>
+          <select
+            className="input"
+            value={type}
+            onChange={(e) => {
+              const t = e.target.value as StaffDocumentType;
+              setType(t);
+              setTemplateId(templates.find((x) => x.type === t)?.id ?? "");
+            }}
+          >
             {TYPE_OPTIONS.map((t) => (
               <option key={t} value={t}>
                 {TYPE_LABELS[t]}
               </option>
             ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+          Nội dung
+          <select className="input" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+            {ofType.map((t) => (
+              <option key={t.id} value={t.id}>
+                Lấy từ mẫu: {t.name}
+              </option>
+            ))}
+            <option value="">Để trống, tự soạn</option>
           </select>
         </label>
       </div>
@@ -103,11 +151,16 @@ function NewDraftStarter({ profiles, onCreated, onCancel }: { profiles: Profile[
 export function DocumentsAdminPanel({
   profiles,
   initialDocuments,
+  initialTemplates,
+  idDocuments,
 }: {
   profiles: Profile[];
   initialDocuments: StaffDocument[];
+  initialTemplates: StaffDocumentTemplate[];
+  idDocuments: StaffIdDocument[];
 }) {
   const router = useRouter();
+  const [templates, setTemplates] = useState(initialTemplates);
   const [showForm, setShowForm] = useState(false);
   const [expandedTypes, setExpandedTypes] = useState<Set<StaffDocumentType>>(() => new Set());
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
@@ -135,10 +188,14 @@ export function DocumentsAdminPanel({
       {showForm && (
         <NewDraftStarter
           profiles={profiles}
+          templates={templates}
+          idDocuments={idDocuments}
           onCreated={(id) => router.push(`/quan-tri/hop-dong/${id}`)}
           onCancel={() => setShowForm(false)}
         />
       )}
+
+      <DocumentTemplatesSection templates={templates} onChange={setTemplates} />
 
       {initialDocuments.length === 0 ? (
         <p className="text-sm" style={{ color: "var(--color-neutral-500)" }}>

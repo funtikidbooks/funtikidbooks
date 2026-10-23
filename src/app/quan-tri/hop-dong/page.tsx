@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
-import { listAllStaffDocuments } from "@/lib/actions/documents";
+import { listAllStaffDocuments, listDocumentTemplates } from "@/lib/actions/documents";
+import { listStaffIdDocuments } from "@/lib/actions/staffId";
 import { DocumentsAdminPanel } from "@/components/admin/DocumentsAdminPanel";
 import type { Profile } from "@/lib/types";
 
@@ -19,10 +20,19 @@ export default async function AdminDocumentsPage() {
     redirect("/quan-tri");
   }
 
-  const [{ data: profiles }, documents] = await Promise.all([
+  const [{ data: profiles }, documents, templates, idDocuments] = await Promise.all([
     supabase.from("profiles").select("*").order("display_name", { ascending: true }),
     listAllStaffDocuments(),
+    listDocumentTemplates(),
+    listStaffIdDocuments(),
   ]);
 
-  return <DocumentsAdminPanel profiles={(profiles ?? []) as Profile[]} initialDocuments={documents} />;
+  return (
+    <DocumentsAdminPanel
+      profiles={(profiles ?? []) as Profile[]}
+      initialDocuments={documents}
+      initialTemplates={templates}
+      idDocuments={idDocuments}
+    />
+  );
 }
