@@ -209,11 +209,21 @@ export function makeBorder(
   const line = new Uint8Array(w * h);
   for (let i = 0; i < w * h; i++) if (cut[i] && dIn[i] <= p.linePx) line[i] = 255;
 
-  // Colour: sampled from the art just inside its edge, skipping dark line
-  // work and white sparkles, then carried outward to the nearest sample and
-  // blended so neighbouring colours fade into each other.
+  // Colour, the way the studio's artists do it by hand (27/10/2026):
+  //  - the border takes the colour of the art right next to it, but DEEPER
+  //    (yellow dress → orange border, aqua → deep teal, pink → magenta) —
+  //    the art's colour multiplied by itself, `deepen` times;
+  //  - next to skin and white/very pale parts (arms, hands, a white collar)
+  //    the border is WHITE instead.
+  // Sampled just inside the art's edge, skipping dark line work and
+  // sparkles, carried outward to the nearest sample, lightly blended where
+  // two colours meet.
   const nc = channels.length;
   const ink = (c: number, i: number) => (cmyk ? 255 - channels[c][i] : channels[c][i]) / 255;
+  const rgbOf = (i: number): [number, number, number] =>
+    cmyk
+      ? [(1 - ink(0, i)) * (1 - ink(3, i)), (1 - ink(1, i)) * (1 - ink(3, i)), (1 - ink(2, i)) * (1 - ink(3, i))]
+      : [ink(0, i), ink(1, i), ink(2, i)];
   const { dist: dInArt } = distanceTransform(
     (() => {
       const m = new Uint8Array(w * h);
@@ -224,6 +234,7 @@ export function makeBorder(
     h,
   );
   const ring = Math.max(6, p.insidePx * 0.6);
+  const pale = new Float32Array(w * h);
   const pickSeeds = (strict: boolean) => {
     const seeds = new Uint8Array(w * h);
     let n = 0;
@@ -232,20 +243,17 @@ export function makeBorder(
         const s = y * lw + x;
         const i = (y + pad) * w + x + pad;
         if (alpha[s] < 200 || dInArt[i] > ring || dInArt[i] < 2) continue;
-        if (strict) {
-          if (cmyk) {
-            const k = ink(3, s);
-            const sum = ink(0, s) + ink(1, s) + ink(2, s) + k;
-            if (k > 0.55 || sum > 2.6 || sum < 0.12) continue;
-          } else {
-            const r = ink(0, s);
-            const g = ink(1, s);
-            const bl = ink(2, s);
-            const luma = 0.3 * r + 0.59 * g + 0.11 * bl;
-            if (luma < 0.25 || Math.min(r, g, bl) > 0.92) continue;
-          }
-        }
+        const [r, g, bl] = rgbOf(s);
+        const hi = Math.max(r, g, bl);
+        const lo = Math.min(r, g, bl);
+        // dark outline strokes, and white/near-grey bits (sparkles, a white
+        // hem) don't decide the colour — the coloured parts beside them do
+        if (strict && 0.3 * r + 0.59 * g + 0.11 * bl < 0.25) continue;
+        // skin in these books is any pale tint (peach, pink, lavender)
+        const skin = lo > 0.62 && hi - lo < 0.3 && hi - lo >= 0.08;
+        if (strict && !skin && lo > 0.8 && hi - lo < 0.08) continue;
         seeds[i] = 1;
+        pale[i] = skin ? 1 : 0;
         n++;
       }
     }
@@ -253,7 +261,11 @@ export function makeBorder(
   };
   const seeds = pickSeeds(true) ?? pickSeeds(false) ?? art;
   const { nearest } = distanceTransform(seeds, w, h, true);
-  const blurR = Math.max(4, Math.round(p.insidePx * 0.8));
+  // A stretch of edge counts as skin only when most of it is (an arm, a
+  // hand) — a vine or bracelet crossing an arm doesn't stripe the border.
+  const paleShare = maskedBoxBlur(pale, seeds, w, h, Math.max(6, Math.round(p.insidePx * 2.5)));
+  const power = Math.max(1, p.deepen);
+  const blurR = Math.max(2, Math.round(p.insidePx * 0.35));
   const color: Uint8Array[] = [];
   for (let c = 0; c < nc; c++) {
     const vals = new Float32Array(w * h);
@@ -262,18 +274,24 @@ export function makeBorder(
       const src = nearest![i];
       const sx = (src % w) - pad;
       const sy = ((src / w) | 0) - pad;
-      vals[i] = sx >= 0 && sy >= 0 && sx < lw && sy < lh ? ink(c, sy * lw + sx) : 0;
+      if (sx < 0 || sy < 0 || sx >= lw || sy >= lh) continue;
+      if (paleShare[src] > 0.45) {
+        vals[i] = cmyk ? 0 : 1; // white
+        continue;
+      }
+      const v = ink(c, sy * lw + sx);
+      // multiply the colour by itself: RGB v^power; CMY ink 1-(1-v)^power;
+      // black ink left as drawn
+      vals[i] = cmyk ? (c === 3 ? v : 1 - Math.pow(1 - v, power)) : Math.pow(v, power);
     }
-    const soft = maskedBoxBlur(maskedBoxBlur(vals, fill, w, h, blurR), fill, w, h, blurR);
+    const soft = maskedBoxBlur(vals, fill, w, h, blurR);
     const out = new Uint8Array(w * h);
     for (let i = 0; i < w * h; i++) {
       if (!fill[i]) {
-        out[i] = cmyk ? 255 : 255;
+        out[i] = 255;
         continue;
       }
-      let v = soft[i];
-      v = cmyk ? Math.min(1, v * p.deepen) : Math.max(0, 1 - (1 - v) * p.deepen); // more ink / darker
-      out[i] = Math.round((cmyk ? 1 - v : v) * 255);
+      out[i] = Math.round(Math.min(1, Math.max(0, cmyk ? 1 - soft[i] : soft[i])) * 255);
     }
     color.push(out);
   }

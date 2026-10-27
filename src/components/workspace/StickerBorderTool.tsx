@@ -17,9 +17,11 @@ const DEFAULTS: StickerSettings = {
   edgeMm: 3,
   trimInsetMm: 0,
   smoothMm: 1,
-  deepen: 1.1,
+  deepen: 1.6,
 };
-const SETTINGS_KEY = "funti-sticker-border-settings";
+// v2: border colour model changed (27/10/2026) — old saved "deepen" values
+// meant something else.
+const SETTINGS_KEY = "funti-sticker-border-settings-v2";
 
 const FIELDS: {
   key: keyof StickerSettings;
@@ -537,19 +539,19 @@ export function StickerBorderTool() {
           ))}
           <label className="flex flex-col gap-1">
             <span className="flex items-center justify-between text-xs font-semibold">
-              Màu viền đậm hơn hình
+              Màu viền đậm hơn hình (chỗ da: viền trắng)
               <span
                 className="tabular-nums"
                 style={{ color: "var(--color-neutral-500)" }}
               >
-                +{Math.round((settings.deepen - 1) * 100)}%
+                {settings.deepen <= 1 ? "như màu hình" : `đậm ${settings.deepen.toFixed(1)}×`}
               </span>
             </span>
             <input
               type="range"
               min={1}
-              max={1.4}
-              step={0.05}
+              max={2.5}
+              step={0.1}
               value={settings.deepen}
               onChange={(e) =>
                 setSettings((s) => ({ ...s, deepen: Number(e.target.value) }))
