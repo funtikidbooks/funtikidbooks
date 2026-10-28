@@ -50,7 +50,8 @@ self.addEventListener("push", (event) => {
   // Only a chat message counts on the app icon — a test from Quản trị
   // ("Đo tín hiệu") or a đơn xin nghỉ notice left a "1" on Lalune's icon
   // with nothing unread inside the app (12/10).
-  const isChatMessage = Boolean(payload.messageId) && payload.tag !== "funti-test";
+  // A customer (Khách hàng) message counts too — it's the one that matters most.
+  const isChatMessage = (Boolean(payload.messageId) && payload.tag !== "funti-test") || Boolean(payload.customer);
   event.waitUntil(
     Promise.all([
       isChatMessage ? bumpAppBadge().catch(() => {}) : Promise.resolve(),
@@ -90,11 +91,18 @@ async function bumpAppBadge() {
 }
 
 function showMessageNotification(title, url, payload) {
+  // A customer (Khách hàng) message must not look like a coworker's ping:
+  // its own orange bell icon, a long buzz, and it re-alerts even if an
+  // older one is still on screen (Android/desktop; iOS shows the app icon
+  // and only takes the title — that's why the title itself says KHÁCH HÀNG).
+  const customer = Boolean(payload.customer);
   return (
     self.registration.showNotification(title, {
       body: payload.body || "",
-      icon: "/brand/funti-logo.jpg",
-      badge: "/brand/funti-logo.jpg",
+      icon: customer ? "/brand/khach-hang-icon.png" : "/brand/funti-logo.jpg",
+      badge: customer ? "/brand/khach-hang-badge.png" : "/brand/funti-logo.jpg",
+      vibrate: customer ? [400, 150, 400, 150, 800] : undefined,
+      renotify: customer || undefined,
       // Unique per message: a shared tag (one per room/sender) made each new
       // message silently *replace* the previous one still sitting on the
       // lock screen — no banner, no sound — so a second message in the same

@@ -30,6 +30,10 @@ export type PushPayload = {
   // dismissed instead of letting it disappear on its own — see sw.js. iOS
   // ignores this and falls back to its own default behavior regardless.
   requireInteraction?: boolean;
+  // A customer (Khách hàng) message or reminder: sw.js shows it with its own
+  // orange icon, a long vibration and counts it on the app icon, so it can't
+  // pass for a coworker's chat ping (lib/customerWaiting.ts).
+  customer?: boolean;
 };
 
 // Kept-open connections to Apple/Google/Mozilla/Microsoft's push servers:

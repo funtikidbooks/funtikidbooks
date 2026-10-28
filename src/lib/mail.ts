@@ -76,6 +76,11 @@ Funti Kidbooks Studio`,
 // case where no director/admin has one set up (or it's silently expired)
 // and a customer message would otherwise go unseen until someone happens
 // to open the Khách hàng inbox.
+// Anything a customer typed goes into these emails as text, never as HTML.
+function esc(text: string) {
+  return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string);
+}
+
 export async function sendNewVisitorMessageEmail(input: {
   to: string;
   visitorName: string | null;
@@ -99,9 +104,9 @@ export async function sendNewVisitorMessageEmail(input: {
 Trả lời tại: ${chatUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #2b2622;">
-        <h2 style="margin-bottom: 4px;">Tin nhắn mới từ ${who}</h2>
-        ${input.visitorEmail ? `<p style="color: #78776f; margin-top: 0;">Email khách: ${input.visitorEmail}</p>` : ""}
-        <p style="background: #f4f1ea; border-radius: 8px; padding: 12px 14px; white-space: pre-wrap;">${input.preview}</p>
+        <h2 style="margin-bottom: 4px;">Tin nhắn mới từ ${esc(who)}</h2>
+        ${input.visitorEmail ? `<p style="color: #78776f; margin-top: 0;">Email khách: ${esc(input.visitorEmail)}</p>` : ""}
+        <p style="background: #f4f1ea; border-radius: 8px; padding: 12px 14px; white-space: pre-wrap;">${esc(input.preview)}</p>
         <p>
           <a href="${chatUrl}" style="display: inline-block; background: #e8674a; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold;">
             Trả lời ngay
@@ -174,11 +179,56 @@ export async function sendNewClientMessageEmail(input: { to: string; clientName:
 Trả lời tại: ${inboxUrl}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #2b2622;">
-        <h2 style="margin-bottom: 4px;">Tin nhắn mới từ ${who}</h2>
-        <p style="background: #f4f1ea; border-radius: 8px; padding: 12px 14px; white-space: pre-wrap;">${input.preview}</p>
+        <h2 style="margin-bottom: 4px;">Tin nhắn mới từ ${esc(who)}</h2>
+        <p style="background: #f4f1ea; border-radius: 8px; padding: 12px 14px; white-space: pre-wrap;">${esc(input.preview)}</p>
         <p>
           <a href="${inboxUrl}" style="display: inline-block; background: #e8674a; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold;">
             Trả lời ngay
+          </a>
+        </p>
+      </div>
+    `,
+  });
+}
+
+// The Liên hệ form used to notify nobody (28/10/2026) — entries just sat
+// in Quản trị → Form liên hệ.
+export async function sendContactFormEmail(input: {
+  to: string;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  projectType: string | null;
+  message: string;
+}) {
+  const transporter = getTransporter();
+  if (!transporter) return;
+  const pageUrl = "https://funtikidbooks.com/quan-tri/tin-nhan";
+  const details = [`Email: ${input.email}`, input.phone ? `Điện thoại: ${input.phone}` : "", input.projectType ? `Loại dự án: ${input.projectType}` : ""]
+    .filter(Boolean)
+    .join("\n");
+
+  await transporter.sendMail({
+    from: `"Funti Kidbooks Studio" <${process.env.GMAIL_USER}>`,
+    to: input.to,
+    replyTo: input.email,
+    subject: `🟠 KHÁCH ĐIỀN FORM LIÊN HỆ — ${input.fullName}`,
+    text: `${input.fullName} vừa gửi form Liên hệ:
+
+"${input.message}"
+
+${details}
+
+Trả lời: bấm Reply email này (gửi thẳng cho khách), rồi đánh dấu "Đã trả lời" tại ${pageUrl}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; color: #2b2622;">
+        <h2 style="margin-bottom: 4px;">Form Liên hệ mới từ ${esc(input.fullName)}</h2>
+        <p style="color: #78776f; margin-top: 0; white-space: pre-wrap;">${esc(details)}</p>
+        <p style="background: #f4f1ea; border-radius: 8px; padding: 12px 14px; white-space: pre-wrap;">${esc(input.message)}</p>
+        <p style="color: #78776f;">Bấm <b>Reply</b> email này là gửi thẳng cho khách. Trả lời xong nhớ đánh dấu “Đã trả lời” trên web.</p>
+        <p>
+          <a href="${pageUrl}" style="display: inline-block; background: #e8674a; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold;">
+            Mở form Liên hệ
           </a>
         </p>
       </div>

@@ -3,7 +3,7 @@
 import { after } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendPushToUser } from "@/lib/push";
+import { customerPush, customerStaffIds, maybeAutoReply, previewOf } from "@/lib/customerWaiting";
 import { sendNewVisitorMessageEmail } from "@/lib/mail";
 import type { FileAttachment, VisitorMessage } from "@/lib/types";
 
@@ -71,35 +71,22 @@ async function resolveUploadScope(conversationId?: string, token?: string) {
 // Project Manager (Alice Đỗ) — the same tier that can actually open and
 // reply to the chat now (see requireStaff() in support-chat.ts).
 async function notifyStaffOfVisitorMessage(visitorName: string | null, visitorEmail: string | null, content: string) {
-  const supabase = createAdminClient();
-  const { data: staff } = await supabase
-    .from("profiles")
-    .select("id, email")
-    .or("access_role.eq.director,access_role.eq.admin,role.eq.Project Manager");
-  if (!staff || staff.length === 0) return;
-
   const who = visitorName?.trim() || "Khách vãng lai";
-  const preview = content.length > 140 ? `${content.slice(0, 140)}…` : content;
+  const preview = previewOf(content);
 
-  await Promise.all(
-    staff.map((s) =>
-      sendPushToUser(s.id, {
-        // Fixed, unmistakable title — a workspace DM's push shows the
-        // sender's own name as the title (e.g. "Thư"), which this must
-        // never resemble, or it reads as just another coworker ping and
-        // gets swiped away the same way.
-        title: "🔔 Khách hàng nhắn tin mới",
-        body: `${who}: ${preview}`,
-        senderId: "visitor-chat",
-        url: "/workspace/khach-hang",
-        tag: "funti-visitor-chat",
-        requireInteraction: true,
-      }).catch(() => {}),
-    ),
-  );
+  // Looks nothing like a coworker's chat ping — see lib/customerWaiting.ts.
+  await customerPush({
+    title: `🟠 KHÁCH HÀNG NHẮN: ${who}`,
+    body: `${preview}
+👉 Bấm để trả lời ngay`,
+    tag: "funti-visitor-chat",
+  }).catch(() => {});
 
+  const supabase = createAdminClient();
+  const ids = await customerStaffIds();
+  const { data: staff } = ids.length ? await supabase.from("profiles").select("email").in("id", ids) : { data: [] };
   await Promise.all(
-    staff.map((s) =>
+    (staff ?? []).map((s) =>
       s.email
         ? sendNewVisitorMessageEmail({ to: s.email, visitorName, visitorEmail, preview }).catch(() => {})
         : Promise.resolve(),
@@ -186,7 +173,10 @@ export async function startVisitorConversation(
 
   if (msgError || !message) throw new Error("Không thể gửi tin nhắn. Vui lòng thử lại.");
 
-  after(() => notifyStaffOfVisitorMessage(name, email, attachmentPreview(content, imageUrls, fileAttachments)).catch(() => {}));
+  after(async () => {
+    await maybeAutoReply("visitor", conversation.id, content).catch(() => {});
+    await notifyStaffOfVisitorMessage(name, email, attachmentPreview(content, imageUrls, fileAttachments)).catch(() => {});
+  });
 
   return { conversationId: conversation.id, token: conversation.visitor_token, message: message as VisitorMessage };
 }
@@ -219,13 +209,14 @@ export async function sendVisitorMessage(
     .select("visitor_name, visitor_email")
     .single();
 
-  after(() =>
-    notifyStaffOfVisitorMessage(
+  after(async () => {
+    await maybeAutoReply("visitor", conversationId, trimmed).catch(() => {});
+    await notifyStaffOfVisitorMessage(
       updatedConversation?.visitor_name ?? null,
       updatedConversation?.visitor_email ?? null,
       attachmentPreview(trimmed, imageUrls, fileAttachments),
-    ).catch(() => {}),
-  );
+    ).catch(() => {});
+  });
 
   return data as VisitorMessage;
 }

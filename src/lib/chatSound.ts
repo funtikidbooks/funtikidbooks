@@ -81,3 +81,33 @@ export function playChatDing() {
   const ready = c.state === "suspended" ? c.resume().catch(() => {}) : Promise.resolve();
   Promise.all([ready, load(c)]).then(start, () => {});
 }
+
+// The customer chime (Khách hàng): three rising notes, twice — nothing like
+// the chat ding, so a customer message can be told apart without looking.
+// Synthesised, so there's no file to load; same unlocked audio context.
+let lastChimeAt = 0;
+export function playCustomerChime() {
+  const now = Date.now();
+  if (now - lastChimeAt < 4000) return;
+  lastChimeAt = now;
+  const c = context();
+  if (!c) return;
+  const ready = c.state === "suspended" ? c.resume().catch(() => {}) : Promise.resolve();
+  ready.then(() => {
+    const t0 = c.currentTime + 0.02;
+    const notes = [880, 1175, 1568, 880, 1175, 1568];
+    notes.forEach((freq, i) => {
+      const start = t0 + i * 0.16 + (i >= 3 ? 0.25 : 0);
+      const osc = c.createOscillator();
+      const gain = c.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.15);
+      osc.connect(gain).connect(c.destination);
+      osc.start(start);
+      osc.stop(start + 0.16);
+    });
+  }, () => {});
+}

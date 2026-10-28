@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { listContactMessages } from "@/lib/actions/admin";
 import type { ContactMessage } from "@/lib/types";
+import { waitingFor } from "@/lib/customerWaitingLabel";
+import { ContactHandledButton } from "./ContactHandledButton";
 
 export const metadata: Metadata = { title: "Quản trị — Tin nhắn khách hàng" };
 
@@ -20,13 +22,26 @@ function formatDate(iso: string) {
 }
 
 export default async function AdminMessagesPage() {
-  const messages = (await listContactMessages()) as ContactMessage[];
+  const all = (await listContactMessages()) as ContactMessage[];
+  // Not answered yet first (oldest wait at the top), then everything else.
+  // Before customer_waiting.sql runs there's no handled_at at all — then
+  // nothing is marked and the list keeps its plain newest-first order.
+  const tracked = all.some((m) => "handled_at" in m);
+  const waiting = tracked ? all.filter((m) => !m.handled_at).sort((a, b) => a.created_at.localeCompare(b.created_at)) : [];
+  const messages = tracked ? [...waiting, ...all.filter((m) => m.handled_at)] : all;
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
       <div className="flex items-center justify-between gap-4 px-6 py-4" style={{ borderBottom: "1px solid var(--color-neutral-200)" }}>
         <h1 className="text-xl">Tin nhắn khách hàng</h1>
-        <span className="tag tag-neutral">{messages.length} tin nhắn</span>
+        <span className="flex items-center gap-2">
+          {waiting.length > 0 && (
+            <span className="tag" style={{ background: "#fff1e6", color: "#c2410c", border: "1px solid #fdba74" }}>
+              ⏳ {waiting.length} chưa trả lời
+            </span>
+          )}
+          <span className="tag tag-neutral">{messages.length} tin nhắn</span>
+        </span>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6">
@@ -35,7 +50,16 @@ export default async function AdminMessagesPage() {
         ) : (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 2xl:grid-cols-3 items-start">
             {messages.map((m) => (
-              <div key={m.id} className="card elev-sm p-4 flex flex-col gap-2">
+              <div
+                key={m.id}
+                className="card elev-sm p-4 flex flex-col gap-2"
+                style={tracked && !m.handled_at ? { border: "2px solid #fb923c", background: "#fffaf5" } : { opacity: tracked ? 0.8 : 1 }}
+              >
+                {tracked && !m.handled_at && (
+                  <span className="text-[12px] font-bold" style={{ color: "#c2410c" }}>
+                    ⏳ Khách chờ {waitingFor(m.created_at)} — chưa trả lời
+                  </span>
+                )}
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-bold text-sm">{m.full_name}</span>
                   <span className="text-xs" style={{ color: "var(--color-neutral-500)" }}>
@@ -51,6 +75,11 @@ export default async function AdminMessagesPage() {
                     ✉ Trả lời {m.email}
                   </a>
                   {m.phone && <span style={{ color: "var(--color-neutral-500)" }}>📞 {m.phone}</span>}
+                  {tracked && (
+                    <span className="ml-auto">
+                      <ContactHandledButton id={m.id} handled={Boolean(m.handled_at)} />
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

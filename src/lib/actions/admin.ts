@@ -579,13 +579,36 @@ export async function saveJsonSetting(key: string, value: unknown, revalidate: s
 // Contact messages (Tin nhắn khách hàng) — read-only for admin/director
 // ---------------------------------------------------------------------------
 
+// Whoever answers customers — director, admin, or the Project Manager
+// (same tier as Khách hàng, support-chat.ts). The PM gets the Liên hệ form
+// too now (28/10/2026), as its pings go to them.
+async function requireCustomerInbox() {
+  const { supabase, user } = await requireUser();
+  const { data: profile } = await supabase.from("profiles").select("access_role, role").eq("id", user.id).maybeSingle();
+  const ok = profile?.access_role === "director" || profile?.access_role === "admin" || profile?.role === "Project Manager";
+  if (!ok) throw new Error("Bạn không có quyền thực hiện thao tác này.");
+  return { supabase, user };
+}
+
 export async function listContactMessages() {
-  const { supabase } = await requireContentEditor();
+  const { supabase } = await requireCustomerInbox();
   const { data } = await supabase
     .from("contact_messages")
     .select("*")
     .order("created_at", { ascending: false });
   return data ?? [];
+}
+
+// "Đã trả lời" on a Liên hệ form entry — it stops counting as a customer
+// waiting (top bar, reminders). Service role: the table has no update policy.
+export async function setContactMessageHandled(id: string, handled: boolean) {
+  await requireCustomerInbox();
+  const { error } = await createAdminClient()
+    .from("contact_messages")
+    .update({ handled_at: handled ? new Date().toISOString() : null, reminder_step: 0 })
+    .eq("id", id);
+  if (error) throw new Error("Không cập nhật được — có thể chưa chạy SQL customer_waiting.sql.");
+  revalidatePath("/quan-tri/tin-nhan");
 }
 
 // ---------------------------------------------------------------------------

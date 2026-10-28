@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/supabase/server";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { CustomerWaitingBar } from "@/components/workspace/CustomerWaitingBar";
 import { listPendingPayrollFeedbackIds } from "@/lib/actions/payroll";
 import { listPendingAdvanceIds } from "@/lib/actions/salaryAdvances";
 import { listPendingLeaveIds } from "@/lib/actions/leave";
@@ -59,6 +60,9 @@ export default async function AdminLayout({
         initialPendingLeaveIds={initialPendingLeaveIds}
       />
       <div className="flex-1 flex flex-col min-w-0">{children}</div>
+      {/* Khách chờ trả lời — floating here (Quản trị has no top bar); only
+          for whoever answers customers, the same as Khách hàng. */}
+      {(isDirector || isProjectManager || profile.access_role === "admin") && <CustomerWaitingBar floating />}
     </div>
   );
 }

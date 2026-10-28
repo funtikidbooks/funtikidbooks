@@ -15,6 +15,7 @@ import { ThemeSync } from "@/components/workspace/ThemeSync";
 import { ProfileMenu } from "@/components/workspace/ProfileMenu";
 import { MessengerButton } from "@/components/workspace/MessengerButton";
 import { LeaveTopBar } from "@/components/workspace/LeaveTopBar";
+import { CustomerWaitingBar } from "@/components/workspace/CustomerWaitingBar";
 import { MobileNav } from "@/components/workspace/MobileNav";
 import { TeamOnlineBadge } from "@/components/workspace/TeamOnlineBadge";
 import { PushGate, PushSetup } from "@/components/workspace/PushSetup";
@@ -106,6 +107,8 @@ export default async function WorkspaceLayout({
   // way to discover the URL themselves.
   const canOpenAdmin = myProfile.access_role === "director" || myProfile.role === "Project Manager";
   const isDirector = myProfile.access_role === "director";
+  // Whoever answers customers (Khách hàng): director, admin, Project Manager.
+  const answersCustomers = canOpenAdmin || myProfile.access_role === "admin";
   // Đề nghị ứng lương waiting count joins a Giám đốc's "Chờ duyệt" inbox.
   const [initialClientUnreadCount, pendingAdvanceCount] = await Promise.all([
     canOpenAdmin ? clientUnreadPromise : 0,
@@ -157,6 +160,7 @@ export default async function WorkspaceLayout({
               />
               {/* Never shrinks: when the bar is crowded, TeamOnlineBadge gives way. */}
               <div className="flex-none flex items-center gap-2">
+                {answersCustomers && <CustomerWaitingBar />}
                 <LeaveTopBar
                   currentUserId={user.id}
                   canManage={canOpenAdmin}

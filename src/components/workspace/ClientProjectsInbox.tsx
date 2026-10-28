@@ -12,11 +12,14 @@ import {
 } from "@/lib/actions/clientPortal";
 import {
   closeVisitorConversation,
+  dismissCustomerWaiting,
   getVisitorConversationMessages,
   markVisitorConversationRead,
   sendStaffReply,
 } from "@/lib/actions/support-chat";
 import { AttachmentGallery } from "@/components/ui/AttachmentGallery";
+import { LinkifiedText } from "@/components/ui/LinkifiedText";
+import { waitingFor } from "@/lib/customerWaitingLabel";
 import type { ClientMessage, ClientProfile, ClientProject, FileAttachment, VisitorConversation, VisitorMessage } from "@/lib/types";
 
 type ProjectWithClient = ClientProject & { client: ClientProfile | null };
@@ -35,6 +38,8 @@ type NormalizedMessage = {
   imageUrls: string[];
   fileAttachments: FileAttachment[];
   createdAt: string;
+  // The studio's automatic "thanks — see our Facebook / Instagram" message.
+  isAuto: boolean;
 };
 
 function fromClientMessage(m: ClientMessage): NormalizedMessage {
@@ -45,6 +50,7 @@ function fromClientMessage(m: ClientMessage): NormalizedMessage {
     imageUrls: m.image_urls,
     fileAttachments: m.file_attachments,
     createdAt: m.created_at,
+    isAuto: Boolean(m.is_auto),
   };
 }
 
@@ -56,7 +62,24 @@ function fromVisitorMessage(m: VisitorMessage): NormalizedMessage {
     imageUrls: m.image_urls,
     fileAttachments: m.file_attachments,
     createdAt: m.created_at,
+    isAuto: Boolean(m.is_auto),
   };
+}
+
+// Orange like the top bar's "khách chờ trả lời" — never the red of a chat badge.
+const WAIT_BG = "#fff1e6";
+const WAIT_FG = "#c2410c";
+
+function WaitingChip({ since }: { since: string }) {
+  return (
+    <span
+      className="flex-none rounded-full px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap"
+      style={{ background: WAIT_BG, color: WAIT_FG, border: "1px solid #fdba74" }}
+      title="Khách đang chờ — chưa ai trả lời"
+    >
+      ⏳ {waitingFor(since)}
+    </span>
+  );
 }
 
 function formatTime(iso: string) {
@@ -108,6 +131,10 @@ export function ClientProjectsInbox({
   const [visitorConvos, setVisitorConvos] = useState(initialVisitorConversations);
   const [unreadByProject, setUnreadByProject] = useState<Record<string, boolean>>({});
   const [active, setActive] = useState<ActiveRef | null>(() => {
+    const waitingProject = initialProjects.find((p) => p.awaiting_reply_since);
+    if (waitingProject) return { kind: "client", id: waitingProject.id };
+    const waitingVisitor = initialVisitorConversations.find((c) => c.awaiting_reply_since && c.status === "open");
+    if (waitingVisitor) return { kind: "visitor", id: waitingVisitor.id };
     if (initialProjects[0]) return { kind: "client", id: initialProjects[0].id };
     if (initialVisitorConversations[0]) return { kind: "visitor", id: initialVisitorConversations[0].id };
     return null;
@@ -140,9 +167,25 @@ export function ClientProjectsInbox({
   // Sorted purely for the rail — the two source arrays each keep their own
   // shape/state untouched.
   const items = useMemo(() => {
-    const clientItems = projects.map((p) => ({ kind: "client" as const, id: p.id, lastMessageAt: p.last_message_at }));
-    const visitorItems = visitorConvos.map((c) => ({ kind: "visitor" as const, id: c.id, lastMessageAt: c.last_message_at }));
-    return [...clientItems, ...visitorItems].sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
+    const clientItems = projects.map((p) => ({
+      kind: "client" as const,
+      id: p.id,
+      lastMessageAt: p.last_message_at,
+      waitingSince: p.awaiting_reply_since ?? null,
+    }));
+    const visitorItems = visitorConvos.map((c) => ({
+      kind: "visitor" as const,
+      id: c.id,
+      lastMessageAt: c.last_message_at,
+      waitingSince: c.status === "open" && !c.claimed_by_client_id ? (c.awaiting_reply_since ?? null) : null,
+    }));
+    // Customers still waiting for an answer go first, longest wait at the top.
+    return [...clientItems, ...visitorItems].sort((a, b) => {
+      if (a.waitingSince && b.waitingSince) return a.waitingSince.localeCompare(b.waitingSince);
+      if (a.waitingSince) return -1;
+      if (b.waitingSince) return 1;
+      return b.lastMessageAt.localeCompare(a.lastMessageAt);
+    });
   }, [projects, visitorConvos]);
 
   const activeRef = useRef(active);
@@ -218,7 +261,19 @@ export function ClientProjectsInbox({
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "client_messages" }, (payload) => {
         const row = payload.new as ClientMessage;
         setProjects((prev) =>
-          prev.map((p) => (p.id === row.project_id ? { ...p, last_message_at: row.created_at } : p)),
+          prev.map((p) =>
+            p.id === row.project_id
+              ? {
+                  ...p,
+                  last_message_at: row.created_at,
+                  awaiting_reply_since: row.is_auto
+                    ? p.awaiting_reply_since
+                    : row.sender_type === "client"
+                      ? (p.awaiting_reply_since ?? row.created_at)
+                      : null,
+                }
+              : p,
+          ),
         );
         const isActive = activeRef.current?.kind === "client" && activeRef.current.id === row.project_id;
         if (row.sender_type === "client" && !isActive) {
@@ -234,7 +289,16 @@ export function ClientProjectsInbox({
         setVisitorConvos((prev) =>
           prev.map((c) =>
             c.id === row.conversation_id
-              ? { ...c, last_message_at: row.created_at, unread: row.sender_type === "visitor" && !isActive }
+              ? {
+                  ...c,
+                  last_message_at: row.created_at,
+                  unread: row.sender_type === "visitor" && !isActive,
+                  awaiting_reply_since: row.is_auto
+                    ? c.awaiting_reply_since
+                    : row.sender_type === "visitor"
+                      ? (c.awaiting_reply_since ?? row.created_at)
+                      : null,
+                }
               : c,
           ),
         );
@@ -281,20 +345,45 @@ export function ClientProjectsInbox({
       if (active.kind === "client") {
         const sent = await sendStaffReplyToClient(active.id, text.trim(), replyImages);
         setMessages((prev) => [...prev, fromClientMessage(sent)]);
-        setProjects((prev) => prev.map((p) => (p.id === active.id ? { ...p, last_message_at: sent.created_at } : p)));
+        setProjects((prev) =>
+          prev.map((p) => (p.id === active.id ? { ...p, last_message_at: sent.created_at, awaiting_reply_since: null } : p)),
+        );
         setReplyImages([]);
       } else {
         const sent = await sendStaffReply(active.id, text.trim());
         setMessages((prev) => [...prev, fromVisitorMessage(sent)]);
         setVisitorConvos((prev) =>
-          prev.map((c) => (c.id === active.id ? { ...c, last_message_at: sent.created_at } : c)),
+          prev.map((c) => (c.id === active.id ? { ...c, last_message_at: sent.created_at, awaiting_reply_since: null } : c)),
         );
       }
       setText("");
+      window.dispatchEvent(new Event("funti-customer-waiting-changed"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     } finally {
       setSending(false);
+    }
+  }
+
+  const activeWaitingSince = activeProject
+    ? (activeProject.awaiting_reply_since ?? null)
+    : activeVisitor && activeVisitor.status === "open" && !activeVisitor.claimed_by_client_id
+      ? (activeVisitor.awaiting_reply_since ?? null)
+      : null;
+
+  async function handleNoReplyNeeded() {
+    if (!active) return;
+    setError(null);
+    try {
+      await dismissCustomerWaiting(active.kind, active.id);
+      if (active.kind === "client") {
+        setProjects((prev) => prev.map((p) => (p.id === active.id ? { ...p, awaiting_reply_since: null } : p)));
+      } else {
+        setVisitorConvos((prev) => prev.map((c) => (c.id === active.id ? { ...c, awaiting_reply_since: null } : c)));
+      }
+      window.dispatchEvent(new Event("funti-customer-waiting-changed"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra");
     }
   }
 
@@ -354,7 +443,11 @@ export function ClientProjectsInbox({
                       {p.description}
                     </span>
                   </span>
-                  {unread && <span className="rounded-full flex-none" style={{ width: 9, height: 9, background: "var(--status-red)" }} />}
+                  {item.waitingSince ? (
+                    <WaitingChip since={item.waitingSince} />
+                  ) : (
+                    unread && <span className="rounded-full flex-none" style={{ width: 9, height: 9, background: "var(--status-red)" }} />
+                  )}
                 </button>
               );
             }
@@ -388,7 +481,11 @@ export function ClientProjectsInbox({
                     Khách vãng lai · chat trên web
                   </span>
                 </span>
-                {c.unread && <span className="rounded-full flex-none" style={{ width: 9, height: 9, background: "var(--status-red)" }} />}
+                {item.waitingSince ? (
+                  <WaitingChip since={item.waitingSince} />
+                ) : (
+                  c.unread && <span className="rounded-full flex-none" style={{ width: 9, height: 9, background: "var(--status-red)" }} />
+                )}
               </button>
             );
           })
@@ -475,6 +572,24 @@ export function ClientProjectsInbox({
               )}
             </div>
 
+            {activeWaitingSince && (
+              <div
+                className="flex flex-wrap items-center gap-2 px-4 py-2 text-[13px] font-semibold"
+                style={{ background: WAIT_BG, color: WAIT_FG, borderBottom: "1px solid #fdba74" }}
+              >
+                <span className="flex-1 min-w-[12rem]">⏳ Khách đang chờ trả lời — {waitingFor(activeWaitingSince)}, chưa ai trả lời</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm flex-none"
+                  style={{ color: WAIT_FG }}
+                  onClick={handleNoReplyNeeded}
+                  title="Tin thử, tin rác, hoặc đã trả lời qua kênh khác"
+                >
+                  Không cần trả lời
+                </button>
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto flex flex-col gap-3 p-4">
               {activeProject && (
                 <div className="flex flex-col items-start gap-1">
@@ -494,15 +609,17 @@ export function ClientProjectsInbox({
                     <div
                       className="rounded-[12px] px-3 py-1.5 text-[13px] max-w-[70%] whitespace-pre-wrap break-words"
                       style={{
-                        background: m.fromCustomer ? "var(--color-surface)" : "var(--color-accent-500)",
-                        color: m.fromCustomer ? "var(--color-text)" : "#fff",
+                        background: m.fromCustomer || m.isAuto ? "var(--color-surface)" : "var(--color-accent-500)",
+                        color: m.fromCustomer || m.isAuto ? "var(--color-text)" : "#fff",
+                        border: m.isAuto ? "1px dashed var(--color-neutral-300)" : undefined,
                       }}
                     >
-                      {m.content}
+                      <LinkifiedText text={m.content} />
                     </div>
                   )}
                   <AttachmentGallery imageUrls={m.imageUrls} fileAttachments={m.fileAttachments} />
                   <span className="text-[10px] mt-0.5" style={{ color: "var(--color-neutral-500)" }}>
+                    {m.isAuto ? "🤖 Tin tự động (chưa tính là đã trả lời) · " : ""}
                     {formatTime(m.createdAt)}
                   </span>
                 </div>

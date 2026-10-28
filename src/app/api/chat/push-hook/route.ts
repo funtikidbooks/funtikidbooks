@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { pushChatMessageOnce, warmChatPush } from "@/lib/chatPushOnce";
+import { remindWaitingCustomers } from "@/lib/customerWaiting";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +12,15 @@ export const dynamic = "force-dynamic";
 // so calling this for a message that was already announced does nothing.
 // Answers at once and does the work after, so the database never waits.
 // {"type":"ping"} every minute (push_delivery.sql) keeps it warm: no cold
-// start in front of the next real message.
+// start in front of the next real message. The same ping sends "khách
+// vẫn đang chờ" reminders for customers nobody has answered yet
+// (lib/customerWaiting.ts) — each reminder is claimed in the database
+// first, so extra pings can't repeat one.
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as { type?: string; id?: string } | null;
   if (body?.type === "ping") {
     after(() => warmChatPush().catch(() => {}));
+    after(() => remindWaitingCustomers().catch(() => {}));
     return new Response(null, { status: 204 });
   }
   const type = body?.type === "dm" ? "dm" : body?.type === "meeting" ? "meeting" : null;

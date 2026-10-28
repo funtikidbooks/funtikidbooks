@@ -14,6 +14,7 @@ import {
 import { useDict } from "@/components/site/LocaleProvider";
 import { visitorTypingChannelName, TYPING_IDLE_MS, TYPING_BROADCAST_THROTTLE_MS } from "@/lib/visitorTyping";
 import { AttachmentGallery } from "@/components/ui/AttachmentGallery";
+import { LinkifiedText } from "@/components/ui/LinkifiedText";
 import type { FileAttachment, VisitorMessage } from "@/lib/types";
 import { isStaffEmail } from "@/lib/actions/clientLogin";
 
@@ -65,7 +66,7 @@ function TypingDots({ label }: { label: string }) {
 // (order-1), info/sign-in panel below (order-2) — chatting stays the thing
 // a visitor can do with zero friction on any screen size.
 export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onError: (msg: string | null) => void }) {
-  const { t } = useDict();
+  const { t, locale } = useDict();
   const [conversationId, setConversationId] = useState<string | null>(() =>
     typeof window === "undefined" ? null : localStorage.getItem(GUEST_CHAT_ID_KEY),
   );
@@ -306,11 +307,12 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
                       color: mine ? "#fff" : "var(--color-text)",
                     }}
                   >
-                    {m.content}
+                    <LinkifiedText text={m.content} />
                   </div>
                 )}
                 <AttachmentGallery imageUrls={m.image_urls} fileAttachments={m.file_attachments} />
                 <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                  {m.is_auto ? (locale === "vi" ? "Tin nhắn tự động · " : "Automatic reply · ") : ""}
                   {formatTime(m.created_at)}
                 </span>
               </div>

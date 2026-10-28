@@ -41,6 +41,11 @@ export type VisitorConversation = {
   // messages live on as that client's first project from then on, and this
   // row just stays around, closed, as a record of where it started.
   claimed_by_client_id?: string | null;
+  // Khách chờ trả lời (customer_waiting.sql): when the still-unanswered run
+  // of customer messages began — null once a person replies — and how many
+  // "still waiting" reminders went out for it.
+  awaiting_reply_since?: string | null;
+  reminder_step?: number;
 };
 
 // A non-image attachment (Word, Excel, PDF, …) — keeps its original
@@ -57,6 +62,9 @@ export type VisitorMessage = {
   image_urls: string[];
   file_attachments: FileAttachment[];
   created_at: string;
+  // The studio's automatic "thanks — see our Facebook / Instagram" message,
+  // not a person's reply (lib/customerWaiting.ts).
+  is_auto?: boolean;
 };
 
 export type ClientType = "individual" | "business";
@@ -79,6 +87,8 @@ export type ClientProject = {
   status: "open" | "closed";
   created_at: string;
   last_message_at: string;
+  awaiting_reply_since?: string | null;
+  reminder_step?: number;
 };
 
 export type ClientMessage = {
@@ -92,6 +102,7 @@ export type ClientMessage = {
   read_by_client: boolean;
   read_by_staff: boolean;
   created_at: string;
+  is_auto?: boolean;
 };
 
 export type FontAsset = {
@@ -1094,6 +1105,9 @@ export type ContactMessage = {
   project_type: string | null;
   message: string;
   created_at: string;
+  // "Đã trả lời" in Quản trị → Form liên hệ (customer_waiting.sql).
+  handled_at?: string | null;
+  reminder_step?: number;
 };
 
 // Hand-authored table typing for @supabase/supabase-js — not generated via

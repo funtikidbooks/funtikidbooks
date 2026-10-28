@@ -4,7 +4,7 @@ import { after } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendPushToUser } from "@/lib/push";
+import { customerPush, customerStaffIds, maybeAutoReply, previewOf } from "@/lib/customerWaiting";
 import { sendClientReplyEmail, sendNewClientMessageEmail } from "@/lib/mail";
 import type { ClientMessage, ClientProfile, ClientProject, ClientType } from "@/lib/types";
 
@@ -140,6 +140,10 @@ export async function claimVisitorConversation(conversationId: string, token: st
     read_by_client: true,
     read_by_staff: true,
     created_at: m.created_at,
+    // The studio's automatic message stays automatic — copied as a plain
+    // staff message it would count as a reply (customer_waiting.sql). Only
+    // sent once that column exists, so a claim never fails before the SQL.
+    ...(m.is_auto !== undefined ? { is_auto: Boolean(m.is_auto) } : {}),
   }));
   await admin.from("client_messages").insert(rows);
 
@@ -222,32 +226,23 @@ export async function getProjectMessages(projectId: string): Promise<ClientMessa
 // submits a new brief or sends a follow-up — same reasoning as
 // notifyStaffOfVisitorMessage in visitor-chat.ts, just for a signed-in
 // client instead of the anonymous widget.
-async function notifyStaffOfClientMessage(clientName: string | null, content: string) {
-  const supabase = createAdminClient();
-  const { data: staff } = await supabase
-    .from("profiles")
-    .select("id, email")
-    .or("access_role.eq.director,access_role.eq.admin,role.eq.Project Manager");
-  if (!staff || staff.length === 0) return;
-
+async function notifyStaffOfClientMessage(clientName: string | null, content: string, isNewProject = false) {
   const who = clientName?.trim() || "Một khách hàng";
-  const preview = content.length > 140 ? `${content.slice(0, 140)}…` : content;
+  const preview = previewOf(content);
 
-  await Promise.all(
-    staff.map((s) =>
-      sendPushToUser(s.id, {
-        title: "🔔 Khách hàng nhắn tin mới",
-        body: `${who}: ${preview}`,
-        senderId: "client-portal",
-        url: "/workspace/khach-hang",
-        tag: "funti-client-portal",
-        requireInteraction: true,
-      }).catch(() => {}),
-    ),
-  );
+  // Looks nothing like a coworker's chat ping — see lib/customerWaiting.ts.
+  await customerPush({
+    title: isNewProject ? `🟠 KHÁCH HÀNG GỬI DỰ ÁN MỚI: ${who}` : `🟠 KHÁCH HÀNG NHẮN: ${who}`,
+    body: `${preview}
+👉 Bấm để trả lời ngay`,
+    tag: "funti-client-portal",
+  }).catch(() => {});
 
+  const admin = createAdminClient();
+  const ids = await customerStaffIds();
+  const { data: staff } = ids.length ? await admin.from("profiles").select("email").in("id", ids) : { data: [] };
   await Promise.all(
-    staff.map((s) =>
+    (staff ?? []).map((s) =>
       s.email ? sendNewClientMessageEmail({ to: s.email, clientName, preview }).catch(() => {}) : Promise.resolve(),
     ),
   );
@@ -273,7 +268,10 @@ export async function createClientProject(description: string, imageUrls: string
 
   if (error || !data) throw new Error("Could not submit your project. Please try again.");
 
-  after(() => notifyStaffOfClientMessage(client?.display_name ?? null, trimmed).catch(() => {}));
+  after(async () => {
+    await maybeAutoReply("client", data.id, trimmed).catch(() => {});
+    await notifyStaffOfClientMessage(client?.display_name ?? null, trimmed, true).catch(() => {});
+  });
 
   return data as ClientProject;
 }
@@ -316,7 +314,10 @@ export async function sendClientMessage(
     .eq("id", projectId);
 
   const notifyPreview = trimmed || (imageUrls.length > 1 ? `📷 Đã gửi ${imageUrls.length} ảnh` : "📷 Đã gửi ảnh");
-  after(() => notifyStaffOfClientMessage(client?.display_name ?? null, notifyPreview).catch(() => {}));
+  after(async () => {
+    await maybeAutoReply("client", projectId, trimmed || notifyPreview).catch(() => {});
+    await notifyStaffOfClientMessage(client?.display_name ?? null, notifyPreview).catch(() => {});
+  });
 
   return data as ClientMessage;
 }

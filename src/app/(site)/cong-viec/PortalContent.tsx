@@ -18,6 +18,7 @@ import { ImageLightbox } from "@/components/workspace/ImageLightbox";
 import { AttachmentGallery } from "@/components/ui/AttachmentGallery";
 import { FuntiWordmark } from "@/components/site/FuntiWordmark";
 import { useDict } from "@/components/site/LocaleProvider";
+import { LinkifiedText } from "@/components/ui/LinkifiedText";
 import { GuestChatPanel, GUEST_CHAT_ID_KEY, GUEST_CHAT_TOKEN_KEY } from "./GuestChatPanel";
 import type { ClientMessage, ClientProfile, ClientProject } from "@/lib/types";
 
@@ -627,7 +628,7 @@ function ProjectThread({
   onUnreadDelta: (delta: number) => void;
   onError: (msg: string | null) => void;
 }) {
-  const { t } = useDict();
+  const { t, locale } = useDict();
   const [messages, setMessages] = useState<ClientMessage[]>([]);
   const [text, setText] = useState("");
   const [images, setImages] = useState<string[]>([]);
@@ -725,11 +726,12 @@ function ProjectThread({
                     color: mine ? "#fff" : "var(--color-text)",
                   }}
                 >
-                  {m.content}
+                  <LinkifiedText text={m.content} />
                 </div>
               )}
               <AttachmentGallery imageUrls={m.image_urls} fileAttachments={m.file_attachments} />
               <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                {m.is_auto ? (locale === "vi" ? "Tin nhắn tự động · " : "Automatic reply · ") : ""}
                 {formatTime(m.created_at)}
               </span>
             </div>

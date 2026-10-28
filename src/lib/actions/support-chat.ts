@@ -73,3 +73,15 @@ export async function closeVisitorConversation(conversationId: string) {
   await supabase.from("visitor_conversations").update({ status: "closed" }).eq("id", conversationId);
   revalidatePath("/workspace/khach-hang");
 }
+
+// "Không cần trả lời" — a test message, spam, or something already handled
+// elsewhere (by email, Zalo…): stop counting it as a customer waiting.
+// Writing again puts them straight back (customer_waiting.sql trigger).
+export async function dismissCustomerWaiting(kind: "client" | "visitor", id: string) {
+  const { supabase } = await requireStaff();
+  const { error } =
+    kind === "client"
+      ? await supabase.from("client_projects").update({ awaiting_reply_since: null, reminder_step: 0 }).eq("id", id)
+      : await supabase.from("visitor_conversations").update({ awaiting_reply_since: null, reminder_step: 0 }).eq("id", id);
+  if (error) throw new Error("Không cập nhật được — thử lại giúp em.");
+}
