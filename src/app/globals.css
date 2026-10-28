@@ -1799,3 +1799,17 @@ select.input:focus {
 @media (prefers-reduced-motion: reduce) {
   .fk-customer-pulse { animation: none; }
 }
+/* Its list on phones: the bell sits mid-bar (Nghỉ phép, Tin nhắn and the
+   avatar are to its right), so a 340px list hanging left from it ran off
+   the left edge of the screen and cut the customers' names. Pin it to the
+   screen just under the bar instead, like the Messenger dropdown —
+   --fk-drop-top is measured from the bell when it opens. */
+@media (max-width: 639px) {
+  .fk-customer-waiting-dropdown {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: var(--fk-drop-top, 56px) !important;
+    width: auto !important;
+  }
+}

@@ -35,6 +35,9 @@ export function CustomerWaitingBar({ floating = false }: { floating?: boolean })
   }, [pathname]);
   const [items, setItems] = useState<WaitingItem[] | null>(null);
   const [open, setOpen] = useState(false);
+  // Where the list starts on a phone, where it's pinned to the screen
+  // rather than hung off the bell (see .fk-customer-waiting-dropdown).
+  const [dropTop, setDropTop] = useState(56);
   const [alert, setAlert] = useState<Alert | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -211,7 +214,11 @@ export function CustomerWaitingBar({ floating = false }: { floating?: boolean })
         >
           <button
             type="button"
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => {
+              const r = boxRef.current?.getBoundingClientRect();
+              if (r) setDropTop(Math.round(r.bottom + 8));
+              setOpen((v) => !v);
+            }}
             className="fk-customer-pulse flex items-center gap-1.5 rounded-full font-bold text-white whitespace-nowrap"
             style={{ background: `linear-gradient(135deg, #f97316, ${ORANGE_DARK})`, padding: "5px 11px", fontSize: 13, boxShadow: "0 2px 8px rgba(234,88,12,.45)" }}
             title={`${count} khách đang chờ trả lời${oldest ? ` — lâu nhất ${waitingFor(oldest)}` : ""}`}
@@ -224,12 +231,13 @@ export function CustomerWaitingBar({ floating = false }: { floating?: boolean })
           </button>
           {open && (
             <div
-              className="card elev-lg absolute z-[70] flex flex-col overflow-hidden"
+              className={`card elev-lg absolute z-[70] flex flex-col overflow-hidden${floating ? "" : " fk-customer-waiting-dropdown"}`}
               style={{
                 width: "min(92vw, 340px)",
                 right: 0,
                 ...(floating ? { bottom: "calc(100% + 8px)" } : { top: "calc(100% + 8px)" }),
                 maxHeight: "min(70vh, 460px)",
+                ["--fk-drop-top" as string]: `${dropTop}px`,
               }}
             >
               <div className="px-3 py-2 text-[13px] font-bold text-white" style={{ background: ORANGE }}>
