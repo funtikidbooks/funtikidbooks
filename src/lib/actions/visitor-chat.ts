@@ -228,5 +228,43 @@ export async function getVisitorMessages(conversationId: string, token: string):
     .select("*")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
-  return (data ?? []) as VisitorMessage[];
+  const messages = (data ?? []) as VisitorMessage[];
+
+  // The guest's page only asks while it's on screen, so the studio's replies
+  // this returns have been seen — nothing up to here needs emailing
+  // (lib/replyEmails.ts). Before reply_emails.sql runs there's no such
+  // column and this quietly does nothing.
+  const lastReply = messages.findLast((m) => m.sender_type === "staff" && !m.is_auto);
+  if (lastReply) {
+    after(async () => {
+      await supabase
+        .from("visitor_conversations")
+        .update({ reply_email_upto: lastReply.created_at })
+        .eq("id", conversationId)
+        .lt("reply_email_upto", lastReply.created_at);
+    });
+  }
+  return messages;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+// "Nhận câu trả lời qua email" in the guest chat (GuestChatPanel).
+export async function getVisitorReplyEmail(conversationId: string, token: string): Promise<string | null> {
+  const { supabase } = await requireConversation(conversationId, token);
+  const { data } = await supabase.from("visitor_conversations").select("visitor_email").eq("id", conversationId).maybeSingle();
+  return data?.visitor_email ?? null;
+}
+
+// Empty clears it ("Không nhận nữa").
+export async function saveVisitorReplyEmail(conversationId: string, token: string, email: string): Promise<string | null> {
+  const value = email.trim();
+  if (value && (value.length > 254 || !EMAIL_RE.test(value))) throw new Error("invalid email");
+  const { supabase } = await requireConversation(conversationId, token);
+  const { error } = await supabase
+    .from("visitor_conversations")
+    .update({ visitor_email: value || null })
+    .eq("id", conversationId);
+  if (error) throw new Error("save failed");
+  return value || null;
 }

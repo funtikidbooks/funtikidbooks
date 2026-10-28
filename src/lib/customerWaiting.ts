@@ -26,11 +26,18 @@ export async function customerStaffIds(): Promise<string[]> {
 
 const VI_CHARS = /[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i;
 
-export function autoReplyText(customerText: string): string {
-  if (VI_CHARS.test(customerText)) {
+export function looksVietnamese(text: string): boolean {
+  return VI_CHARS.test(text);
+}
+
+// askEmail: a guest chat with no email on file yet — point them at the
+// "get our reply by email" box right under this message (GuestChatPanel).
+export function autoReplyText(customerText: string, askEmail = false): string {
+  if (looksVietnamese(customerText)) {
     return [
       "Cảm ơn bạn đã nhắn cho Funti Kidbooks Studio! 💛",
       "Đội ngũ studio sẽ trả lời bạn sớm nhất có thể.",
+      ...(askEmail ? ["📧 Để lại email ở khung ngay bên dưới — câu trả lời sẽ gửi thẳng vào hộp thư của bạn."] : []),
       "",
       "Trong lúc chờ, bạn ghé xem thêm các dự án của studio nhé:",
       `• Facebook: ${STUDIO_FACEBOOK}`,
@@ -40,6 +47,7 @@ export function autoReplyText(customerText: string): string {
   return [
     "Thank you for reaching out to Funti Kidbooks Studio! 💛",
     "Our team will get back to you as soon as possible (we're in Vietnam, GMT+7).",
+    ...(askEmail ? ["📧 Leave your email in the box just below and we'll send our reply straight to your inbox."] : []),
     "",
     "While you wait, take a look at more of our work:",
     `• Facebook: ${STUDIO_FACEBOOK}`,
@@ -75,7 +83,12 @@ export async function maybeAutoReply(kind: "visitor" | "client", conversationId:
   const halfHourAgo = Date.now() - 30 * 60_000;
   if (rows.some((r) => r.sender_type === "staff" && !r.is_auto && Date.parse(r.created_at) > halfHourAgo)) return;
 
-  const content = autoReplyText(customerText);
+  let askEmail = false;
+  if (kind === "visitor") {
+    const { data: conversation } = await admin.from("visitor_conversations").select("visitor_email").eq("id", conversationId).maybeSingle();
+    askEmail = !conversation?.visitor_email;
+  }
+  const content = autoReplyText(customerText, askEmail);
   if (kind === "visitor") {
     await admin.from("visitor_messages").insert({ conversation_id: conversationId, sender_type: "staff", sender_id: null, content, is_auto: true });
   } else {

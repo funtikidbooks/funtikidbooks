@@ -8,6 +8,8 @@ import {
   startVisitorConversation,
   sendVisitorMessage,
   getVisitorMessages,
+  getVisitorReplyEmail,
+  saveVisitorReplyEmail,
   uploadVisitorImage,
   uploadVisitorFile,
 } from "@/lib/actions/visitor-chat";
@@ -30,6 +32,18 @@ export const GUEST_CHAT_TOKEN_KEY = "funti-visitor-token";
 // allowance ran out in 10/2026 with tabs polling all day in the background).
 const POLL_MS = 6000;
 const MAX_PENDING_ATTACHMENTS = 10;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+// "Mở cuộc trò chuyện" in a reply email (lib/replyEmails.ts) carries this
+// chat's id and key — the guest may open it on another device than the one
+// they wrote from, and should still land back in their own thread.
+function chatFromLink(): { id: string; token: string } | null {
+  if (typeof window === "undefined") return null;
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get("chat");
+  const token = params.get("t");
+  return id && token ? { id, token } : null;
+}
 
 function formatTime(iso: string) {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
@@ -67,12 +81,21 @@ function TypingDots({ label }: { label: string }) {
 // a visitor can do with zero friction on any screen size.
 export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onError: (msg: string | null) => void }) {
   const { t, locale } = useDict();
+  const [linked] = useState(chatFromLink);
   const [conversationId, setConversationId] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : localStorage.getItem(GUEST_CHAT_ID_KEY),
+    linked?.id ?? (typeof window === "undefined" ? null : localStorage.getItem(GUEST_CHAT_ID_KEY)),
   );
   const [token, setToken] = useState<string | null>(() =>
-    typeof window === "undefined" ? null : localStorage.getItem(GUEST_CHAT_TOKEN_KEY),
+    linked?.token ?? (typeof window === "undefined" ? null : localStorage.getItem(GUEST_CHAT_TOKEN_KEY)),
   );
+  // Where the studio's answer gets emailed if this guest isn't on the page
+  // (lib/replyEmails.ts) — undefined until known.
+  const [replyEmail, setReplyEmail] = useState<string | null | undefined>(undefined);
+  const [replyEmailDraft, setReplyEmailDraft] = useState("");
+  const [editingReplyEmail, setEditingReplyEmail] = useState(false);
+  const [savingReplyEmail, setSavingReplyEmail] = useState(false);
+  const [replyEmailError, setReplyEmailError] = useState<string | null>(null);
+  const freshConversationRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<VisitorMessage[]>([]);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -91,6 +114,30 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!linked) return;
+    localStorage.setItem(GUEST_CHAT_ID_KEY, linked.id);
+    localStorage.setItem(GUEST_CHAT_TOKEN_KEY, linked.token);
+    // The key opens this chat — keep it out of the address bar and history.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("chat");
+    url.searchParams.delete("t");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, [linked]);
+
+  useEffect(() => {
+    if (!conversationId || !token || freshConversationRef.current === conversationId) return;
+    let cancelled = false;
+    getVisitorReplyEmail(conversationId, token)
+      .then((saved) => {
+        if (!cancelled) setReplyEmail(saved);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, token]);
 
   useEffect(() => {
     if (!conversationId || !token) return;
@@ -149,9 +196,10 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
     typingChannelRef.current.send({ type: "broadcast", event: "typing", payload: { from: "visitor" } });
   }
 
+  // The email box sits under the last message, so it counts too.
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
-  }, [messages.length]);
+  }, [messages.length, replyEmail, editingReplyEmail, replyEmailError]);
 
   // Closes the attach popover on any click outside it — it has no backdrop
   // of its own (unlike ImageLightbox), so this is what makes it feel
@@ -220,6 +268,9 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
         const result = await startVisitorConversation(undefined, undefined, trimmed, pendingImages, pendingFiles);
         localStorage.setItem(GUEST_CHAT_ID_KEY, result.conversationId);
         localStorage.setItem(GUEST_CHAT_TOKEN_KEY, result.token);
+        // A brand-new chat has no email yet — ask for one right away.
+        freshConversationRef.current = result.conversationId;
+        setReplyEmail(null);
         setConversationId(result.conversationId);
         setToken(result.token);
         setMessages([result.message]);
@@ -235,6 +286,30 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
     } finally {
       setSending(false);
     }
+  }
+
+  async function saveReplyEmail(value: string) {
+    if (!conversationId || !token || savingReplyEmail) return;
+    setSavingReplyEmail(true);
+    setReplyEmailError(null);
+    try {
+      setReplyEmail(await saveVisitorReplyEmail(conversationId, token, value));
+      setEditingReplyEmail(false);
+    } catch {
+      setReplyEmailError(t.portal.guestReplyEmailError);
+    } finally {
+      setSavingReplyEmail(false);
+    }
+  }
+
+  function handleSaveReplyEmail(e: React.FormEvent) {
+    e.preventDefault();
+    const value = replyEmailDraft.trim();
+    if (!EMAIL_RE.test(value)) {
+      setReplyEmailError(t.portal.guestReplyEmailInvalid);
+      return;
+    }
+    saveReplyEmail(value);
   }
 
   async function handleLogin(e: React.FormEvent) {
@@ -318,6 +393,87 @@ export function GuestChatPanel({ onSent, onError }: { onSent: () => void; onErro
               </div>
             );
           })}
+          {conversationId && replyEmail !== undefined && (
+            <div className="flex flex-col gap-1.5">
+              {replyEmail && !editingReplyEmail ? (
+                <p className="text-[12px] max-w-[85%]" style={{ color: "var(--color-neutral-600)" }}>
+                  ✓ {t.portal.guestReplyEmailSaved.replace("{email}", replyEmail)}{" "}
+                  <button
+                    type="button"
+                    className="font-semibold underline"
+                    onClick={() => {
+                      setReplyEmailDraft(replyEmail);
+                      setReplyEmailError(null);
+                      setEditingReplyEmail(true);
+                    }}
+                  >
+                    {t.portal.guestReplyEmailChange}
+                  </button>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="font-semibold underline"
+                    disabled={savingReplyEmail}
+                    onClick={() => saveReplyEmail("")}
+                  >
+                    {t.portal.guestReplyEmailStop}
+                  </button>
+                </p>
+              ) : (
+                <form
+                  onSubmit={handleSaveReplyEmail}
+                  noValidate
+                  className="flex flex-col gap-2 rounded-[12px] p-3 w-full max-w-[420px]"
+                  style={{ background: "var(--color-accent-100)", border: "1px solid var(--color-accent-200)" }}
+                >
+                  <span className="text-[13px] font-bold">{t.portal.guestReplyEmailTitle}</span>
+                  <p className="text-[12px] leading-snug" style={{ color: "var(--color-neutral-600)" }}>
+                    {t.portal.guestReplyEmailBody}
+                  </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <input
+                      type="email"
+                      autoComplete="email"
+                      inputMode="email"
+                      className="input w-full sm:flex-1 sm:min-w-0"
+                      style={{ padding: "7px 10px", fontSize: 13 }}
+                      placeholder={t.portal.guestChatEmailPlaceholder}
+                      value={replyEmailDraft}
+                      onChange={(e) => {
+                        setReplyEmailDraft(e.target.value);
+                        setReplyEmailError(null);
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      disabled={savingReplyEmail || !replyEmailDraft.trim()}
+                      className="btn btn-primary btn-sm w-full sm:w-auto sm:flex-none"
+                    >
+                      {savingReplyEmail ? "…" : t.portal.guestReplyEmailBtn}
+                    </button>
+                  </div>
+                  {editingReplyEmail && (
+                    <button
+                      type="button"
+                      className="self-start text-[12px] font-semibold underline"
+                      style={{ color: "var(--color-neutral-600)" }}
+                      onClick={() => {
+                        setEditingReplyEmail(false);
+                        setReplyEmailError(null);
+                      }}
+                    >
+                      {t.portal.guestReplyEmailCancel}
+                    </button>
+                  )}
+                </form>
+              )}
+              {replyEmailError && (
+                <p className="text-[12px] font-semibold" style={{ color: "var(--status-red)" }}>
+                  {replyEmailError}
+                </p>
+              )}
+            </div>
+          )}
           {staffTyping && (
             <div className="flex flex-col items-start">
               <TypingDots label={t.portal.guestChatStaffTyping} />

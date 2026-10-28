@@ -4,8 +4,8 @@ import { after } from "next/server";
 import { randomUUID } from "node:crypto";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { customerPush, customerStaffIds, maybeAutoReply, previewOf } from "@/lib/customerWaiting";
-import { sendClientReplyEmail, sendNewClientMessageEmail } from "@/lib/mail";
+import { customerPush, customerStaffIds, looksVietnamese, maybeAutoReply, previewOf } from "@/lib/customerWaiting";
+import { sendCustomerReplyEmail, sendNewClientMessageEmail } from "@/lib/mail";
 import type { ClientMessage, ClientProfile, ClientProject, ClientType } from "@/lib/types";
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
@@ -428,12 +428,24 @@ export async function sendStaffReplyToClient(projectId: string, content: string,
     .select("*, client:clients(*)")
     .single();
 
+  // Emailing the client is the reply digest's job (lib/replyEmails.ts): one
+  // email for a run of messages, and only what they haven't seen on the
+  // site. Until reply_emails.sql adds reply_email_upto, the old way — an
+  // email for every message.
   const client = (project as unknown as { client: ClientProfile | null } | null)?.client ?? null;
-  if (client?.email) {
-    const preview =
-      trimmed.length > 140 ? `${trimmed.slice(0, 140)}…` : trimmed || (imageUrls.length > 1 ? `📷 Sent ${imageUrls.length} images` : "📷 Sent an image");
+  if (client?.email && project && !("reply_email_upto" in project)) {
+    const to = client.email;
+    const lang = looksVietnamese(trimmed) ? "vi" : "en";
     after(() =>
-      sendClientReplyEmail({ to: client.email, clientName: client.display_name, preview }).catch(() => {}),
+      sendCustomerReplyEmail({
+        to,
+        name: client.display_name,
+        lang,
+        kind: "client",
+        replies: [{ content: trimmed, imageUrls, files: [] }],
+        youWrote: null,
+        link: `https://funtikidbooks.com/cong-viec?lang=${lang}`,
+      }).catch(() => {}),
     );
   }
 

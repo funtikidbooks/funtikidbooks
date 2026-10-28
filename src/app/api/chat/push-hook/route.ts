@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { pushChatMessageOnce, warmChatPush } from "@/lib/chatPushOnce";
 import { remindWaitingCustomers } from "@/lib/customerWaiting";
+import { emailUnseenReplies } from "@/lib/replyEmails";
 
 export const dynamic = "force-dynamic";
 
@@ -15,12 +16,14 @@ export const dynamic = "force-dynamic";
 // start in front of the next real message. The same ping sends "khách
 // vẫn đang chờ" reminders for customers nobody has answered yet
 // (lib/customerWaiting.ts) — each reminder is claimed in the database
-// first, so extra pings can't repeat one.
+// first, so extra pings can't repeat one. And it emails customers the
+// studio's replies they haven't seen on the site (lib/replyEmails.ts).
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as { type?: string; id?: string } | null;
   if (body?.type === "ping") {
     after(() => warmChatPush().catch(() => {}));
     after(() => remindWaitingCustomers().catch(() => {}));
+    after(() => emailUnseenReplies().catch(() => {}));
     return new Response(null, { status: 204 });
   }
   const type = body?.type === "dm" ? "dm" : body?.type === "meeting" ? "meeting" : null;

@@ -46,6 +46,11 @@ export type VisitorConversation = {
   // "still waiting" reminders went out for it.
   awaiting_reply_since?: string | null;
   reminder_step?: number;
+  // Reply emails (reply_emails.sql, lib/replyEmails.ts): studio replies up
+  // to this moment were emailed, seen on the site, or answered — and when
+  // the last email actually went out.
+  reply_email_upto?: string;
+  reply_emailed_at?: string | null;
 };
 
 // A non-image attachment (Word, Excel, PDF, …) — keeps its original
@@ -89,6 +94,9 @@ export type ClientProject = {
   last_message_at: string;
   awaiting_reply_since?: string | null;
   reminder_step?: number;
+  // Same as VisitorConversation's (reply_emails.sql).
+  reply_email_upto?: string;
+  reply_emailed_at?: string | null;
 };
 
 export type ClientMessage = {

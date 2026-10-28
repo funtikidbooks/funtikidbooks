@@ -371,6 +371,23 @@ export function ClientProjectsInbox({
       ? (activeVisitor.awaiting_reply_since ?? null)
       : null;
 
+  // Whether this customer still gets the answer if they've left the site —
+  // studio replies they haven't seen go out by email (lib/replyEmails.ts).
+  // Only once reply_emails.sql has run (no reply_email_upto before that).
+  const replyEmailNote = (() => {
+    const row = activeProject ?? (activeVisitor?.status === "open" && !activeVisitor.claimed_by_client_id ? activeVisitor : null);
+    if (!row?.reply_email_upto) return null;
+    const to = activeProject ? (activeProject.client?.email ?? null) : (activeVisitor?.visitor_email ?? null);
+    if (!to) {
+      return {
+        warn: true,
+        text: "⚠️ Khách chưa để lại email — đã rời web thì chỉ thấy câu trả lời khi quay lại trang. Nên xin email hoặc Zalo của khách.",
+      };
+    }
+    const last = row.reply_emailed_at ? ` · lần gửi gần nhất ${formatTime(row.reply_emailed_at)}` : "";
+    return { warn: false, text: `📧 Khách không online thì câu trả lời tự gửi qua email tới ${to} (sau khoảng 3 phút)${last}` };
+  })();
+
   async function handleNoReplyNeeded() {
     if (!active) return;
     setError(null);
@@ -674,6 +691,14 @@ export function ClientProjectsInbox({
                     onChange={handleReplyFiles}
                   />
                 </div>
+              )}
+              {replyEmailNote && (
+                <p
+                  className="text-[11px] leading-snug"
+                  style={{ color: replyEmailNote.warn ? "#b45309" : "var(--color-neutral-500)" }}
+                >
+                  {replyEmailNote.text}
+                </p>
               )}
               <form onSubmit={handleSend} className="flex items-center gap-2">
                 <input

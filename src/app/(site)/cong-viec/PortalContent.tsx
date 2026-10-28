@@ -656,6 +656,17 @@ function ProjectThread({
   }, [messages.length]);
 
   useEffect(() => {
+    // A studio reply counts as read only once it's actually on screen — what
+    // the client hasn't seen gets emailed to them (lib/replyEmails.ts), and a
+    // tab left open in the background shouldn't swallow that.
+    let unseen = 0;
+    const markSeen = () => {
+      if (unseen === 0 || document.visibilityState !== "visible") return;
+      const n = unseen;
+      unseen = 0;
+      markProjectReadByClient(project.id).then(() => onUnreadDelta(-n));
+    };
+    document.addEventListener("visibilitychange", markSeen);
     const supabase = createClient();
     const channel = supabase
       .channel(`client-project-${project.id}`)
@@ -666,12 +677,14 @@ function ProjectThread({
           const row = payload.new as ClientMessage;
           setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
           if (row.sender_type === "staff") {
-            markProjectReadByClient(project.id).then(() => onUnreadDelta(-1));
+            unseen++;
+            markSeen();
           }
         },
       )
       .subscribe();
     return () => {
+      document.removeEventListener("visibilitychange", markSeen);
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

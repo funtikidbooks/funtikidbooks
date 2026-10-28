@@ -18,9 +18,17 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("vi");
 
   useEffect(() => {
+    // ?lang=en / ?lang=vi — links in the studio's emails to customers
+    // (lib/replyEmails.ts) open in the language the email was written in.
+    const fromLink = new URLSearchParams(window.location.search).get("lang");
+    if (fromLink === "en" || fromLink === "vi") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLocaleState(fromLink);
+      document.cookie = `${LOCALE_COOKIE}=${fromLink}; path=/; max-age=31536000`;
+      return;
+    }
     const match = document.cookie.match(/(?:^|;\s*)funti-locale=([^;]*)/);
     if (match?.[1] === "en") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocaleState("en");
     }
   }, []);
