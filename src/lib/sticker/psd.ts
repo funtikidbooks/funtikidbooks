@@ -1,7 +1,8 @@
 // Just enough of the Photoshop format to read a sticker sheet's layers and
 // write the same file back with extra layers slipped in. Every original
 // layer is copied byte for byte (effects, masks, smart objects and all), so
-// nothing the artist made is touched — only new layers are added.
+// nothing the artist made is touched — only new layers are added (and the
+// tool's own layers from an earlier download left out, to be made afresh).
 // Handles 8-bit RGB and CMYK .psd (not .psb). In CMYK files Photoshop
 // stores each ink inverted: 255 = no ink, 0 = full ink.
 
@@ -366,8 +367,14 @@ function newLayerRecord(l: NewLayer, id: number): Uint8Array {
 }
 
 // The original file with `below[i]` layers placed directly under layer i
-// (so they sit in the same group) and `onTop` above everything.
-export function writePsdWithLayers(psd: PsdFile, below: Map<number, NewLayer[]>, onTop: NewLayer[]): Blob {
+// (so they sit in the same group), `onTop` above everything, and the layers
+// in `drop` left out.
+export function writePsdWithLayers(
+  psd: PsdFile,
+  below: Map<number, NewLayer[]>,
+  onTop: NewLayer[],
+  drop: Set<number> = new Set(),
+): Blob {
   const b = psd.buf;
   let nextId = Math.max(0, ...psd.layers.map((l) => l.layerId)) + 1;
   const records = new Writer();
@@ -380,6 +387,7 @@ export function writePsdWithLayers(psd: PsdFile, below: Map<number, NewLayer[]>,
   };
   for (const l of psd.layers) {
     for (const n of below.get(l.index) ?? []) addNew(n);
+    if (drop.has(l.index)) continue;
     records.bytes(b.subarray(l.recordStart, l.recordEnd));
     data.bytes(b.subarray(l.dataStart, l.dataEnd));
     count++;

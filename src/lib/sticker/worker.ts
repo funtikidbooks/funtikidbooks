@@ -23,7 +23,7 @@ export type WorkerIn =
   | { type: "export"; baseName: string };
 
 export type WorkerOut =
-  | { type: "loaded"; width: number; height: number; dpi: number; mode: "CMYK" | "RGB"; layers: LayerInfo[] }
+  | { type: "loaded"; width: number; height: number; dpi: number; mode: "CMYK" | "RGB"; layers: LayerInfo[]; own: number }
   | { type: "progress"; done: number; total: number }
   | { type: "result"; preview: ArrayBuffer; pw: number; ph: number; scale: number; conflicts: Conflict[]; bordered: number }
   | { type: "exported"; psd: Blob; svg: string }
@@ -32,6 +32,7 @@ export type WorkerOut =
 type Done = {
   name: string; // the sticker's layer names
   bottomIndex: number; // its border goes right under this layer
+  dieAbove: number; // its die line goes right above this one
   border: NewLayer;
   cut: Uint8Array;
   line: Uint8Array;
@@ -46,6 +47,41 @@ let results: Done[] = [];
 let lastSettings: StickerSettings | null = null;
 
 const post = (m: WorkerOut, transfer: Transferable[] = []) => (self as unknown as Worker).postMessage(m, transfer);
+
+// This tool's own layers in a file it wrote earlier: the borders and the
+// die lines (one per sticker; a single "KHUÔN CẮT" for the whole sheet
+// before 29/10/2026). Loading that file again treats them as old output,
+// not art, and the download swaps them for fresh ones — so a sheet
+// rearranged in Photoshop just goes through the tool once more.
+const OWN_LAYER = /^(Viền - |Vien - |Khuôn cắt - |Khuon cat - |KHUÔN CẮT$|KHUON CAT$)/;
+const isOwnLayer = (l: PsdLayer) => l.section === 0 && OWN_LAYER.test(l.name.normalize("NFC"));
+
+// The layer a sticker's die line goes right above: its top layer, or the
+// last layer (or clipped group) clipped onto that — slipping a layer in
+// under those would break their clipping.
+function dieSlot(p: PsdFile, top: number) {
+  let i = top;
+  for (;;) {
+    const next = p.layers[i + 1];
+    if (!next) return i;
+    if (next.section === 0 && next.clipping) {
+      i++;
+      continue;
+    }
+    if (next.section !== 3) return i;
+    // A group starts above: skip it whole if it's clipped (the flag is on
+    // its folder record, at the group's top).
+    let depth = 0;
+    let j = i + 1;
+    for (; j < p.layers.length; j++) {
+      if (p.layers[j].section === 3) depth++;
+      else if (p.layers[j].section === 1 || p.layers[j].section === 2) depth--;
+      if (depth === 0) break;
+    }
+    if (j >= p.layers.length || !p.layers[j].clipping) return i;
+    i = j;
+  }
+}
 
 function isCandidate(p: PsdFile, l: PsdLayer) {
   const w = l.right - l.left;
@@ -74,8 +110,9 @@ self.onmessage = (e: MessageEvent<WorkerIn>) => {
         height: psd.height,
         dpi: psd.dpi,
         mode: psd.mode === 4 ? "CMYK" : "RGB",
+        own: psd.layers.filter(isOwnLayer).length,
         layers: psd.layers
-          .filter((l) => l.section === 0 && !l.hidden && !l.clipping && l.right > l.left)
+          .filter((l) => l.section === 0 && !l.hidden && !l.clipping && l.right > l.left && !isOwnLayer(l))
           .map((l) => ({
             index: l.index,
             name: l.name,
@@ -119,7 +156,7 @@ function run(s: StickerSettings, enabled: Set<number>, previewWidth: number) {
   // dress — are one sticker: one border, one die line.
   const alphas = new Map<number, Uint8Array>();
   for (const l of p.layers) {
-    if (!enabled.has(l.index) || !drawable(l) || l.clipping) continue;
+    if (!enabled.has(l.index) || !drawable(l) || l.clipping || isOwnLayer(l)) continue;
     const a = readChannel(p, l, -1);
     if (a) alphas.set(l.index, a);
   }
@@ -184,6 +221,7 @@ function run(s: StickerSettings, enabled: Set<number>, previewWidth: number) {
     results.push({
       name,
       bottomIndex: members[0].index,
+      dieAbove: dieSlot(p, members[members.length - 1].index),
       border: {
         name: `Viền - ${name}`,
         top: b.top,
@@ -341,37 +379,61 @@ function checkSpacing(p: PsdFile, s: StickerSettings): Conflict[] {
   return found;
 }
 
+// A sticker's die line as a layer of its own, cropped to the line.
+function dieLayer(r: Done, ink: number[]): NewLayer | null {
+  let x0 = r.w;
+  let y0 = r.h;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < r.h; y++) {
+    for (let x = 0; x < r.w; x++) {
+      if (!r.line[y * r.w + x]) continue;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      y1 = y;
+    }
+  }
+  if (x1 < 0) return null;
+  const w = x1 - x0 + 1;
+  const h = y1 - y0 + 1;
+  const alpha = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) alpha.set(r.line.subarray((y0 + y) * r.w + x0, (y0 + y) * r.w + x0 + w), y * w);
+  const solid = (v: number) => encodeChannel(new Uint8Array(w * h).fill(v), w, h);
+  return {
+    name: `Khuôn cắt - ${r.name}`,
+    top: r.top + y0,
+    left: r.left + x0,
+    bottom: r.top + y0 + h,
+    right: r.left + x0 + w,
+    channels: [{ id: -1, data: encodeChannel(alpha, w, h) }, ...ink.map((v, k) => ({ id: k, data: solid(v) }))],
+  };
+}
+
 function exportFiles(baseName: string) {
   const p = psd!;
   const s = lastSettings!;
   const cmyk = p.mode === 4;
-  const below = new Map<number, NewLayer[]>();
-  for (const r of results) below.set(r.bottomIndex, [r.border]);
-
-  // One die-line layer over the whole sheet.
-  const line = new Uint8Array(p.width * p.height);
-  for (const r of results) {
-    for (let y = 0; y < r.h; y++) {
-      const gy = r.top + y;
-      if (gy < 0 || gy >= p.height) continue;
-      for (let x = 0; x < r.w; x++) {
-        const gx = r.left + x;
-        if (gx < 0 || gx >= p.width) continue;
-        if (r.line[y * r.w + x]) line[gy * p.width + gx] = 255;
-      }
-    }
-  }
-  const solid = (v: number) => encodeChannel(new Uint8Array(p.width * p.height).fill(v), p.width, p.height);
   const magenta = cmyk ? [255, 0, 255, 255] : [236, 0, 140]; // CMYK stored inverted: 100% M only
-  const dieLayer: NewLayer = {
-    name: "KHUÔN CẮT",
-    top: 0,
-    left: 0,
-    bottom: p.height,
-    right: p.width,
-    channels: [{ id: -1, data: encodeChannel(line, p.width, p.height) }, ...magenta.map((v, k) => ({ id: k, data: solid(v) }))],
+
+  // Each sticker comes out as one run of layers — its border right under
+  // the art, its die line right above — so selecting the run moves the
+  // whole sticker (staff had to cut die lines out of one shared layer).
+  // Where two land in the same slot the die line goes first: one sticker's
+  // die line, then the next sticker's border.
+  const below = new Map<number, NewLayer[]>();
+  const onTop: NewLayer[] = [];
+  const place = (slot: number, l: NewLayer) => {
+    if (slot < p.layers.length) below.set(slot, [...(below.get(slot) ?? []), l]);
+    else onTop.push(l);
   };
-  const blob = writePsdWithLayers(p, below, [dieLayer]);
+  for (const r of results) {
+    const die = dieLayer(r, magenta);
+    if (die) place(r.dieAbove + 1, die);
+  }
+  for (const r of results) place(r.bottomIndex, r.border);
+  const own = new Set(p.layers.filter(isOwnLayer).map((l) => l.index));
+  const blob = writePsdWithLayers(p, below, onTop, own);
 
   const pxToMm = 25.4 / p.dpi;
   const paths = results

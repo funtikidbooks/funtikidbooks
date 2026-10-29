@@ -92,6 +92,11 @@ type Doc = {
   mode: string;
 };
 
+// "Sheet - co vien.psd" (the tool's own download, maybe with the browser's
+// " (1)") loaded again names its files after "Sheet", not "… - co vien - co vien".
+const baseName = (fileName: string) =>
+  fileName.replace(/\.psd$/i, "").replace(/( - co vien)+( \(\d+\))?$/i, "");
+
 function loadSettings(): StickerSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -107,6 +112,8 @@ export function StickerBorderTool() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
   const [layers, setLayers] = useState<LayerInfo[]>([]);
+  // Borders / die lines this tool made in an earlier download of the file.
+  const [ownLayers, setOwnLayers] = useState(0);
   const [enabled, setEnabled] = useState<Set<number>>(new Set());
   const [settings, setSettings] = useState<StickerSettings>(DEFAULTS);
   const [status, setStatusState] = useState<Status>("idle");
@@ -191,6 +198,7 @@ export function StickerBorderTool() {
             : d,
         );
         setLayers(m.layers);
+        setOwnLayers(m.own);
         const en = new Set(m.layers.filter((l) => l.auto).map((l) => l.index));
         setEnabled(en);
         latest.current = { ...latest.current, enabled: en };
@@ -276,8 +284,9 @@ export function StickerBorderTool() {
     setConflicts([]);
     setBordered(0);
     setLayers([]);
+    setOwnLayers(0);
     setStatus("loading");
-    docName.current = file.name.replace(/\.psd$/i, "");
+    docName.current = baseName(file.name);
     setDoc({
       name: file.name,
       size: file.size,
@@ -357,6 +366,12 @@ export function StickerBorderTool() {
                 {doc.width > 0 &&
                   ` · ${mm(doc.width)}×${mm(doc.height)} mm · ${Math.round(doc.dpi)} dpi · ${doc.mode}`}
               </span>
+              {ownLayers > 0 && (
+                <span className="mt-1">
+                  File đã có viền và khuôn do web tạo ({ownLayers} lớp) — bản
+                  tải về thay bằng viền và khuôn mới theo chỗ đặt hiện tại.
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -412,7 +427,7 @@ export function StickerBorderTool() {
                 <a
                   className="btn btn-secondary btn-sm"
                   href={svgUrl}
-                  download={`${doc.name.replace(/\.psd$/i, "")} - khuon cat.svg`}
+                  download={`${baseName(doc.name)} - khuon cat.svg`}
                 >
                   ⬇ Khuôn cắt (SVG)
                 </a>
@@ -488,8 +503,13 @@ export function StickerBorderTool() {
                 đặt quá sát.
               </span>
               <span>
-                3. Tải PSD có viền: thêm lớp “Viền - …” dưới mỗi món và lớp
-                “KHUÔN CẮT” trên cùng. Gửi nhà in kèm file khuôn SVG.
+                3. Tải PSD có viền: mỗi món có lớp “Viền - …” ngay dưới và lớp
+                “Khuôn cắt - …” ngay trên — chọn các lớp đó cùng lúc là dời
+                được cả sticker. Gửi nhà in kèm file khuôn SVG.
+              </span>
+              <span>
+                4. Dời sticker trong Photoshop xong thì chọn lại file đó ở đây:
+                web làm lại viền, khuôn và file SVG theo chỗ mới.
               </span>
             </div>
           )}
