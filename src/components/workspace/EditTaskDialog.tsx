@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { Modal } from "@/components/ui/Modal";
 import {
@@ -112,6 +112,23 @@ export function EditTaskDialog({
   const attachmentsInputRef = useRef<HTMLInputElement>(null);
   const startDateInputRef = useRef<HTMLInputElement>(null);
   const dueDateInputRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
+
+  // The card's name wraps onto as many lines as it needs — a one-line box
+  // cut long names off ("chỗ tên dự án còn đang k hiện hết", 3/11/2026).
+  // Refits when the text or the screen width changes (an iPad turned).
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+    };
+    fit();
+    document.fonts?.ready.then(fit);
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, [title]);
 
   // The board only passes `task` in once, when the dialog opens — it never
   // refreshes this prop while the dialog stays open. Every onUpdated() call
@@ -469,7 +486,7 @@ export function EditTaskDialog({
           </button>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6 p-6">
+        <div className="flex flex-col lg:flex-row gap-6 p-4 sm:p-6">
           {/* Left column — title, metadata, description, checklist, attachments */}
           <div className="flex-1 min-w-0 flex flex-col gap-4">
             <span className="text-[11px] font-semibold" style={{ color: "var(--color-neutral-500)" }}>
@@ -494,15 +511,16 @@ export function EditTaskDialog({
               </div>
             )}
 
-            <div className="flex items-center gap-2.5">
-              {/* Trello's "Đánh dấu thẻ hoàn thành" circle in front of the title. */}
+            <div className="flex items-start gap-2.5">
+              {/* Trello's "Đánh dấu thẻ hoàn thành" circle in front of the title,
+                  level with its first line. */}
               <button
                 type="button"
                 onClick={() => toggleDueDone(!dueDone)}
-                className="flex-none flex items-center justify-center rounded-full text-[13px] font-bold"
+                className="flex-none flex items-center justify-center rounded-full text-[13px] font-bold mt-1 sm:mt-[5px]"
                 style={{
-                  width: 22,
-                  height: 22,
+                  width: 24,
+                  height: 24,
                   background: dueDone ? "#22a06b" : "transparent",
                   border: dueDone ? "none" : "2px solid var(--color-neutral-400)",
                   color: "#fff",
@@ -513,21 +531,26 @@ export function EditTaskDialog({
               >
                 {dueDone ? "✓" : ""}
               </button>
-              <input
-                className="input flex-1 min-w-0"
-                style={{ fontSize: 19, fontWeight: 700, border: "none", padding: "3px 0" }}
+              <textarea
+                ref={titleRef}
+                className="input fk-task-title flex-1 min-w-0"
+                rows={1}
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                // Still one line of text: a pasted line break becomes a space.
+                onChange={(e) => setTitle(e.target.value.replace(/\s*\n\s*/g, " "))}
                 onBlur={saveTitle}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.nativeEvent.isComposing) e.currentTarget.blur();
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
                 }}
                 aria-label="Tên thẻ"
               />
             </div>
 
             {columnTitle && (
-              <p className="text-xs -mt-3" style={{ color: "var(--color-neutral-500)" }}>
+              <p className="text-[13px] -mt-3" style={{ color: "var(--color-neutral-500)" }}>
                 trong danh sách <strong>{columnTitle}</strong>
                 {isDone && " · ✓ đã hoàn thành"}
               </p>
@@ -625,36 +648,54 @@ export function EditTaskDialog({
               </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="field relative">
-                <label>👤 Thành viên</label>
+            {/* Who's doing it, by name on its own row — a lone initial in a
+                small circle didn't say who ("cũng k biết là ai làm"). */}
+            <div className="field">
+              <label>👤 Thành viên</label>
+              <div className="relative">
                 <button
                   type="button"
                   onClick={() => setAssigneeMenuOpen((v) => !v)}
-                  className="input flex items-center gap-1 flex-wrap"
-                  style={{ borderRadius: 999, minHeight: 42, cursor: "pointer" }}
+                  className="input flex items-center gap-2 text-left"
+                  style={{ borderRadius: 16, minHeight: 52, padding: "7px 8px", cursor: "pointer" }}
+                  aria-expanded={assigneeMenuOpen}
                 >
-                  {assignees.length === 0 ? (
-                    <span style={{ color: "var(--color-neutral-500)" }}>Chưa giao</span>
-                  ) : (
-                    assignees.map((a) => (
-                      <span
-                        key={a.id}
-                        title={a.display_name}
-                        className="flex items-center justify-center rounded-full font-bold flex-none"
-                        style={{
-                          width: 22,
-                          height: 22,
-                          fontSize: 10,
-                          background: "var(--color-accent-100)",
-                          color: "var(--color-accent-700)",
-                        }}
-                      >
-                        {a.display_name.charAt(0).toUpperCase()}
+                  <span className="flex-1 min-w-0 flex flex-wrap gap-2">
+                    {assignees.length === 0 ? (
+                      <span className="px-1.5 text-[15px]" style={{ color: "var(--color-neutral-500)" }}>
+                        Chưa giao cho ai
                       </span>
-                    ))
-                  )}
-                  <span className="ml-auto text-xs" style={{ color: "var(--color-neutral-500)" }}>
+                    ) : (
+                      assignees.map((a) => (
+                        <span
+                          key={a.id}
+                          className="inline-flex items-center gap-2 rounded-full min-w-0 max-w-full"
+                          style={{ padding: "4px 14px 4px 4px", background: "var(--color-accent-100)" }}
+                        >
+                          <span
+                            className="flex items-center justify-center rounded-full font-bold flex-none"
+                            style={{
+                              width: 30,
+                              height: 30,
+                              fontSize: 13,
+                              background: "var(--color-panel)",
+                              color: "var(--color-accent-700)",
+                            }}
+                          >
+                            {a.display_name.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="text-[16px] font-bold truncate" style={{ color: "var(--color-accent-800)" }}>
+                            {a.display_name}
+                          </span>
+                        </span>
+                      ))
+                    )}
+                  </span>
+                  <span
+                    className="flex-none flex items-center justify-center rounded-full text-[18px] font-bold"
+                    style={{ width: 32, height: 32, background: "var(--color-neutral-100)", color: "var(--color-neutral-600)" }}
+                    aria-hidden
+                  >
                     +
                   </span>
                 </button>
@@ -662,36 +703,43 @@ export function EditTaskDialog({
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setAssigneeMenuOpen(false)} />
                     <div
-                      className="card elev-md absolute left-0 top-[68px] z-20 flex flex-col gap-0.5 p-1"
-                      style={{ width: 220 }}
+                      className="card elev-md absolute left-0 top-full mt-1 z-20 flex flex-col gap-0.5 p-1 overflow-y-auto"
+                      style={{ width: 300, maxWidth: "100%", maxHeight: "min(60vh, 460px)" }}
                     >
-                      {profiles.map((p) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => toggleAssignee(p)}
-                          className="ws-nav-link flex items-center gap-2 px-2 py-1.5 rounded-[6px] text-[13px] font-semibold"
-                        >
-                          <span
-                            className="flex items-center justify-center rounded-full font-bold flex-none"
-                            style={{
-                              width: 22,
-                              height: 22,
-                              fontSize: 10,
-                              background: "var(--color-accent-100)",
-                              color: "var(--color-accent-700)",
-                            }}
+                      {profiles.map((p) => {
+                        const picked = assignees.some((a) => a.id === p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            aria-pressed={picked}
+                            onClick={() => toggleAssignee(p)}
+                            className="ws-nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-[8px] text-[15px] font-semibold"
                           >
-                            {p.display_name.charAt(0).toUpperCase()}
-                          </span>
-                          <span className="flex-1 text-left truncate">{p.display_name}</span>
-                          {assignees.some((a) => a.id === p.id) && <span aria-hidden>✓</span>}
-                        </button>
-                      ))}
+                            <span
+                              className="flex items-center justify-center rounded-full font-bold flex-none"
+                              style={{
+                                width: 30,
+                                height: 30,
+                                fontSize: 13,
+                                background: "var(--color-accent-100)",
+                                color: "var(--color-accent-700)",
+                              }}
+                            >
+                              {p.display_name.charAt(0).toUpperCase()}
+                            </span>
+                            <span className="flex-1 text-left truncate">{p.display_name}</span>
+                            {picked && <span aria-hidden>✓</span>}
+                          </button>
+                        );
+                      })}
                     </div>
                   </>
                 )}
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
               <div className="field">
                 <label htmlFor="edit-start">🕐 Ngày bắt đầu</label>
                 <input
@@ -884,9 +932,9 @@ export function EditTaskDialog({
           </div>
 
           {/* Right column — comments & activity, always visible */}
-          <div className="lg:w-[300px] flex-none flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-[13px] font-bold" style={{ color: "var(--color-neutral-600)" }}>
+          <div className="lg:w-[360px] xl:w-[400px] flex-none flex flex-col gap-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-[16px] font-bold" style={{ color: "var(--color-neutral-700)" }}>
                 💬 Nhận xét và hoạt động
               </h3>
               <button type="button" onClick={() => setShowDetails((v) => !v)} className="btn btn-ghost btn-sm">

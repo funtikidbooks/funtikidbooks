@@ -1339,6 +1339,28 @@ select.input:focus {
   border-color: var(--color-accent-500);
   box-shadow: 0 0 0 3px var(--color-accent-100);
 }
+/* A work card's name (EditTaskDialog) is a textarea that grows to fit, so a
+   long name wraps instead of running off the end of one line. */
+textarea.input.fk-task-title {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+  border: none;
+  padding: 3px 0;
+  resize: none;
+  overflow: hidden;
+}
+@media (min-width: 640px) {
+  textarea.input.fk-task-title {
+    font-size: 22px;
+  }
+}
+/* The card's comment box: 15px from tablet up (phones keep 16px, above). */
+@media (min-width: 768px) {
+  textarea.input.fk-comment-input {
+    font-size: 15px;
+  }
+}
 
 /* ---------- Nav link underline animation ---------- */
 .fk-navlink {

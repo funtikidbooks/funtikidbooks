@@ -64,7 +64,7 @@ function FileInFeed({ url, filename, mimeType, size = 64 }: { url: string; filen
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[12.5px] font-semibold max-w-full"
+      className="inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-1.5 text-[14px] font-semibold max-w-full"
       style={{ background: "var(--color-surface)", border: "1px solid var(--color-neutral-200)", color: "var(--color-text)" }}
     >
       <span aria-hidden>📄</span>
@@ -104,6 +104,17 @@ export function TaskCommentChat({
   const [editText, setEditText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+
+  // Grows the comment box with what's being written instead of scrolling a
+  // long comment inside one line.
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    // scrollHeight leaves out the border, which border-box sizing counts.
+    el.style.height = `${Math.min(el.scrollHeight + el.offsetHeight - el.clientHeight, 160)}px`;
+  }, [text]);
 
   // Read straight from Supabase (lib/taskCommentsClient.ts), only while the
   // card is on screen, every 10 s — it used to be two Vercel function calls
@@ -248,23 +259,23 @@ export function TaskCommentChat({
 
   return (
     <div className="rounded-[var(--radius-md)]" style={{ border: "1px solid var(--color-neutral-200)" }}>
-      <div ref={listRef} className="flex flex-col gap-3 p-3 overflow-y-auto" style={{ maxHeight: 320 }}>
+      <div ref={listRef} className="flex flex-col gap-3.5 p-3 overflow-y-auto" style={{ maxHeight: "min(60vh, 480px)" }}>
         {visible.length === 0 && (
-          <p className="text-[12.5px]" style={{ color: "var(--color-neutral-500)" }}>
+          <p className="text-[14px]" style={{ color: "var(--color-neutral-500)" }}>
             Chưa có phản hồi nào. Hãy để lại bình luận đầu tiên.
           </p>
         )}
         {visible.map((item) =>
           item.kind === "activity" ? (
-            <div key={item.data.id} className="flex gap-2">
+            <div key={item.data.id} className="flex gap-2.5">
               <div
                 className="flex items-center justify-center rounded-full font-bold flex-none"
-                style={{ width: 26, height: 26, fontSize: 11, background: "var(--color-neutral-200)", color: "var(--color-neutral-600)" }}
+                style={{ width: 32, height: 32, fontSize: 13, background: "var(--color-neutral-200)", color: "var(--color-neutral-600)" }}
               >
                 {(item.data.actor?.display_name ?? "?").charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                <p className="text-[12.5px]" style={{ color: "var(--color-neutral-600)" }}>
+                <p className="text-[15px] leading-snug break-words" style={{ color: "var(--color-neutral-700)" }}>
                   {activityText(item.data)}
                 </p>
                 {(() => {
@@ -275,30 +286,30 @@ export function TaskCommentChat({
                     </div>
                   ) : null;
                 })()}
-                <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                <span className="text-[12.5px]" style={{ color: "var(--color-neutral-500)" }}>
                   {formatTime(item.created_at)}
                 </span>
               </div>
             </div>
           ) : (
-            <div key={item.data.id} className="flex gap-2">
+            <div key={item.data.id} className="flex gap-2.5">
               <div
                 className="flex items-center justify-center rounded-full font-bold flex-none"
-                style={{ width: 26, height: 26, fontSize: 11, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
+                style={{ width: 32, height: 32, fontSize: 13, background: "var(--color-accent-2-100)", color: "var(--color-accent-2-800)" }}
               >
                 {(item.data.author?.display_name ?? "?").charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-[13px] font-bold">{item.data.author?.display_name ?? "Ẩn danh"}</span>
-                  <span className="text-[11px]" style={{ color: "var(--color-neutral-500)" }}>
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-[15px] font-bold">{item.data.author?.display_name ?? "Ẩn danh"}</span>
+                  <span className="text-[12.5px]" style={{ color: "var(--color-neutral-500)" }}>
                     {formatTime(item.created_at)}
                   </span>
                   {item.data.user_id === currentUser.id && editingId !== item.data.id && (
                     <button
                       type="button"
                       onClick={() => startEdit(item.data)}
-                      className="text-[11px] font-semibold"
+                      className="text-[13px] font-semibold"
                       style={{ color: "var(--color-accent-700)" }}
                     >
                       Sửa
@@ -308,9 +319,9 @@ export function TaskCommentChat({
                 {editingId === item.data.id ? (
                   <div className="flex flex-col gap-1.5 mt-1">
                     <textarea
-                      className="input"
-                      style={{ resize: "none", padding: "6px 10px", fontSize: 13.5 }}
-                      rows={2}
+                      className="input fk-comment-input"
+                      style={{ resize: "none", padding: "8px 12px" }}
+                      rows={3}
                       autoFocus
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
@@ -323,19 +334,14 @@ export function TaskCommentChat({
                         }
                       }}
                     />
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => saveEdit(item.data.id)}
-                        className="btn btn-primary btn-sm"
-                        style={{ padding: "2px 10px", fontSize: 12 }}
-                      >
+                    <div className="flex items-center gap-3">
+                      <button type="button" onClick={() => saveEdit(item.data.id)} className="btn btn-primary btn-sm">
                         Lưu
                       </button>
                       <button
                         type="button"
                         onClick={cancelEdit}
-                        className="text-[12px] font-semibold"
+                        className="text-[13.5px] font-semibold"
                         style={{ color: "var(--color-neutral-500)" }}
                       >
                         Huỷ
@@ -343,7 +349,9 @@ export function TaskCommentChat({
                     </div>
                   </div>
                 ) : (
-                  item.data.content && <p className="text-[13.5px] whitespace-pre-wrap">{item.data.content}</p>
+                  item.data.content && (
+                    <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{item.data.content}</p>
+                  )
                 )}
                 {item.data.attachments.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mt-1">
@@ -367,8 +375,8 @@ export function TaskCommentChat({
                 <button
                   type="button"
                   onClick={() => setPending((prev) => prev.filter((x) => x.id !== p.id))}
-                  className="absolute -right-1 -top-1 flex items-center justify-center rounded-full text-white"
-                  style={{ width: 16, height: 16, fontSize: 10, background: "rgba(20,18,17,.75)" }}
+                  className="absolute -right-1.5 -top-1.5 flex items-center justify-center rounded-full text-white"
+                  style={{ width: 20, height: 20, fontSize: 11, background: "rgba(20,18,17,.75)" }}
                 >
                   ✕
                 </button>
@@ -377,15 +385,17 @@ export function TaskCommentChat({
           </div>
         )}
         <div className="flex items-end gap-2">
+          {/* Your own initial — left out on a phone, where the box needs the room. */}
           <div
-            className="flex items-center justify-center rounded-full font-bold flex-none"
-            style={{ width: 26, height: 26, fontSize: 11, background: "var(--color-accent-100)", color: "var(--color-accent-700)" }}
+            className="hidden sm:flex items-center justify-center rounded-full font-bold flex-none mb-1"
+            style={{ width: 32, height: 32, fontSize: 13, background: "var(--color-accent-100)", color: "var(--color-accent-700)" }}
           >
             {currentUser.display_name.charAt(0).toUpperCase()}
           </div>
           <textarea
-            className="input"
-            style={{ resize: "none", padding: "8px 12px" }}
+            ref={composerRef}
+            className="input fk-comment-input"
+            style={{ resize: "none", padding: "9px 12px" }}
             rows={1}
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -414,7 +424,12 @@ export function TaskCommentChat({
             className="hidden"
             onChange={(e) => handleFiles(e.target.files)}
           />
-          <button type="submit" disabled={sending} className="btn btn-primary btn-sm flex-none">
+          <button
+            type="submit"
+            disabled={sending}
+            className="btn btn-primary flex-none"
+            style={{ padding: "11px 16px", fontSize: 14.5 }}
+          >
             Gửi
           </button>
         </div>
