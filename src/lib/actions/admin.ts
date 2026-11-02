@@ -803,7 +803,7 @@ export async function createStaffAccount(input: {
   accessRole: "admin" | "staff";
   jobTitle?: string;
 }) {
-  const { supabase } = await requireDirector();
+  await requireDirector();
 
   const displayName = input.displayName.trim();
   const email = input.email.trim().toLowerCase();
@@ -831,15 +831,23 @@ export async function createStaffAccount(input: {
     );
   }
 
-  // handle_new_user trigger already inserted the profile row with default
-  // access_role 'staff' — update it to the chosen role (and job title).
-  const patch: Partial<Profile> = { access_role: input.accessRole };
-  if (input.jobTitle?.trim()) patch.role = input.jobTitle.trim();
-
-  const { data: profile, error: profileError } = await supabase
+  // The staff profile is made here, by the director: a sign-up on the
+  // public site no longer gets one (handle_new_user,
+  // supabase/migrations/salary_privacy.sql), so nobody can make themselves
+  // staff. An upsert, because before that SQL runs the trigger has already
+  // made the row.
+  const { data: profile, error: profileError } = await adminClient
     .from("profiles")
-    .update(patch)
-    .eq("id", data.user.id)
+    .upsert(
+      {
+        id: data.user.id,
+        email,
+        display_name: displayName,
+        access_role: input.accessRole,
+        ...(input.jobTitle?.trim() ? { role: input.jobTitle.trim() } : {}),
+      },
+      { onConflict: "id" },
+    )
     .select("*")
     .single();
 

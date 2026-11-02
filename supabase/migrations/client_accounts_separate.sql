@@ -8,23 +8,17 @@
 -- clean it up. Clients now live only in public.clients (Quản trị → Tài
 -- khoản khách hàng).
 
--- 1) New client sign-ups no longer get a staff profile.
+-- 1) New client sign-ups no longer get a staff profile. (Since
+--    salary_privacy.sql, 2/11/2026, no sign-up does — the "client" tag was
+--    the sign-up's own say-so — and staff profiles come from
+--    createStaffAccount. Kept identical here so re-running this file can't
+--    bring the old behaviour back.)
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
 begin
-  if coalesce(new.raw_user_meta_data ->> 'signup_source', '') = 'client' then
-    return new;
-  end if;
-  insert into public.profiles (id, email, display_name)
-  values (
-    new.id,
-    new.email,
-    coalesce(new.raw_user_meta_data ->> 'display_name', split_part(new.email, '@', 1))
-  )
-  on conflict (id) do nothing;
   return new;
 end;
 $$;

@@ -70,20 +70,17 @@ end $$;
 -- them the director role, so promote them manually once via the SQL Editor:
 --   update public.profiles set access_role = 'director' where email = 'you@example.com';
 
--- Auto-create a profile row whenever someone signs up.
+-- A sign-up never becomes staff (migrations/salary_privacy.sql): customers
+-- sign in on /cong-viec and stay in public.clients; staff profiles are
+-- written by createStaffAccount (Quản trị → Nhân sự) when the director
+-- creates the account. This used to insert a staff profile for every new
+-- login, so anyone could make themselves staff by signing up.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, display_name)
-  values (
-    new.id,
-    new.email,
-    coalesce(new.raw_user_meta_data ->> 'display_name', split_part(new.email, '@', 1))
-  )
-  on conflict (id) do nothing;
   return new;
 end;
 $$;
@@ -545,17 +542,29 @@ create policy "staff can upload task attachments"
   to authenticated
   with check (bucket_id = 'task-attachments');
 
+-- Files open by their public link (no policy needed for that), but only the
+-- uploader or a Giám đốc can list or delete them — before 2/11/2026 anyone
+-- could list the bucket (bank QR codes, contract signatures, DM images)
+-- and any signed-in account could delete any file (migrations/salary_privacy.sql).
 drop policy if exists "staff can delete task attachments" on storage.objects;
-create policy "staff can delete task attachments"
+drop policy if exists "uploader or director can delete task attachments" on storage.objects;
+create policy "uploader or director can delete task attachments"
   on storage.objects for delete
   to authenticated
-  using (bucket_id = 'task-attachments');
+  using (
+    bucket_id = 'task-attachments'
+    and (owner_id = (select auth.uid())::text or owner = (select auth.uid()) or public.current_access_role() = 'director')
+  );
 
 drop policy if exists "anyone can view task attachments" on storage.objects;
-create policy "anyone can view task attachments"
+drop policy if exists "uploader or director can see task attachments" on storage.objects;
+create policy "uploader or director can see task attachments"
   on storage.objects for select
-  to public
-  using (bucket_id = 'task-attachments');
+  to authenticated
+  using (
+    bucket_id = 'task-attachments'
+    and (owner_id = (select auth.uid())::text or owner = (select auth.uid()) or public.current_access_role() = 'director')
+  );
 
 -- ---------------------------------------------------------------------------
 -- Access-role helper — used by RLS policies below instead of repeating the
@@ -1006,12 +1015,24 @@ alter table public.payroll_feedback add constraint payroll_feedback_status_check
 
 alter table public.payroll_feedback enable row level security;
 
+-- Read your own; add one only on your own payslip, always "pending" — the
+-- decision is the director/PM's (tightened 2/11/2026, salary_privacy.sql).
 drop policy if exists "staff can add and read own payroll feedback" on public.payroll_feedback;
-create policy "staff can add and read own payroll feedback"
-  on public.payroll_feedback for all
+drop policy if exists "staff can read own payroll feedback" on public.payroll_feedback;
+create policy "staff can read own payroll feedback"
+  on public.payroll_feedback for select
   to authenticated
-  using (profile_id = auth.uid())
-  with check (profile_id = auth.uid());
+  using (profile_id = auth.uid());
+
+drop policy if exists "staff can comment on own payslip" on public.payroll_feedback;
+create policy "staff can comment on own payslip"
+  on public.payroll_feedback for insert
+  to authenticated
+  with check (
+    profile_id = auth.uid()
+    and status = 'pending'
+    and exists (select 1 from public.payroll_records r where r.id = payroll_record_id and r.profile_id = auth.uid())
+  );
 
 drop policy if exists "director or pm can read payroll feedback" on public.payroll_feedback;
 create policy "director or pm can read payroll feedback"
@@ -1061,12 +1082,33 @@ create table if not exists public.payroll_confirmations (
 
 alter table public.payroll_confirmations enable row level security;
 
+-- Only on your own payslip (tightened 2/11/2026, salary_privacy.sql);
+-- confirmMyPayroll() upserts, hence insert + update.
 drop policy if exists "staff can confirm own payroll" on public.payroll_confirmations;
-create policy "staff can confirm own payroll"
-  on public.payroll_confirmations for all
+drop policy if exists "staff can read own payroll confirmations" on public.payroll_confirmations;
+create policy "staff can read own payroll confirmations"
+  on public.payroll_confirmations for select
+  to authenticated
+  using (profile_id = auth.uid());
+
+drop policy if exists "staff can confirm own payslip" on public.payroll_confirmations;
+create policy "staff can confirm own payslip"
+  on public.payroll_confirmations for insert
+  to authenticated
+  with check (
+    profile_id = auth.uid()
+    and exists (select 1 from public.payroll_records r where r.id = payroll_record_id and r.profile_id = auth.uid())
+  );
+
+drop policy if exists "staff can re-confirm own payslip" on public.payroll_confirmations;
+create policy "staff can re-confirm own payslip"
+  on public.payroll_confirmations for update
   to authenticated
   using (profile_id = auth.uid())
-  with check (profile_id = auth.uid());
+  with check (
+    profile_id = auth.uid()
+    and exists (select 1 from public.payroll_records r where r.id = payroll_record_id and r.profile_id = auth.uid())
+  );
 
 drop policy if exists "director or pm can manage payroll confirmations" on public.payroll_confirmations;
 create policy "director or pm can manage payroll confirmations"
