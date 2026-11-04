@@ -956,6 +956,11 @@ alter table public.payroll_records add column if not exists work_days numeric;
 -- overwrite the override.
 alter table public.payroll_records add column if not exists fixed_amount numeric;
 
+-- When the payslip was handed out (emailed to the employee) — until then,
+-- or until it's "Đã trả", the employee can't read it: no per-day rate, no
+-- running total during the month (migrations/salary_lock.sql, 4/11/2026).
+alter table public.payroll_records add column if not exists released_at timestamptz;
+
 alter table public.payroll_records enable row level security;
 
 drop policy if exists "director can manage payroll" on public.payroll_records;
@@ -970,7 +975,7 @@ drop policy if exists "staff can read own payroll" on public.payroll_records;
 create policy "staff can read own payroll"
   on public.payroll_records for select
   to authenticated
-  using (profile_id = auth.uid());
+  using (profile_id = auth.uid() and (released_at is not null or status = 'paid'));
 
 drop trigger if exists payroll_records_set_updated_at on public.payroll_records;
 create trigger payroll_records_set_updated_at
@@ -1159,11 +1164,9 @@ create policy "director or pm can manage staff salary"
   using (public.can_manage_hr())
   with check (public.can_manage_hr());
 
+-- Not readable by the employee: monthly_salary / standard_work_days is the
+-- per-day rate kept back until the payslip (migrations/salary_lock.sql).
 drop policy if exists "staff can read own staff salary" on public.staff_salary;
-create policy "staff can read own staff salary"
-  on public.staff_salary for select
-  to authenticated
-  using (profile_id = auth.uid());
 
 drop trigger if exists staff_salary_set_updated_at on public.staff_salary;
 create trigger staff_salary_set_updated_at

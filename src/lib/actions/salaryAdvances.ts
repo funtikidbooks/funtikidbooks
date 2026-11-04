@@ -2,6 +2,7 @@
 
 import { after } from "next/server";
 import { requireUser } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { addMonths, firstOfMonth, vnToday } from "@/lib/constants/attendance";
 import { sendPushToUser, sendPushToUsers } from "@/lib/push";
 import { ADVANCE_MAX, ADVANCE_MIN, SALARY_ADVANCE_SELECT, toSalaryAdvance } from "@/lib/salaryAdvance";
@@ -12,16 +13,17 @@ import type { SalaryAdvance } from "@/lib/types";
 // view of colleagues.
 
 // Who can ask: anyone paid through payroll, a Giám đốc included (who may
-// approve their own).
-async function canAskForAdvance(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], userId: string) {
-  const { data: salary } = await supabase.from("staff_salary").select("monthly_salary").eq("profile_id", userId).maybeSingle();
+// approve their own). Looked up with the service role and answered yes/no
+// only — staff can't read their own salary row (salary_lock.sql).
+async function canAskForAdvance(userId: string) {
+  const { data: salary } = await createAdminClient().from("staff_salary").select("monthly_salary").eq("profile_id", userId).maybeSingle();
   return Number(salary?.monthly_salary ?? 0) > 0;
 }
 
 export async function getMyAdvances(): Promise<{ eligible: boolean; requests: SalaryAdvance[] }> {
   const { supabase, user } = await requireUser();
   const [eligible, { data }] = await Promise.all([
-    canAskForAdvance(supabase, user.id),
+    canAskForAdvance(user.id),
     supabase.from("salary_advances").select(SALARY_ADVANCE_SELECT).eq("profile_id", user.id).order("requested_at", { ascending: false }).limit(30),
   ]);
   return { eligible, requests: (data ?? []).map(toSalaryAdvance) };
@@ -32,7 +34,7 @@ export async function requestAdvance(amountInput: number, reasonInput: string): 
   const amount = Math.round(Number(amountInput));
   if (!Number.isFinite(amount) || amount < ADVANCE_MIN) throw new Error("Số tiền ứng tối thiểu là 1.000.000 ₫.");
   if (amount > ADVANCE_MAX) throw new Error("Số tiền này lớn quá, bạn kiểm tra lại nhé.");
-  if (!(await canAskForAdvance(supabase, user.id))) throw new Error("Tài khoản này chưa có bảng lương nên chưa ứng được.");
+  if (!(await canAskForAdvance(user.id))) throw new Error("Tài khoản này chưa có bảng lương nên chưa ứng được.");
   const reason = reasonInput.trim().slice(0, 300) || null;
 
   const { data, error } = await supabase

@@ -247,11 +247,20 @@ export function PayrollBoard({
                 {record ? (
                   <div className="flex flex-col items-center gap-0.5">
                     <span className="text-sm font-bold">{formatVnd(netTotal(record))}</span>
+                    {/* "Đã gửi phiếu": emailed, so the employee can see it on
+                        their Chấm công page — a draft they can't (salary_lock.sql). */}
                     <span
                       className="text-[11px] font-bold"
-                      style={{ color: record.status === "paid" ? "var(--status-green)" : "var(--color-neutral-500)" }}
+                      style={{
+                        color:
+                          record.status === "paid"
+                            ? "var(--status-green)"
+                            : record.released_at
+                              ? "var(--status-blue)"
+                              : "var(--color-neutral-500)",
+                      }}
                     >
-                      {record.status === "paid" ? "Đã trả" : "Nháp"}
+                      {record.status === "paid" ? "Đã trả" : record.released_at ? "Đã gửi phiếu" : "Nháp"}
                     </span>
                   </div>
                 ) : (

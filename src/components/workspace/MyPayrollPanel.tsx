@@ -7,12 +7,11 @@ import {
   getMyBankInfo,
   getMyPayroll,
   getMyPayrollConfirmation,
-  getMyStaffSalary,
   listMyPayrollFeedback,
 } from "@/lib/actions/payroll";
 import { bankColor, formatAccountNumber } from "@/lib/bankDisplay";
 import { ImageLightbox } from "@/components/workspace/ImageLightbox";
-import type { PayrollConfirmation, PayrollFeedback, PayrollRecord, StaffBankInfo, StaffSalary } from "@/lib/types";
+import type { PayrollConfirmation, PayrollFeedback, PayrollRecord, StaffBankInfo } from "@/lib/types";
 
 function formatVnd(n: number) {
   return new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(n);
@@ -25,7 +24,6 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [record, setRecord] = useState<PayrollRecord | null>(null);
-  const [salary, setSalary] = useState<StaffSalary | null>(null);
   const [bankInfo, setBankInfo] = useState<StaffBankInfo | null>(null);
   const [qrLightboxOpen, setQrLightboxOpen] = useState(false);
   const [confirmation, setConfirmation] = useState<PayrollConfirmation | null>(null);
@@ -44,10 +42,9 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
       setLoading(true);
       setError(null);
       try {
-        const [rec, mySalary, myBankInfo] = await Promise.all([getMyPayroll(monthStart), getMyStaffSalary(), getMyBankInfo()]);
+        const [rec, myBankInfo] = await Promise.all([getMyPayroll(monthStart), getMyBankInfo()]);
         if (cancelled) return;
         setRecord(rec);
-        setSalary(mySalary);
         setBankInfo(myBankInfo);
         if (rec) {
           const [feedbackList, myConfirmation] = await Promise.all([
@@ -165,21 +162,9 @@ export function MyPayrollPanel({ monthStart }: { monthStart: string }) {
             </p>
           ) : (
             <>
-              {salary && (
-                <div className="flex gap-4 pt-3 text-xs" style={{ color: "var(--color-neutral-500)" }}>
-                  <span>
-                    Lương cứng: <strong style={{ color: "var(--color-text)" }}>{formatVnd(salary.monthly_salary)}</strong>
-                  </span>
-                  <span>
-                    Mỗi ngày công:{" "}
-                    <strong style={{ color: "var(--color-text)" }}>
-                      {formatVnd(salary.standard_work_days > 0 ? salary.monthly_salary / salary.standard_work_days : 0)}
-                    </strong>
-                  </span>
-                </div>
-              )}
-
-              <div className="flex flex-col gap-1 text-sm" style={{ paddingTop: salary ? 0 : 12 }}>
+              {/* The payslip as emailed (lib/mail.ts sendPayslipEmail) — no
+                  lương cứng / per-day rate line (sếp Phúc, 4/11/2026). */}
+              <div className="flex flex-col gap-1 text-sm pt-3">
                 <div className="flex justify-between gap-3">
                   <span style={{ color: "var(--color-neutral-500)" }}>
                     {record.fixed_amount !== null

@@ -661,6 +661,10 @@ export type PayrollRecord = {
   items: PayrollItem[];
   note: string | null;
   status: PayrollStatus;
+  // When the payslip was handed out (emailed) — until then, or until it's
+  // "Đã trả", the employee can't see it (supabase/migrations/salary_lock.sql).
+  // Missing on a database that hasn't run that file yet.
+  released_at?: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

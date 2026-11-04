@@ -92,6 +92,13 @@ export async function deletePayroll(id: string) {
   await supabase.from("payroll_records").delete().eq("id", id);
 }
 
+// Emailing a payslip is handing it out: only from then on does the
+// employee see it on their own Chấm công page (getMyPayroll). Keeps the
+// first time it went out. Best-effort — the email has already gone.
+async function markReleased(supabase: Awaited<ReturnType<typeof requireUser>>["supabase"], recordId: string) {
+  await supabase.from("payroll_records").update({ released_at: new Date().toISOString() }).eq("id", recordId).is("released_at", null);
+}
+
 // One payslip, emailed to the employee's own login address — mirrors
 // PayrollPrintView.tsx's numbers exactly (same base_salary/items/status),
 // so the email and the printable PDF for the same record never disagree.
@@ -117,6 +124,7 @@ export async function sendPayrollEmail(payrollRecordId: string): Promise<void> {
     status: record.status as "draft" | "paid",
     note: record.note,
   });
+  await markReleased(supabase, record.id);
 }
 
 // Bulk version for "send this month's payslips to everyone" — best-effort
@@ -153,6 +161,9 @@ export async function sendPayrollEmailsForMonth(monthStartInput?: string): Promi
         note: record.note,
       });
       sent++;
+      // Right after its own email, so a send cut off halfway still leaves
+      // everyone who got one able to see it.
+      await markReleased(supabase, record.id);
     } catch {
       failed++;
     }
@@ -211,6 +222,13 @@ export async function listPayrollFeedback(payrollRecordId: string): Promise<Payr
 // collapsible "Bảng lương của tôi" panel on the workspace Chấm công page.
 // RLS's own "staff can read own payroll" policy is the real gate; the
 // .eq("profile_id", user.id) here just narrows the query to match it.
+//
+// Only once it's been handed out — emailed or "Đã trả". sếp Phúc, 4/11/2026:
+// staff see money when they get their payslip at the end of the month,
+// never the daily rate or the running total while the month goes on. RLS
+// does the same for staff; this also covers a Giám đốc/PM, who can read
+// every row. Before salary_lock.sql adds released_at, months already over
+// count as handed out.
 export async function getMyPayroll(monthStartInput?: string): Promise<PayrollRecord | null> {
   const { supabase, user } = await requireUser();
   const monthStart = firstOfMonth(monthStartInput ?? vnToday());
@@ -220,7 +238,12 @@ export async function getMyPayroll(monthStartInput?: string): Promise<PayrollRec
     .eq("profile_id", user.id)
     .eq("month", monthStart)
     .maybeSingle();
-  return (data as PayrollRecord) ?? null;
+  const record = (data as PayrollRecord | null) ?? null;
+  if (!record) return null;
+  const released =
+    record.status === "paid" ||
+    (record.released_at === undefined ? monthStart < firstOfMonth(vnToday()) : record.released_at !== null);
+  return released ? record : null;
 }
 
 export async function listMyPayrollFeedback(payrollRecordId: string): Promise<PayrollFeedback[]> {
@@ -309,14 +332,6 @@ export async function listPendingPayrollFeedbackIds(): Promise<string[]> {
   const { supabase } = await requireHrManager();
   const { data } = await supabase.from("payroll_feedback").select("id").eq("status", "pending");
   return (data ?? []).map((r) => r.id as string);
-}
-
-// The caller's own fixed-salary settings — backs "Lương cứng" / "mỗi ngày
-// công" on the payslip panel, alongside the already-computed base_salary.
-export async function getMyStaffSalary(): Promise<StaffSalary | null> {
-  const { supabase, user } = await requireUser();
-  const { data } = await supabase.from("staff_salary").select("*").eq("profile_id", user.id).maybeSingle();
-  return (data as StaffSalary) ?? null;
 }
 
 // The caller's own bank account on file — lets someone double-check the
