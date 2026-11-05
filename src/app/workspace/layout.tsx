@@ -80,6 +80,11 @@ export default async function WorkspaceLayout({
     fetchActiveLeave(supabase, vnToday()).catch(() => []),
   ]);
 
+  // No staff profile means a client signed in through Work With Funti
+  // (handle_new_user() skips them) — the workspace is staff-only. Before
+  // anything else runs for them, check-in included.
+  if (!profile) redirect("/cong-viec");
+
   // Auto-check-in bookkeeping has zero bearing on what this layout renders
   // — it used to sit here as a sequential `await` (its own auth check plus
   // 2-3 more DB calls) after the Promise.all above had already resolved,
@@ -90,13 +95,9 @@ export default async function WorkspaceLayout({
 
   // Admin accounts handle site content, not the Kanban workspace — send
   // them to the panel that's actually theirs.
-  if (profile?.access_role === "admin") {
+  if (profile.access_role === "admin") {
     redirect("/quan-tri");
   }
-
-  // No staff profile means a client signed in through Work With Funti
-  // (handle_new_user() skips them) — the workspace is staff-only.
-  if (!profile) redirect("/cong-viec");
 
   const myProfile: Profile = profile;
 

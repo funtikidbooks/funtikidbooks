@@ -599,6 +599,21 @@ as $$
   );
 $$;
 
+-- Has a staff profile at all. Anyone can get a signed-in session (the
+-- website chat's email link signs customers in), so "to authenticated" is
+-- never "staff". migrations/staff_only.sql puts a restrictive "staff only"
+-- policy on every table but the public website's and the customer portal's
+-- — run it again after adding a table.
+create or replace function public.is_staff()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.profiles where id = auth.uid());
+$$;
+
 -- Same "director or exact chức danh 'Project Manager'" rule as
 -- can_manage_hr(), under a name that isn't HR-specific — used to gate
 -- renaming "Chung" and the "Riêng" tab label (see meeting_channels' update

@@ -154,14 +154,36 @@ create policy "authenticated can upload client files"
   to authenticated
   with check (bucket_id = 'client-uploads');
 
+-- Listing and deleting: the uploader, or whoever answers customers —
+-- since staff_only.sql (5/11/2026); before, anyone could list every
+-- customer's files and any signed-in account delete them. Files still
+-- open by their public link.
 drop policy if exists "authenticated can delete client files" on storage.objects;
-create policy "authenticated can delete client files"
+drop policy if exists "uploader or customer team can delete client files" on storage.objects;
+create policy "uploader or customer team can delete client files"
   on storage.objects for delete
   to authenticated
-  using (bucket_id = 'client-uploads');
+  using (
+    bucket_id = 'client-uploads'
+    and (
+      owner_id = (select auth.uid())::text
+      or owner = (select auth.uid())
+      or public.current_access_role() = 'admin'
+      or public.is_director_or_pm()
+    )
+  );
 
 drop policy if exists "anyone can view client files" on storage.objects;
-create policy "anyone can view client files"
+drop policy if exists "uploader or customer team can see client files" on storage.objects;
+create policy "uploader or customer team can see client files"
   on storage.objects for select
-  to public
-  using (bucket_id = 'client-uploads');
+  to authenticated
+  using (
+    bucket_id = 'client-uploads'
+    and (
+      owner_id = (select auth.uid())::text
+      or owner = (select auth.uid())
+      or public.current_access_role() = 'admin'
+      or public.is_director_or_pm()
+    )
+  );

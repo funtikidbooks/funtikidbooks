@@ -102,7 +102,10 @@ create trigger direct_messages_broadcast
 -- (~0.06–0.08s) instead of a REST call into the other person's inbox
 -- (~0.13–0.16s). inbox:<id> stays for unread badges / dings elsewhere.
 -- Same functions as supabase/migrations/chat_private_broadcast.sql, with the
--- dm: branch added — room: and inbox: rules are unchanged.
+-- dm: branch added — room: and inbox: rules are unchanged. Since
+-- staff_only.sql (5/11/2026) every channel also needs a staff profile: a
+-- customer signed in through the website chat could listen to the general
+-- room before.
 
 create or replace function public.chat_topic_can_receive(p_topic text)
 returns boolean
@@ -111,7 +114,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select case
+  select exists (select 1 from public.profiles where id = auth.uid()) and case
     when p_topic like 'room:%' then
       exists (
         select 1 from public.meeting_channels c
@@ -136,7 +139,7 @@ stable
 security definer
 set search_path = public
 as $$
-  select case
+  select exists (select 1 from public.profiles where id = auth.uid()) and case
     when p_topic like 'room:%' then
       exists (
         select 1 from public.meeting_channels c

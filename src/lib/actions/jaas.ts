@@ -18,7 +18,11 @@ export async function getJaasCallCredentials(): Promise<{ appId: string; jwt: st
 
   const { supabase, user } = await requireUser();
 
-  const { data: profile } = await supabase.from("profiles").select("display_name").eq("id", user.id).single();
+  const { data: profile } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
+  // Staff only. The pass makes its holder moderator of every Funti call
+  // room, and a customer signed in through the website chat is signed in
+  // too (sếp Phúc, 5/11/2026: khách không được vào phần nhân viên).
+  if (!profile) throw new Error("Bạn không có quyền này.");
 
   // Vercel env vars can't hold real newlines, so the PEM is stored with
   // literal "\n" sequences and unescaped here.
@@ -29,7 +33,7 @@ export async function getJaasCallCredentials(): Promise<{ appId: string; jwt: st
     context: {
       user: {
         id: user.id,
-        name: profile?.display_name ?? "Funtikidbooks",
+        name: profile.display_name,
         // 8x8's own JWT sample (jaas_demo/jaas-jwt-samples/js) sends these as
         // the strings "true"/"false", not booleans — a boolean here fails
         // JaaS's auth check with a generic "Authentication failed".

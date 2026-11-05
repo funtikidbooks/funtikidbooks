@@ -1,5 +1,9 @@
 -- Run once in the Supabase Dashboard SQL Editor.
 --
+-- Superseded: chat_topic_can_receive/send are redefined by
+-- performance_night.sql (adds dm:) and staff_only.sql (staff profile
+-- required). Re-running this file would undo both — don't.
+--
 -- Fast path for chat: right after a message is saved, the sender's browser
 -- also Broadcasts the saved row over Supabase Realtime, which reaches the
 -- other side in ~0.06s versus ~0.6s for the database-change feed (measured
