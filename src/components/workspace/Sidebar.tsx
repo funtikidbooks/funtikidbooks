@@ -48,6 +48,7 @@ const NAV_GROUPS = [
       { href: "/workspace/tinh-kho-sach", label: "Tính khổ sách", icon: "📐", enabled: true },
       { href: "/workspace/vien-sticker", label: "Tạo viền sticker", icon: "✂️", enabled: true },
       { href: "/workspace/di-line", label: "Đi line tự động", icon: "✒️", enabled: true },
+      { href: "/workspace/chuyen-vector", label: "Chuyển line sang vector", icon: "🔷", enabled: true },
       { href: "/workspace/bien-tap", label: "Biên tập", icon: "🖊️", enabled: true },
     ],
   },
