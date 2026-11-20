@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readSketch } from "@/lib/lineart/readImage";
 import type { PsdFile } from "@/lib/sticker/psd";
+import { normalizeHex, snapToInk } from "@/lib/vector/color";
 import { epsOf, pdfOf, svgOf, type VectorDoc } from "@/lib/vector/formats";
 import { composeLayers, listLayers, type LayerChoice } from "@/lib/vector/psdLayers";
 import type { VectorSettings, VectorWorkerIn, VectorWorkerOut } from "@/lib/vector/worker";
+import { VectorColor } from "./VectorColor";
 import { VectorPreview, type PreviewView, type PreviewZoom } from "./VectorPreview";
 
 type Mode = "auto" | "outline" | "centerline";
@@ -20,7 +22,8 @@ type Settings = {
   corner: number; // 0 round everything … 1 keep every corner
   tolMm: number; // how far a curve may stray from the traced line
   strokeMm: number; // centre line: stroke width of the file; 0 = as wide as the picture's lines
-  color: string;
+  color: string; // the colour picked by hand (used when colorAuto is off)
+  colorAuto: boolean; // the file takes the colour of the lines in the picture
 };
 
 const DEFAULTS: Settings = {
@@ -34,10 +37,10 @@ const DEFAULTS: Settings = {
   tolMm: 0.05,
   strokeMm: 0,
   color: "#000000",
+  colorAuto: true,
 };
 const SETTINGS_KEY = "funti-vector-settings";
 const MAX_PIXELS = 30_000_000;
-const CUT_PINK = "#EC008C"; // the die-line colour of the sticker tool
 
 type Status = "idle" | "loading" | "running" | "ready";
 
@@ -46,7 +49,11 @@ type Result = Extract<VectorWorkerOut, { type: "result" }>;
 function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Settings>) };
+    if (raw) {
+      const s = { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Settings>) };
+      // the colour ends up inside the downloaded file: only a real hex code goes in
+      return { ...s, color: normalizeHex(String(s.color)) ?? DEFAULTS.color, colorAuto: s.colorAuto !== false };
+    }
   } catch {}
   return DEFAULTS;
 }
@@ -177,7 +184,6 @@ export function VectorTool() {
   const [dpi, setDpi] = useState(300);
   const [settings, setSettings] = useState<Settings>(DEFAULTS);
   const [invert, setInvert] = useState(false);
-  const [colorAuto, setColorAuto] = useState(true); // the file takes the colour of the lines in the picture
   const [detected, setDetected] = useState("#000000");
   const [layers, setLayers] = useState<LayerChoice[]>([]);
   const [picked, setPicked] = useState<number[]>([]);
@@ -190,7 +196,7 @@ export function VectorTool() {
   const statusRef = useRef<Status>("idle");
   const pending = useRef(false);
   const idRef = useRef(0);
-  const latest = useRef({ settings: DEFAULTS, dpi: 300, invert: false, colorAuto: true });
+  const latest = useRef({ settings: DEFAULTS, dpi: 300, invert: false });
 
   const setStatus = useCallback((s: Status) => {
     statusRef.current = s;
@@ -198,8 +204,8 @@ export function VectorTool() {
   }, []);
 
   useEffect(() => {
-    latest.current = { settings, dpi, invert, colorAuto };
-  }, [settings, dpi, invert, colorAuto]);
+    latest.current = { settings, dpi, invert };
+  }, [settings, dpi, invert]);
 
   useEffect(() => {
     // localStorage exists only in the browser, after the first render.
@@ -208,6 +214,8 @@ export function VectorTool() {
   }, []);
 
   useEffect(() => {
+    // the untouched defaults of the first render must not overwrite what was saved before it is read back
+    if (settings === DEFAULTS) return;
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch {}
@@ -232,8 +240,8 @@ export function VectorTool() {
     worker.onmessage = (e: MessageEvent<VectorWorkerOut>) => {
       const m = e.data;
       if (m.type === "loaded") {
-        setDetected(m.color);
-        if (latest.current.colorAuto) setSettings((s) => ({ ...s, color: m.color }));
+        // a CMYK sheet’s die lines read as pure magenta: give them Illustrator’s pink
+        setDetected(snapToInk(m.color, psdRef.current?.mode === 4));
         setStatus("ready");
         trace();
       } else if (m.type === "result") {
@@ -367,6 +375,7 @@ export function VectorTool() {
   const effMode = result?.mode ?? (settings.mode === "auto" ? "outline" : settings.mode);
   const measuredMm = result && result.widthPx > 0 ? Math.round((result.widthPx / mmPx) * 100) / 100 : 0;
   const strokeMm = settings.strokeMm > 0 ? settings.strokeMm : measuredMm || 0.25;
+  const color = settings.colorAuto ? detected : settings.color;
 
   function doc(): VectorDoc | null {
     if (!result || !size) return null;
@@ -377,7 +386,7 @@ export function VectorTool() {
       height: size.h,
       dpi,
       mode: result.mode === "centerline" ? "stroke" : "fill",
-      color: settings.color,
+      color,
       strokeMm,
     };
   }
@@ -586,7 +595,7 @@ export function VectorTool() {
               outlines={result?.outlines ?? []}
               closed={result?.closed ?? []}
               mode={effMode === "centerline" ? "stroke" : "fill"}
-              color={settings.color}
+              color={color}
               strokeMm={strokeMm}
               dpi={dpi}
               view={view}
@@ -614,6 +623,15 @@ export function VectorTool() {
 
         {/* settings */}
         <div className="flex flex-col gap-5 lg:col-start-1 lg:row-start-2">
+          <VectorColor
+            auto={settings.colorAuto}
+            color={color}
+            detected={detected}
+            hasImage={!!size}
+            onAuto={(on) => setSettings((s) => ({ ...s, colorAuto: on, color: on ? s.color : detected }))}
+            onPick={(hex) => setSettings((s) => ({ ...s, color: hex, colorAuto: false }))}
+          />
+
           <div className="card elev-sm p-4 flex flex-col gap-3">
             <span className="text-[15px] font-bold">Kiểu vector</span>
             <div className="flex flex-col gap-2" role="radiogroup" aria-label="Kiểu vector">
@@ -644,7 +662,7 @@ export function VectorTool() {
           <div className="card elev-sm p-4 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <span className="text-[15px] font-bold">Chỉnh nét</span>
-              <button type="button" className="btn btn-ghost" style={{ fontSize: 14, padding: "7px 14px" }} onClick={() => setSettings(DEFAULTS)}>
+              <button type="button" className="btn btn-ghost" style={{ fontSize: 14, padding: "7px 14px" }} onClick={() => setSettings((s) => ({ ...DEFAULTS, color: s.color, colorAuto: s.colorAuto }))}>
                 ↺ Mặc định
               </button>
             </div>
@@ -751,49 +769,8 @@ export function VectorTool() {
                 </button>
               </div>
             )}
-            <label className="flex items-center justify-between gap-3 text-[15px] font-semibold">
-              Màu {effMode === "centerline" ? "đường" : "nét"}
-              <span className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={settings.color}
-                  onChange={(e) => {
-                    setColorAuto(false);
-                    set("color", e.target.value);
-                  }}
-                  style={{ width: 44, height: 32 }}
-                />
-              </span>
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ fontSize: 14, padding: "7px 14px" }}
-                disabled={colorAuto && settings.color === detected}
-                onClick={() => {
-                  setColorAuto(true);
-                  set("color", detected);
-                }}
-              >
-                Theo màu trong ảnh
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                style={{ fontSize: 14, padding: "7px 14px" }}
-                onClick={() => {
-                  setColorAuto(false);
-                  set("color", CUT_PINK);
-                }}
-                title="Màu hồng khuôn cắt của tool Tạo viền sticker"
-              >
-                Hồng khuôn cắt
-              </button>
-            </div>
             <p className="text-[13px]" style={{ color: "var(--color-neutral-500)" }}>
-              Màu đen xuất ra mực đen K 100% (không pha 4 màu). Hồng khuôn cắt đặt tên nhóm CutContour trong SVG, giống file khuôn của tool Tạo viền sticker. File có
-              kích thước thật theo dpi ở trên.
+              File có kích thước thật theo dpi ở trên. Màu đường chọn ở khung “Màu viền”.
             </p>
           </div>
         </div>

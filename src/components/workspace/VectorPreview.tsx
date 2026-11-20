@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { isPale } from "@/lib/vector/color";
 
 export type PreviewView = "vector" | "original" | "overlay";
 export type PreviewZoom = "fit" | number;
@@ -45,6 +46,8 @@ export function VectorPreview({ width, height, original, outlines, closed, mode,
   const lastScale = useRef(0);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const path = useMemo(() => buildPath(outlines, closed), [outlines, closed]);
+  // white or very pale lines would vanish on white: show them on grey
+  const bg = view === "vector" && isPale(color) ? "#4b4f56" : "#fff";
 
   useEffect(() => {
     const el = scrollerRef.current;
@@ -77,7 +80,7 @@ export function VectorPreview({ width, height, original, outlines, closed, mode,
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, pw, ph);
     const sl = sc.scrollLeft;
     const st = sc.scrollTop;
@@ -130,7 +133,7 @@ export function VectorPreview({ width, height, original, outlines, closed, mode,
         }
       }
     }
-  }, [cw, ch, scale, view, original, path, mode, color, strokeMm, dpi, showNodes, outlines]);
+  }, [cw, ch, scale, view, original, path, mode, color, strokeMm, dpi, showNodes, outlines, bg]);
 
   const schedule = useCallback(() => {
     cancelAnimationFrame(frame.current);
@@ -176,7 +179,7 @@ export function VectorPreview({ width, height, original, outlines, closed, mode,
       className="overflow-auto rounded-[var(--radius-sm)]"
       style={{
         height: "clamp(320px, 68vh, 900px)",
-        background: "#fff",
+        background: bg,
         border: "1px solid var(--color-neutral-200)",
         cursor: canDrag ? "grab" : "default",
         opacity: busy ? 0.55 : 1,
