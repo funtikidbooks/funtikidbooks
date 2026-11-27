@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { thumbnailUrl } from "@/lib/imageTransform";
+import { savePicture, shareFile } from "@/lib/saveImage";
 
 // Matches fk-lightbox-backdrop-out/fk-lightbox-image-out's own duration in
 // globals.css — kept as one constant instead of two, so they can't drift
@@ -51,6 +52,38 @@ export function ImageLightbox({
   const swipedRef = useRef(false);
   const current = list[Math.min(index, list.length - 1)];
   const many = list.length > 1;
+
+  // "Tải về", remembered against the photo it was tapped on, so swiping to
+  // the next one shows a fresh button. "tap-again" holds the fetched file
+  // for iOS, whose share sheet wants a tap right before it opens.
+  const [save, setSave] = useState<{ url: string; step: "busy" | "done" | "tap-again"; file?: File } | null>(null);
+  const saveHere = save?.url === current.url ? save : null;
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
+  async function handleSave() {
+    const { url, filename } = current;
+    if (saveHere?.step === "busy") return;
+    const ready = saveHere?.file;
+    setSave({ url, step: "busy" });
+    const outcome = ready ? await shareFile(ready) : await savePicture(url, filename, () => aliveRef.current);
+    const next =
+      outcome.kind === "tap-again"
+        ? ({ url, step: "tap-again", file: outcome.file } as const)
+        : outcome.kind === "downloaded"
+          ? ({ url, step: "done" } as const)
+          : null;
+    // Another photo's button may have taken over while this one worked.
+    setSave((s) => (s?.url === url ? next : s));
+    if (next?.step === "done") {
+      setTimeout(() => setSave((s) => (s?.url === url && s.step === "done" ? null : s)), 2500);
+    }
+  }
 
   const reduced = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -249,36 +282,60 @@ export function ImageLightbox({
         handleClose();
       }}
     >
-      {/* Top bar: open the original · 3 / 12 · close */}
-      <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-3 px-3 sm:px-4" style={{ height: 64, zIndex: 3 }}>
+      {/* Top bar: open the original · 3 / 12 · save, close */}
+      <div className="absolute inset-x-0 top-0 grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 sm:px-4" style={{ height: 64, zIndex: 3 }}>
         <a
           href={current.url}
           target="_blank"
           rel="noreferrer"
           onClick={stop}
-          className="flex items-center justify-center rounded-full h-10 px-3 text-[13px] font-semibold"
+          className="justify-self-start flex items-center justify-center rounded-full h-10 px-3 text-[13px] font-semibold"
           style={chip}
           aria-label="Mở ảnh gốc trong tab mới"
         >
           ↗<span className="hidden sm:inline">&nbsp;Mở trong tab mới</span>
         </a>
-        {many && (
-          <span className="rounded-full px-3 py-1 text-[13px] font-semibold tabular-nums" style={chip}>
+        {many ? (
+          <span className="rounded-full px-3 py-1 text-[13px] font-semibold tabular-nums whitespace-nowrap" style={chip}>
             {index + 1} / {list.length}
           </span>
+        ) : (
+          <span aria-hidden />
         )}
-        <button
-          type="button"
-          onClick={(e) => {
-            stop(e);
-            handleClose();
-          }}
-          aria-label="Đóng"
-          className="flex items-center justify-center rounded-full flex-none"
-          style={{ ...chip, width: 40, height: 40, fontSize: 20 }}
-        >
-          ✕
-        </button>
+        <div className="justify-self-end flex items-center gap-2">
+          <button
+            type="button"
+            onClick={(e) => {
+              stop(e);
+              void handleSave();
+            }}
+            disabled={saveHere?.step === "busy"}
+            className="flex items-center justify-center rounded-full h-10 px-3.5 text-[15px] font-semibold whitespace-nowrap"
+            style={saveHere?.step === "tap-again" ? { background: "var(--color-accent-500)", color: "#fff" } : chip}
+          >
+            <span aria-live="polite">
+              {saveHere?.step === "busy"
+                ? "Đang tải…"
+                : saveHere?.step === "done"
+                  ? "✓ Đã tải"
+                  : saveHere?.step === "tap-again"
+                    ? "⬇ Bấm để lưu"
+                    : "⬇ Tải về"}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              stop(e);
+              handleClose();
+            }}
+            aria-label="Đóng"
+            className="flex items-center justify-center rounded-full flex-none"
+            style={{ ...chip, width: 40, height: 40, fontSize: 20 }}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* The photos, between the top bar and the thumbnail strip. Three

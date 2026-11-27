@@ -6,6 +6,7 @@ import { loadTaskActivity, loadTaskComments } from "@/lib/taskCommentsClient";
 import { uploadTaskFile } from "@/lib/taskUpload";
 import { thumbnailUrl } from "@/lib/imageTransform";
 import type { Profile, TaskActivity, TaskAttachment, TaskComment } from "@/lib/types";
+import { ImageLightbox } from "./ImageLightbox";
 
 // Explicit timeZone — without it this reads the server's own timezone
 // (UTC on Vercel) instead of Vietnam's, a real hydration-mismatch source;
@@ -42,13 +43,13 @@ function activityText(a: TaskActivity): string {
   }
 }
 
-// A file in the conversation, the way Trello shows it: a picture as a
-// thumbnail, anything else (PDF, PSD…) as a named chip. Both open the file.
-function FileInFeed({ url, filename, mimeType, size = 64 }: { url: string; filename: string; mimeType?: string; size?: number }) {
-  const isImage = (mimeType ?? "").startsWith("image/") || /.(png|jpe?g|webp|gif|avif)$/i.test(filename);
-  if (isImage) {
-    return (
-      <a href={url} target="_blank" rel="noreferrer" title={filename}>
+// A picture in the conversation: a thumbnail that opens the full-screen
+// viewer (and its "Tải về") — a new tab had no way to save it on a phone.
+function PictureInFeed({ url, filename, size }: { url: string; filename: string; size: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} title={filename} className="block flex-none">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={thumbnailUrl(url, size * 2)}
@@ -56,9 +57,17 @@ function FileInFeed({ url, filename, mimeType, size = 64 }: { url: string; filen
           className="rounded-[6px] object-cover"
           style={{ width: size, height: size, border: "1px solid var(--color-neutral-200)" }}
         />
-      </a>
-    );
-  }
+      </button>
+      {open && <ImageLightbox url={url} filename={filename} onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+// A file in the conversation, the way Trello shows it: a picture as a
+// thumbnail, anything else (PDF, PSD…) as a named chip. Both open the file.
+function FileInFeed({ url, filename, mimeType, size = 64 }: { url: string; filename: string; mimeType?: string; size?: number }) {
+  const isImage = (mimeType ?? "").startsWith("image/") || /.(png|jpe?g|webp|gif|avif)$/i.test(filename);
+  if (isImage) return <PictureInFeed url={url} filename={filename} size={size} />;
   return (
     <a
       href={url}

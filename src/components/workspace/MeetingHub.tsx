@@ -4782,7 +4782,7 @@ export function MeetingHub({
                             return (
                               <a
                                 key={m.id}
-                                href={m.attachment_url ?? undefined}
+                                href={m.attachment_url ? fileLinkUrl(m.attachment_url, m.attachment_filename, m.attachment_mime) : undefined}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="flex items-center gap-2 rounded-[8px] px-2.5 py-1.5"
